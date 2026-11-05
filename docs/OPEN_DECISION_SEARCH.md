@@ -31,3 +31,12 @@ D-40 规定服务之间不直接调用对方的内部函数，共享部分放在
 2. 若选方案 1，接受 `RepoLocator` 接口这种形式吗？
 
 在你决定之前，`internal/files/pending/` 中的两个文件不编译，也不影响其它服务。
+
+## 补充：git 服务有同样的问题
+
+`git.go`、`git_adv.go`、`gitrun.go` 同样依赖：
+
+- `gitrun.go` 的 `gitFor` 调用 `s.sessionEnvVars()`（终端服务）。该函数只导出 `AURORA_BIN`、`AURORA_TERMINFO`、`TERMINFO_DIRS`，它们只被 tmux 会话里的 shell 配置读取（`tmuxbin.go:350-360`）。git 进程不读取它们，v2 中也没有 git hook 或 credential helper 使用它们。因此去掉这一项不改变 git 的行为，这一处可以直接修正，不需要你决定。
+- `git.go` 和 `git_adv.go` 的 `dirOf`、`repo` 方法，以及 `isFile`（来自终端服务的 `tmuxconf.go`）、`foreignMounts`（来自 `search.go`）。`dirOf` 与 `search` 的 `dirOf` 相同，需要同一个根目录解析接口。
+
+所以 git 服务的根目录解析和搜索的仓库判断，应使用同一个中性接口，这个接口需要你确认（见上文第 1、2 题）。

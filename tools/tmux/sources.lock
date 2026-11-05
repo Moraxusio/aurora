@@ -1,0 +1,10 @@
+# Sources of the tmux bundled into aurora-agent. tools/tmux/build.ps1 refuses
+# files that do not match. Verified 2026-10-26: tmux and libevent against the
+# GitHub release digests, libevent and ncurses against their maintainers' GPG
+# signatures (Nick Mathewson 2133BC600AB133E1D826D173FE43009C4607B1FB,
+# Thomas E. Dickey 19882D92DDA4C400C22C0D56CC2AF4472167BE03), Alpine against
+# its published sha256.
+e79c699c7e949dccd0a4a125e17b8d1261e311b16979dbc8eb34542f3966d82e  tmux-3.8.tar.gz  https://github.com/tmux/tmux/releases/download/3.8/tmux-3.8.tar.gz
+f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c  libevent-2.1.13-stable.tar.gz  https://github.com/libevent/libevent/releases/download/release-2.1.13-stable/libevent-2.1.13-stable.tar.gz
+355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11  ncurses-6.6.tar.gz  https://ftp.gnu.org/gnu/ncurses/ncurses-6.6.tar.gz
+f8e1cafba9b1b283b5d30d06f9885c8d2bc161ffe9083ade8e2e157813a53407  alpine-minirootfs-3.24.3-x86_64.tar.gz  https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-minirootfs-3.24.3-x86_64.tar.gz

@@ -1,4 +1,7 @@
 /dist/
+/.cache/
+/internal/bundle/*
+!/internal/bundle/.gitkeep
 *.exe
 *.test
 *.out

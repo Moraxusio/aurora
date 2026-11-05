@@ -1,0 +1,3 @@
+# Written by tools/tmux/build.ps1; the main build.ps1 checks internal/bundle against it.
+b403d5e9f699b1a0e2df74aa2c0df14197e0ceea89cd8b7d15395143902bd145  tmux
+26c2102a85d8ba0b53afc2c103709ac0eb3b678794f78081f904941c4539a544  terminfo.tar.gz

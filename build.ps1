@@ -27,6 +27,29 @@ function Invoke-Build([string]$out, [string]$pkg, [string]$goos, [string]$goarch
     "built dist\$out"
 }
 
+# The agent must carry its tmux: check the bundle against tools/tmux/bundle.lock
+# before any agent is built (same rule as v2, D-20).
+$bundleDir = Join-Path $root 'internal\bundle'
+$lockFile = Join-Path $root 'tools\tmux\bundle.lock'
+if (-not (Test-Path (Join-Path $bundleDir 'tmux.gz'))) { throw 'internal/bundle/tmux.gz missing: run tools/tmux/build.ps1 -BuildHost <linux host with docker>' }
+$want = @{}
+foreach ($l in Get-Content $lockFile) { if ($l -notmatch '^\s*#' -and $l.Trim()) { $p = $l -split '\s+'; $want[$p[1]] = $p[0] } }
+$gzIn = [IO.File]::OpenRead((Join-Path $bundleDir 'tmux.gz'))
+$ms = New-Object IO.MemoryStream
+try {
+    $gzs = New-Object IO.Compression.GZipStream($gzIn, [IO.Compression.CompressionMode]::Decompress)
+    $gzs.CopyTo($ms); $gzs.Close()
+} catch {
+    throw "internal/bundle/tmux.gz is not a valid gzip stream (rebuild it with tools/tmux/build.ps1): $($_.Exception.Message)"
+} finally {
+    $gzIn.Close()
+}
+$sha = [Security.Cryptography.SHA256]::Create()
+$gotTmux = ([BitConverter]::ToString($sha.ComputeHash($ms.ToArray())) -replace '-', '').ToLower()
+$gotTi = (Get-FileHash (Join-Path $bundleDir 'terminfo.tar.gz') -Algorithm SHA256).Hash.ToLower()
+if ($gotTmux -ne $want['tmux'] -or $gotTi -ne $want['terminfo.tar.gz']) { throw "tmux bundle does not match tools/tmux/bundle.lock (tmux $gotTmux, terminfo $gotTi)" }
+"tmux bundle matches tools/tmux/bundle.lock"
+
 Invoke-Build 'aurora-agent-linux-amd64' './cmd/aurora-agent' 'linux' 'amd64'
 Invoke-Build 'aurora-agent-linux-arm64' './cmd/aurora-agent' 'linux' 'arm64'
 Invoke-Build 'aurora-client.exe' './cmd/aurora-client' 'windows' 'amd64'

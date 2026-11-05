@@ -1,7 +1,16 @@
-/dist/
-/.cache/
-/internal/bundle/*
-!/internal/bundle/.gitkeep
+# Go agent
+/agent/dist/
+/agent/.cache/
+/agent/internal/bundle/*
+!/agent/internal/bundle/.gitkeep
 *.exe
 *.test
 *.out
+
+# Flutter app
+/app/**/.dart_tool/
+/app/**/build/
+/app/**/.flutter-plugins
+/app/**/.flutter-plugins-dependencies
+/app/**/*.iml
+/app/**/.idea/

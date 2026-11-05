@@ -13,6 +13,6 @@ func main() {
 		fmt.Println(Version)
 		return
 	}
-	fmt.Fprintln(os.Stderr, "aurora-client: the interface is not built yet")
+	fmt.Fprintln(os.Stderr, "aurora3-agent: no service is enabled yet")
 	os.Exit(2)
 }

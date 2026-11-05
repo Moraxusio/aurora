@@ -1,25 +1,22 @@
-# Aurora v3
+# Aurora
 
 Aurora 是一个远程服务器管理工具，目标是比 SSH 更强的远程管理能力。
 
-## 状态
-
-重新设计阶段。目前仓库里只有设计文档，代码尚未开始。设计定稿前不写实现。
-
-- 设计文档：[docs/REDESIGN_V3.md](docs/REDESIGN_V3.md)
-
-## 与旧版的关系
-
-旧版（v2，Aurora 2.0.x）保留在另一个仓库中，不再开发，作为只读参考：
-
-- 仓库：`aurora-v2`，分支 `hardening-2026-11`
-- 封存标签：`archive/v2-final`（提交 `f0d209c`）
-
-v3 是独立的新软件。它不依赖旧仓库的路径或模块。需要的代码会在设计定稿后复制过来，并在新仓库里独立维护。
-
-## 基本思路
-
-- 服务器只装一个 `aurora-agent`，它是入口，类似 SSH 的服务端。
-- 终端、文件、代理、监控、开发工具等都是挂在入口上的服务，按需启用。
-- 客户端通过 SSH 完成安装，之后建立直连。
+- 服务器上只装一个 `aurora3-agent`（Go），终端、文件、git、代理、监控等都是它上面可以单独启停的服务。
+- 客户端用 Flutter 编写，面向 Windows、Linux、macOS、Android、iOS。
+- 客户端通过 SSH 安装 agent，之后用 TLS 直连，日常使用不再依赖 SSH。
 - VPS 是可选项，只提供代理网络和打洞，不承担凭据。
+
+## 目录
+
+| 目录 | 内容 |
+|---|---|
+| `agent/` | Go：agent、内核与服务、tmux 构建工具。构建：`agent\build.ps1` |
+| `app/` | Flutter 客户端 |
+| `docs/DESIGN.md` | 设计（全部决定） |
+| `docs/PLAN.md` | 实施计划与进度 |
+| `docs/history/` | 旧的讨论记录，只作追溯 |
+
+## 与 v2 的关系
+
+v2（`aurora-v2`，标签 `archive/v2-final`）已封存，只读参考。v3 使用独立的名字、路径和端口，可以与 v2 装在同一台机器上，测试和部署都不影响 v2。详见 `docs/DESIGN.md` 第 4 节。

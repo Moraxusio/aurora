@@ -108,8 +108,10 @@ WSL 测试实例说明：WSL 里的 `Ubuntu-24.04` 运行着 v2 agent，直接�
 | G1.5 复制 p2p | 完成 | 8b62e40 | 七个文件一致，三行 import 改为 aurora3；linux/windows 构建通过 |
 | G4.1 amd64 tmux | 完成 | 97a42ec | 在 203.0.113.10 的 Alpine 容器中构建；哈希与 v2 的 bundle.lock 完全一致；容器冒烟测试通过 |
 | G4.2 arm64 tmux | 未开始 | — | 需要 arm64 真机或 QEMU，未验证前不发布（D-21） |
-| G2.2 files 服务 | 部分完成 | d2238a1、d154fb8 | `files.go`、`du.go`、`tail.go`、`watch.go` 与辅助函数已复制；`fs.search`、`fs.find`、`fs.logs` 等待边界决定（`docs/OPEN_DECISION_SEARCH.md`）。Linux 测试 4 项通过 |
-| G2.1、G2.3–G2.8 其它服务 | 未开始 | — | git 服务依赖相同的根目录解析接口；`gitFor` 中对终端服务的依赖可直接去掉（见决定文档） |
+| G2.2 files 服务 | 完成（除 fs.copy 的完整测试） | d2238a1、d154fb8、30381fc | `files.go`、`du.go`、`tail.go`、`watch.go`、`search.go`、`search_text.go` 已复制。搜索通过 `files.RepoRunner` 接口使用 git，不依赖 git 或终端的内部实现（D-40）。8 项 Linux 测试通过 |
+| G2.3 git 服务 | 部分完成 | 30381fc | `gitrun.go` 的运行器与 `ls-files` 接口已复制；`git.go`、`git_adv.go`（约 1500 行）尚未复制 |
+| G2.1、G2.4–G2.8 其它服务 | 未开始 | — | — |
+| 待你决定 | — | 5c33748 | git 的 fetch/push 是否经过代理：v2 注释说经过，代码不经过；见 `docs/OPEN_DECISION_SEARCH.md` |
 | G3 生命周期 | 未开始 | — | 需要 Linux 测试环境（G7.1） |
 | G5 客户端界面 | 未开始 | — | 需要先选定界面框架 |
 | G6 VPS 登记 | 未开始 | — | — |

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"aurora3/internal/wire"
@@ -139,4 +140,15 @@ var SkipDirs = map[string]bool{
 	".tox": true, ".cache": true, ".idea": true, ".gradle": true,
 	// installed Python packages: thousands of files nobody edits
 	"site-packages": true, "dist-packages": true, ".conda": true, ".npm": true, ".nvm": true,
+}
+
+// UnitName is the syntax of a systemd unit name the agent accepts (v2 monitor.go).
+var UnitName = regexp.MustCompile(`^[A-Za-z0-9@_.:-]{1,128}$`)
+
+// CheckUnit refuses a unit name that is malformed or looks like a flag.
+func CheckUnit(name string) error {
+	if !UnitName.MatchString(name) || strings.HasPrefix(name, "-") {
+		return wire.Errf(wire.CodeBadRequest, "服务名无效")
+	}
+	return nil
 }

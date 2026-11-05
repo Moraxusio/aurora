@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"aurora3/internal/paths"
 	"aurora3/internal/wire"
 )
 
@@ -145,17 +146,9 @@ func statfsBounded(p string) (syscall.Statfs_t, bool) {
 // cleanRel validates a client path ("/a/b") and returns it relative to the
 // root ("a/b", or "." for the root itself).
 func cleanRel(p string) (string, error) {
-	if len(p) > 4096 || strings.ContainsAny(p, "\x00\\") {
-		return "", wire.Errf(wire.CodeBadRequest, "路径无效")
-	}
-	for _, part := range strings.Split(p, "/") {
-		if part == ".." {
-			return "", wire.Errf(wire.CodeForbidden, "不允许访问根目录以外的路径")
-		}
-	}
-	rel := strings.TrimPrefix(path.Clean("/"+p), "/")
-	if rel == "" {
-		rel = "."
+	rel, err := paths.Clean(p)
+	if err != nil {
+		return "", paths.WireError(err)
 	}
 	return rel, nil
 }

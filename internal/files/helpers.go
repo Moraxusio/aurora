@@ -3,23 +3,14 @@
 package files
 
 import (
-	"os"
-	"strings"
+	"aurora3/internal/paths"
 )
 
-// Copied from v2 internal/agent/monitor.go and gitrun.go (pure functions).
+// Thin wrappers over the kernel's path rules (internal/paths). The bodies live
+// in one place, shared with the git service (D-40).
 
-// localFS lists the filesystem types that are local disks, not network mounts.
-var localFS = map[string]bool{"ext2": true, "ext3": true, "ext4": true, "xfs": true, "btrfs": true, "f2fs": true, "vfat": true, "zfs": true, "jfs": true}
+var localFS = paths.LocalFS
 
-func readFile(p string) string {
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
+func readFile(p string) string { return paths.ReadFile(p) }
 
-func within(root, p string) bool {
-	return root == "/" || p == root || strings.HasPrefix(p, strings.TrimSuffix(root, "/")+"/")
-}
+func within(root, p string) bool { return paths.Within(root, p) }

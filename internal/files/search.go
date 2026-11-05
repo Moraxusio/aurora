@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"aurora3/internal/paths"
 	"aurora3/internal/wire"
 )
 
@@ -80,28 +81,7 @@ func (s *Env) listFiles(ctx context.Context, abs string) (files []string, via st
 var errorsStop = fs.ErrClosed
 
 // foreignMounts: mount points below abs that a walk must not enter.
-func foreignMounts(abs string) map[string]bool {
-	out := map[string]bool{}
-	for _, line := range strings.Split(readFile("/proc/mounts"), "\n") {
-		f := strings.Fields(line)
-		if len(f) < 3 {
-			continue
-		}
-		mnt := strings.ReplaceAll(f[1], "\\040", " ")
-		if mnt == abs || !within(abs, mnt) {
-			continue
-		}
-		if !localFS[f[2]] || mnt == "/proc" || mnt == "/sys" || mnt == "/dev" || mnt == "/run" {
-			out[mnt] = true
-		}
-	}
-	for _, p := range []string{"/proc", "/sys", "/dev", "/run"} {
-		if abs == "/" {
-			out[p] = true
-		}
-	}
-	return out
-}
+func foreignMounts(abs string) map[string]bool { return paths.ForeignMounts(abs) }
 
 // ---- quick open ----
 
@@ -340,9 +320,8 @@ func (s *Env) fsLogs(ctx context.Context, raw json.RawMessage) (any, error) {
 // dirOf resolves a root-relative path to its absolute, symlink-checked form.
 // Copied from v2 gitrun.go; the git service does not need it, search does.
 func (s *Env) dirOf(rootID, p string) (rootAbs, abs string, err error) {
-	rel, err := cleanRel(p)
-	if err != nil {
-		return "", "", err
+	if _, err := paths.Clean(p); err != nil {
+		return "", "", paths.WireError(err)
 	}
 	r, err := s.openRoot(rootID)
 	if err != nil {
@@ -350,15 +329,12 @@ func (s *Env) dirOf(rootID, p string) (rootAbs, abs string, err error) {
 	}
 	r.Close()
 	rootAbs = rootPath(s, rootID)
-	if real, e := filepath.EvalSymlinks(rootAbs); e == nil {
-		rootAbs = real
+	abs, err = paths.Resolve(rootAbs, p)
+	if err == paths.ErrOutside {
+		return "", "", paths.WireError(err)
 	}
-	abs, err = filepath.EvalSymlinks(filepath.Join(rootAbs, rel))
 	if err != nil {
 		return "", "", fsErr(err)
-	}
-	if !within(rootAbs, abs) {
-		return "", "", wire.Errf(wire.CodeForbidden, "不允许访问根目录以外的路径")
 	}
 	return rootAbs, abs, nil
 }

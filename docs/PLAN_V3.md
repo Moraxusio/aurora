@@ -109,8 +109,10 @@ WSL 测试实例说明：WSL 里的 `Ubuntu-24.04` 运行着 v2 agent，直接�
 | G4.1 amd64 tmux | 完成 | 97a42ec | 在 203.0.113.10 的 Alpine 容器中构建；哈希与 v2 的 bundle.lock 完全一致；容器冒烟测试通过 |
 | G4.2 arm64 tmux | 未开始 | — | 需要 arm64 真机或 QEMU，未验证前不发布（D-21） |
 | G2.2 files 服务 | 完成（除 fs.copy 的完整测试） | d2238a1、d154fb8、30381fc | `files.go`、`du.go`、`tail.go`、`watch.go`、`search.go`、`search_text.go` 已复制。搜索通过 `files.RepoRunner` 接口使用 git，不依赖 git 或终端的内部实现（D-40）。8 项 Linux 测试通过 |
-| G2.3 git 服务 | 部分完成 | 30381fc | `gitrun.go` 的运行器与 `ls-files` 接口已复制；`git.go`、`git_adv.go`（约 1500 行）尚未复制 |
-| G2.1、G2.4–G2.8 其它服务 | 未开始 | — | — |
+| G2.3 git 服务 | 完成（运行器、操作、5 项测试） | 6fb8c8b、02d3e54 | `git.go`、`git_adv.go` 按 v2 复制，改动仅为接收者与服务引用，逐行核对通过。5 项真实仓库测试在 WSL 中通过（空仓库提交提示、暂存与提交、审计、越界路径、相对路径）。其余操作的行为未测 |
+| G2.6 monitor 服务 | 部分完成 | ff90f00 | `sys.metrics`、`proc.list`、`log.tail` 已复制。`gpu.info` 未复制：它把 GPU 进程归属到终端会话，需要先定邻接接口 |
+| G2.7 systemd 服务 | 部分完成 | ff90f00 | `svc.info`、`svc.action` 与 `service_actions` 白名单已复制；单元名检查在内核 `paths.CheckUnit`，有测试。两个操作本身未做行为测试 |
+| G2.1、G2.4、G2.5、G2.8 其它服务 | 未开始 | — | terminal、devtools、net、proxy |
 | 待你决定 | — | 5c33748 | git 的 fetch/push 是否经过代理：v2 注释说经过，代码不经过；见 `docs/OPEN_DECISION_SEARCH.md` |
 | G3 生命周期 | 未开始 | — | 需要 Linux 测试环境（G7.1） |
 | G5 客户端界面 | 未开始 | — | 需要先选定界面框架 |

@@ -374,7 +374,7 @@ func (e *Env) gitInit(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	g, err := gitFor(abs)
+	g, err := gitFor(abs, e.Proxy)
 	if err != nil {
 		return nil, err
 	}

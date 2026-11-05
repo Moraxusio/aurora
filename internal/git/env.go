@@ -24,9 +24,14 @@ type Auditor interface {
 }
 
 // Env is everything the git service needs from the agent.
+//
+// Proxy returns the proxy environment while the proxy service is on, and nil
+// when it is off (D-69). It is a function, not a fixed map, so a switch changed
+// at run time applies to the next git call.
 type Env struct {
 	Roots []Root
 	Audit Auditor
+	Proxy func() map[string]string
 }
 
 // decode reads the operation's arguments. Copied from v2 server.go.

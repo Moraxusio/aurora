@@ -28,7 +28,9 @@ type gitCtx struct {
 
 var errNoGit = wire.Errf(wire.CodeUnsupported, "服务器上没有安装 git")
 
-func gitFor(dir string) (*gitCtx, error) {
+// gitFor prepares git for dir. proxy, when non-nil and returning a map, adds the
+// proxy variables to git's environment (D-69).
+func gitFor(dir string, proxy func() map[string]string) (*gitCtx, error) {
 	exe, err := exec.LookPath("git")
 	if err != nil {
 		return nil, errNoGit
@@ -55,6 +57,11 @@ func gitFor(dir string) (*gitCtx, error) {
 		"HOME=" + g.home, "USER=" + g.name, "LOGNAME=" + g.name, "LANG=C.UTF-8",
 		"GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/false", "SSH_ASKPASS=/bin/false",
 		"GIT_SSH_COMMAND=ssh -o BatchMode=yes -o ConnectTimeout=20",
+	}
+	if proxy != nil {
+		for k, v := range proxy() {
+			g.env = append(g.env, k+"="+v)
+		}
 	}
 	return g, nil
 }

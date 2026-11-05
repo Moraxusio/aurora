@@ -61,7 +61,7 @@ func (e *Env) repo(raw json.RawMessage) (*gitArgs, *gitCtx, string, error) {
 	if err != nil {
 		return nil, nil, "", err
 	}
-	g, err := gitFor(abs)
+	g, err := gitFor(abs, e.Proxy)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -141,7 +141,7 @@ func (e *Env) gitRepos(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	g, err := gitFor(abs)
+	g, err := gitFor(abs, e.Proxy)
 	if err != nil {
 		return nil, err
 	}

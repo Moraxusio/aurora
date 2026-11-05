@@ -71,12 +71,15 @@ func nulSplit(data []byte, atEOF bool) (int, []byte, error) {
 }
 
 // Repos provides a Runner per directory. It satisfies files.RepoRunner.
-type Repos struct{}
+type Repos struct {
+	// Proxy is the same hook as Env.Proxy (D-69).
+	Proxy func() map[string]string
+}
 
 // Runner returns a runner for dir. It fails when git is missing, and the
 // caller then walks the directory as v2 did.
-func (Repos) Runner(dir string) (files.Runner, error) {
-	g, err := gitFor(dir)
+func (r Repos) Runner(dir string) (files.Runner, error) {
+	g, err := gitFor(dir, r.Proxy)
 	if err != nil {
 		return nil, err
 	}

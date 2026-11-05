@@ -11,13 +11,11 @@ package files
 // that is not a local disk (a dead NFS server would hang the walk).
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -36,40 +34,17 @@ const (
 
 // listFiles lists the files below abs, relative to it.
 func (s *Env) listFiles(ctx context.Context, abs string) (files []string, via string, truncated bool, walkErrors int) {
-	if g, err := s.gitFor(abs); err == nil {
-		cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		cmd := exec.CommandContext(cctx, g.exe, "-c", "safe.directory=*", "-c", "core.quotepath=off", "ls-files", "-co", "--exclude-standard", "-z")
-		cmd.Dir, cmd.Env = g.dir, g.env
-		out, err := cmd.StdoutPipe()
-		if err == nil {
-			_ = cmd.Start()
-			sc := bufio.NewScanner(out)
-			sc.Split(func(data []byte, atEOF bool) (int, []byte, error) {
-				for i, b := range data {
-					if b == 0 {
-						return i + 1, data[:i], nil
-					}
-				}
-				if atEOF && len(data) > 0 {
-					return len(data), data, nil
-				}
-				return 0, nil, nil
-			})
-			for sc.Scan() {
-				if len(files) >= listMax {
-					truncated = true
-					_ = cmd.Process.Kill()
-					break
-				}
-				files = append(files, string(sc.Bytes()))
-			}
-			waitErr := cmd.Wait()
+	if s.Repos != nil {
+		if r, err := s.Repos.Runner(abs); err == nil {
+			lctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			names, capped, lerr := r.LsFiles(lctx, listMax)
 			cancel()
-			if waitErr == nil || truncated {
+			files = append(files, names...)
+			truncated = capped
+			if lerr == nil || truncated {
 				return files, "git", truncated, 0
 			}
 		}
-		cancel()
 	}
 	skip := foreignMounts(abs)
 	stop := errorsStop
@@ -362,3 +337,29 @@ func (s *Env) fsLogs(ctx context.Context, raw json.RawMessage) (any, error) {
 	}
 	return map[string]any{"files": out}, nil
 }
+// dirOf resolves a root-relative path to its absolute, symlink-checked form.
+// Copied from v2 gitrun.go; the git service does not need it, search does.
+func (s *Env) dirOf(rootID, p string) (rootAbs, abs string, err error) {
+	rel, err := cleanRel(p)
+	if err != nil {
+		return "", "", err
+	}
+	r, err := s.openRoot(rootID)
+	if err != nil {
+		return "", "", err
+	}
+	r.Close()
+	rootAbs = rootPath(s, rootID)
+	if real, e := filepath.EvalSymlinks(rootAbs); e == nil {
+		rootAbs = real
+	}
+	abs, err = filepath.EvalSymlinks(filepath.Join(rootAbs, rel))
+	if err != nil {
+		return "", "", fsErr(err)
+	}
+	if !within(rootAbs, abs) {
+		return "", "", wire.Errf(wire.CodeForbidden, "不允许访问根目录以外的路径")
+	}
+	return rootAbs, abs, nil
+}
+

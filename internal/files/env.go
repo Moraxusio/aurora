@@ -25,11 +25,13 @@ type Auditor interface {
 	Write(event string, fields map[string]any)
 }
 
-// Env is everything the files service needs from the agent.
+// Env is everything the files service needs from the agent. Git is optional:
+// with Repos nil, search does not look for repositories.
 type Env struct {
 	Roots          []Root
 	UploadMaxBytes int64
 	Audit          Auditor
+	Repos          RepoRunner
 }
 
 func decode(args json.RawMessage, v any) error {

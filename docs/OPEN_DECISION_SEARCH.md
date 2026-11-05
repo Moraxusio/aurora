@@ -32,6 +32,18 @@ D-40 规定服务之间不直接调用对方的内部函数，共享部分放在
 
 在你决定之前，`internal/files/pending/` 中的两个文件不编译，也不影响其它服务。
 
+## 发现：v2 的注释与代码不一致（需要你决定）
+
+`gitrun.go` 文件头注释写的是 git 在 fetch 和 push 时使用"会话环境（代理）"。但代码并非如此：
+
+- `gitFor` 构造的环境只有 PATH、HOME、USER、LOGNAME、LANG 和 GIT_* 设置，再加上 `sessionEnvVars()`。
+- `sessionEnvVars()` 只返回 `AURORA_BIN`、`AURORA_TERMINFO`、`TERMINFO_DIRS`，不含代理。
+- 代理变量来自 `s.proxy.Env()`（`proxyenv.go:111`），写入会话环境文件。`gitFor` 从不读取它。
+
+因此 **v2 的 git fetch 和 push 实际上不经过代理**，而注释说它会经过。这与 D-47 至 D-50（代理按会话设置）有关：git 的网络访问是否应该遵循会话的代理设置？
+
+在你决定之前，v3 的 git 服务保持 v2 的实际行为（不带代理）。这是一项行为决定，不由我单独定。
+
 ## 补充：git 服务有同样的问题
 
 `git.go`、`git_adv.go`、`gitrun.go` 同样依赖：

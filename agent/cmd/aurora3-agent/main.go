@@ -1,6 +1,12 @@
+// aurora3-agent is Aurora's server side (v3). It runs beside a v2 aurora-agent
+// without sharing any name, path or port (D-71).
+//
+//	aurora3-agent version
+//	aurora3-agent run [--config /etc/aurora3/agent.json]
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 )
@@ -9,10 +15,26 @@ import (
 var Version = "3.0.0-dev"
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "version" {
-		fmt.Println(Version)
-		return
+	if len(os.Args) < 2 {
+		usage()
 	}
-	fmt.Fprintln(os.Stderr, "aurora3-agent: no service is enabled yet")
+	switch os.Args[1] {
+	case "version":
+		fmt.Println(Version)
+	case "run":
+		fs := flag.NewFlagSet("run", flag.ExitOnError)
+		cfg := fs.String("config", defaultConfigPath, "配置文件")
+		_ = fs.Parse(os.Args[2:])
+		if err := run(*cfg); err != nil {
+			fmt.Fprintln(os.Stderr, "aurora3-agent:", err)
+			os.Exit(1)
+		}
+	default:
+		usage()
+	}
+}
+
+func usage() {
+	fmt.Fprintln(os.Stderr, "usage: aurora3-agent version | run [--config PATH]")
 	os.Exit(2)
 }

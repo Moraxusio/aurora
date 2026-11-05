@@ -42,7 +42,7 @@ Go 工具链、模块、构建脚本、tmux 构建锁。
 - G2.6 monitor：`sys.metrics`、`proc.list`、`log.tail` 已复制；`gpu.info` 等 terminal 的中性接口。
 - G2.7 systemd：`svc.info`、`svc.action` 已复制。
 - G2.8 proxy：按会话（D-47 至 D-50、D-53）。
-- G2.9 入口：`aurora3-agent run`，TCP 直连监听（7710）、Hello、yamux、按服务分发，Linux TCP 调优。这是客户端联调的前提，排在 G2.1 之前。
+- G2.9 入口：`aurora3-agent run`，TCP 直连监听（17710，D-76）、Hello、yamux、按服务分发，Linux TCP 调优。这是客户端联调的前提，排在 G2.1 之前。
 - 验收：每个服务有开关测试；关闭后新操作被拒，已有会话不被结束。
 
 ### G3 生命周期

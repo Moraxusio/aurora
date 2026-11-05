@@ -95,11 +95,60 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | G2.6 monitor | 部分完成 | ff90f00 | `gpu.info` 未复制；操作未做行为测试 |
 | G2.7 systemd | 部分完成 | ff90f00 | 单元名检查有测试；操作未做行为测试 |
 | 内核 `internal/paths` | 完成 | 1154d1f、ff90f00 | 7 项测试通过 |
-| 新仓库 aurora-next | 完成 | 见 git log | 克隆 aurora-v3，Go 代码移入 `agent/`，设计文档汇总为 `DESIGN.md` |
+| 新仓库 aurora-next | 完成 | 227da69 | 克隆 aurora-v3，Go 代码移入 `agent/`，设计文档汇总为 `DESIGN.md` |
 | Flutter 3.47.9 | 完成 | — | zip 哈希一致；`flutter doctor` 中 Windows 与 Visual Studio 通过，Android SDK 未装 |
+| G2.9 agent 入口 | 完成 | f723936 | 17710 端口（D-76）、Hello、yamux、按服务分发、服务开关写回 agent.json 并审计。10 项测试在 Windows 与 Linux 通过。WSL 端到端：普通用户在 `/tmp` 下运行，fs.list、fs.read、sys.metrics、关闭的服务、错误令牌均符合预期；v2 的单元、二进制、配置、tmux 单元、端口前后一致 |
+| G5.2 Dart 协议层 | 完成 | 见 git log | `app/packages/aurora_wire`：帧、yamux（兼容 hashicorp/yamux v0.1.1）、TLS 指纹校验、Hello、请求与流。14 项内存测试通过 |
+| G5.3 协议层联调 | 完成 | 见 git log | 对真实 Go 入口（`aurora3-testpeer`）13 项测试通过：握手、令牌错误、指纹不符、无人监听、服务开关、流回显、64 MiB 下载与上传逐字节核对、200 个并发调用、下载进行中的调用延迟、ping 与保活、agent 被杀后的断开原因 |
+| G5.4 TCP 性能 | 部分完成 | 见 git log | 见第 6 节。客户端自身的优化已做；吞吐受 Dart SDK 的 TLS 实现限制，需要你决定是否进一步处理 |
 
-## 5. 已知待办
+## 5. 第三方依赖（DESIGN 5.9：只用 MIT、BSD、Apache-2.0）
+
+| 包 | 版本 | 许可证 | 用途 |
+|---|---|---|---|
+| crypto（Dart 团队） | 3.0.8 | BSD-3-Clause | 证书指纹 SHA-256 |
+| typed_data（crypto 的依赖） | 1.4.0 | BSD-3-Clause | — |
+| github.com/hashicorp/yamux（Go） | 0.1.1 | MPL-2.0 | agent 端多路复用，沿用 v2 |
+| github.com/apernet/hysteria/core/v2（Go） | 2.13.0 | MIT | 代理上游，沿用 v2 |
+| github.com/apernet/quic-go（Go，间接） | — | MIT | p2p、hysteria |
+| github.com/coder/websocket（Go） | 1.8.15 | ISC | 沿用 v2 |
+| github.com/creack/pty（Go） | 1.1.24 | MIT | 终端，沿用 v2 |
+| golang.org/x/net、x/sys、x/crypto（Go） | 见 go.mod | BSD-3-Clause | — |
+
+开发依赖（`test`、`lints`、`flutter_lints`）不进入发布产物。hashicorp/yamux 是 MPL-2.0，沿用自 v2，属于文件级弱 copyleft：只要求修改过的该库文件本身开源，我们没有修改它。ISC 与 MIT 等价。Dart 端的 yamux 是按协议自行编写的，没有复制 hashicorp/yamux 的代码。
+
+## 5.1 已知待办
 
 - tmux 构建脚本里的终端信息目录是 v2 的 `/var/lib/aurora/terminfo`（`agent/tools/tmux/build-in-container.sh`）。v3 要改为 `/var/lib/aurora3/terminfo` 并重新构建 tmux（需要 Linux 主机上的 Docker）。在此之前，内置 tmux 也能通过 `TERMINFO_DIRS` 环境变量找到 v3 的目录，所以不阻塞 G2.1。
 - `update/local.go` 的 Windows 路径是 v2 桌面端的 `%LOCALAPPDATA%\Aurora`，没有任何代码调用它。Flutter 客户端有自己的更新方式，这部分在 G5 中删除或改写。
 - `update.ProductAgent` 的值是 `aurora-agent`，发布清单里的产品名应改为 `aurora3-agent`，在 G7 做发布清单时一起改。
+
+## 6. TCP 性能基准（2026-11-06）
+
+同一个 `aurora3-testpeer`（真实的 TLS、Hello、hashicorp/yamux 与分发），分别用 Go 客户端（`agent/cmd/aurora3-bench`，即 v2 的客户端协议栈）和 Dart 客户端（`app/packages/aurora_wire/bin/bench.dart`）跑同样的项目。本机回环，8 核。复现：`agent/tools/bench.ps1`（Windows）、`agent/tools/bench-linux.sh`（WSL）。
+
+| 项目 | Go，Linux | Dart，Linux | Go，Windows | Dart，Windows |
+|---|---|---|---|---|
+| 建立连接（TCP+TLS+Hello） | 2.7 ms | 3.5 ms | 3.4 ms | 4.2 ms |
+| 空载单次调用 p50 / p99 | 0.41 / 0.72 ms | 0.76 / 1.08 ms | —¹ | 0.26 / 0.65 ms |
+| yamux ping p50 | 0.25 ms | 0.55 ms | —¹ | 0.16 ms |
+| 64 路并发调用 | 32969 次/秒 | 2969 次/秒 | 11043 次/秒 | 6261 次/秒 |
+| 下载，单流 | 420 MB/s | 37 MB/s | 205 MB/s | 58 MB/s |
+| 下载，4 流合计 | 727 MB/s | 40 MB/s | 265 MB/s | 56 MB/s |
+| 上传，单流 | 401 MB/s | 69 MB/s | 242 MB/s | 55 MB/s |
+| 下载进行中按键回显 p50 / p99 | 0.57 / 1.12 ms | 13.1 / 14.9 ms | —¹ | 13.8 / 20.8 ms |
+
+¹ Windows 上 Go 的计时精度不足，p50 显示为 0，不可比。
+
+**瓶颈在 Dart SDK 的 TLS，不在 yamux。** 用最简单的程序直接测 `dart:io`（服务端只发数据，不分帧，不走 yamux）：
+
+| | Linux | Windows |
+|---|---|---|
+| `SecureSocket`（TLS 1.3）读取 | 46–48 MB/s | 69–72 MB/s |
+| `Socket`（明文 TCP）读取 | 1168–1274 MB/s | 444–446 MB/s |
+
+`SecureSocket` 每次只交出约 5.4 KB 明文，原因是它内部固定 8 KiB 的环形缓冲区，并在单独的线程上做加解密（Dart SDK 源码 `secure_socket_patch.dart` 第 69 行 `SIZE = 8 * 1024`）。这是 Dart SDK 的已知问题：dart-lang/sdk#64086、#64115（2026-08 起讨论，维护者已同意简化这部分实现，尚未合并）。Dart 客户端的吞吐达到了这个上限的 80% 左右（Linux 37–40 / 47，Windows 56–58 / 70）。多 isolate、多连接在 Windows 上能叠加（4 个 isolate 合计 206 MB/s），在 Linux 上不能（4 个合计 47 MB/s）。
+
+**客户端已做的优化**（DESIGN 5.3）：同一轮事件里的帧合并成一次写（20 个小帧合并为 1 次）；一次只有一个写在进行；交互流优先于批量流；一元调用的 SYN、请求和 FIN 在同一次写中发出；接收窗口按读取速度自动增长（与 quic-go 的流量控制算法相同），读取方跟不上时窗口不放大，下载进行中的按键回显 p50 从 52.6 ms 降到 13.1 ms（Linux），下载速度不变。
+
+**对实际使用的意义**：37–69 MB/s 约等于 300–550 Mbps。经公网或校园网连接服务器时，链路通常低于这个值，TLS 不会成为瓶颈；千兆局域网下的大文件传输会受它限制。64 路并发调用每秒约 3000–6000 次，界面操作用不到这个量。

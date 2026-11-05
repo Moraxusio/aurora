@@ -1,0 +1,14 @@
+name: aurora_wire
+description: Aurora client protocol (pinned TLS, Hello, yamux, operation frames). Pure Dart.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  crypto: ^3.0.6
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.0

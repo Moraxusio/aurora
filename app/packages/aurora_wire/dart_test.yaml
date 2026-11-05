@@ -1,0 +1,3 @@
+tags:
+  agent:
+    # needs AURORA3_TESTPEER (agent/cmd/aurora3-testpeer); skipped without it

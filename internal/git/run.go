@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"aurora3/internal/paths"
 	"aurora3/internal/wire"
 )
 
@@ -106,3 +107,18 @@ func gitErr(stderr string, err error) error {
 }
 
 // dirOf resolves {root, path} to a real folder inside that root.
+
+// gitErr turns git's stderr into the message the client shows. Copied from v2
+// gitrun.go; these texts are part of the user-facing behaviour.
+
+// rootRel returns p relative to rootAbs, or "" when p is outside it.
+func rootRel(rootAbs, p string) string {
+	if !paths.Within(rootAbs, p) {
+		return ""
+	}
+	r := strings.TrimPrefix(p, strings.TrimSuffix(rootAbs, "/"))
+	if r == "" {
+		return "/"
+	}
+	return r
+}

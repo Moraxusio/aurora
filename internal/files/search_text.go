@@ -3,6 +3,7 @@ package files
 // Text side of search (no OS calls; tested on any platform).
 
 import (
+	"aurora3/internal/paths"
 	"errors"
 	"path"
 	"regexp"
@@ -14,13 +15,7 @@ import (
 
 // skipDirs are never descended into by a folder walk (git's own list of
 // files is used inside repositories instead).
-var skipDirs = map[string]bool{
-	".git": true, ".hg": true, ".svn": true, "node_modules": true, "__pycache__": true,
-	".venv": true, "venv": true, ".mypy_cache": true, ".pytest_cache": true, ".ruff_cache": true,
-	".tox": true, ".cache": true, ".idea": true, ".gradle": true,
-	// installed Python packages: thousands of files nobody edits
-	"site-packages": true, "dist-packages": true, ".conda": true, ".npm": true, ".nvm": true,
-}
+var skipDirs = paths.SkipDirs
 
 // globSet matches paths against comma-separated globs. A glob without a
 // slash matches the file name at any depth ("*.py"); with one it matches the

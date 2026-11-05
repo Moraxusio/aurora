@@ -130,3 +130,13 @@ func WireError(err error) error {
 	}
 	return err
 }
+
+// SkipDirs are directories a walk does not enter: VCS data, caches, and installed
+// packages nobody edits. Shared by search and git.
+var SkipDirs = map[string]bool{
+	".git": true, ".hg": true, ".svn": true, "node_modules": true, "__pycache__": true,
+	".venv": true, "venv": true, ".mypy_cache": true, ".pytest_cache": true, ".ruff_cache": true,
+	".tox": true, ".cache": true, ".idea": true, ".gradle": true,
+	// installed Python packages: thousands of files nobody edits
+	"site-packages": true, "dist-packages": true, ".conda": true, ".npm": true, ".nvm": true,
+}

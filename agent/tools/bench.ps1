@@ -2,13 +2,13 @@
 # aurora3-testpeer each, on this machine (loopback). Build first:
 #   agent: go build -o dist\aurora3-testpeer.exe ./cmd/aurora3-testpeer
 #          go build -o dist\aurora3-bench.exe ./cmd/aurora3-bench
-#   app\packages\aurora_wire: dart compile exe bin\bench.dart -o build\bench.exe
+#   app\packages\aurora_wire: dart build cli -t bin\bench.dart -o build\benchcli
 param([int]$Rounds = 1)
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $peerExe = Join-Path $root 'agent\dist\aurora3-testpeer.exe'
 $goBench = Join-Path $root 'agent\dist\aurora3-bench.exe'
-$dartBench = Join-Path $root 'app\packages\aurora_wire\build\bench.exe'
+$dartBench = Join-Path $root 'app\packages\aurora_wire\build\benchcli\bundle\bin\bench.exe'
 
 function Start-Peer {
     $psi = New-Object System.Diagnostics.ProcessStartInfo $peerExe

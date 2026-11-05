@@ -3,10 +3,9 @@
 // opens a stream and starts with a Request frame (agent/internal/wire).
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' show sha256;
+import 'package:aurora_tls/aurora_tls.dart';
 
 import 'bytes.dart';
 import 'frame.dart';
@@ -82,61 +81,43 @@ class AgentInfo {
   List<String> get caps => (raw['caps'] as List?)?.cast<String>() ?? const [];
 }
 
-String _hex(List<int> b) {
-  const d = '0123456789abcdef';
-  final s = StringBuffer();
-  for (final x in b) {
-    s
-      ..write(d[x >> 4])
-      ..write(d[x & 15]);
+/// The pin as 32 bytes, or null when it is not 64 hex digits.
+Uint8List? _pinBytes(String hex) {
+  final h = hex.trim().toLowerCase();
+  if (h.length != 64) return null;
+  final out = Uint8List(32);
+  for (var i = 0; i < 32; i++) {
+    final v = int.tryParse(h.substring(2 * i, 2 * i + 2), radix: 16);
+    if (v == null) return null;
+    out[i] = v;
   }
-  return s.toString();
+  return out;
 }
 
-/// Constant-time comparison of two pins.
-bool _pinEqual(String a, String b) {
-  if (a.length != b.length) return false;
-  var r = 0;
-  for (var i = 0; i < a.length; i++) {
-    r |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
-  }
-  return r == 0;
-}
-
-/// Pin of a certificate: hex SHA-256 of its DER (wire.CertPin).
-String certPin(X509Certificate cert) => _hex(sha256.convert(cert.der).bytes);
-
-/// A socket can be listened to once: the single subscription stays, and
-/// [listen] swaps the handlers (Hello first, then the yamux session).
-class _SocketTransport implements Transport {
-  final SecureSocket _s;
+/// Adapts [TlsSocket] (package:aurora_tls) to the session's [Transport]. Its
+/// input is one stream; [listen] swaps the handlers (Hello first, then the
+/// yamux session) on the single subscription.
+class _TlsTransport implements Transport {
+  final TlsSocket _s;
   StreamSubscription<Uint8List>? _sub;
   void Function(Uint8List) _onData = (_) {};
   void Function(Object) _onError = (_) {};
   void Function() _onDone = () {};
-  _SocketTransport(this._s);
+  _TlsTransport(this._s);
 
   @override
   void listen(void Function(Uint8List) onData, void Function(Object) onError, void Function() onDone) {
     _onData = onData;
     _onError = onError;
     _onDone = onDone;
-    _sub ??= _s.listen((d) => _onData(d), onError: (Object e) => _onError(e), onDone: () => _onDone(), cancelOnError: true);
+    _sub ??= _s.input.listen((d) => _onData(d), onError: (Object e) => _onError(e), onDone: () => _onDone(), cancelOnError: true);
   }
 
   @override
-  Future<void> write(Uint8List bytes) {
-    _s.add(bytes);
-    return _s.flush();
-  }
+  Future<void> write(Uint8List bytes) => _s.write(bytes);
 
   @override
-  Future<void> close() async {
-    try {
-      await _s.close();
-    } catch (_) {}
-    _s.destroy();
-  }
+  Future<void> close() => _s.close();
 }
 
 /// One direct link: a yamux session to an agent.
@@ -152,36 +133,24 @@ class Link {
       {String client = 'aurora',
       Duration timeout = const Duration(seconds: 15),
       YamuxConfig config = const YamuxConfig()}) async {
-    final want = ep.pin.trim().toLowerCase();
-    String? gotPin;
-    final ctx = SecurityContext(withTrustedRoots: false)..minimumTlsProtocolVersion = TlsProtocolVersion.tls1_3;
-    SecureSocket sock;
+    final pin = _pinBytes(ep.pin);
+    if (pin == null) throw DialException(DialFailure.protocol, '证书指纹格式无效');
+    TlsSocket sock;
     try {
-      // The pin replaces CA and host name checks (wire.PinnedTLS): every
-      // certificate reaches onBadCertificate, which accepts only the pinned one.
-      sock = await SecureSocket.connect(ep.host, ep.port, context: ctx, timeout: timeout, onBadCertificate: (c) {
-        gotPin = certPin(c);
-        return _pinEqual(gotPin!, want);
-      });
-    } on HandshakeException catch (e) {
-      if (gotPin != null && !_pinEqual(gotPin!, want)) {
-        throw DialException(DialFailure.pinMismatch, '服务器身份已变化（证书指纹不符）');
-      }
-      throw DialException(DialFailure.protocol, 'TLS 握手失败：${e.message}');
-    } on SocketException catch (e) {
-      throw DialException(DialFailure.network, '无法连接 ${ep.host}:${ep.port}：${e.message}');
-    } on TimeoutException {
-      throw DialException(DialFailure.network, '连接 ${ep.host}:${ep.port} 超时');
+      // TLS 1.3 in the bundled BoringSSL; trust is the pin alone
+      // (wire.PinnedTLS). dart:io's SecureSocket is not used: it caps
+      // throughput (docs/PLAN.md section 6).
+      sock = await TlsSocket.connect(ep.host, ep.port, pin, timeout: timeout);
+    } on TlsException catch (e) {
+      throw DialException(
+          switch (e.kind) {
+            TlsFailure.network => DialFailure.network,
+            TlsFailure.pinMismatch => DialFailure.pinMismatch,
+            TlsFailure.protocol => DialFailure.protocol,
+          },
+          e.message);
     }
-    // A certificate that verified against the empty trust store would skip
-    // onBadCertificate; check the pin on the final peer certificate anyway.
-    final peer = sock.peerCertificate;
-    if (peer == null || !_pinEqual(certPin(peer), want)) {
-      sock.destroy();
-      throw DialException(DialFailure.pinMismatch, '服务器身份已变化（证书指纹不符）');
-    }
-    sock.setOption(SocketOption.tcpNoDelay, true);
-    final t = _SocketTransport(sock);
+    final t = _TlsTransport(sock);
     try {
       final (reply, rest) = await _hello(t, ep.token, client).timeout(timeout);
       final server = AgentInfo((reply['server'] as Map?)?.cast<String, dynamic>() ?? const {});
@@ -199,7 +168,7 @@ class Link {
     }
   }
 
-  static Future<(Map<String, dynamic>, Uint8List)> _hello(_SocketTransport t, String token, String client) {
+  static Future<(Map<String, dynamic>, Uint8List)> _hello(_TlsTransport t, String token, String client) {
     final done = Completer<(Map<String, dynamic>, Uint8List)>();
     final q = ByteQueue();
     void fail(Object e) {

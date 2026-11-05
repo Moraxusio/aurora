@@ -172,7 +172,14 @@ void main() {
     for (var i = 0; i < 200; i++) {
       expect(res[i], {'text': '$i'});
     }
-    expect(l.session.numStreams, lessThan(5), reason: 'finished streams are forgotten');
+    // A call returns as soon as its Response frame is read; the agent's FIN
+    // for that stream may still be on the way. Once it arrives the stream is
+    // forgotten.
+    final until = DateTime.now().add(const Duration(seconds: 2));
+    while (l.session.numStreams > 0 && DateTime.now().isBefore(until)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    expect(l.session.numStreams, 0, reason: 'finished streams are forgotten');
     await l.close();
   }, skip: skip);
 

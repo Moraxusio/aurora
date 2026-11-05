@@ -14,6 +14,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"aurora3/internal/entry"
 	"aurora3/internal/service"
@@ -33,6 +35,9 @@ func main() {
 }
 
 func run(listen string, off, verbose bool) error {
+	// Tests kill this process (to check a dead agent), so a deferred removal
+	// may never run; leftovers of earlier runs are removed here instead.
+	sweepStale()
 	dir, err := os.MkdirTemp("", "aurora3-testpeer-")
 	if err != nil {
 		return err
@@ -75,4 +80,23 @@ func run(listen string, off, verbose bool) error {
 		cancel()
 	}()
 	return <-done
+}
+
+// sweepStale removes aurora3-testpeer-* directories in the temp directory
+// that are older than an hour: their process is gone (a run lasts seconds).
+// Only this tool's own directories match the prefix.
+func sweepStale() {
+	tmp := os.TempDir()
+	ents, err := os.ReadDir(tmp)
+	if err != nil {
+		return
+	}
+	for _, e := range ents {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "aurora3-testpeer-") {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > time.Hour {
+			_ = os.RemoveAll(filepath.Join(tmp, e.Name()))
+		}
+	}
 }

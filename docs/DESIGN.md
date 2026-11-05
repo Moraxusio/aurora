@@ -1,6 +1,6 @@
 # Aurora 设计
 
-本文是 Aurora（v3）的唯一设计文档，汇总了 D-1 至 D-76 的全部决定。旧的讨论记录在 `docs/history/`，只作追溯，以本文为准。
+本文是 Aurora（v3）的唯一设计文档，汇总了 D-1 至 D-77 的全部决定。旧的讨论记录在 `docs/history/`，只作追溯，以本文为准。
 
 ## 1. 目标
 
@@ -109,7 +109,7 @@ v3 的所有名字都与 v2 不同，两者可以装在同一台机器上互不�
 协议栈（客户端到 agent）：
 
 1. **TCP**：开启 `TCP_NODELAY`。
-2. **TLS 1.3**：不校验 CA 与主机名，改为比较证书 DER 的 SHA-256（小写十六进制）与保存的指纹，不一致即断开（`wire.PinnedTLS`）。
+2. **TLS 1.3**：不校验 CA 与主机名，改为比较证书 DER 的 SHA-256（小写十六进制）与保存的指纹，不一致即断开（`wire.PinnedTLS`）。客户端的 TLS 由随 App 编译的 BoringSSL 完成（D-77，`app/packages/aurora_tls`）。
 3. **Hello**：一个 `J` 帧，`{"role":"client","token":…,"version":"3.0","client":…}`；agent 回 `HelloReply`。握手限时 15 秒。主版本不同即拒绝（D-65）。
 4. **yamux**：hashicorp/yamux v0.1.1 协议，客户端用奇数流号。参数与 `wire.MuxConfig` 一致：流窗口上限 4 MiB，keepalive 15 秒，写超时 30 秒，打开流超时 20 秒。
 5. **请求**：每个操作开一个流，先发 `J` 帧 `Request{op,args}`。帧格式：4 字节大端长度（含类型字节）、1 字节类型（`J` JSON、`D` 数据、`E` 结束）、负载，单帧不超过 1 MiB。
@@ -228,6 +228,7 @@ v3 的所有名字都与 v2 不同，两者可以装在同一台机器上互不�
 | D-74 | 新仓库 `aurora-next`，客户端与 agent 合一（见第 3 节） |
 | D-75 | 测试和部署不影响封存的 v2（见第 4 节） |
 | D-76 | v3 默认直连端口为 17710（修正 D-71 中的 7710）。原因：WSL 上的 v2 配置为 `127.0.0.1:7710`。17710 在 WSL 和 203.0.113.10 上都空闲，且不在两台机器的临时端口范围内。新机器安装前仍在探测阶段检查端口是否被占用 |
+| D-77 | 客户端的 TLS 不用 Dart 自带的 `SecureSocket`，改用随 App 编译的 BoringSSL（0.20261020.0，Apache-2.0），由 Dart 构建钩子为每个平台编译，不修改 Flutter 引擎。TCP 仍用 Dart 的普通 Socket，密文与明文经 FFI 在 Dart 与 BoringSSL 之间传递，不经过 IO 线程。原因：`SecureSocket` 固定 8 KiB 缓冲并在 IO 线程上加解密，本机只有 46–72 MB/s（dart-lang/sdk#64115，上游的修复在 2026-09 被拒绝）；Mbed TLS 4.1 的 AES-GCM 只有约 300 MB/s。Windows x64 构建需要 NASM 3.02（构建工具，不进安装包） |
 
 ## 7. 暂不涉及
 

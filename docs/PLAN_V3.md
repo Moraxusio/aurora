@@ -108,7 +108,8 @@ WSL 测试实例说明：WSL 里的 `Ubuntu-24.04` 运行着 v2 agent，直接�
 | G1.5 复制 p2p | 完成 | 8b62e40 | 七个文件一致，三行 import 改为 aurora3；linux/windows 构建通过 |
 | G4.1 amd64 tmux | 完成 | 97a42ec | 在 203.0.113.10 的 Alpine 容器中构建；哈希与 v2 的 bundle.lock 完全一致；容器冒烟测试通过 |
 | G4.2 arm64 tmux | 未开始 | — | 需要 arm64 真机或 QEMU，未验证前不发布（D-21） |
-| G2 服务（8 个） | 未开始 | — | `files` 服务的复制需要适配层，见下 |
+| G2.2 files 服务 | 部分完成 | d2238a1、d154fb8 | `files.go`、`du.go`、`tail.go`、`watch.go` 与辅助函数已复制；`fs.search`、`fs.find`、`fs.logs` 等待边界决定（`docs/OPEN_DECISION_SEARCH.md`）。Linux 测试 4 项通过 |
+| G2.1、G2.3–G2.8 其它服务 | 未开始 | — | git 服务依赖相同的根目录解析接口；`gitFor` 中对终端服务的依赖可直接去掉（见决定文档） |
 | G3 生命周期 | 未开始 | — | 需要 Linux 测试环境（G7.1） |
 | G5 客户端界面 | 未开始 | — | 需要先选定界面框架 |
 | G6 VPS 登记 | 未开始 | — | — |
@@ -116,7 +117,9 @@ WSL 测试实例说明：WSL 里的 `Ubuntu-24.04` 运行着 v2 agent，直接�
 
 **G0.2 的小问题（已记录，不影响验收）**：`tools/tmux/build.ps1` 中写 bundle.lock 的注释已改为 v3 路径。`go.mod` 与 `go.sum` 直接取自 v2，因为 v3 的依赖与 v2 相同。
 
-**`files` 服务的复制方案**：`internal/agent/files.go`（874 行）依赖 `Server` 的 `cfg`、`audit`，以及 `decode`、`openRoot`、`writeAtomic`、`idNames` 等 v2 辅助函数。计划是：整文件保持不变；通过一个小接口提供配置与审计，而不是复制整个 `Server`。路径安全（`cleanRel`、`os.Root`、有界 `statfs`）原样保留，并用测试验证路径穿越仍被拒绝。这一步尚未完成。
+**`files` 服务的复制方案（已实施）**：`files.go` 仅改动 27 行，全部是包名、导入路径、接收者 `*Server`→`*Env`，以及三处字段访问（`cfg.Roots`、`cfg.UploadMaxBytes`、`audit.write`）。安全检查、路径规则和错误文字与 v2 完全一致。路径穿越测试在 Linux 上通过。
+
+**服务边界问题**：`search` 与 `git` 依赖 `gitFor`（git 服务）和 `sessionEnvVars`（终端服务）。`sessionEnvVars` 只被 tmux 会话的 shell 配置读取，git 不需要，去掉它不改变行为；但根目录解析 `dirOf` 需要共享的中性接口，这一点等待你决定。
 
 ## 停止条件的触发记录
 

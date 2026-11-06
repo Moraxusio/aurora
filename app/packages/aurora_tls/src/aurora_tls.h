@@ -78,6 +78,18 @@ AT_API int at_peer_pin(at_conn *c, uint8_t out[32]);
 /* Negotiated cipher suite, or "" before the handshake ends. */
 AT_API const char *at_cipher(at_conn *c);
 
+/* Release signatures (D-3): 1 when sig (64 bytes) is a valid Ed25519
+ * signature of msg by pub (32 bytes), else 0. */
+AT_API int at_ed25519_verify(const uint8_t *msg, size_t len, const uint8_t *sig, const uint8_t *pub);
+
+/* Streaming SHA-256 for files: a context, updates, then the digest (which
+ * also frees the context). at_sha256_free drops one without a digest. */
+typedef struct at_sha256 at_sha256;
+AT_API at_sha256 *at_sha256_new(void);
+AT_API void at_sha256_update(at_sha256 *h, const uint8_t *data, size_t len);
+AT_API void at_sha256_final(at_sha256 *h, uint8_t out[32]);
+AT_API void at_sha256_free(at_sha256 *h);
+
 #ifdef __cplusplus
 }
 #endif

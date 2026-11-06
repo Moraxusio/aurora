@@ -104,6 +104,7 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | G5.3 协议层联调 | 完成 | 见 git log | 对真实 Go 入口（`aurora3-testpeer`）13 项测试通过：握手、令牌错误、指纹不符、无人监听、服务开关、流回显、64 MiB 下载与上传逐字节核对、200 个并发调用、下载进行中的调用延迟、ping 与保活、agent 被杀后的断开原因 |
 | G5.4 TCP 性能 | 完成（Linux 下载还有差距，见第 6 节） | 见 git log | TLS 改用随 App 编译的 BoringSSL（D-77，`app/packages/aurora_tls`）。下载从 37–58 MB/s 提到 176–218 MB/s，上传从 55–69 MB/s 提到 185–346 MB/s，下载中按键回显 p50 从 13 ms 降到 0.2–1.2 ms。`aurora_tls` 6 项测试（对 Go 的 crypto/tls）、`aurora_wire` 27 项测试全部通过；Windows 构建与 Linux 交叉构建（经 WSL 的 gcc）都由构建钩子完成，未改 Flutter 引擎 |
 | G3.1 安装四阶段 | 完成 | 见 git log | `agent/internal/install`，命令 `aurora3-agent install --sha256 HEX [--name] [--user] [--probe]` 和 `aurora3-agent direct-info`（D-4）。输出 JSON 行：每阶段开始与结束，最后是结果；退出码 0 成功、1 拒绝且未改动、2 已回滚、3 回滚未完成。探测不改任何东西，普通用户也能跑；已装版本不低于本次时不改动（D-12）。准备阶段只写 `/var/lib/aurora3/install-*`：复制程序并核对 SHA-256、运行 `version` 核对版本、新装时生成配置并读回、`systemd-analyze verify` 单元。切换前把原状态存进 `rollback-*`，新文件先写在目标旁边，再 rename 提交。确认阶段对本机端口做带指纹的 Hello，并核对版本（D-38）。失败则回滚并再次确认原服务；回滚目录只在确认通过后删除，否则保留并报告，下次安装拒绝（D-17）。安装锁防止两个安装同时运行；SSH 断开时忽略 SIGHUP 和 SIGPIPE，四阶段照样完成或回滚。升级保留 agent.json、证书和令牌。测试：48 项（假 systemd，覆盖 4 种起始状态 × 7 个失败点，逐字节核对回滚后的文件和服务状态）；WSL 上以 root 真实运行（`agent/tools/install-real.ps1`）：普通用户探测、错误哈希、安装、direct-info、同版本、升级、坏版本回滚（33 秒）、SSH 中途断开，全部通过，结束后删除全部 v3 文件，v2 的单元、PID、二进制、配置、端口前后一致 |
+| G5.6 SSH 与安装（不含界面） | 完成 | 见 git log | `app/packages/aurora_install`：用 dartssh2 登录（密码或私钥），主机密钥在发送任何凭据前交给回调决定（D-2），不符时停止。签名清单按 Go 的 `update.VerifyFor` 同样的规则校验：v3 发布密钥的 Ed25519 签名（BoringSSL 实现，`aurora_tls` 新增）、key_id、产品 `aurora3-agent`、渠道、文件大小与 SHA-256（D-3）。读取架构和 root/sudo 情况，上传到 `mktemp -d` 建的私有目录，以 root 运行 `aurora3-agent install`，把各阶段转成进度，读回直连参数（D-4）；sudo 密码只走标准输入，不进命令行（D-6）。上传用 exec 加 `cat`，不依赖 SFTP。`update.ProductAgent` 改为 `aurora3-agent`；新工具 `aurora3-release`（sign、verify、pubkey）和测试用 SSH 服务器 `aurora3-sshpeer`。测试：Dart 19 项（Go 签名的清单与 6 种篡改、sudo 与 root 的命令、拒绝条件、结果解析），Go 4 项；WSL 端到端（`agent/tools/install-e2e.ps1`）两种登录各跑一次：root 登录，以及普通用户加密码 sudo（临时用户，测完删除）。都覆盖了错误主机密钥、错误密码、安装、direct-info、直连到新 agent，全部通过，v2 不变 |
 | G5.5 凭据存储 | Windows 完成，其它平台未做 | 见 git log | `app/packages/aurora_profile`：服务器、SSH 登录（含 sudo 密码，D-6）、直连参数（D-22）和客户端自己的 known_hosts（D-2）存在同一个加密文件里，原子写入（同 v2 的 `client.Store`）。Windows 用 DPAPI 当前用户范围，经 FFI 调用 `crypt32.dll`，带固定的 entropy，其它程序为同一用户加密的数据（包括 v2）打不开。文件头记录加密方式，打不开的文件不会被覆盖，只能由用户选择移到一边重来。没有明文实现：其它平台的 `platformSealer()` 直接拒绝（D-72），WSL 中已验证。20 项测试通过，包括 DPAPI 往返、1 MiB、篡改检测、不同 entropy 打不开 |
 
 ## 5. 第三方依赖（DESIGN 5.9：只用 MIT、BSD、Apache-2.0）
@@ -112,6 +113,9 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 |---|---|---|---|
 | BoringSSL（C/C++，随 App 编译） | 0.20261020.0 | Apache-2.0 | 客户端 TLS 1.3（D-77）。来源与哈希见 `app/packages/aurora_tls/third_party/README.md` |
 | ffi（Dart 团队） | 2.2.0 | BSD-3-Clause | 原生内存分配；`aurora_profile` 调用 DPAPI |
+| dartssh2 | 4.1.0（锁定） | MIT | 安装与重新配对时的 SSH（G5.6）。pub.dev 包的 SHA-256 `39359ace…7c84c51` 已核对 |
+| pointycastle、pinenacl、asn1lib、convert、meta（dartssh2 的依赖） | 4.0.0、0.6.0、1.6.8、3.1.2、1.19.0 | MIT | — |
+| golang.org/x/crypto/ssh（Go，只用于测试工具 `aurora3-sshpeer`） | 0.58.0 | BSD-3-Clause | 不进 agent |
 | hooks、code_assets、native_toolchain_c（Dart 团队） | 2.2.0、2.1.0、0.19.5 | BSD-3-Clause | 构建钩子，只在构建时用 |
 | NASM（构建工具，不进安装包） | 3.02 | BSD-2-Clause | 只在 Windows x64 上汇编 BoringSSL；位于 `<nasm-dir>` |
 | github.com/hashicorp/yamux（Go） | 0.1.1 | MPL-2.0 | agent 端多路复用，沿用 v2 |
@@ -127,10 +131,11 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 
 - tmux 构建脚本里的终端信息目录是 v2 的 `/var/lib/aurora/terminfo`（`agent/tools/tmux/build-in-container.sh`）。v3 要改为 `/var/lib/aurora3/terminfo` 并重新构建 tmux（需要 Linux 主机上的 Docker）。在此之前，内置 tmux 也能通过 `TERMINFO_DIRS` 环境变量找到 v3 的目录，所以不阻塞 G2.1。
 - `update/local.go` 的 Windows 路径是 v2 桌面端的 `%LOCALAPPDATA%\Aurora`，没有任何代码调用它。Flutter 客户端有自己的更新方式，这部分在 G5 中删除或改写。
-- `update.ProductAgent` 的值是 `aurora-agent`，发布清单里的产品名应改为 `aurora3-agent`，在 G7 做发布清单时一起改。
 - G5.5 其它平台的加密实现（D-72）：Android Keystore、macOS/iOS Keychain、Linux libsecret。都按 `Sealer` 接口接入，平台打开时（G5.9 等）再做。Linux 需要 libsecret 和一个密钥服务（如 gnome-keyring）；WSL 的 Ubuntu 两者都没装，测试前要先装，或另找一台桌面 Linux。
 - 配置文件在 Windows 以外的路径由 App 用 path_provider 给出，接入界面时再定。
-- G3.1 的签名校验在客户端：`--sha256` 来自客户端内置的签名清单（D-3），agent 只核对上传的文件与它一致。签名清单和内置 agent 的打包在 G5.6 与 G7 做。
+- 把签名的 agent 打进客户端安装包（D-3、D-14）：`aurora3-release sign` 已能产出签名目录，Flutter 应用怎样带上 amd64、arm64 两份并在运行时找到它们，在 G5.8 接界面时做。arm64 版要等 G4.2 的 tmux。
+- 安装向导的界面（输入地址账号、显示主机指纹请用户确认、显示各阶段进度）属于 G5.8；`aurora_install` 已提供需要的回调和结果。
+- 203.0.113.10 的 SSH 端口从本机可达，但没有在它上面跑过安装。真机安装（非 WSL）在接上界面后、经你同意再做。
 - G3.1 坏版本回滚要等确认超时（30 秒）。可以在服务进入 failed 状态时提前结束等待，属于优化项。
 
 ## 6. TCP 性能基准

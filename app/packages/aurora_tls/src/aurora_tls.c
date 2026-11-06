@@ -6,6 +6,7 @@
 
 #include <openssl/bio.h>
 #include <openssl/crypto.h>
+#include <openssl/curve25519.h>
 #include <openssl/err.h>
 #include <openssl/mem.h>
 #include <openssl/pool.h>
@@ -325,4 +326,31 @@ const char *at_cipher(at_conn *c) {
     if (!c->handshake_done) return "";
     const SSL_CIPHER *ci = SSL_get_current_cipher(c->ssl);
     return ci ? SSL_CIPHER_standard_name(ci) : "";
+}
+
+int at_ed25519_verify(const uint8_t *msg, size_t len, const uint8_t *sig, const uint8_t *pub) {
+    return ED25519_verify(msg, len, sig, pub) == 1 ? 1 : 0;
+}
+
+struct at_sha256 {
+    SHA256_CTX ctx;
+};
+
+at_sha256 *at_sha256_new(void) {
+    at_sha256 *h = (at_sha256 *)OPENSSL_malloc(sizeof *h);
+    if (h) SHA256_Init(&h->ctx);
+    return h;
+}
+
+void at_sha256_update(at_sha256 *h, const uint8_t *data, size_t len) { SHA256_Update(&h->ctx, data, len); }
+
+void at_sha256_final(at_sha256 *h, uint8_t out[32]) {
+    SHA256_Final(out, &h->ctx);
+    OPENSSL_free(h);
+}
+
+void at_sha256_free(at_sha256 *h) {
+    if (!h) return;
+    OPENSSL_cleanse(h, sizeof *h);
+    OPENSSL_free(h);
 }

@@ -10,8 +10,10 @@ const (
 	OpCheck        = "update.check"
 	OpFetch        = "update.fetch"
 	ProductDesktop = "aurora-desktop"
-	ProductAgent   = "aurora-agent"
-	ProductRelay   = "aurora-relay"
+	// ProductAgent is v3's agent (D-71). v2 signed "aurora-agent" with its own
+	// key; the name differs too, so neither manifest passes as the other.
+	ProductAgent = "aurora3-agent"
+	ProductRelay = "aurora-relay"
 	ChannelStable  = "stable"
 )
 

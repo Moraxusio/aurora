@@ -54,6 +54,23 @@ external int atPeerPin(Pointer<AtConn> c, Pointer<Uint8> out);
 @Native<Pointer<Char> Function(Pointer<AtConn>)>(symbol: 'at_cipher', isLeaf: true)
 external Pointer<Char> atCipher(Pointer<AtConn> c);
 
+@Native<Int32 Function(Pointer<Uint8>, Size, Pointer<Uint8>, Pointer<Uint8>)>(symbol: 'at_ed25519_verify', isLeaf: true)
+external int atEd25519Verify(Pointer<Uint8> msg, int len, Pointer<Uint8> sig, Pointer<Uint8> pub);
+
+final class AtSha256 extends Opaque {}
+
+@Native<Pointer<AtSha256> Function()>(symbol: 'at_sha256_new', isLeaf: true)
+external Pointer<AtSha256> atSha256New();
+
+@Native<Void Function(Pointer<AtSha256>, Pointer<Uint8>, Size)>(symbol: 'at_sha256_update', isLeaf: true)
+external void atSha256Update(Pointer<AtSha256> h, Pointer<Uint8> data, int len);
+
+@Native<Void Function(Pointer<AtSha256>, Pointer<Uint8>)>(symbol: 'at_sha256_final', isLeaf: true)
+external void atSha256Final(Pointer<AtSha256> h, Pointer<Uint8> out);
+
+@Native<Void Function(Pointer<AtSha256>)>(symbol: 'at_sha256_free', isLeaf: true)
+external void atSha256Free(Pointer<AtSha256> h);
+
 /// Reads a NUL-terminated UTF-8 string (ASCII in practice).
 String cString(Pointer<Char> p) {
   if (p.address == 0) return '';

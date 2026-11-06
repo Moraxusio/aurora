@@ -1,0 +1,18 @@
+name: aurora_install
+description: Installs aurora3-agent on a Linux server over SSH and reads its direct-link parameters (G5.6).
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  aurora_tls:
+    path: ../aurora_tls
+  dartssh2: 4.1.0
+
+dev_dependencies:
+  aurora_wire:
+    path: ../aurora_wire
+  lints: ^6.0.0
+  test: ^1.26.0

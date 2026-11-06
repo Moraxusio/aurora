@@ -126,6 +126,18 @@ func (r *Registry) AddEntry(name string, h Handler) error {
 	return nil
 }
 
+// EntryOps lists the operations that belong to the entry (D-46), sorted.
+func (r *Registry) EntryOps() []string {
+	var out []string
+	for name, id := range r.ops {
+		if id == "" {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // ErrUnknown is returned for an operation no service provides.
 var ErrUnknown = errors.New("unsupported operation")
 
@@ -184,9 +196,20 @@ func (r *Registry) SetEnabled(id string, on bool) error {
 		return fmt.Errorf("unknown service %q", id)
 	}
 	r.mu.Lock()
+	was := r.enabled[id]
 	r.enabled[id] = on
 	r.mu.Unlock()
+	if sw, ok := r.services[id].(Switchable); ok && was != on {
+		sw.Switched(on)
+	}
 	return nil
+}
+
+// Switchable is implemented by a service that must act when it is switched
+// at run time, such as terminal disconnecting attached windows (D-51). The
+// registry has already refused new operations when Switched(false) runs.
+type Switchable interface {
+	Switched(on bool)
 }
 
 // Enabled reports whether a service switch is on.

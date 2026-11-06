@@ -3,6 +3,7 @@
 /agent/.cache/
 /agent/internal/bundle/*
 !/agent/internal/bundle/.gitkeep
+!/agent/internal/bundle/bundle.go
 *.exe
 *.test
 *.out

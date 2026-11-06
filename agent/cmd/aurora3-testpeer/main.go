@@ -27,33 +27,44 @@ func main() {
 	listen := flag.String("listen", "127.0.0.1:0", "listen address")
 	off := flag.Bool("test-off", false, "start with the test service switched off")
 	verbose := flag.Bool("v", false, "log to stderr")
+	state := flag.String("state", "", "keep identity and token in this directory across runs (restart tests); default: a fresh temporary one")
 	flag.Parse()
-	if err := run(*listen, *off, *verbose); err != nil {
+	if err := run(*listen, *off, *verbose, *state); err != nil {
 		fmt.Fprintln(os.Stderr, "aurora3-testpeer:", err)
 		os.Exit(1)
 	}
 }
 
-func run(listen string, off, verbose bool) error {
+func run(listen string, off, verbose bool, state string) error {
 	// Tests kill this process (to check a dead agent), so a deferred removal
 	// may never run; leftovers of earlier runs are removed here instead.
 	sweepStale()
-	dir, err := os.MkdirTemp("", "aurora3-testpeer-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(dir)
-	cfg := &entry.Config{Listen: listen, Token: wire.NewToken(), StateDir: filepath.Join(dir, "state"),
-		Roots: []entry.Root{{ID: "tmp", Path: dir}}}
-	if off {
-		cfg.Services = map[string]bool{testsvc.ID: false}
-	}
-	if err := cfg.Validate(); err != nil {
-		return err
+	dir := state
+	if dir == "" {
+		d, err := os.MkdirTemp("", "aurora3-testpeer-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(d)
+		dir = d
 	}
 	cfgPath := filepath.Join(dir, "agent.json")
-	if err := cfg.Save(cfgPath); err != nil {
-		return err
+	// With -state the same certificate and token come back after a restart,
+	// as on a real server; the config is written once.
+	cfg, err := entry.LoadConfig(cfgPath)
+	if err != nil {
+		cfg = &entry.Config{Listen: listen, Token: wire.NewToken(), StateDir: filepath.Join(dir, "state"),
+			Roots: []entry.Root{{ID: "tmp", Path: dir}}}
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
+		if err := cfg.Save(cfgPath); err != nil {
+			return err
+		}
+	}
+	cfg.Listen = listen
+	if off {
+		cfg.Services = map[string]bool{testsvc.ID: false}
 	}
 	out := io.Discard
 	if verbose {

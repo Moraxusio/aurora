@@ -91,6 +91,10 @@ func loadOrCreateID(path string) (string, error) {
 // Pin is the certificate pin clients check.
 func (s *Server) Pin() string { return s.pin }
 
+// AddEntryOp registers an operation that belongs to the entry rather than a
+// service, so it cannot be switched off (D-46, D-52). Call before Run.
+func (s *Server) AddEntryOp(name string, h service.Handler) error { return s.reg.AddEntry(name, h) }
+
 // Audit is the audit writer the services share (D-26).
 func (s *Server) AuditLog() *Audit { return s.audit }
 
@@ -328,7 +332,7 @@ func (s *Server) Info() wire.AgentInfo {
 			caps = append(caps, st.Ops...)
 		}
 	}
-	caps = append(caps, "agent.info", "agent.health", "agent.services", "agent.service")
+	caps = append(caps, s.reg.EntryOps()...)
 	sort.Strings(caps)
 	port := listenPort(s.cfg.Listen)
 	if a, ok := s.Addr().(*net.TCPAddr); ok && port == 0 {

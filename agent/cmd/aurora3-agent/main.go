@@ -3,6 +3,8 @@
 //
 //	aurora3-agent version
 //	aurora3-agent run [--config /etc/aurora3/agent.json]
+//	aurora3-agent install --sha256 HEX [--name N] [--user U] [--probe]
+//	aurora3-agent direct-info
 package main
 
 import (
@@ -29,12 +31,16 @@ func main() {
 			fmt.Fprintln(os.Stderr, "aurora3-agent:", err)
 			os.Exit(1)
 		}
+	case "install":
+		os.Exit(installCmd(os.Args[2:]))
+	case "direct-info":
+		os.Exit(directInfoCmd(os.Args[2:]))
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: aurora3-agent version | run [--config PATH]")
+	fmt.Fprintln(os.Stderr, "usage: aurora3-agent version | run [--config PATH] | install --sha256 HEX [--name N] [--user U] [--probe] | direct-info")
 	os.Exit(2)
 }

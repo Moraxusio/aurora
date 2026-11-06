@@ -34,6 +34,11 @@ type fakeSys struct {
 	noSystemd bool
 	log       []string
 	failFirst string // this systemctl operation fails the first time only
+
+	tmuxUnits   []string // running aurora3-tmux-* units
+	sessions    []string
+	sessionsErr error
+	stopFails   map[string]bool
 }
 
 func (f *fakeSys) op(name string) error {
@@ -71,7 +76,21 @@ func (f *fakeSys) Disable(string) error {
 	f.enabled = false
 	return nil
 }
-func (f *fakeSys) Stop(string) error {
+func (f *fakeSys) Stop(unit string) error {
+	if strings.HasPrefix(unit, "aurora3-tmux-") {
+		f.log = append(f.log, "stop "+unit)
+		if f.stopFails[unit] {
+			return errors.New("refused to stop " + unit)
+		}
+		for i, u := range f.tmuxUnits {
+			if u == unit {
+				f.tmuxUnits = append(f.tmuxUnits[:i], f.tmuxUnits[i+1:]...)
+				break
+			}
+		}
+		f.sessions = nil
+		return nil
+	}
 	if err := f.op("stop"); err != nil {
 		return err
 	}
@@ -104,6 +123,16 @@ func (f *fakeSys) Restart(string) error {
 	return nil
 }
 func (f *fakeSys) ResetFailed(string) {}
+
+func (f *fakeSys) Units(string) []string { return append([]string{}, f.tmuxUnits...) }
+
+func (f *fakeSys) TmuxSessions(string) ([]string, error) { return append([]string{}, f.sessions...), f.sessionsErr }
+
+func (f *fakeSys) KillTmux(string) error {
+	f.log = append(f.log, "kill-tmux")
+	f.sessions = nil
+	return nil
+}
 
 func (f *fakeSys) VerifyUnit(path string) error {
 	b, err := os.ReadFile(path)

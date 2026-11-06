@@ -211,6 +211,13 @@ func (e *Env) ensure(ctx context.Context, name, dir string) error {
 	if e.exists(ctx, name) {
 		return nil
 	}
+	// Without a folder, start in the home directory, not in the agent's own
+	// working directory (/ under systemd, wherever it was started by hand).
+	if dir == "" {
+		if h, err := os.UserHomeDir(); err == nil && isDir(h) {
+			dir = h
+		}
+	}
 	newArgs := []string{"new-session", "-d", "-s", name}
 	if dir != "" {
 		newArgs = append(newArgs, "-c", dir)

@@ -97,6 +97,21 @@ class InstallOutcome {
       const {'installed', 'upgraded', 'up_to_date', 'direct'}.contains(result) && direct != null;
 }
 
+/// Outcome of an uninstall: "probe", "uninstalled", "sessions" (nothing
+/// changed; [sessions] lists them), "partial" (a step failed: [done] ran,
+/// [failed] did not), "refused", or the client's "unsupported" and "failed".
+class UninstallOutcome {
+  final String result;
+  final String message;
+  final List<String> sessions;
+  final List<String> done;
+  final List<String> kept;
+  final String? failed;
+  UninstallOutcome(this.result, this.message,
+      {this.sessions = const [], this.done = const [], this.kept = const [], this.failed});
+  bool get ok => result == 'uninstalled';
+}
+
 class InstallException implements Exception {
   final String message;
   InstallException(this.message);
@@ -132,7 +147,8 @@ class Installer {
     }
     final build = builds.where((b) => b.arch == host.arch).firstOrNull;
     if (build == null) {
-      final m = '服务器的架构是 ${host.uname}，本客户端没有对应的 agent（支持 amd64、arm64，D-14）';
+      final have = builds.map((b) => b.arch).toSet().join('、');
+      final m = '服务器的架构是 ${host.uname}，本客户端带的 agent 只支持 ${have.isEmpty ? '（无）' : have}';
       _p(InstallStep.inspect, 'fail', m);
       return InstallOutcome('unsupported', m);
     }
@@ -188,6 +204,42 @@ class Installer {
     _p(InstallStep.inspect, 'ok');
     final out = await _asRoot(host, ['/usr/local/bin/aurora3-agent', 'direct-info']);
     return _outcome(out);
+  }
+
+  /// Uninstalls the agent (D-31 to D-34). With [force] false and terminal
+  /// sessions running, nothing changes and the outcome lists them
+  /// ("sessions"); ask the user, then call again with [force]. [purge] also
+  /// deletes the config, identity and state (D-33).
+  Future<UninstallOutcome> uninstall({bool probe = false, bool force = false, bool purge = false}) async {
+    _p(InstallStep.inspect, 'start');
+    final _Host host;
+    try {
+      host = await _inspect();
+    } on InstallException catch (e) {
+      _p(InstallStep.inspect, 'fail', e.message);
+      return UninstallOutcome('unsupported', e.message);
+    }
+    _p(InstallStep.inspect, 'ok');
+    final r = await _asRoot(host, [
+      '/usr/local/bin/aurora3-agent',
+      'uninstall',
+      if (probe) '--probe',
+      if (force) '--force',
+      if (purge) '--purge',
+    ]);
+    final last = _lastResult(r);
+    if (last == null) {
+      final err = r.stderr.trim();
+      // The binary is gone (an earlier default uninstall, or never
+      // installed). Leftover config and state are not removed this way.
+      if (r.exitCode == 127 || err.contains('No such file') || err.contains('not found')) {
+        return UninstallOutcome('uninstalled', '服务器上没有安装 aurora3-agent');
+      }
+      return UninstallOutcome('failed', _noResult(r));
+    }
+    List<String> list(String k) => [for (final x in (last[k] as List? ?? const [])) if (x is String) x];
+    return UninstallOutcome(last['result'] as String, last['message'] as String? ?? '',
+        sessions: list('sessions'), done: list('done'), kept: list('kept'), failed: last['failed'] as String?);
   }
 
   Future<_Host> _inspect() async {
@@ -247,27 +299,31 @@ class Installer {
     }
   }
 
-  InstallOutcome _outcome(RunResult r) {
-    Map? last;
+  /// The agent's last {"result":...} line, or null.
+  static Map? _lastResult(RunResult r) {
     for (final l in const LineSplitter().convert(r.stdout).reversed) {
       if (!l.startsWith('{')) continue;
       try {
         final m = jsonDecode(l);
-        if (m is Map && m['result'] is String) {
-          last = m;
-          break;
-        }
+        if (m is Map && m['result'] is String) return m;
       } on FormatException {
         continue;
       }
     }
-    if (last == null) {
-      final err = r.stderr.trim();
-      if (err.contains('incorrect password') || err.contains('密码不正确') || err.contains('Sorry, try again')) {
-        return InstallOutcome('failed', 'sudo 密码不对');
-      }
-      return InstallOutcome('failed', '安装程序没有给出结果（退出码 ${r.exitCode}）${err.isEmpty ? '' : '：$err'}');
+    return null;
+  }
+
+  static String _noResult(RunResult r) {
+    final err = r.stderr.trim();
+    if (err.contains('incorrect password') || err.contains('密码不正确') || err.contains('Sorry, try again')) {
+      return 'sudo 密码不对';
     }
+    return '服务器上的程序没有给出结果（退出码 ${r.exitCode}）${err.isEmpty ? '' : '：$err'}';
+  }
+
+  InstallOutcome _outcome(RunResult r) {
+    final last = _lastResult(r);
+    if (last == null) return InstallOutcome('failed', _noResult(r));
     final res = last['result'] as String;
     final direct = Direct.fromJson(last['direct']);
     _p(InstallStep.read, direct != null ? 'ok' : 'fail');

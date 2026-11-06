@@ -373,6 +373,11 @@ func isFile(path string) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
+func isDir(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
+}
+
 func shellQuote(v string) string { return "'" + strings.ReplaceAll(v, "'", "'\\''") + "'" }
 
 func fmtUnit() string { return fmt.Sprintf("%s%d", UnitPrefix, time.Now().UnixMilli()) }

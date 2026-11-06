@@ -182,6 +182,44 @@ void main() {
     expect(o.ok, isFalse);
   }, skip: skip);
 
+  test('uninstall: sessions first, then --force, flags pass through', () async {
+    final r = FakeRemote()
+      ..uname = 'Linux\nx86_64\n0\nroot\nroot\n'
+      ..installCode = 1
+      ..installOut = jsonEncode({'result': 'sessions', 'message': 'two', 'sessions': ['main', 'build']});
+    var o = await Installer(r, const []).uninstall();
+    expect(o.result, 'sessions');
+    expect(o.sessions, ['main', 'build']);
+    expect(o.ok, isFalse);
+    expect(r.commands.last, "'/usr/local/bin/aurora3-agent' 'uninstall'");
+    r
+      ..installCode = 0
+      ..installOut = jsonEncode({'result': 'uninstalled', 'kept': ['/etc/aurora3', '/var/lib/aurora3'], 'done': ['stop-agent']});
+    o = await Installer(r, const []).uninstall(force: true, purge: true);
+    expect(o.ok, isTrue);
+    expect(o.kept, hasLength(2));
+    expect(r.commands.last, "'/usr/local/bin/aurora3-agent' 'uninstall' '--force' '--purge'");
+  });
+
+  test('uninstall with sudo, partial failure, not installed', () async {
+    final r = FakeRemote()
+      ..uname = 'Linux\nx86_64\n1000\nalice\nsudo-nopass\n'
+      ..installCode = 4
+      ..installOut = jsonEncode({'result': 'partial', 'message': 'm', 'failed': 'stop-sessions', 'done': ['stop-agent']});
+    var o = await Installer(r, const []).uninstall(force: true);
+    expect(o.result, 'partial');
+    expect(o.failed, 'stop-sessions');
+    expect(o.done, ['stop-agent']);
+    expect(r.commands.last, startsWith('sudo -n -- '));
+    r
+      ..installCode = 127
+      ..installOut = ''
+      ..installErr = "sudo: /usr/local/bin/aurora3-agent: command not found";
+    o = await Installer(r, const []).uninstall();
+    expect(o.result, 'uninstalled');
+    expect(o.message, contains('没有安装'));
+  });
+
   test('readDirect runs direct-info as root', () async {
     final r = FakeRemote()
       ..uname = 'Linux\nx86_64\n1000\nalice\nsudo-nopass\n'

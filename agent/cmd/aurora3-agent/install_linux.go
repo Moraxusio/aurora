@@ -33,6 +33,23 @@ func installCmd(args []string) int {
 	return install.ExitCode(r)
 }
 
+// uninstallCmd: aurora3-agent uninstall [--probe] [--force] [--purge]. Exits
+// 0 when done, 1 when it refused (sessions without --force, or not root), 4
+// when a step failed (what ran is reported; no rollback, D-34).
+func uninstallCmd(args []string) int {
+	fs := flag.NewFlagSet("uninstall", flag.ExitOnError)
+	probe := fs.Bool("probe", false, "只列出会话和已安装的内容，不做改动")
+	force := fs.Bool("force", false, "有终端会话时也卸载（会结束它们）")
+	purge := fs.Bool("purge", false, "同时删除配置、证书、令牌和状态（彻底清除）")
+	_ = fs.Parse(args)
+	detach()
+	if !*probe && os.Geteuid() != 0 {
+		install.Emit(os.Stdout, install.Result{Result: install.ResultRefused, Message: "卸载需要 root 权限"})
+		return 1
+	}
+	return install.UninstallExitCode(install.Uninstall(env(), install.UninstallOptions{Probe: *probe, Force: *force, Purge: *purge}))
+}
+
 // directInfoCmd: aurora3-agent direct-info. Prints the installed agent's
 // direct-link parameters, token included (D-4); root only, as agent.json is.
 func directInfoCmd([]string) int {

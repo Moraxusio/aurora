@@ -77,10 +77,10 @@ Go 工具链、模块、构建脚本、tmux 构建锁。
 |---|---|---|
 | M1.1 | 直连与重连（G5.7） | 完成 |
 | M1.2 | 终端服务（G2.1）：会话、终端流，tmux 在 `aurora3-tmux-*` 单元里，agent 重启和升级时会话不断 | 完成 |
-| M1.3 | 卸载（G3.3）：列出活动会话，默认保留配置，停 `aurora3-tmux-*`；彻底清除单独一步 | 待做 |
-| M1.4 | 界面一：服务器列表、添加服务器（SSH 安装向导、主机指纹确认、进度）、连接状态与重连、服务开关 | 待做 |
-| M1.5 | 界面二：终端（xterm 包或自写的渲染，会话列表，断线后自动重新连接） | 待做 |
-| M1.6 | 界面三：文件（浏览、上传下载、新建、改名、删除）、监控（CPU、内存、磁盘、进程） | 待做 |
+| M1.3 | 卸载（G3.3）：列出活动会话，默认保留配置，停 `aurora3-tmux-*`；彻底清除单独一步 | 完成 |
+| M1.4 | 界面一：服务器列表、添加服务器（SSH 安装向导、主机指纹确认、进度）、连接状态与重连、服务开关 | 完成 |
+| M1.5 | 界面二：终端（xterm 包，会话列表，断线后自动重新连接） | 完成 |
+| M1.6 | 界面三：文件（浏览、上传下载、新建、改名、删除）、监控（CPU、内存、磁盘、进程） | 完成 |
 | M1.7 | 打包：签名 amd64 agent，随程序放进文件夹；WSL 上完整验收"添加、安装、连接、终端、文件、开关、卸载"，v2 前后不变 | 待做 |
 
 不在初版里：Android、git 界面、devtools、net、代理（G2.8）、VPS、arm64 服务器。会话按 root 运行（D-25），`session_user` 在代理之后做。
@@ -122,6 +122,8 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | G3.1 安装四阶段 | 完成 | 见 git log | `agent/internal/install`，命令 `aurora3-agent install --sha256 HEX [--name] [--user] [--probe]` 和 `aurora3-agent direct-info`（D-4）。输出 JSON 行：每阶段开始与结束，最后是结果；退出码 0 成功、1 拒绝且未改动、2 已回滚、3 回滚未完成。探测不改任何东西，普通用户也能跑；已装版本不低于本次时不改动（D-12）。准备阶段只写 `/var/lib/aurora3/install-*`：复制程序并核对 SHA-256、运行 `version` 核对版本、新装时生成配置并读回、`systemd-analyze verify` 单元。切换前把原状态存进 `rollback-*`，新文件先写在目标旁边，再 rename 提交。确认阶段对本机端口做带指纹的 Hello，并核对版本（D-38）。失败则回滚并再次确认原服务；回滚目录只在确认通过后删除，否则保留并报告，下次安装拒绝（D-17）。安装锁防止两个安装同时运行；SSH 断开时忽略 SIGHUP 和 SIGPIPE，四阶段照样完成或回滚。升级保留 agent.json、证书和令牌。测试：48 项（假 systemd，覆盖 4 种起始状态 × 7 个失败点，逐字节核对回滚后的文件和服务状态）；WSL 上以 root 真实运行（`agent/tools/install-real.ps1`）：普通用户探测、错误哈希、安装、direct-info、同版本、升级、坏版本回滚（33 秒）、SSH 中途断开，全部通过，结束后删除全部 v3 文件，v2 的单元、PID、二进制、配置、端口前后一致 |
 | G5.7 直连与重连 | 完成 | 见 git log | `aurora_wire` 的 `Connection`：按顺序试每个地址，上次成功的地址排在最前；网络失败等 2、5、10 秒重试，共 4 轮后报告；令牌被拒、指纹不符、版本不兼容立刻报告，不重试，也不再试其它地址（D-24、D-62）。连接断开后自动重新拨号；`retryNow` 跳过等待，`close` 停止。`aurora3-testpeer` 加 `-state`，重启后保持同一身份。12 项测试，其中 3 项对真实 Go 入口：agent 被杀后重启，连接自己恢复；错误令牌；证书变了 |
 | G2.1 terminal | 完成 | 见 git log | `agent/internal/terminal`，移植 v2 的会话和终端代码，改用 v3 的名字：tmux 套接字 `aurora3`，tmux 服务器在 `aurora3-tmux-*` 单元里（D-35），内置 tmux 3.8 嵌进 agent（`internal/bundle`）。操作：`session.list`、`session.create`、`session.cwd`、`session.capture`、`terminal`（流）；`session.kill` 挂在入口上，服务关闭时仍可用（D-52）。关闭服务会断开已连接的窗口并说明原因，会话不结束（D-51）。Dart 端 `Terminal`（按键走交互优先级）。测试：Go 5 项（内置 tmux、建立和结束会话、打字、调整大小、ping、断开后再连、shell 退出、关服务、结束忽略 SIGHUP 的进程）；Dart 对真实 agent 的端到端 15 项（`agent/tools/terminal-e2e.ps1`，普通用户、/tmp、17790 端口），30 万行输出 276 ms，之后 ping 0.4 ms；WSL 上真实安装（`agent/tools/terminal-survives.ps1`）：会话里的进程在 agent 重启和升级后都还在，tmux 不在 agent 的 cgroup 里，`session.kill` 结束进程和单元，v2 不变 |
+| G3.3 卸载 | 完成 | 见 git log | `aurora3-agent uninstall [--probe] [--force] [--purge]`：先列出 tmux 会话，有会话又没有 `--force` 时不做改动并报告（D-31）；默认停服务、停全部 `aurora3-tmux-*` 单元（D-37）、删程序和单元，保留 `/etc/aurora3`、`/var/lib/aurora3`（D-32），之后重装令牌和指纹不变；`--purge` 再删配置、状态和 `/usr/local/lib/aurora3`（D-33）。按步骤执行，失败时报告已完成的步骤，不回滚，可重试（D-34）。客户端 `Installer.uninstall`。测试：Go 7 项（含失败步骤、v2 文件不动），Dart 2 项；`install-real.ps1` 增加真实卸载：有会话被拒、`--force` 停掉 tmux 单元、配置保留、重装后指纹和令牌不变、`--purge` 全部删除，v2 不变 |
+| G5.8 界面（初版） | 完成 | 见 git log | Flutter Windows 程序（`app/lib`）：左侧服务器列表，右侧终端（xterm 4.0.0）、文件、监控、服务开关、概览（重新配对、卸载、彻底清除）；添加服务器向导：SSH 密码或私钥，第一次连接显示主机指纹并要求确认，密钥变了就停止并说明，各阶段进度，按用户选择加密保存密码（D-1、D-2、D-6）。标签页切走后保留状态；终端一连上就按窗口大小，断线和 agent 重启后自动重新连接。测试：`app/tool/ui_test.ps1`（真实 agent，普通用户，5 个页面，连续 5 次通过，并截图核对）；`app/tool/install_ui_test.ps1`（真实 SSH 服务器和真实安装：在界面里填表、确认指纹、看到 8 个阶段、连上、新建会话、从概览卸载并确认会话），v2 不变 |
 | G5.6 SSH 与安装（不含界面） | 完成 | 见 git log | `app/packages/aurora_install`：用 dartssh2 登录（密码或私钥），主机密钥在发送任何凭据前交给回调决定（D-2），不符时停止。签名清单按 Go 的 `update.VerifyFor` 同样的规则校验：v3 发布密钥的 Ed25519 签名（BoringSSL 实现，`aurora_tls` 新增）、key_id、产品 `aurora3-agent`、渠道、文件大小与 SHA-256（D-3）。读取架构和 root/sudo 情况，上传到 `mktemp -d` 建的私有目录，以 root 运行 `aurora3-agent install`，把各阶段转成进度，读回直连参数（D-4）；sudo 密码只走标准输入，不进命令行（D-6）。上传用 exec 加 `cat`，不依赖 SFTP。`update.ProductAgent` 改为 `aurora3-agent`；新工具 `aurora3-release`（sign、verify、pubkey）和测试用 SSH 服务器 `aurora3-sshpeer`。测试：Dart 19 项（Go 签名的清单与 6 种篡改、sudo 与 root 的命令、拒绝条件、结果解析），Go 4 项；WSL 端到端（`agent/tools/install-e2e.ps1`）两种登录各跑一次：root 登录，以及普通用户加密码 sudo（临时用户，测完删除）。都覆盖了错误主机密钥、错误密码、安装、direct-info、直连到新 agent，全部通过，v2 不变 |
 | G5.5 凭据存储 | Windows 完成，其它平台未做 | 见 git log | `app/packages/aurora_profile`：服务器、SSH 登录（含 sudo 密码，D-6）、直连参数（D-22）和客户端自己的 known_hosts（D-2）存在同一个加密文件里，原子写入（同 v2 的 `client.Store`）。Windows 用 DPAPI 当前用户范围，经 FFI 调用 `crypt32.dll`，带固定的 entropy，其它程序为同一用户加密的数据（包括 v2）打不开。文件头记录加密方式，打不开的文件不会被覆盖，只能由用户选择移到一边重来。没有明文实现：其它平台的 `platformSealer()` 直接拒绝（D-72），WSL 中已验证。20 项测试通过，包括 DPAPI 往返、1 MiB、篡改检测、不同 entropy 打不开 |
 

@@ -124,8 +124,36 @@ for i in $(seq 60); do [ "$(probe | field version)" = 3.0.4 ] && break; sleep 0.
 check "$(probe | field version)" 3.0.4 "3.0.4 answers"
 check "$(ls -d /var/lib/aurora3/install-* /var/lib/aurora3/rollback-* /usr/local/bin/aurora3-agent.aurora3-tmp-* 2>/dev/null | wc -l)" 0 "nothing left over"
 
+echo "== uninstall with a terminal session (D-31, D-32, D-37)"
+check "$(probe | field version)" 3.0.4 "agent up before uninstall"
+"$W/aurora3-probe" -addr 127.0.0.1:17710 -pin "$PIN" -token "$TOK" -op session.create -args '{"name":"keep"}' >/dev/null 2>&1
+check "$(systemctl list-units --plain --no-legend 'aurora3-tmux-*' | wc -l)" 1 "a session runs in an aurora3-tmux unit"
+out=$(/usr/local/bin/aurora3-agent uninstall --probe 2>&1)
+check "$(echo "$out" | field result)" probe "probe"
+check "$(echo "$out" | python3 -c 'import json,sys; print(",".join(json.loads(sys.stdin.read().splitlines()[-1])["sessions"]))')" keep "probe lists the session"
+out=$(/usr/local/bin/aurora3-agent uninstall 2>&1); code=$?
+check "$code" 1 "without --force: refused"
+check "$(echo "$out" | field result)" sessions "result sessions"
+check "$(systemctl is-active aurora3-agent)" active "agent untouched"
+out=$(/usr/local/bin/aurora3-agent uninstall --force 2>&1); code=$?
+echo "$out" | grep '"stage"' | sed 's/^/     /'
+check "$code" 0 "uninstall --force exit 0"
+check "$(echo "$out" | field result)" uninstalled "uninstalled"
+check "$(systemctl list-units --all --plain --no-legend 'aurora3-tmux-*' | wc -l)" 0 "tmux unit stopped"
+check "$(ls /usr/local/bin/aurora3-agent /etc/systemd/system/aurora3-agent.service 2>/dev/null | wc -l)" 0 "binary and unit removed"
+check "$(ls -d /etc/aurora3 /var/lib/aurora3 2>/dev/null | wc -l)" 2 "config and state kept"
+check "$(ss -ltnH 'sport = :17710' | wc -l)" 0 "17710 closed"
+echo "== reinstall keeps the identity, then purge"
+out=$(inst 3.0.4 2>&1)
+check "$(echo "$out" | field result)" installed "reinstalled"
+check "$(echo "$out" | field direct.cert_sha256)" "$PIN" "same certificate"
+check "$(echo "$out" | field direct.token)" "$TOK" "same token"
+out=$("$W/aurora3-agent-3.0.4" uninstall --force --purge 2>&1); code=$?
+check "$code" 0 "uninstall --purge exit 0"
+check "$(ls -d /usr/local/bin/aurora3* /etc/aurora3 /var/lib/aurora3 /usr/local/lib/aurora3 /etc/systemd/system/aurora3* 2>/dev/null | wc -l)" 0 "everything removed"
+
 echo "== cleanup: every v3 name"
-systemctl stop aurora3-agent; systemctl disable aurora3-agent 2>/dev/null
+systemctl stop aurora3-agent 2>/dev/null; systemctl disable aurora3-agent 2>/dev/null
 rm -f /etc/systemd/system/aurora3-agent.service /usr/local/bin/aurora3-agent /run/aurora3-install.lock
 rm -rf /etc/aurora3 /var/lib/aurora3 "$W"
 systemctl daemon-reload; systemctl reset-failed aurora3-agent 2>/dev/null

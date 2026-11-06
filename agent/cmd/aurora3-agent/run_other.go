@@ -18,3 +18,5 @@ func installCmd([]string) int {
 }
 
 func directInfoCmd([]string) int { return installCmd(nil) }
+
+func uninstallCmd([]string) int { return installCmd(nil) }

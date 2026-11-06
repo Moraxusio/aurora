@@ -1,5 +1,5 @@
 name: aurora
-description: "A new Flutter project."
+description: Aurora 3 client (docs/DESIGN.md D-70).
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -9,9 +9,22 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  aurora_install:
+    path: packages/aurora_install
+  aurora_profile:
+    path: packages/aurora_profile
+  aurora_tls:
+    path: packages/aurora_tls
+  aurora_wire:
+    path: packages/aurora_wire
+  file_picker: 13.3.2
+  path_provider: 2.1.6
+  xterm: 4.0.0
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
 

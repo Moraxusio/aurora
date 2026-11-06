@@ -144,6 +144,13 @@ type System interface {
 	VerifyUnit(path string) error
 	BinaryVersion(path string) (string, error)
 	PortFree(port int) bool
+	// Units lists loaded units matching a glob (aurora3-tmux-*).
+	Units(pattern string) []string
+	// TmuxSessions lists the sessions on v3's tmux socket, using the tmux
+	// unpacked in stateDir; none when no tmux server runs.
+	TmuxSessions(stateDir string) ([]string, error)
+	// KillTmux ends a tmux server on v3's socket, if one runs.
+	KillTmux(stateDir string) error
 }
 
 // Dialer opens a pinned TLS connection, sends Hello and returns the agent's

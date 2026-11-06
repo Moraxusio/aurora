@@ -81,6 +81,57 @@ func (Systemd) Stop(unit string) error    { return systemctl("stop", unit) }
 // ResetFailed fails harmlessly when the unit is not loaded or not failed.
 func (Systemd) ResetFailed(unit string) { _ = systemctl("reset-failed", unit) }
 
+func (Systemd) Units(pattern string) []string {
+	out, err := run(15*time.Second, "systemctl", "list-units", "--all", "--plain", "--no-legend", pattern)
+	if err != nil {
+		return nil
+	}
+	var units []string
+	for _, l := range strings.Split(out, "\n") {
+		if f := strings.Fields(l); len(f) > 0 && strings.HasPrefix(f[0], strings.TrimSuffix(pattern, "*")) {
+			units = append(units, f[0])
+		}
+	}
+	return units
+}
+
+// tmuxBins are the tmux binaries the terminal service unpacked; a tmux client
+// must match its server, so each is tried.
+func tmuxBins(stateDir string) []string {
+	m, _ := filepath.Glob(filepath.Join(stateDir, "bin", "tmux-*"))
+	if p, err := exec.LookPath("tmux"); err == nil {
+		m = append(m, p)
+	}
+	return m
+}
+
+// terminalSocket is the terminal service's tmux socket (terminal.DefaultSocket).
+const terminalSocket = "aurora3"
+
+func (Systemd) TmuxSessions(stateDir string) ([]string, error) {
+	for _, b := range tmuxBins(stateDir) {
+		out, err := run(10*time.Second, b, "-L", terminalSocket, "list-sessions", "-F", "#{session_name}")
+		if err != nil {
+			continue // no server, or a mismatched client: try the next binary
+		}
+		var names []string
+		for _, l := range strings.Split(out, "\n") {
+			if l = strings.TrimSpace(l); l != "" {
+				names = append(names, l)
+			}
+		}
+		return names, nil
+	}
+	return nil, nil
+}
+
+func (Systemd) KillTmux(stateDir string) error {
+	for _, b := range tmuxBins(stateDir) {
+		_, _ = run(10*time.Second, b, "-L", terminalSocket, "kill-server")
+	}
+	return nil
+}
+
 // VerifyUnit runs systemd-analyze verify. It exits 0 on some errors in the
 // file (an unknown value is only a warning), so any message about this file
 // counts as a failure too; messages about other units on the system do not.

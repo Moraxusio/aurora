@@ -81,7 +81,9 @@ Go 工具链、模块、构建脚本、tmux 构建锁。
 | M1.4 | 界面一：服务器列表、添加服务器（SSH 安装向导、主机指纹确认、进度）、连接状态与重连、服务开关 | 完成 |
 | M1.5 | 界面二：终端（xterm 包，会话列表，断线后自动重新连接） | 完成 |
 | M1.6 | 界面三：文件（浏览、上传下载、新建、改名、删除）、监控（CPU、内存、磁盘、进程） | 完成 |
-| M1.7 | 打包：签名 amd64 agent，随程序放进文件夹；WSL 上完整验收"添加、安装、连接、终端、文件、开关、卸载"，v2 前后不变 | 待做 |
+| M1.7 | 打包：签名 amd64 agent，随程序放进文件夹；WSL 上完整验收"添加、安装、连接、终端、文件、开关、卸载"，v2 前后不变 | 完成（2026-11-07） |
+
+初版交付：`release3\Aurora-3.0.0`（及同目录的 zip 和 `.sha256`），由 `tools\package.ps1 -Version 3.0.0` 生成，没有上传。agent `aurora3-agent-3.0.0-linux-amd64` 的 SHA-256 为 `9a44d006a08c5650cab3ba43d400107748a76e0a9964e4c6e94ce791a6408e5e`，用发布密钥 `87828dfb18459372` 签名；两次打包得到相同的 agent，构建可复现。验收：`app\tool\accept_release.ps1` 用这个文件夹自己的 agent（不设测试密钥）在界面里装进 WSL，连接、新建会话、卸载；改动 agent 一个字节后客户端拒绝安装；`ui_test`、`install-real`（64 项）、`terminal-survives`（16 项）、`install-e2e`（24 项）、`terminal-e2e`（15 项）和全部 Go、Dart 单元测试通过；v2 的单元、PID、二进制、配置、端口前后一致。`v2-release` 是 v2 的发布目录，v3 不写入。
 
 不在初版里：Android、git 界面、devtools、net、代理（G2.8）、VPS、arm64 服务器。会话按 root 运行（D-25），`session_user` 在代理之后做。
 
@@ -136,6 +138,10 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | dartssh2 | 4.1.0（锁定） | MIT | 安装与重新配对时的 SSH（G5.6）。pub.dev 包的 SHA-256 `39359ace…7c84c51` 已核对 |
 | pointycastle、pinenacl、asn1lib、convert、meta（dartssh2 的依赖） | 4.0.0、0.6.0、1.6.8、3.1.2、1.19.0 | MIT | — |
 | golang.org/x/crypto/ssh（Go，只用于测试工具 `aurora3-sshpeer`） | 0.58.0 | BSD-3-Clause | 不进 agent |
+| xterm | 4.0.0（锁定） | MIT | 终端渲染（G5.8）。最近一次发布 2024-02，在 Flutter 3.47 上编译和运行通过 |
+| file_picker 及其平台包 | 13.3.2 | MIT | 上传时选文件、下载时选文件夹 |
+| dbus（file_picker_linux 的依赖） | 0.8.0 | MPL-2.0 | 只在 Linux 版里用于文件对话框。2026-11-07 用户同意例外：与 hashicorp/yamux 一样，不修改它，随程序附上许可证 |
+| Flutter 应用的其它运行时依赖（共 50 个） | 见 `app/pubspec.lock` | MIT、BSD-2/3-Clause、Apache-2.0 | 2026-11-07 逐个核对 pub.dev 上的许可证原文；发布文件夹里的 `LICENSES.txt` 按包列出 |
 | hooks、code_assets、native_toolchain_c（Dart 团队） | 2.2.0、2.1.0、0.19.5 | BSD-3-Clause | 构建钩子，只在构建时用 |
 | NASM（构建工具，不进安装包） | 3.02 | BSD-2-Clause | 只在 Windows x64 上汇编 BoringSSL；位于 `<nasm-dir>` |
 | github.com/hashicorp/yamux（Go） | 0.1.1 | MPL-2.0 | agent 端多路复用，沿用 v2 |
@@ -145,7 +151,7 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | github.com/creack/pty（Go） | 1.1.24 | MIT | 终端，沿用 v2 |
 | golang.org/x/net、x/sys、x/crypto（Go） | 见 go.mod | BSD-3-Clause | — |
 
-开发依赖（`test`、`lints`、`flutter_lints`）不进入发布产物。hashicorp/yamux 是 MPL-2.0，沿用自 v2，属于文件级弱 copyleft：只要求修改过的该库文件本身开源，我们没有修改它。ISC 与 MIT 等价。Dart 端的 yamux 是按协议自行编写的，没有复制 hashicorp/yamux 的代码。
+开发依赖（`test`、`lints`、`flutter_lints`）不进入发布产物。hashicorp/yamux 和 dbus 是 MPL-2.0，属于文件级弱 copyleft：只要求修改过的该库文件本身开源，我们没有修改它们。ISC 与 MIT 等价。Dart 端的 yamux 是按协议自行编写的，没有复制 hashicorp/yamux 的代码。
 
 ## 5.1 已知待办
 
@@ -156,7 +162,8 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 配置文件在 Windows 以外的路径由 App 用 path_provider 给出，接入界面时再定。
 - 把签名的 agent 打进客户端安装包（D-3、D-14）：`aurora3-release sign` 已能产出签名目录，Flutter 应用怎样带上 amd64、arm64 两份并在运行时找到它们，在 G5.8 接界面时做。arm64 版要等 G4.2 的 tmux。
 - 安装向导的界面（输入地址账号、显示主机指纹请用户确认、显示各阶段进度）属于 G5.8；`aurora_install` 已提供需要的回调和结果。
-- 203.0.113.10 的 SSH 端口从本机可达，但没有在它上面跑过安装。真机安装（非 WSL）在接上界面后、经你同意再做。
+- 203.0.113.10 的 SSH 端口从本机可达，但没有在它上面跑过安装。真机安装（非 WSL，G7.1）经用户同意再做。
+- 初版之后：v2 和 v3 用同一个图标（取自 v2 的 `cmd/aurora/winres/aurora.ico`），任务栏里分不出；可加“3”标记。终端会话按 `session_user` 运行、代理（G2.8）、git 界面、Android、arm64。`docs/PLAN.md` 第 6 节的 Linux 下载速度。
 - G3.1 坏版本回滚要等确认超时（30 秒）。可以在服务进入 failed 状态时提前结束等待，属于优化项。
 
 ## 6. TCP 性能基准

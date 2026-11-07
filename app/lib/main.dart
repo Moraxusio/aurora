@@ -59,23 +59,37 @@ class Home extends StatelessWidget {
                         ),
                     ]),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: FilledButton.icon(
-                      onPressed: () async {
-                        await Navigator.push(context, MaterialPageRoute(builder: (_) => AddServerPage(app: app)));
-                      },
-                      icon: const Icon(Icons.add),
-                      label: const Text('添加服务器'),
+                  // With no servers the main area has the same button.
+                  if (p.servers.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: FilledButton.icon(
+                        onPressed: () async {
+                          await Navigator.push(context, MaterialPageRoute(builder: (_) => AddServerPage(app: app)));
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('添加服务器'),
+                      ),
                     ),
-                  ),
                 ]),
               ),
             ),
             const VerticalDivider(width: 1),
             Expanded(
               child: sel == null || p.server(sel) == null
-                  ? const Center(child: Text('添加一台服务器开始使用'))
+                  ? Center(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text('还没有服务器', style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 8),
+                        const Text('填写 Linux 服务器的 SSH 地址和账号，Aurora 会通过 SSH 安装 agent，之后直接连接。'),
+                        const SizedBox(height: 20),
+                        FilledButton.icon(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddServerPage(app: app))),
+                          icon: const Icon(Icons.add),
+                          label: const Text('添加服务器'),
+                        ),
+                      ]),
+                    )
                   : ServerPage(key: ValueKey(sel), app: app, id: sel),
             ),
           ]),

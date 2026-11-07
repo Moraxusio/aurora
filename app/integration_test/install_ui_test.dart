@@ -78,8 +78,12 @@ void main() {
     await t.tap(find.text('完成'));
     await pumpFor(t, const Duration(milliseconds: 600));
 
-    // The new server is selected and connects directly.
+    // The new server is selected and connects directly, to the version the
+    // build carried.
     await waitFor(t, find.textContaining('已连接'));
+    const want = String.fromEnvironment('AURORA3_EXPECT_VERSION');
+    if (want.isNotEmpty) expect(find.textContaining('agent $want'), findsOneWidget);
+    expect(app.testKey, Platform.environment['AURORA3_TRUST_KEY'] == null ? isNull : isNotNull);
     final p = app.profile;
     final s = p.servers.single;
     expect(s.name, 'wsl-wizard');

@@ -18,7 +18,6 @@ dependencies:
   aurora_wire:
     path: packages/aurora_wire
   file_picker: 13.3.2
-  path_provider: 2.1.6
   xterm: 4.0.0
 
 dev_dependencies:

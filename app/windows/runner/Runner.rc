@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "dev.aurora3" "\0"
-            VALUE "FileDescription", "aurora" "\0"
+            VALUE "CompanyName", "Aurora" "\0"
+            VALUE "FileDescription", "Aurora 3" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "aurora" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 dev.aurora3. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Aurora" "\0"
             VALUE "OriginalFilename", "aurora.exe" "\0"
-            VALUE "ProductName", "aurora" "\0"
+            VALUE "ProductName", "Aurora 3" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

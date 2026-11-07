@@ -18,7 +18,10 @@ dependencies:
   aurora_wire:
     path: packages/aurora_wire
   file_picker: 13.3.2
-  xterm: 4.0.0
+  # xterm 4.0.0 (MIT) with a patch for Flutter's Windows text input; see
+  # third_party/xterm/AURORA.md.
+  xterm:
+    path: third_party/xterm
 
 dev_dependencies:
   flutter_test:

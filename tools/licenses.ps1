@@ -30,7 +30,8 @@ $deps = & 'flutter' pub deps --no-dev --style=compact --directory (Join-Path $re
 if (@($deps).Count -lt 20) { throw "pub deps listed only $(@($deps).Count) packages" }
 foreach ($d in ($deps | Sort-Object name -Unique)) {
     if ($d.name -in 'aurora_install', 'aurora_profile', 'aurora_tls', 'aurora_wire', 'aurora', 'flutter', 'flutter_web_plugins', 'sky_engine') { continue }
-    $p = Join-Path $pub "$($d.name)-$($d.version)"
+    # xterm is vendored (app/third_party/xterm, patched): its licence is there.
+    $p = if ($d.name -eq 'xterm') { Join-Path $repo 'app\third_party\xterm' } else { Join-Path $pub "$($d.name)-$($d.version)" }
     $lic = @('LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING') | ForEach-Object { Join-Path $p $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
     Add-License "Dart package $($d.name) $($d.version)" $lic
 }

@@ -5,6 +5,8 @@
 // show the agent's data: monitor, files, services, terminal.
 //   flutter test integration_test/ui_test.dart -d windows
 //     --dart-define=AURORA3_UI_ADDR=.. AURORA3_UI_PIN=.. AURORA3_UI_TOKEN=..
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show ImageByteFormat;
 
@@ -47,15 +49,8 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('pages show a real agent', (t) async {
-    // The terminal view asks the platform for text input (IME) while the
-    // test window has no view id: harness noise, not an app error.
-    final prev = FlutterError.onError;
-    FlutterError.onError = (d) {
-      final s = d.exceptionAsString();
-      if (s.contains('view ID is null') || s.contains('no client is set')) return;
-      prev?.call(d);
-    };
-    addTearDown(() => FlutterError.onError = prev);
+    // No filter for text input errors: "view ID is null" from the engine was
+    // the bug that kept typed characters out of the terminal.
     expect(addr, isNotEmpty, reason: 'run through app/tool/ui_test.ps1');
     final ep = {'addr': addr, 'pin': pin, 'token': token};
     final dir = await Directory.systemTemp.createTemp('aurora3-ui-');
@@ -110,6 +105,13 @@ void main() {
     }
     expect(seen, contains('COL=$cols='), reason: 'view is $cols columns; screen:\n${seen.trimRight()}');
 
+    // Typing on the real keyboard path: Windows key messages into this
+    // window, through the engine's text input to the terminal. ASCII comes
+    // as key presses, the Chinese as Unicode packets, as an IME sends them.
+    await typeKeys(t, r'echo TYPED-中文-$((6*7))' '\n');
+    await waitFor(t, find.byWidgetPredicate((_) => _screen(view.terminal).contains('TYPED-中文-42')),
+        upTo: const Duration(seconds: 10));
+
     // Files: the root and the test folder.
     await tab(t, '文件');
     await waitFor(t, find.widgetWithText(ListTile, 'docs'));
@@ -158,6 +160,24 @@ void main() {
     await app.disconnect(app.profile.servers.first.id);
     await settle(t, upTo: const Duration(milliseconds: 300));
   });
+}
+
+const sendKeys = String.fromEnvironment('AURORA3_UI_SENDKEYS');
+
+/// Types [text] into this process's window with app/tool/sendkeys.ps1,
+/// pumping frames meanwhile so the app handles the keys as they come.
+Future<void> typeKeys(WidgetTester t, String text) async {
+  expect(sendKeys, isNotEmpty, reason: 'run through app/tool/ui_test.ps1');
+  final p = await Process.start('powershell', ['-NoProfile', '-File', sendKeys, '-ProcessId', '$pid', '-Base64', base64.encode(utf8.encode(text))]);
+  final err = StringBuffer();
+  p.stderr.transform(utf8.decoder).listen(err.write);
+  p.stdout.drain<void>();
+  int? code;
+  unawaited(p.exitCode.then((c) => code = c));
+  while (code == null) {
+    await t.pump(const Duration(milliseconds: 50));
+  }
+  expect(code, 0, reason: 'sendkeys: $err');
 }
 
 /// The terminal's whole buffer as text.

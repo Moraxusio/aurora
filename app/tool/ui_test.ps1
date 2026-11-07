@@ -29,7 +29,8 @@ try {
     Push-Location $app
     try {
         # Plain values: PowerShell strips the quotes of a JSON argument.
-        $defs = @("--dart-define=AURORA3_UI_ADDR=$($ep.addr)", "--dart-define=AURORA3_UI_PIN=$($ep.pin)", "--dart-define=AURORA3_UI_TOKEN=$($ep.token)")
+        $defs = @("--dart-define=AURORA3_UI_ADDR=$($ep.addr)", "--dart-define=AURORA3_UI_PIN=$($ep.pin)", "--dart-define=AURORA3_UI_TOKEN=$($ep.token)",
+            "--dart-define=AURORA3_UI_SENDKEYS=$(Join-Path $PSScriptRoot 'sendkeys.ps1')")
         if ($Shots) { New-Item -ItemType Directory -Force $Shots | Out-Null; $defs += "--dart-define=AURORA3_UI_SHOTS=$Shots" }
         & flutter test integration_test\ui_test.dart -d windows @defs
         $code = $LASTEXITCODE

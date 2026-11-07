@@ -107,3 +107,50 @@ func TestUnknownRootRefused(t *testing.T) {
 		t.Fatalf("unknown root: code %v (%v)", wire.CodeOf(err), err)
 	}
 }
+
+// What the editor depends on: a file is read with its etag, saved only while
+// the etag still matches (another program's edit is refused, not overwritten),
+// and a file that is not valid UTF-8 comes back as binary without content, so the
+// editor never holds text it could save over the original bytes.
+func TestEditorReadSaveConflict(t *testing.T) {
+	e, dir := newEnv(t)
+	res, err := call(t, e, (*Env).fsRead, map[string]any{"root": "home", "path": "/inside.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := res.(map[string]any)
+	etag, _ := m["etag"].(string)
+	if etag == "" || m["content"] != "ok\n" || m["binary"] != nil {
+		t.Fatalf("read: %v", m)
+	}
+	save := func(content, ifMatch string) (any, error) {
+		return call(t, e, (*Env).fsWrite, map[string]any{"root": "home", "path": "/inside.txt", "content": content, "if_match": ifMatch})
+	}
+	saved, err := save("changed\n", etag)
+	if err != nil {
+		t.Fatalf("save with the current etag: %v", err)
+	}
+	newTag := saved.(entry).Etag
+	if newTag == "" || newTag == etag {
+		t.Fatalf("etag after save %q (was %q)", newTag, etag)
+	}
+	// someone else edits the file; saving with the old etag must be refused
+	other := filepath.Join(dir, "inside.txt")
+	if err := os.WriteFile(other, []byte("theirs, longer than before\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := save("mine\n", newTag); wire.CodeOf(err) != wire.CodeConflict {
+		t.Fatalf("stale save: %v", err)
+	}
+	if b, _ := os.ReadFile(other); string(b) != "theirs, longer than before\n" {
+		t.Fatalf("the other edit was overwritten: %q", b)
+	}
+	// a GBK file: binary, and no content to save back
+	if err := os.WriteFile(filepath.Join(dir, "gbk.txt"), []byte{0xd6, 0xd0, 0xce, 0xc4, '\n'}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err = call(t, e, (*Env).fsRead, map[string]any{"root": "home", "path": "/gbk.txt"})
+	if g := res.(map[string]any); err != nil || g["binary"] != true || g["content"] != nil {
+		t.Fatalf("invalid utf-8 must come back as binary without content: %v %v", res, err)
+	}
+}

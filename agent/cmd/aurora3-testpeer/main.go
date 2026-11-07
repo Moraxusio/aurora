@@ -1,6 +1,6 @@
 // aurora3-testpeer runs the real agent entry (pinned TLS, Hello, yamux,
-// dispatch) with only the test service, for client tests and benchmarks. It
-// is not shipped. It prints one JSON line {"addr","pin","token"} on stdout and
+// dispatch) with the test service and the portable net service (net.dial), for
+// client tests and benchmarks. It is not shipped. It prints one JSON line {"addr","pin","token"} on stdout and
 // runs until stdin is closed.
 package main
 
@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"aurora3/internal/entry"
+	"aurora3/internal/netfwd"
 	"aurora3/internal/service"
 	"aurora3/internal/testsvc"
 	"aurora3/internal/wire"
@@ -70,7 +71,7 @@ func run(listen string, off, verbose bool, state string) error {
 	if verbose {
 		out = os.Stderr
 	}
-	srv, err := entry.New(cfg, cfgPath, "3.0.0-testpeer", []service.Service{testsvc.Service()}, nil, nil, log.New(out, "testpeer ", log.Lmicroseconds))
+	srv, err := entry.New(cfg, cfgPath, "3.0.0-testpeer", []service.Service{testsvc.Service(), (&netfwd.Env{}).Service()}, nil, nil, log.New(out, "testpeer ", log.Lmicroseconds))
 	if err != nil {
 		return err
 	}

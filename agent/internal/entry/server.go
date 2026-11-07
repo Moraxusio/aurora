@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/yamux"
 
 	"aurora3/internal/p2p"
+	"aurora3/internal/paths"
 	"aurora3/internal/service"
 	"aurora3/internal/wire"
 )
@@ -72,6 +73,7 @@ func New(cfg *Config, cfgPath, version string, services []service.Service, lookP
 		"agent.health":   s.agentHealth,
 		"agent.services": s.agentServices,
 		"agent.service":  s.agentSetService,
+		"agent.actions":  s.agentActions,
 	} {
 		if err := reg.AddEntry(name, h); err != nil {
 			return nil, err
@@ -97,6 +99,19 @@ func (s *Server) AddEntryOp(name string, h service.Handler) error { return s.reg
 
 // Audit is the audit writer the services share (D-26).
 func (s *Server) AuditLog() *Audit { return s.audit }
+
+// ServiceActions is a copy of the systemd allowlist as it stands now (D-28).
+// The systemd service reads it on every call, so a change made with
+// agent.actions applies to the next svc.action.
+func (s *Server) ServiceActions() map[string][]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string][]string, len(s.cfg.ServiceActions))
+	for k, v := range s.cfg.ServiceActions {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
+}
 
 // Addr is the bound listener address (nil before Run).
 func (s *Server) Addr() net.Addr {
@@ -384,6 +399,55 @@ func (s *Server) agentSetService(_ context.Context, raw json.RawMessage) (any, e
 	}
 	s.audit.Write("agent.service", map[string]any{"id": a.ID, "enabled": *a.Enabled})
 	return map[string]any{"services": s.reg.Statuses()}, nil
+}
+
+// agentActions reads or changes the systemd allowlist (D-28): which of
+// start, stop and restart svc.action may run on which unit. Without a name it
+// only returns the list. With a name it replaces that unit's actions (an empty
+// list removes the unit), saves agent.json, and audits the change like a
+// service switch (D-26). On a save failure the list is put back.
+func (s *Server) agentActions(_ context.Context, raw json.RawMessage) (any, error) {
+	var a struct {
+		Name    string   `json:"name"`
+		Actions []string `json:"actions"`
+	}
+	if err := decode(raw, &a); err != nil {
+		return nil, err
+	}
+	if a.Name == "" {
+		return map[string]any{"actions": s.ServiceActions()}, nil
+	}
+	acts, err := paths.CheckActions(a.Name, a.Actions)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := *s.cfg
+	next.ServiceActions = map[string][]string{}
+	for k, v := range s.cfg.ServiceActions {
+		next.ServiceActions[k] = v
+	}
+	if len(acts) == 0 {
+		delete(next.ServiceActions, a.Name)
+	} else {
+		next.ServiceActions[a.Name] = acts
+	}
+	if len(next.ServiceActions) == 0 {
+		next.ServiceActions = nil
+	}
+	if s.cfgPath != "" {
+		if err := next.Save(s.cfgPath); err != nil {
+			return nil, wire.Errf(wire.CodeInternal, "保存配置失败：%v", err)
+		}
+	}
+	s.cfg.ServiceActions = next.ServiceActions
+	s.audit.Write("agent.actions", map[string]any{"name": a.Name, "actions": acts})
+	out := make(map[string][]string, len(s.cfg.ServiceActions))
+	for k, v := range s.cfg.ServiceActions {
+		out[k] = append([]string(nil), v...)
+	}
+	return map[string]any{"actions": out}, nil
 }
 
 // agentHealth reports what a long-running agent holds, to spot leaks.

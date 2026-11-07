@@ -15,6 +15,7 @@ import (
 	"aurora3/internal/files"
 	"aurora3/internal/git"
 	"aurora3/internal/monitor"
+	"aurora3/internal/netfwd"
 	"aurora3/internal/service"
 	"aurora3/internal/systemd"
 	"aurora3/internal/terminal"
@@ -29,8 +30,12 @@ func run(cfgPath string) error {
 	}
 	logger := log.New(os.Stderr, "", log.LstdFlags)
 	audit := entry.NewAudit(cfg.AuditLog)
-	list, term := services(cfg, audit)
-	srv, err := entry.New(cfg, cfgPath, Version, list, lookPath, audit, logger)
+	// The systemd service reads the allowlist from the running entry, so a change
+	// made with agent.actions applies to the next svc.action (D-28).
+	var srv *entry.Server
+	actions := func() map[string][]string { return srv.ServiceActions() }
+	list, term := services(cfg, audit, actions)
+	srv, err = entry.New(cfg, cfgPath, Version, list, lookPath, audit, logger)
 	if err != nil {
 		return err
 	}
@@ -46,7 +51,7 @@ func run(cfgPath string) error {
 // services builds the compiled-in service list (D-40, D-45). The audit writer
 // is the entry's; proxy is nil until the proxy service exists (G2.8), so git
 // runs without proxy variables.
-func services(cfg *entry.Config, audit *entry.Audit) ([]service.Service, *terminal.Env) {
+func services(cfg *entry.Config, audit *entry.Audit, actions func() map[string][]string) ([]service.Service, *terminal.Env) {
 	var proxy func() map[string]string
 	fr := make([]files.Root, len(cfg.Roots))
 	gr := make([]git.Root, len(cfg.Roots))
@@ -61,10 +66,11 @@ func services(cfg *entry.Config, audit *entry.Audit) ([]service.Service, *termin
 	fe := &files.Env{Roots: fr, UploadMaxBytes: cfg.UploadMaxBytes, Audit: audit, Repos: git.Repos{Proxy: proxy}}
 	ge := &git.Env{Roots: gr, Audit: audit, Proxy: proxy}
 	me := &monitor.Env{Roots: mr, Audit: audit}
-	se := &systemd.Env{ServiceActions: cfg.ServiceActions, Audit: audit}
+	se := &systemd.Env{Actions: actions, Audit: audit}
+	ne := &netfwd.Env{}
 	te := &terminal.Env{StateDir: cfg.StateDir, Roots: tr, Audit: audit, Bundle: bundle.FS{},
 		NoUnit: os.Getenv("INVOCATION_ID") == ""} // not started by systemd: no transient units
-	return []service.Service{fe.Service(), ge.Service(), me.Service(), se.Service(), te.Service()}, te
+	return []service.Service{fe.Service(), ge.Service(), me.Service(), se.Service(), ne.Service(), te.Service()}, te
 }
 
 func lookPath(name string) error {

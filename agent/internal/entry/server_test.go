@@ -256,6 +256,61 @@ func TestServiceSwitchOverTheLink(t *testing.T) {
 	}
 }
 
+// agent.actions edits the systemd allowlist over the link (D-28): saved to
+// agent.json, audited, visible to the services at once, validated, and
+// available with every service off (D-46).
+func TestAgentActionsAllowlist(t *testing.T) {
+	a := startAgent(t, map[string]bool{"echo": false})
+	s, _, err := dial(t, a.addr, a.srv.Pin(), hello())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var out struct {
+		Actions map[string][]string `json:"actions"`
+	}
+	if err := call(t, s, "agent.actions", nil, &out); err != nil || len(out.Actions) != 0 {
+		t.Fatalf("empty list: %+v %v", out, err)
+	}
+	if err := call(t, s, "agent.actions", map[string]any{"name": "nginx.service", "actions": []string{"stop", "restart", "stop"}}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.Actions["nginx.service"]; len(got) != 2 || got[0] != "restart" || got[1] != "stop" {
+		t.Fatalf("after set: %+v", out.Actions)
+	}
+	if got := a.srv.ServiceActions()["nginx.service"]; len(got) != 2 {
+		t.Fatalf("services do not see the change: %v", got)
+	}
+	saved, err := LoadConfig(a.cfgPath)
+	if err != nil || len(saved.ServiceActions["nginx.service"]) != 2 {
+		t.Fatalf("not saved: %+v %v", saved, err)
+	}
+	b, _ := os.ReadFile(filepath.Join(filepath.Dir(a.cfgPath), "audit.log"))
+	if !strings.Contains(string(b), `"event":"agent.actions"`) {
+		t.Fatalf("not audited: %s", b)
+	}
+	for _, bad := range []map[string]any{
+		{"name": "nginx.service", "actions": []string{"enable"}},
+		{"name": "-x", "actions": []string{"start"}},
+		{"name": "a b", "actions": []string{"start"}},
+	} {
+		if err := call(t, s, "agent.actions", bad, nil); wire.CodeOf(err) != wire.CodeBadRequest {
+			t.Fatalf("%v: %v", bad, err)
+		}
+	}
+	if got := a.srv.ServiceActions()["nginx.service"]; len(got) != 2 {
+		t.Fatalf("a refused change altered the list: %v", got)
+	}
+	// an empty list removes the unit (decode into a fresh map: JSON merges into an old one)
+	out.Actions = nil
+	if err := call(t, s, "agent.actions", map[string]any{"name": "nginx.service", "actions": []string{}}, &out); err != nil || len(out.Actions) != 0 {
+		t.Fatalf("remove: %+v %v", out, err)
+	}
+	if saved, _ := LoadConfig(a.cfgPath); len(saved.ServiceActions) != 0 {
+		t.Fatalf("removal not saved: %+v", saved.ServiceActions)
+	}
+}
+
 // Entry operations stay available with every service off (D-46).
 func TestEntryOperationsAlwaysOn(t *testing.T) {
 	a := startAgent(t, map[string]bool{"echo": false})

@@ -336,7 +336,10 @@ func TestKillEndsProcessesThatIgnoreHangup(t *testing.T) {
 	// A background job that ignores SIGHUP, as nohup-less long jobs do.
 	// The output marker is split in the typed command, so only the shell's
 	// output (not the echo of the command line) matches it.
-	c.send(wire.TypeData, []byte("(trap '' HUP; exec sleep 613) & echo PI''D=$!=END\r"))
+	// Both halves of the marker are split in the typed command ("PI''D" and
+	// "EN''D"): the echo of the command line must not match while the shell
+	// has not answered yet, or the pid would be read out of the command text.
+	c.send(wire.TypeData, []byte("(trap '' HUP; exec sleep 613) & echo PI''D=$!=EN''D\r"))
 	if err := c.waitScreen("=END", 10*time.Second); err != nil {
 		t.Fatal(err)
 	}

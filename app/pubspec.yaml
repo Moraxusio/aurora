@@ -18,6 +18,9 @@ dependencies:
   aurora_wire:
     path: packages/aurora_wire
   file_picker: 13.3.2
+  # Code editor for the file tabs (MIT), with its highlighter (MIT).
+  re_editor: 0.10.0
+  re_highlight: 0.0.3
   # xterm 4.0.0 (MIT) with a patch for Flutter's Windows text input; see
   # third_party/xterm/AURORA.md.
   xterm:

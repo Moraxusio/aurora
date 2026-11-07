@@ -264,6 +264,18 @@ class OpStream {
     }
   }
 
+  /// For a stream that carries raw bytes after its Response (net.dial): the
+  /// bytes that came with the Response first, then the rest, until the peer
+  /// closes (null). Do not mix with [read].
+  Future<Uint8List?> readRaw() async {
+    final rest = _r.takeBuffered();
+    if (rest.isNotEmpty) return rest;
+    try {
+      return await _r.nextRaw();
+    } on YamuxException catch (e) {
+      throw OpError(codeUnavailable, '连接中断：$e');
+    }
+  }
   /// Reads the Response frame: its result, or [OpError].
   Future<Object?> response() async {
     final f = await read();

@@ -68,3 +68,44 @@ func TestNetPortsFindsListener(t *testing.T) {
 		t.Fatal("the agent's own listener must be left out")
 	}
 }
+
+// One port can have several listeners (a wildcard and a loopback, IPv4 and
+// IPv6). The listing keeps one, always the same: the most reachable address,
+// whatever order they were read in.
+func TestDedupePortsIsStable(t *testing.T) {
+	in := []openPort{
+		{Port: 53, Addr: "127.0.0.54", Pid: 7},
+		{Port: 22, Addr: "::", Pid: 9},
+		{Port: 53, Addr: "127.0.0.53", Pid: 7},
+		{Port: 22, Addr: "0.0.0.0", Pid: 9},
+		{Port: 80, Addr: "127.0.0.1"},
+		{Port: 80, Addr: "10.0.0.5", Pid: 3},
+	}
+	want := func(got []openPort) string {
+		s := ""
+		for _, p := range got {
+			s += p.Addr + " "
+		}
+		return s
+	}
+	first := want(dedupePorts(in))
+	if first != "0.0.0.0 127.0.0.53 10.0.0.5 " && first != ":: 127.0.0.53 10.0.0.5 " {
+		t.Fatalf("got %q", first)
+	}
+	// the wildcard chosen for 22 is the same one every time, in every order
+	for i := 0; i < 50; i++ {
+		shuffled := append([]openPort(nil), in...)
+		for j := range shuffled {
+			k := (j*7 + i*3) % len(shuffled)
+			shuffled[j], shuffled[k] = shuffled[k], shuffled[j]
+		}
+		if got := want(dedupePorts(shuffled)); got != first {
+			t.Fatalf("order changed the result: %q vs %q", got, first)
+		}
+	}
+	// ports come out sorted
+	got := dedupePorts(in)
+	if got[0].Port != 22 || got[1].Port != 53 || got[2].Port != 80 {
+		t.Fatalf("not sorted: %+v", got)
+	}
+}

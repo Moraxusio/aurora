@@ -29,6 +29,17 @@ public static class Keys {
     Thread.Sleep(15);
   }
   static void Vk(ushort vk, bool up) { Send(vk, (ushort)MapVirtualKey(vk, 0), up ? UP : 0); }
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  static string Describe(IntPtr h) {
+    if (h == IntPtr.Zero) return "no window";
+    var sb = new System.Text.StringBuilder(256);
+    GetWindowText(h, sb, 256);
+    uint pid; GetWindowThreadProcessId(h, out pid);
+    string proc = "?";
+    try { proc = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; } catch { }
+    return "'" + sb + "' (" + proc + ", pid " + pid + ")";
+  }
   public static void Focus(IntPtr h) {
     // A background process may only move the focus after a key press.
     keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, UP, UIntPtr.Zero);
@@ -37,8 +48,12 @@ public static class Keys {
   }
   public static void Type(IntPtr h, string s) {
     foreach (char c in s) {
-      // Never type into another window, should the focus move meanwhile.
-      if (GetForegroundWindow() != h) throw new Exception("the window lost the focus; stopped typing");
+      // Never type into another window, should the focus move meanwhile: try
+      // to take it back a few times, and stop with the culprit's name if not.
+      for (int tries = 0; GetForegroundWindow() != h; tries++) {
+        if (tries == 3) throw new Exception("the window lost the focus to " + Describe(GetForegroundWindow()) + "; stopped typing");
+        Focus(h);
+      }
       if (c == '\n') { Vk(0x0D, false); Vk(0x0D, true); continue; }
       short k = c < 128 ? VkKeyScan(c) : (short)-1;
       if (k == -1) { Send(0, c, UNICODE); Send(0, c, UNICODE | UP); continue; }

@@ -37,13 +37,12 @@ void main() {
 
   testWidgets('add a server through the wizard, then uninstall', (t) async {
     expect(addr, isNotEmpty, reason: 'run through app/tool/install_ui_test.ps1');
-    final prev = FlutterError.onError;
-    FlutterError.onError = (d) {
-      final s = d.exceptionAsString();
-      if (s.contains('view ID is null') || s.contains('no client is set')) return;
-      prev?.call(d);
-    };
-    addTearDown(() => FlutterError.onError = prev);
+    t.view.physicalSize = const Size(1700, 1000);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      t.view.resetPhysicalSize();
+      t.view.resetDevicePixelRatio();
+    });
 
     final dir = await Directory.systemTemp.createTemp('aurora3-ui-install-');
     addTearDown(() => dir.delete(recursive: true));
@@ -80,9 +79,13 @@ void main() {
 
     // The new server is selected and connects directly, to the version the
     // build carried.
-    await waitFor(t, find.textContaining('已连接'));
+    await waitFor(t, find.textContaining('127.0.0.1:17710'));
     const want = String.fromEnvironment('AURORA3_EXPECT_VERSION');
-    if (want.isNotEmpty) expect(find.textContaining('agent $want'), findsOneWidget);
+    if (want.isNotEmpty) {
+      await t.tap(find.byTooltip('概览与设置'));
+      await waitFor(t, find.text('agent 版本'));
+      expect(find.text(want), findsWidgets, reason: 'the overview shows the agent version the build carried');
+    }
     expect(app.testKey, Platform.environment['AURORA3_TRUST_KEY'] == null ? isNull : isNotNull);
     final p = app.profile;
     final s = p.servers.single;
@@ -91,17 +94,21 @@ void main() {
     expect(s.ssh!.password, password, reason: '"save the passwords" was on');
     expect(p.knownHost(addr.substring(0, i), int.parse(addr.substring(i + 1)))!.fingerprint, hostKey);
 
-    // Its terminal works: a session can be created.
+    // Its terminal works: a session can be created from the side bar.
+    // the terminal side bar is the one shown by default; a click on its icon would hide it
     await waitFor(t, find.text('新建会话'));
-    await t.tap(find.widgetWithText(FilledButton, '新建会话'));
+    await t.tap(find.widgetWithText(OutlinedButton, '新建会话'));
     await pumpFor(t, const Duration(milliseconds: 500));
-    await t.tap(find.widgetWithText(FilledButton, '新建'));
-    await waitFor(t, find.widgetWithText(ChoiceChip, 'main'));
+    await t.tap(find.widgetWithText(FilledButton, '创建'));
+    await waitFor(t, find.text('main'));
 
     // Uninstall from the overview: the session is listed and must be
     // confirmed, then the agent is removed and the link goes away.
-    await t.tap(find.descendant(of: find.byType(TabBar), matching: find.text('概览')));
+    await t.tap(find.byTooltip('概览与设置'));
     await pumpFor(t, const Duration(milliseconds: 600));
+    await waitFor(t, find.text('卸载 agent'));
+    await t.ensureVisible(find.text('卸载 agent'));
+    await pumpFor(t, const Duration(milliseconds: 300));
     await t.tap(find.text('卸载 agent'));
     await pumpFor(t, const Duration(milliseconds: 400));
     await t.tap(find.widgetWithText(FilledButton, '卸载'));

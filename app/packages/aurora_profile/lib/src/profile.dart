@@ -75,7 +75,10 @@ class ServerEntry {
   /// Unix seconds of the last successful direct link.
   int? lastSeen;
 
-  ServerEntry({required this.id, required this.name, this.agentId, this.ssh, this.direct, this.lastSeen});
+  /// Port forwards (the "net" service): opened again when the server connects.
+  List<ForwardSpec> forwards;
+
+  ServerEntry({required this.id, required this.name, this.agentId, this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards}) : forwards = forwards ?? [];
 
   /// A new entry with a random id.
   factory ServerEntry.create(String name, {SshLogin? ssh}) => ServerEntry(id: newId(), name: name, ssh: ssh);
@@ -87,6 +90,7 @@ class ServerEntry {
         ssh: j['ssh'] == null ? null : SshLogin.fromJson(_map(j['ssh'])),
         direct: j['direct'] == null ? null : DirectParams.fromJson(_map(j['direct'])),
         lastSeen: j['last_seen'] as int?,
+        forwards: [for (final f in (j['forwards'] as List? ?? const [])) ForwardSpec.fromJson(_map(f))],
       );
 
   Map<String, dynamic> toJson() => {
@@ -96,9 +100,29 @@ class ServerEntry {
         'ssh': ?ssh?.toJson(),
         'direct': ?direct?.toJson(),
         'last_seen': ?lastSeen,
+        if (forwards.isNotEmpty) 'forwards': [for (final f in forwards) f.toJson()],
       };
 }
 
+/// One port forward: [host]:[port] on the server, opened on this machine's
+/// loopback at [local]. Not a secret, but kept in the same sealed file.
+class ForwardSpec {
+  String host;
+  int port;
+  int local;
+  String label;
+
+  ForwardSpec({this.host = '127.0.0.1', required this.port, required this.local, this.label = ''});
+
+  factory ForwardSpec.fromJson(Map<String, dynamic> j) => ForwardSpec(
+        host: j['host'] as String? ?? '127.0.0.1',
+        port: j['port'] as int? ?? 0,
+        local: j['local'] as int? ?? 0,
+        label: j['label'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {'host': host, 'port': port, 'local': local, if (label.isNotEmpty) 'label': label};
+}
 /// An SSH account. Secrets are optional: a field left null is asked for
 /// each time it is needed (D-1: saving is the user's choice).
 class SshLogin {

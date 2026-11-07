@@ -1,8 +1,16 @@
-// UI against a real aurora3-agent (agent/tools/ui-agent.sh, started by
-// app/tool/ui_test.ps1). The profile is a temporary file sealed with the
-// real DPAPI, and the server entry is written directly (the SSH install is
-// covered by agent/tools/install-e2e.ps1). Each page is opened and must
-// show the agent's data: monitor, files, services, terminal.
+// The whole client against a real aurora3-agent (agent/tools/ui-agent.sh,
+// started by app/tool/ui_test.ps1): normal user, /tmp, a git repository with
+// a modified and an untracked file, and a TCP service to forward. The profile
+// is a temporary file sealed with the real DPAPI; the server entry is written
+// directly (the SSH install is covered by agent/tools/install-e2e.ps1).
+// Every feature is used through the window the way a person would:
+//   terminal   typing on the real Windows input path, Chinese included
+//   files      the tree, the editor, saving, and a save refused after
+//              another program changed the file
+//   git        changes, a diff, staging, committing, history
+//   systemd    the unit list
+//   net        a forward opened from the list, with bytes through it
+//   layout     wide, medium and narrow windows
 //   flutter test integration_test/ui_test.dart -d windows
 //     --dart-define=AURORA3_UI_ADDR=.. AURORA3_UI_PIN=.. AURORA3_UI_TOKEN=..
 import 'dart:async';
@@ -10,9 +18,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show ImageByteFormat;
 
+import 'package:aurora/features/files/file_editor.dart';
 import 'package:aurora/main.dart';
 import 'package:aurora/state/app_state.dart';
 import 'package:aurora_profile/aurora_profile.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show OffsetLayer;
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +32,9 @@ import 'package:xterm/xterm.dart' show Terminal, TerminalView;
 const addr = String.fromEnvironment('AURORA3_UI_ADDR');
 const pin = String.fromEnvironment('AURORA3_UI_PIN');
 const token = String.fromEnvironment('AURORA3_UI_TOKEN');
+const sendKeys = String.fromEnvironment('AURORA3_UI_SENDKEYS');
+const shots = String.fromEnvironment('AURORA3_UI_SHOTS');
+const typingLines = int.fromEnvironment('AURORA3_UI_TYPING_LINES', defaultValue: 6);
 
 Future<void> settle(WidgetTester t, {Duration upTo = const Duration(seconds: 10)}) async {
   final end = DateTime.now().add(upTo);
@@ -39,130 +52,39 @@ Future<void> waitFor(WidgetTester t, Finder f, {Duration upTo = const Duration(s
   throw TestFailure('not found within $upTo: $f');
 }
 
-/// Switches tab and waits for the tab animation, so taps land on the new tab.
-Future<void> tab(WidgetTester t, String name) async {
-  await t.tap(find.descendant(of: find.byType(TabBar), matching: find.text(name)));
-  await settle(t, upTo: const Duration(milliseconds: 600));
+Future<void> waitUntil(WidgetTester t, bool Function() ok, String what, {Duration upTo = const Duration(seconds: 15)}) async {
+  final end = DateTime.now().add(upTo);
+  while (DateTime.now().isBefore(end)) {
+    await t.pump(const Duration(milliseconds: 100));
+    if (ok()) return;
+  }
+  throw TestFailure('did not happen within $upTo: $what');
 }
 
-void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+/// A mouse click on the first match. flutter_test's own tap is a touch, which
+/// would switch the window to touch mode (bigger rows, the key bar).
+Future<void> click(WidgetTester t, Finder f) async {
+  final at = t.getCenter(f.first);
+  final g = await t.createGesture(kind: PointerDeviceKind.mouse);
+  await g.addPointer(location: at);
+  await g.down(at);
+  await t.pump();
+  await g.up();
+  await g.removePointer();
+  await t.pump();
+}
 
-  testWidgets('pages show a real agent', (t) async {
-    // No filter for text input errors: "view ID is null" from the engine was
-    // the bug that kept typed characters out of the terminal.
-    expect(addr, isNotEmpty, reason: 'run through app/tool/ui_test.ps1');
-    final ep = {'addr': addr, 'pin': pin, 'token': token};
-    final dir = await Directory.systemTemp.createTemp('aurora3-ui-');
-    addTearDown(() => dir.delete(recursive: true));
-    final store = await ProfileStore.open('${dir.path}\\profile.bin', DpapiSealer());
-    await store.update((p) {
-      final s = ServerEntry.create('wsl-ui', ssh: SshLogin(host: '127.0.0.1', user: 'root'));
-      s.direct = DirectParams(port: 17791, addrs: [ep['addr'] as String], pin: ep['pin'] as String, token: ep['token'] as String);
-      p.servers.add(s);
-      p.selected = s.id;
-    });
-    await store.close();
-    final app = AppState();
-    await app.initAt('${dir.path}\\profile.bin');
-    await t.pumpWidget(AuroraApp(app: app));
-
-    // Connected, with the agent's version in the header.
-    await waitFor(t, find.textContaining('已连接'));
-    expect(find.textContaining('agent 3.0.1'), findsOneWidget);
-
-    // Terminal: no session yet; create one through the dialog.
-    await waitFor(t, find.text('新建会话'));
-    await t.tap(find.widgetWithText(FilledButton, '新建会话'));
+/// Shows a feature's side bar. A click on the icon of the feature that is
+/// already open hides the side bar (as in an IDE), so the icon is tapped only
+/// when the side bar does not already show [title].
+Future<void> activity(WidgetTester t, String tooltip, {required String title}) async {
+  final shown = find.text(title.toUpperCase());
+  if (shown.evaluate().isEmpty) {
+    await click(t, find.byTooltip(tooltip).first);
     await settle(t, upTo: const Duration(milliseconds: 500));
-    await t.tap(find.widgetWithText(FilledButton, '新建'));
-    await waitFor(t, find.widgetWithText(ChoiceChip, 'main'));
-
-    // The terminal's size reached tmux: the shell sees the view's columns,
-    // not the 80 it attached with.
-    final term = find.byType(TerminalView);
-    await waitFor(t, term);
-    final view = t.widget<TerminalView>(term);
-    final cols = view.terminal.viewWidth;
-    expect(cols, greaterThan(80), reason: 'the test window is wider than 80 columns');
-    // tmux had the real size from the start: the date at the right end of
-    // its status line sits in the last columns of the view, not at 80.
-    await waitFor(t, find.byWidgetPredicate((_) => _screen(view.terminal).contains('\$')));
-    final status = view.terminal.buffer.lines[0];
-    var last = 0;
-    for (var x = 0; x < status.length; x++) {
-      if (status.getCodePoint(x) > 32) last = x;
-    }
-    expect(last, greaterThan(cols - 4), reason: 'status line ends at column $last of $cols');
-    // The shell's output split in the typed command, so only the answer
-    // matches. Asked again until it shows: the first prompt may still be
-    // drawing when the keys arrive.
-    var seen = '';
-    for (var i = 0; i < 30 && !seen.contains('COL=$cols='); i++) {
-      if (i % 10 == 0) view.terminal.textInput('echo CO""L=\$(tput cols)=\r');
-      await settle(t, upTo: const Duration(milliseconds: 300));
-      seen = _screen(view.terminal);
-    }
-    expect(seen, contains('COL=$cols='), reason: 'view is $cols columns; screen:\n${seen.trimRight()}');
-
-    // Typing on the real keyboard path: Windows key messages into this
-    // window, through the engine's text input to the terminal. ASCII comes
-    // as key presses, the Chinese as Unicode packets, as an IME sends them.
-    await typeKeys(t, r'echo TYPED-中文-$((6*7))' '\n');
-    await waitFor(t, find.byWidgetPredicate((_) => _screen(view.terminal).contains('TYPED-中文-42')),
-        upTo: const Duration(seconds: 10));
-
-    // Files: the root and the test folder.
-    await tab(t, '文件');
-    await waitFor(t, find.widgetWithText(ListTile, 'docs'));
-    await t.tap(find.widgetWithText(ListTile, 'docs'));
-    await waitFor(t, find.text('readme.txt'));
-
-    // Switching away and back keeps the folder (and the terminal).
-    await tab(t, '终端');
-    expect(identical(t.widget<TerminalView>(term).terminal, view.terminal), isTrue, reason: 'terminal kept');
-    await tab(t, '文件');
-    expect(find.text('readme.txt'), findsOneWidget, reason: 'still in docs');
-    await t.tap(find.byTooltip('上一级'));
-    await waitFor(t, find.widgetWithText(ListTile, 'docs'));
-
-    // Monitor: CPU and memory cards fill in after two samples.
-    await tab(t, '监控');
-    await waitFor(t, find.textContaining(' %'), upTo: const Duration(seconds: 10));
-    expect(find.text('内存'), findsWidgets); // the card and the process table column
-    await waitFor(t, find.text('进程（按 CPU 排序）'));
-
-    // Services: the switches the agent reports.
-    await tab(t, '服务');
-    await waitFor(t, find.widgetWithText(SwitchListTile, '终端'));
-    expect(find.widgetWithText(SwitchListTile, '文件'), findsOneWidget);
-
-    // Overview shows the pin.
-    await tab(t, '概览');
-    await waitFor(t, find.text(ep['pin'] as String));
-
-    // Screenshots for review, when asked for (AURORA3_UI_SHOTS=dir).
-    const shots = String.fromEnvironment('AURORA3_UI_SHOTS');
-    if (shots.isNotEmpty) {
-      for (final name in ['终端', '文件', '监控', '服务', '概览']) {
-        await tab(t, name);
-        await settle(t, upTo: const Duration(seconds: 3));
-        await shot(t, '$shots\\$name.png');
-      }
-      // The add-server page, as a user opens it.
-      await t.tap(find.text('添加服务器'));
-      await settle(t, upTo: const Duration(seconds: 1));
-      await shot(t, '$shots\\添加服务器.png');
-      await t.tap(find.byType(BackButton));
-      await settle(t, upTo: const Duration(milliseconds: 600));
-    }
-
-    await app.disconnect(app.profile.servers.first.id);
-    await settle(t, upTo: const Duration(milliseconds: 300));
-  });
+  }
+  expect(shown, findsOneWidget, reason: 'the $tooltip side bar is shown');
 }
-
-const sendKeys = String.fromEnvironment('AURORA3_UI_SENDKEYS');
 
 /// Types [text] into this process's window with app/tool/sendkeys.ps1,
 /// pumping frames meanwhile so the app handles the keys as they come.
@@ -180,7 +102,6 @@ Future<void> typeKeys(WidgetTester t, String text) async {
   expect(code, 0, reason: 'sendkeys: $err');
 }
 
-/// The terminal's whole buffer as text.
 String _screen(Terminal term) {
   final b = term.buffer;
   final out = StringBuffer();
@@ -190,15 +111,178 @@ String _screen(Terminal term) {
   return out.toString();
 }
 
-/// Writes the window's current frame as a PNG. The root layer is in physical
-/// pixels (the view's transform scales by the device pixel ratio), so the
-/// logical size is scaled back and the image taken at ratio 1: the whole
-/// window, at its real resolution.
-Future<void> shot(WidgetTester t, String path) async {
+/// The whole window's current frame as a PNG (physical pixels).
+Future<void> shot(WidgetTester t, String name) async {
+  if (shots.isEmpty) return;
   final ro = t.binding.renderViews.first;
   final layer = ro.debugLayer as OffsetLayer;
-  final physical = ro.flutterView.physicalSize;
-  final img = await layer.toImage(Offset.zero & physical);
+  final img = await layer.toImage(Offset.zero & ro.flutterView.physicalSize);
   final png = await img.toByteData(format: ImageByteFormat.png);
-  await File(path).writeAsBytes(png!.buffer.asUint8List());
+  await File('$shots\\$name.png').writeAsBytes(png!.buffer.asUint8List());
 }
+
+/// Runs a command in WSL as the normal user (the same machine the agent is on).
+Future<String> wsl(String script) async {
+  final r = await Process.run('wsl', ['-d', 'Ubuntu-24.04', '--', 'sh', '-c', script]);
+  return '${r.stdout}${r.stderr}'.trim();
+}
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('every feature, through the window', (t) async {
+    // No filter for text input errors: "view ID is null" from the engine was
+    // the bug that kept typed characters out of the terminal.
+    expect(addr, isNotEmpty, reason: 'run through app/tool/ui_test.ps1');
+    t.view.physicalSize = const Size(1700, 1000);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      t.view.resetPhysicalSize();
+      t.view.resetDevicePixelRatio();
+    });
+    final dir = await Directory.systemTemp.createTemp('aurora3-ui-');
+    addTearDown(() => dir.delete(recursive: true));
+    final store = await ProfileStore.open('${dir.path}\\profile.bin', DpapiSealer());
+    await store.update((p) {
+      final s = ServerEntry.create('wsl-ui', ssh: SshLogin(host: '127.0.0.1', user: 'root'));
+      s.direct = DirectParams(port: 17791, addrs: [addr], pin: pin, token: token);
+      p.servers.add(s);
+      p.selected = s.id;
+    });
+    await store.close();
+    final app = AppState();
+    await app.initAt('${dir.path}\\profile.bin');
+    await t.pumpWidget(AuroraApp(app: app));
+
+    // ---- connection ----
+    await waitFor(t, find.textContaining('127.0.0.1:17791'), upTo: const Duration(seconds: 20)); // status bar
+    expect(find.textContaining('wsl-ui'), findsWidgets);
+    await shot(t, '01-welcome');
+
+    // ---- terminal ----
+    await activity(t, '终端', title: '终端会话');
+    await waitFor(t, find.text('新建会话'));
+    await click(t, find.widgetWithText(OutlinedButton, '新建会话'));
+    await settle(t, upTo: const Duration(milliseconds: 600));
+    await click(t, find.widgetWithText(FilledButton, '创建'));
+    await waitFor(t, find.byType(TerminalView));
+    final view = t.widget<TerminalView>(find.byType(TerminalView));
+    final cols = view.terminal.viewWidth;
+    expect(cols, greaterThan(80), reason: 'the terminal uses the whole editor area, not 80 columns');
+    await waitUntil(t, () => _screen(view.terminal).contains('\$'), 'the shell prompt');
+    // typing on the real keyboard path: ASCII as key presses, Chinese as
+    // Unicode packets as an IME sends them
+    // Typing on the real keyboard path: Windows key messages into this
+    // window, through the engine's text input to the terminal. ASCII comes as
+    // key presses, the Chinese as Unicode packets, as an IME sends them. Six
+    // lines, each checked as typed (nothing in front of it) and as run.
+    String tail() => _screen(view.terminal).trimRight().split('\n').reversed.take(8).toList().reversed.join('\n');
+    final failures = <String>[];
+    for (var i = 0; i < typingLines; i++) {
+      await typeKeys(t, 'echo TYPED$i-中文-\$(((6+$i)*7))\n');
+      final typed = RegExp(r'~\$ ?echo TYPED' '$i-中文-\\\$\\(\\(\\(6\\+$i\\)\\*7\\)\\)');
+      final result = 'TYPED$i-中文-${(6 + i) * 7}';
+      try {
+        await waitUntil(t, () => _screen(view.terminal).contains(result), 'line $i run by the shell', upTo: const Duration(seconds: 5));
+      } on TestFailure {
+        // fall through: the check below records what was on screen
+      }
+      if (!typed.hasMatch(_screen(view.terminal)) || !_screen(view.terminal).contains(result)) {
+        failures.add('line $i not typed as sent.\nscreen tail:\n${tail()}');
+      }
+    }
+    expect(failures, isEmpty, reason: '${failures.length} of $typingLines lines went wrong:\n${failures.join('\n------\n')}');    await shot(t, '02-terminal');
+
+    // ---- files: tree, editor, save ----
+    await activity(t, '文件', title: '文件');
+    await waitFor(t, find.text('docs'));
+    await click(t, find.text('docs'));
+    await settle(t, upTo: const Duration(milliseconds: 800));
+    await shot(t, '03a-files-after-docs');
+    await waitFor(t, find.textContaining('readme.txt'));
+    await click(t, find.textContaining('readme.txt').first);
+    await waitFor(t, find.byType(FileEditor));
+    final editor = t.state<FileEditorState>(find.byType(FileEditor));
+    await waitUntil(t, () => editor.text.contains('hello from the ui agent'), 'file content in the editor');
+    expect(editor.dirty, isFalse);
+    editor.text = 'edited in the editor\n';
+    await t.pump();
+    expect(editor.dirty, isTrue, reason: 'the tab shows unsaved changes');
+    await editor.save();
+    await settle(t, upTo: const Duration(milliseconds: 500));
+    expect(editor.dirty, isFalse);
+    expect(await wsl('cat /tmp/aurora3-ui-agent/home/docs/readme.txt'), 'edited in the editor');
+    // another program changes the file; saving over it is refused, and the
+    // other program's text survives
+    await wsl("printf 'changed elsewhere, and longer\\n' > /tmp/aurora3-ui-agent/home/docs/readme.txt");
+    editor.text = 'mine\n';
+    await t.pump();
+    unawaited(editor.save());
+    await waitFor(t, find.text('服务器上的文件已被修改'));
+    await shot(t, '03-save-conflict');
+    await click(t, find.text('取消'));
+    await settle(t, upTo: const Duration(milliseconds: 400));
+    expect(await wsl('cat /tmp/aurora3-ui-agent/home/docs/readme.txt'), 'changed elsewhere, and longer', reason: 'the refused save did not overwrite');
+    expect(editor.dirty, isTrue, reason: 'my text is still in the editor');
+
+    // ---- git ----
+    await activity(t, '源代码管理', title: '源代码管理');
+    await waitFor(t, find.text('new.txt'));
+    expect(find.text('a.txt'), findsOneWidget, reason: 'the modified file is listed');
+    await click(t, find.text('a.txt'));
+    await waitFor(t, find.text('TWO')); // the diff tab shows the added line
+    expect(find.text('two'), findsWidgets, reason: 'and the removed one');
+    await shot(t, '04-git-diff');
+    // stage the untracked file and commit
+    await click(t, find.byTooltip('暂存').last);
+    await settle(t, upTo: const Duration(seconds: 1));
+    await waitFor(t, find.textContaining('暂存的更改  1'));
+    await t.enterText(find.widgetWithText(TextField, '提交说明（提交到 main）'), 'add new file');
+    await click(t, find.textContaining('提交 1 个文件'));
+    await waitFor(t, find.textContaining('暂存的更改  0'));
+    expect(await wsl('cd /tmp/aurora3-ui-agent/home/proj && git log --format=%s -1'), 'add new file');
+    // history lists it
+    await click(t, find.text('历史'));
+    await waitFor(t, find.textContaining('add new file'));
+
+    // ---- systemd ----
+    await activity(t, '系统服务', title: '系统服务');
+    await waitFor(t, find.textContaining('个服务'), upTo: const Duration(seconds: 20));
+    await shot(t, '05-systemd');
+
+    // ---- port forward ----
+    await activity(t, '端口转发', title: '端口转发');
+    // the row is "17792" plus a grey note in one text, so match by what it contains
+    await waitFor(t, find.textContaining('17792'), upTo: const Duration(seconds: 20));
+    await click(t, find.textContaining('17792'));
+    await waitFor(t, find.textContaining('→  17792'));
+    final local = RegExp(r'127\.0\.0\.1:(\d+)\s+→\s+17792').firstMatch(find.textContaining('→  17792').evaluate().map((e) => (e.widget as Text).textSpan!.toPlainText()).first)!.group(1)!;
+    final reply = await () async {
+      final s = await Socket.connect(InternetAddress.loopbackIPv4, int.parse(local));
+      final out = <int>[];
+      final done = Completer<void>();
+      s.listen(out.addAll, onDone: done.complete);
+      await Future.any([done.future, Future<void>.delayed(const Duration(seconds: 8))]);
+      s.destroy();
+      return utf8.decode(out);
+    }();
+    expect(reply, contains('ui-port-banner'), reason: 'bytes came through the forward');
+    await shot(t, '06-forward');
+
+    // ---- layouts ----
+    t.view.physicalSize = const Size(760, 900);
+    await t.pump();
+    await settle(t, upTo: const Duration(milliseconds: 500));
+    await shot(t, '07-medium');
+    t.view.physicalSize = const Size(420, 860);
+    await t.pump();
+    await settle(t, upTo: const Duration(milliseconds: 500));
+    await shot(t, '08-narrow');
+    expect(tester(t), isNull);
+
+    await app.disconnect(app.profile.servers.first.id);
+    await settle(t, upTo: const Duration(milliseconds: 300));
+  });
+}
+
+Object? tester(WidgetTester t) => t.takeException();

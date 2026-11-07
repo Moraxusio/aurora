@@ -1,10 +1,45 @@
-// Monitor tab: CPU, memory, load, disks and the top processes, from
-// sys.metrics and proc.list every 2 s. sys.metrics returns raw counters; the
+// The monitor tab (service "monitor"): CPU, memory, load, disks and the top
+// processes, from sys.metrics and proc.list every 2 s. sys.metrics returns raw counters; the
 // CPU percentage comes from the difference between two samples.
 import 'dart:async';
 
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
+
+import '../../kernel/editor_tab.dart';
+import '../../kernel/feature.dart';
+import '../../kernel/workspace.dart';
+import '../../theme/ide_theme.dart';
+import '../systemd/systemd_feature.dart' show systemLogTab;
+
+class MonitorFeature extends Feature {
+  const MonitorFeature();
+
+  @override
+  String get id => 'monitor';
+  @override
+  String get title => '监控';
+  @override
+  IconData get icon => Icons.monitor_heart_outlined;
+  @override
+  String get service => 'monitor';
+  @override
+  List<String> get ops => const ['sys.metrics', 'proc.list'];
+
+  @override
+  SideBarView? sideBar(BuildContext context, Workspace ws) => null;
+
+  @override
+  void open(Workspace ws) => ws.openTab(monitorTab(ws));
+
+  @override
+  List<Command> commands(Workspace ws) => [
+        Command(id: 'monitor.open', title: '打开监控', group: '监控', icon: Icons.monitor_heart_outlined, run: () => open(ws)),
+        Command(id: 'monitor.syslog', title: '查看系统日志', group: '监控', icon: Icons.receipt_long_outlined, enabled: () => ws.hasOp('log.tail'), run: () => ws.openTab(systemLogTab(ws))),
+      ];
+}
+
+EditorTab monitorTab(Workspace ws) => EditorTab(id: 'monitor', title: '监控', icon: Icons.monitor_heart_outlined, builder: (_) => LinkGate(ws: ws, builder: (_, link) => MonitorTab(link: link)));
 
 class MonitorTab extends StatefulWidget {
   final Link link;
@@ -73,7 +108,7 @@ class _MonitorTabState extends State<MonitorTab> {
     final swapT = (mem['SwapTotal'] as num? ?? 0).toDouble(), swapF = (mem['SwapFree'] as num? ?? 0).toDouble();
     final load = [for (final x in m['load'] as List) (x as num).toDouble()];
     final t = Theme.of(context).textTheme;
-    return ListView(padding: const EdgeInsets.all(16), children: [
+    return ListView(padding: const EdgeInsets.all(20), children: [
       Text('${m['host']} · ${m['os']} · 内核 ${m['kernel']} · 已运行 ${_dur((m['uptime'] as num).toDouble())}', style: t.bodySmall),
       Text('${m['cpu_model']} × ${m['cpu_count']}', style: t.bodySmall),
       const SizedBox(height: 12),
@@ -89,7 +124,7 @@ class _MonitorTabState extends State<MonitorTab> {
         const SizedBox(height: 4),
         Container(
           height: 64,
-          decoration: BoxDecoration(border: Border.all(color: Theme.of(context).colorScheme.outlineVariant), borderRadius: BorderRadius.circular(4)),
+          decoration: BoxDecoration(color: Ide.of(context).panel, border: Border.all(color: Ide.of(context).border), borderRadius: BorderRadius.circular(4)),
           padding: const EdgeInsets.all(4),
           child: CustomPaint(painter: _Spark(_history, Theme.of(context).colorScheme.primary), size: Size.infinite),
         ),
@@ -107,7 +142,7 @@ class _MonitorTabState extends State<MonitorTab> {
         ),
       const SizedBox(height: 16),
       Text('进程（按 CPU 排序）', style: t.titleMedium),
-      DataTable(columnSpacing: 16, headingRowHeight: 32, dataRowMinHeight: 28, dataRowMaxHeight: 32, columns: const [
+      DataTable(columnSpacing: 16, headingRowHeight: 30, dataRowMinHeight: 26, dataRowMaxHeight: 28, dividerThickness: 0.5, columns: const [
         DataColumn(label: Text('PID'), numeric: true),
         DataColumn(label: Text('用户')),
         // Per process, 100 % is one core; the CPU card is all cores together.

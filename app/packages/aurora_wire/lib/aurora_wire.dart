@@ -4,6 +4,7 @@ library;
 
 export 'src/bytes.dart' show ByteQueue;
 export 'src/connection.dart';
+export 'src/forward.dart';
 export 'src/frame.dart';
 export 'src/link.dart';
 export 'src/terminal.dart';

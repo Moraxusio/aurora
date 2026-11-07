@@ -71,21 +71,54 @@ func (e *Env) netPorts(ctx context.Context, _ json.RawMessage) (any, error) {
 			}
 		}
 	}
-	byPort := map[int]openPort{}
+	all := make([]openPort, 0, len(inodes))
 	for _, lp := range inodes {
-		if lp.Pid == self {
-			continue // the agent's own listeners
-		}
-		if old, ok := byPort[lp.Port]; !ok || old.Pid == 0 {
-			byPort[lp.Port] = lp
+		if lp.Pid != self {
+			all = append(all, lp) // the agent's own listeners are left out
 		}
 	}
-	out := make([]openPort, 0, len(byPort))
-	for _, lp := range byPort {
+	return map[string]any{"ports": dedupePorts(all)}, nil
+}
+
+// dedupePorts keeps one listener per port, sorted by port. A port can have
+// several (0.0.0.0 and ::, or 127.0.0.53 and 127.0.0.54); which one is shown
+// must not depend on map order. The address reachable from furthest away wins
+// (a wildcard, then a real interface, then a loopback), so the list never
+// understates who can connect; a listener whose owner is known comes next, and
+// the address text settles a tie.
+func dedupePorts(all []openPort) []openPort {
+	best := map[int]openPort{}
+	for _, lp := range all {
+		if old, ok := best[lp.Port]; !ok || betterPort(lp, old) {
+			best[lp.Port] = lp
+		}
+	}
+	out := make([]openPort, 0, len(best))
+	for _, lp := range best {
 		out = append(out, lp)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
-	return map[string]any{"ports": out}, nil
+	return out
+}
+
+func exposure(addr string) int {
+	if addr == "0.0.0.0" || addr == "::" {
+		return 2
+	}
+	if ip := net.ParseIP(addr); ip != nil && ip.IsLoopback() {
+		return 0
+	}
+	return 1
+}
+
+func betterPort(a, b openPort) bool {
+	if ea, eb := exposure(a.Addr), exposure(b.Addr); ea != eb {
+		return ea > eb
+	}
+	if (a.Pid != 0) != (b.Pid != 0) {
+		return a.Pid != 0
+	}
+	return a.Addr < b.Addr
 }
 
 // parseListen reads /proc/net/tcp{,6}: listening sockets by inode.

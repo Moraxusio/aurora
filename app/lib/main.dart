@@ -1,10 +1,14 @@
-// Aurora 3 client (D-70): the server list on the left, the selected server
-// on the right. Windows desktop first (M1).
+// Aurora 3 client (D-70). The window is the kernel's shell (lib/kernel); the
+// features (lib/features) plug into it (D-78). Windows desktop first (M1).
 import 'package:flutter/material.dart';
 
+import 'kernel/input_mode.dart';
+import 'kernel/registry.dart';
+import 'kernel/shell.dart';
+import 'kernel/widgets.dart';
 import 'state/app_state.dart';
+import 'theme/ide_theme.dart';
 import 'ui/add_server.dart';
-import 'ui/server_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,23 +17,49 @@ Future<void> main() async {
   runApp(AuroraApp(app: app));
 }
 
-class AuroraApp extends StatelessWidget {
+class AuroraApp extends StatefulWidget {
   final AppState app;
   const AuroraApp({super.key, required this.app});
+  @override
+  State<AuroraApp> createState() => _AuroraAppState();
+}
+
+class _AuroraAppState extends State<AuroraApp> {
+  final _features = Features();
+  final _input = InputMode();
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  void dispose() {
+    _features.dispose();
+    _input.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      // touch or pointer: decided by the last input (kernel/input_mode.dart)
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _input.onPointer,
+      onPointerHover: _input.onPointer,
+      child: MaterialApp(
         title: 'Aurora',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(colorSchemeSeed: const Color(0xFF3B82F6), useMaterial3: true, fontFamily: 'Microsoft YaHei UI'),
-        darkTheme: ThemeData(colorSchemeSeed: const Color(0xFF3B82F6), brightness: Brightness.dark, useMaterial3: true, fontFamily: 'Microsoft YaHei UI'),
-        home: Home(app: app),
-      );
+        scaffoldMessengerKey: Toast.key,
+        theme: buildTheme(Brightness.light),
+        darkTheme: buildTheme(Brightness.dark),
+        themeMode: ThemeMode.system,
+        builder: (context, child) => InputMode.scope(mode: _input, child: child!),
+        home: Home(app: widget.app, features: _features),
+      ),
+    );
+  }
 }
 
 class Home extends StatelessWidget {
   final AppState app;
-  const Home({super.key, required this.app});
+  final Features features;
+  const Home({super.key, required this.app, required this.features});
 
   @override
   Widget build(BuildContext context) {
@@ -37,72 +67,10 @@ class Home extends StatelessWidget {
       listenable: app,
       builder: (context, _) {
         if (!app.ready) return _StoreProblem(app: app);
-        final p = app.profile;
-        final sel = p.selected;
-        return Scaffold(
-          body: Row(children: [
-            SizedBox(
-              width: 260,
-              child: Material(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
-                child: Column(children: [
-                  ListTile(title: Text('Aurora', style: Theme.of(context).textTheme.titleLarge)),
-                  Expanded(
-                    child: ListView(children: [
-                      for (final s in p.servers)
-                        ListTile(
-                          selected: s.id == sel,
-                          leading: _dot(app.status(s.id).state.name),
-                          title: Text(s.name),
-                          subtitle: Text(s.ssh?.host ?? ''),
-                          onTap: () => app.select(s.id),
-                        ),
-                    ]),
-                  ),
-                  // With no servers the main area has the same button.
-                  if (p.servers.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: FilledButton.icon(
-                        onPressed: () async {
-                          await Navigator.push(context, MaterialPageRoute(builder: (_) => AddServerPage(app: app)));
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('添加服务器'),
-                      ),
-                    ),
-                ]),
-              ),
-            ),
-            const VerticalDivider(width: 1),
-            Expanded(
-              child: sel == null || p.server(sel) == null
-                  ? Center(
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text('还没有服务器', style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 8),
-                        const Text('填写 Linux 服务器的 SSH 地址和账号，Aurora 会通过 SSH 安装 agent，之后直接连接。'),
-                        const SizedBox(height: 20),
-                        FilledButton.icon(
-                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddServerPage(app: app))),
-                          icon: const Icon(Icons.add),
-                          label: const Text('添加服务器'),
-                        ),
-                      ]),
-                    )
-                  : ServerPage(key: ValueKey(sel), app: app, id: sel),
-            ),
-          ]),
-        );
+        return Shell(app: app, features: features);
       },
     );
   }
-
-  static Widget _dot(String state) => Icon(
-        state == 'connected' ? Icons.circle : Icons.circle_outlined,
-        size: 12,
-        color: switch (state) { 'connected' => Colors.green, 'failed' => Colors.red, 'waiting' => Colors.orange, _ => null },
-      );
 }
 
 class _StoreProblem extends StatelessWidget {
@@ -141,3 +109,6 @@ class _StoreProblem extends StatelessWidget {
         ),
       );
 }
+
+// AddServerPage is opened by the shell; re-exported here for the tests.
+typedef AddServer = AddServerPage;

@@ -233,4 +233,89 @@ void main() {
     expect(await l.done.timeout(const Duration(seconds: 10)), isNotEmpty);
     await own.p.exitCode;
   }, skip: skip);
-}
+
+  // The client's side of port forwarding: a local listener, one net.dial
+  // stream per connection, bytes both ways, and what happens when the target
+  // is not there.
+  group('port forward', () {
+    late ServerSocket target;
+    late Link l;
+    setUp(() async {
+      // The "service on the server": answers "echo:" + what it received, then
+      // closes (so a half-close by the client is what ends the request).
+      target = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      target.listen((c) {
+        final got = BytesBuilder();
+        c.listen(got.add, onDone: () {
+          c.add([...utf8.encode('echo:'), ...got.takeBytes()]);
+          c.close();
+        });
+      });
+      l = await Link.dial(peer.ep);
+    });
+    tearDown(() async {
+      await l.close();
+      await target.close();
+    });
+
+    Future<List<int>> ask(int port, List<int> send) async {
+      final s = await Socket.connect(InternetAddress.loopbackIPv4, port);
+      s.add(send);
+      await s.close();
+      final out = BytesBuilder();
+      await for (final c in s) {
+        out.add(c);
+      }
+      s.destroy();
+      return out.takeBytes();
+    }
+
+    test('bytes go both ways, in text and in bulk', () async {
+      final f = await Forward.start(l, port: target.port);
+      expect(f.local, isNot(target.port));
+      expect(utf8.decode(await ask(f.local, utf8.encode('你好'))), 'echo:你好');
+      // 3 MiB: more than a yamux window, so flow control is exercised
+      final big = Uint8List.fromList([for (var i = 0; i < 3 << 20; i++) pattern(i)]);
+      final back = await ask(f.local, big);
+      expect(back.length, big.length + 5);
+      expect(utf8.decode(back.sublist(0, 5)), 'echo:');
+      expect(back.sublist(5), big);
+      expect(f.bytesOut, greaterThanOrEqualTo(big.length));
+      expect(f.bytesIn, greaterThanOrEqualTo(big.length));
+      await f.close();
+    }, skip: skip, timeout: const Timeout(Duration(minutes: 1)));
+
+    test('connections run side by side', () async {
+      final f = await Forward.start(l, port: target.port);
+      final answers = await Future.wait([for (var i = 0; i < 20; i++) ask(f.local, utf8.encode('n$i'))]);
+      for (var i = 0; i < 20; i++) {
+        expect(utf8.decode(answers[i]), 'echo:n$i');
+      }
+      expect(f.total, 20);
+      await f.close();
+    }, skip: skip);
+
+    test('a port nothing listens on: the connection ends, the reason is kept', () async {
+      final dead = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final deadPort = dead.port;
+      await dead.close();
+      final f = await Forward.start(l, port: deadPort);
+      expect(await ask(f.local, utf8.encode('x')), isEmpty);
+      expect(f.lastError, contains('连不上'));
+      await f.close();
+    }, skip: skip);
+
+    test('close stops the listener', () async {
+      final f = await Forward.start(l, port: target.port);
+      final port = f.local;
+      await f.close();
+      expect(f.isClosed, isTrue);
+      await expectLater(Socket.connect(InternetAddress.loopbackIPv4, port), throwsA(isA<SocketException>()));
+    }, skip: skip);
+
+    test('a local port in use is reported', () async {
+      final f = await Forward.start(l, port: target.port);
+      await expectLater(Forward.start(l, port: target.port, local: f.local), throwsA(isA<SocketException>()));
+      await f.close();
+    }, skip: skip);
+  });}

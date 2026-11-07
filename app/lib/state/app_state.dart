@@ -178,13 +178,13 @@ class AppState extends ChangeNotifier {
       if (e == null) {
         e = ServerEntry.create(name, ssh: ssh);
         p.servers.add(e);
+        p.selected = e.id; // a server just added is the one the user wants to see
       }
       e
         ..name = name
         ..ssh = ssh
         ..agentId = o.agentId ?? e.agentId
         ..direct = DirectParams(port: d.port, addrs: _addrs(ssh.host, d), pin: d.pin, token: d.token);
-      p.selected ??= e.id;
       sid = e.id;
     });
     await disconnect(sid); // new parameters: a fresh connection

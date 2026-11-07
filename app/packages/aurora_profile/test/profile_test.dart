@@ -24,6 +24,8 @@ Profile sample() {
   final s = ServerEntry.create('lab',
       ssh: SshLogin(host: '203.0.113.10', user: 'alice', password: 'pw-秘密', sudoPassword: 'sudo-pw'));
   s.direct = DirectParams(port: 17710, addrs: ['203.0.113.10:17710'], pin: 'a' * 64, token: 'tok-1');
+  s.forwards.add(ForwardSpec(port: 8888, local: 18888, label: 'jupyter'));
+  s.forwards.add(ForwardSpec(host: 'db.internal', port: 5432, local: 15432));
   p.servers.add(s);
   p.selected = s.id;
   p.trustHost('203.0.113.10', 22, 'ssh-ed25519', 'SHA256:abc');
@@ -48,6 +50,7 @@ void main() {
       expect(jsonEncode(q.toJson()), jsonEncode(p.toJson()));
       final s = q.servers.single;
       expect(s.ssh!.password, 'pw-秘密');
+      expect([for (final f in s.forwards) '${f.host}:${f.port}->${f.local} ${f.label}'], ['127.0.0.1:8888->18888 jupyter', 'db.internal:5432->15432 ']);
       expect(s.ssh!.sudoPassword, 'sudo-pw');
       expect(s.ssh!.privateKey, isNull);
       expect(s.direct!.ready, isTrue);

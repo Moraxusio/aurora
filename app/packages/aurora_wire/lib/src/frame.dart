@@ -61,6 +61,10 @@ class FrameParser {
 
   int get buffered => _q.length;
 
+  /// Takes whatever is buffered and not yet a frame (the bytes that followed
+  /// the last frame, on a stream that turns raw after its Response).
+  Uint8List takeRest() => _q.takeAll();
+
   /// The next whole frame, or null when more bytes are needed.
   Frame? next() {
     if (_q.length < 4) return null;
@@ -78,6 +82,12 @@ class FrameReader {
   final YamuxStream _st;
   final FrameParser _p = FrameParser();
   FrameReader(this._st);
+
+  /// See [FrameParser.takeRest].
+  Uint8List takeBuffered() => _p.takeRest();
+
+  /// The stream's own bytes, for a stream that went raw after its Response.
+  Future<Uint8List?> nextRaw() => _st.next();
 
   /// The next frame, or null when the stream ends cleanly between frames.
   Future<Frame?> read() async {

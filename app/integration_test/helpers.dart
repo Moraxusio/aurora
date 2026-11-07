@@ -8,6 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// Path of app/tool/sendkeys.ps1 (--dart-define=AURORA3_UI_SENDKEYS=..).
 const sendKeys = String.fromEnvironment('AURORA3_UI_SENDKEYS');
 
+/// Whether the last [typeKeys] was refused because another window had the focus.
+bool lastTypeRefused = false;
+
 /// Types [text] into this process's window with app/tool/sendkeys.ps1,
 /// pumping frames meanwhile so the app handles the keys as they come.
 /// [gapMs] is the pause between two key events.
@@ -23,5 +26,6 @@ Future<void> typeKeys(WidgetTester t, String text, {int gapMs = 15}) async {
   while (code == null) {
     await t.pump(const Duration(milliseconds: 50));
   }
-  expect(code, 0, reason: 'sendkeys: $err');
+  lastTypeRefused = code != 0 && err.toString().contains('lost the focus');
+  if (!lastTypeRefused) expect(code, 0, reason: 'sendkeys: $err');
 }

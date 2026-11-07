@@ -30,6 +30,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:xterm/xterm.dart' show Terminal, TerminalView;
 
 import 'helpers.dart';
+import 'input_watch.dart';
 
 const addr = String.fromEnvironment('AURORA3_UI_ADDR');
 const pin = String.fromEnvironment('AURORA3_UI_PIN');
@@ -37,6 +38,8 @@ const token = String.fromEnvironment('AURORA3_UI_TOKEN');
 const shots = String.fromEnvironment('AURORA3_UI_SHOTS');
 const typingLines = int.fromEnvironment('AURORA3_UI_TYPING_LINES', defaultValue: 6);
 const stopAfterTyping = bool.fromEnvironment('AURORA3_UI_STOP_AFTER_TYPING');
+/// For checking the watcher itself: at this line a window of another program takes the focus (-1: never).
+const disturbAtLine = int.fromEnvironment('AURORA3_UI_DISTURB_AT_LINE', defaultValue: -1);
 
 Future<void> settle(WidgetTester t, {Duration upTo = const Duration(seconds: 10)}) async {
   final end = DateTime.now().add(upTo);
@@ -86,6 +89,19 @@ Future<void> activity(WidgetTester t, String tooltip, {required String title}) a
     await settle(t, upTo: const Duration(milliseconds: 500));
   }
   expect(shown, findsOneWidget, reason: 'the $tooltip side bar is shown');
+}
+
+/// A window of another program comes to the front for a moment, as a window
+/// the user clicked would (app/tool/focus_thief.ps1, a real window).
+Future<void> _stealFocus(WidgetTester t) async {
+  final script = sendKeys.replaceAll('sendkeys.ps1', 'focus_thief.ps1');
+  final p = await Process.start('powershell', ['-NoProfile', '-File', script, '-Seconds', '2']);
+  p.stdout.drain<void>();
+  p.stderr.drain<void>();
+  for (var i = 0; i < 35; i++) {
+    await t.pump(const Duration(milliseconds: 100));
+  }
+  p.kill();
 }
 
 String _screen(Terminal term) {
@@ -173,11 +189,19 @@ void main() {
       emitted.write(d);
       handler?.call(d);
     };
+    // A person may be using this desktop while the test types: a key they press
+    // lands in the window under test, and a window of theirs may take the
+    // focus. input_watch.dart reports both, so a line that was disturbed is
+    // counted apart from one nobody touched.
+    final watch = await InputWatch.start();
+    addTearDown(watch.stop);
     final failures = <String>[];
-    var lostBeforeSend = 0, lostAfterSend = 0;
+    var disturbed = 0, lostBeforeSend = 0, lostAfterSend = 0;
     for (var i = 0; i < typingLines; i++) {
       emitted.clear();
       final want = 'echo TYPED$i-中文-\$(((6+$i)*7))';
+      final from = InputWatch.now();
+      if (disturbAtLine == i) await _stealFocus(t);
       await typeKeys(t, '$want\n');
       final typed = RegExp(r'~\$ ?echo TYPED' '$i-中文-\\\$\\(\\(\\(6\\+$i\\)\\*7\\)\\)');
       final result = 'TYPED$i-中文-${(6 + i) * 7}';
@@ -186,18 +210,23 @@ void main() {
       } on TestFailure {
         // fall through: the check below records what was on screen
       }
+      final why = [...watch.between(from, InputWatch.now()), if (lastTypeRefused) 'the typing tool stopped: another window had the focus'];
+      if (why.isNotEmpty) disturbed++;
       if (!typed.hasMatch(_screen(view.terminal)) || !_screen(view.terminal).contains(result)) {
+        if (why.isNotEmpty) continue; // somebody else's key or window: not the program's fault
         final sent = emitted.toString();
         final before = sent != '$want\r';
         before ? lostBeforeSend++ : lostAfterSend++;
-        failures.add('line $i: ${before ? "xterm did not emit the line as typed" : "xterm emitted it whole, the shell did not get it"}\n'
+        failures.add('line $i (nobody touched the keyboard or the window): ${before ? "xterm did not emit the line as typed" : "xterm emitted it whole, the shell did not get it"}\n'
             '  typed:   ${want.replaceAll('\r', r'\r')}\\n\n'
             '  emitted: ${sent.replaceAll('\r', r'\r')}\n'
             'screen tail:\n${tail()}');
       }
     }
+    // ignore: avoid_print
+    print('TYPING: $typingLines lines, $disturbed disturbed by a person or another window, ${failures.length} wrong without a disturbance');
     expect(failures, isEmpty,
-        reason: '${failures.length} of $typingLines lines went wrong ($lostBeforeSend lost before the connection, $lostAfterSend after):\n${failures.join('\n------\n')}');
+        reason: '${failures.length} of $typingLines lines went wrong with nobody else on the keyboard ($lostBeforeSend lost before the connection, $lostAfterSend after):\n${failures.join('\n------\n')}');
     if (stopAfterTyping) return;
     await shot(t, '02-terminal');
 

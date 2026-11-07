@@ -1,7 +1,7 @@
 # Runs integration_test/ui_test.dart on Windows against a real aurora3-agent
 # in WSL (agent/tools/ui-agent.sh: normal user, /tmp, 127.0.0.1:17791).
 #   powershell -File app\tool\ui_test.ps1 [-Distro Ubuntu-24.04]
-param([string]$Distro = 'Ubuntu-24.04', [string]$Shots = '', [int]$TypingLines = 6, [switch]$TypingOnly)
+param([string]$Distro = 'Ubuntu-24.04', [string]$Shots = '', [int]$TypingLines = 6, [switch]$TypingOnly, [int]$DisturbAtLine = -1)
 $ErrorActionPreference = 'Stop'
 $app = Split-Path -Parent $PSScriptRoot
 $repo = Split-Path -Parent $app
@@ -30,7 +30,7 @@ try {
     try {
         # Plain values: PowerShell strips the quotes of a JSON argument.
         $defs = @("--dart-define=AURORA3_UI_ADDR=$($ep.addr)", "--dart-define=AURORA3_UI_PIN=$($ep.pin)", "--dart-define=AURORA3_UI_TOKEN=$($ep.token)",
-            "--dart-define=AURORA3_UI_SENDKEYS=$(Join-Path $PSScriptRoot 'sendkeys.ps1')", "--dart-define=AURORA3_UI_TYPING_LINES=$TypingLines", "--dart-define=AURORA3_UI_STOP_AFTER_TYPING=$($TypingOnly.IsPresent.ToString().ToLower())")
+            "--dart-define=AURORA3_UI_SENDKEYS=$(Join-Path $PSScriptRoot 'sendkeys.ps1')", "--dart-define=AURORA3_UI_TYPING_LINES=$TypingLines", "--dart-define=AURORA3_UI_STOP_AFTER_TYPING=$($TypingOnly.IsPresent.ToString().ToLower())", "--dart-define=AURORA3_UI_DISTURB_AT_LINE=$DisturbAtLine")
         if ($Shots) { New-Item -ItemType Directory -Force $Shots | Out-Null; $defs += "--dart-define=AURORA3_UI_SHOTS=$Shots" }
         & flutter test integration_test\ui_test.dart -d windows @defs
         $code = $LASTEXITCODE

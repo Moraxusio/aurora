@@ -510,12 +510,13 @@ class _TerminalView extends LeafRenderObjectWidget {
       alwaysShowCursor: alwaysShowCursor,
       onEditableRect: onEditableRect,
       composingText: composingText,
-    );
+    )..devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
   }
 
   @override
   void updateRenderObject(BuildContext context, RenderTerminal renderObject) {
     renderObject
+      ..devicePixelRatio = MediaQuery.devicePixelRatioOf(context)
       ..terminal = terminal
       ..controller = controller
       ..offset = offset

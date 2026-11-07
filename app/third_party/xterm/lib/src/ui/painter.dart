@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/painting.dart';
 
+import 'package:xterm/src/utils/hash_values.dart';
 import 'package:xterm/src/ui/palette_builder.dart';
 import 'package:xterm/src/ui/paragraph_cache.dart';
 import 'package:xterm/xterm.dart';
@@ -85,12 +86,16 @@ class TerminalPainter {
     _paragraphCache.clear();
   }
 
-  /// Paints the cursor based on the current cursor type.
+  /// Paints the cursor based on the current cursor type. [under] is the cell the
+  /// cursor is on: a block cursor draws that character again in the
+  /// background colour (Aurora patch; the original left the block opaque over
+  /// it, so the character under the cursor disappeared).
   void paintCursor(
     Canvas canvas,
     Offset offset, {
     required TerminalCursorType cursorType,
     bool hasFocus = true,
+    CellData? under,
   }) {
     final paint = Paint()
       ..color = _theme.cursor
@@ -106,6 +111,9 @@ class TerminalPainter {
       case TerminalCursorType.block:
         paint.style = PaintingStyle.fill;
         canvas.drawRect(offset & _cellSize, paint);
+        if (under != null && (under.content & CellContent.codepointMask) > 0x20) {
+          paintCellForeground(canvas, offset, under, colorOverride: _theme.background);
+        }
         return;
       case TerminalCursorType.underline:
         return canvas.drawLine(
@@ -142,8 +150,9 @@ class TerminalPainter {
   void paintLine(
     Canvas canvas,
     Offset offset,
-    BufferLine line,
-  ) {
+    BufferLine line, {
+    double? lineHeight,
+  }) {
     final cellData = CellData.empty();
     final cellWidth = _cellSize.width;
 
@@ -153,7 +162,7 @@ class TerminalPainter {
       final charWidth = cellData.content >> CellContent.widthShift;
       final cellOffset = offset.translate(i * cellWidth, 0);
 
-      paintCell(canvas, cellOffset, cellData);
+      paintCell(canvas, cellOffset, cellData, lineHeight: lineHeight);
 
       if (charWidth == 2) {
         i++;
@@ -162,27 +171,29 @@ class TerminalPainter {
   }
 
   @pragma('vm:prefer-inline')
-  void paintCell(Canvas canvas, Offset offset, CellData cellData) {
-    paintCellBackground(canvas, offset, cellData);
+  void paintCell(Canvas canvas, Offset offset, CellData cellData, {double? lineHeight}) {
+    paintCellBackground(canvas, offset, cellData, lineHeight: lineHeight);
     paintCellForeground(canvas, offset, cellData);
   }
 
   /// Paints the character in the cell represented by [cellData] to [canvas] at
   /// [offset].
   @pragma('vm:prefer-inline')
-  void paintCellForeground(Canvas canvas, Offset offset, CellData cellData) {
+  void paintCellForeground(Canvas canvas, Offset offset, CellData cellData, {Color? colorOverride}) {
     final charCode = cellData.content & CellContent.codepointMask;
     if (charCode == 0) return;
 
-    final cacheKey = cellData.getHash() ^ _textScaler.hashCode;
+    // an override colour is not the cell's own, so its glyph is not cached under the cell's key
+    final cacheKey = colorOverride == null ? cellData.getHash() ^ _textScaler.hashCode : hashValues(cellData.getHash(), colorOverride.toARGB32(), 7) ^ _textScaler.hashCode;
     var paragraph = _paragraphCache.getLayoutFromCache(cacheKey);
 
     if (paragraph == null) {
       final cellFlags = cellData.flags;
 
-      var color = cellFlags & CellFlags.inverse == 0
-          ? resolveForegroundColor(cellData.foreground)
-          : resolveBackgroundColor(cellData.background);
+      var color = colorOverride ??
+          (cellFlags & CellFlags.inverse == 0
+              ? resolveForegroundColor(cellData.foreground)
+              : resolveBackgroundColor(cellData.background));
 
       if (cellData.flags & CellFlags.faint != 0) {
         color = color.withOpacity(0.5);
@@ -220,7 +231,7 @@ class TerminalPainter {
   /// Paints the background of a cell represented by [cellData] to [canvas] at
   /// [offset].
   @pragma('vm:prefer-inline')
-  void paintCellBackground(Canvas canvas, Offset offset, CellData cellData) {
+  void paintCellBackground(Canvas canvas, Offset offset, CellData cellData, {double? lineHeight}) {
     late Color color;
     final colorType = cellData.background & CellColor.typeMask;
 
@@ -235,7 +246,9 @@ class TerminalPainter {
     final paint = Paint()..color = color;
     final doubleWidth = cellData.content >> CellContent.widthShift == 2;
     final widthScale = doubleWidth ? 2 : 1;
-    final size = Size(_cellSize.width * widthScale + 1, _cellSize.height);
+    // Aurora patch: the background covers the line down to the next line's top
+    // (render.dart snaps both to the pixel grid), not the nominal cell height.
+    final size = Size(_cellSize.width * widthScale + 1, lineHeight ?? _cellSize.height);
     canvas.drawRect(offset & size, paint);
   }
 

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:xterm/src/core/buffer/cell_offset.dart';
 import 'package:xterm/src/core/buffer/range.dart';
 import 'package:xterm/src/core/buffer/segment.dart';
+import 'package:xterm/src/core/cell.dart';
 import 'package:xterm/src/core/mouse/button.dart';
 import 'package:xterm/src/core/mouse/button_state.dart';
 import 'package:xterm/src/terminal.dart';
@@ -118,6 +119,9 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     if (attached) _focusNode.addListener(_onFocusChange);
     markNeedsPaint();
   }
+
+  /// Device pixels per logical pixel, for snapping lines to the pixel grid.
+  double devicePixelRatio = 1.0;
 
   TerminalCursorType _cursorType;
   set cursorType(TerminalCursorType value) {
@@ -413,11 +417,22 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     final effectFirstLine = firstLine.clamp(0, lines.length - 1);
     final effectLastLine = lastLine.clamp(0, lines.length - 1);
 
+    // Aurora patch: each line's top is rounded to a whole *physical* pixel, and
+    // the line is painted down to the next line's top. The original rounded to
+    // a whole logical pixel (truncateToDouble) while the line height is
+    // fractional (14 px x 1.2 = 16.8), so on some lines a gap of up to one
+    // logical pixel was left between two background rectangles, and the view's
+    // own background showed through as a thin line across the screen.
+    final dpr = devicePixelRatio;
+    double snap(double y) => (y * dpr).floorToDouble() / dpr;
     for (var i = effectFirstLine; i <= effectLastLine; i++) {
+      final top = snap(i * charHeight + _lineOffset);
+      final next = snap((i + 1) * charHeight + _lineOffset);
       _painter.paintLine(
         canvas,
-        offset.translate(0, (i * charHeight + _lineOffset).truncateToDouble()),
+        offset.translate(0, top),
         lines[i],
+        lineHeight: next - top,
       );
     }
 
@@ -428,11 +443,19 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
       }
 
       if (_shouldShowCursor) {
+        // the cell under the cursor, so a block cursor can draw its character again
+        final cy = _terminal.buffer.absoluteCursorY, cx = _terminal.buffer.cursorX;
+        CellData? under;
+        if (cy >= 0 && cy < lines.length && cx >= 0 && cx < lines[cy].length) {
+          under = CellData.empty();
+          lines[cy].getCellData(cx, under);
+        }
         _painter.paintCursor(
           canvas,
           offset + cursorOffset,
           cursorType: _cursorType,
           hasFocus: _focusNode.hasFocus,
+          under: under,
         );
       }
     }

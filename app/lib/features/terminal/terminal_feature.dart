@@ -20,6 +20,7 @@ import '../../kernel/input_mode.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
+import 'terminal_colors.dart';
 
 class TerminalFeature extends Feature {
   const TerminalFeature();
@@ -363,31 +364,7 @@ class _SessionViewState extends State<SessionView> {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final touch = InputMode.isTouch(context);
-    final theme = TerminalTheme(
-      cursor: ide.accent,
-      selection: ide.selection,
-      foreground: ide.text,
-      background: ide.panel,
-      black: const Color(0xFF000000),
-      red: const Color(0xFFCD3131),
-      green: const Color(0xFF0DBC79),
-      yellow: const Color(0xFFE5E510),
-      blue: const Color(0xFF2472C8),
-      magenta: const Color(0xFFBC3FBC),
-      cyan: const Color(0xFF11A8CD),
-      white: const Color(0xFFE5E5E5),
-      brightBlack: const Color(0xFF666666),
-      brightRed: const Color(0xFFF14C4C),
-      brightGreen: const Color(0xFF23D18B),
-      brightYellow: const Color(0xFFF5F543),
-      brightBlue: const Color(0xFF3B8EEA),
-      brightMagenta: const Color(0xFFD670D6),
-      brightCyan: const Color(0xFF29B8DB),
-      brightWhite: const Color(0xFFFFFFFF),
-      searchHitBackground: const Color(0xFFFFFF2B),
-      searchHitBackgroundCurrent: const Color(0xFF31FF26),
-      searchHitForeground: const Color(0xFF000000),
-    );
+    final theme = terminalTheme(ide);
     return Column(children: [
       Expanded(
         child: Stack(children: [

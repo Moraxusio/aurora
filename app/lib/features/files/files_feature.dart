@@ -82,13 +82,21 @@ class _FileTreeState extends State<FileTree> {
   void initState() {
     super.initState();
     widget.transfers.addListener(_tick);
+    ws.filesRevision.addListener(_onFilesChanged);
     _loadRoots();
   }
 
   @override
   void dispose() {
     widget.transfers.removeListener(_tick);
+    ws.filesRevision.removeListener(_onFilesChanged);
     super.dispose();
+  }
+
+  /// A save changed a file: reload the folders that are open, so the size and
+  /// time in the tree are not those of the file before the save.
+  void _onFilesChanged() {
+    if (mounted) _refreshAll();
   }
 
   void _tick() {

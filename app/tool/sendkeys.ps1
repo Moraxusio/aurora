@@ -3,13 +3,14 @@
 # key packets (what an IME delivers), "`n" as Enter. Used by the UI tests to
 # check the real Windows input path, which flutter_test's key events skip.
 #   sendkeys.ps1 -ProcessId N -Base64 <UTF-8 text, base64>
-param([Parameter(Mandatory)][int]$ProcessId, [Parameter(Mandatory)][string]$Base64)
+param([Parameter(Mandatory)][int]$ProcessId, [Parameter(Mandatory)][string]$Base64, [int]$GapMs = 15)
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 public static class Keys {
+  public static int GapMs = 15;
   [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr extra; }
   [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx; public int dy; public uint data; public uint flags; public uint time; public IntPtr extra; }
   [StructLayout(LayoutKind.Explicit)] struct UNION { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
@@ -26,7 +27,7 @@ public static class Keys {
     i[0].type = 1;
     i[0].u.ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags };
     if (SendInput(1, i, Marshal.SizeOf(typeof(INPUT))) != 1) throw new Exception("SendInput failed: " + Marshal.GetLastWin32Error());
-    Thread.Sleep(15);
+    Thread.Sleep(GapMs);
   }
   static void Vk(ushort vk, bool up) { Send(vk, (ushort)MapVirtualKey(vk, 0), up ? UP : 0); }
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
@@ -68,6 +69,7 @@ public static class Keys {
 $p = Get-Process -Id $ProcessId
 $h = $p.MainWindowHandle
 if ($h -eq [IntPtr]::Zero) { throw "process $ProcessId has no window" }
+[Keys]::GapMs = $GapMs
 [Keys]::Focus($h)
 if ([Keys]::GetForegroundWindow() -ne $h) { throw 'could not bring the window to the front' }
 [Keys]::Type($h, [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Base64)))

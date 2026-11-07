@@ -29,12 +29,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:xterm/xterm.dart' show Terminal, TerminalView;
 
+import 'helpers.dart';
+
 const addr = String.fromEnvironment('AURORA3_UI_ADDR');
 const pin = String.fromEnvironment('AURORA3_UI_PIN');
 const token = String.fromEnvironment('AURORA3_UI_TOKEN');
-const sendKeys = String.fromEnvironment('AURORA3_UI_SENDKEYS');
 const shots = String.fromEnvironment('AURORA3_UI_SHOTS');
 const typingLines = int.fromEnvironment('AURORA3_UI_TYPING_LINES', defaultValue: 6);
+const stopAfterTyping = bool.fromEnvironment('AURORA3_UI_STOP_AFTER_TYPING');
 
 Future<void> settle(WidgetTester t, {Duration upTo = const Duration(seconds: 10)}) async {
   final end = DateTime.now().add(upTo);
@@ -84,22 +86,6 @@ Future<void> activity(WidgetTester t, String tooltip, {required String title}) a
     await settle(t, upTo: const Duration(milliseconds: 500));
   }
   expect(shown, findsOneWidget, reason: 'the $tooltip side bar is shown');
-}
-
-/// Types [text] into this process's window with app/tool/sendkeys.ps1,
-/// pumping frames meanwhile so the app handles the keys as they come.
-Future<void> typeKeys(WidgetTester t, String text) async {
-  expect(sendKeys, isNotEmpty, reason: 'run through app/tool/ui_test.ps1');
-  final p = await Process.start('powershell', ['-NoProfile', '-File', sendKeys, '-ProcessId', '$pid', '-Base64', base64.encode(utf8.encode(text))]);
-  final err = StringBuffer();
-  p.stderr.transform(utf8.decoder).listen(err.write);
-  p.stdout.drain<void>();
-  int? code;
-  unawaited(p.exitCode.then((c) => code = c));
-  while (code == null) {
-    await t.pump(const Duration(milliseconds: 50));
-  }
-  expect(code, 0, reason: 'sendkeys: $err');
 }
 
 String _screen(Terminal term) {
@@ -177,9 +163,22 @@ void main() {
     // key presses, the Chinese as Unicode packets, as an IME sends them. Six
     // lines, each checked as typed (nothing in front of it) and as run.
     String tail() => _screen(view.terminal).trimRight().split('\n').reversed.take(8).toList().reversed.join('\n');
+    // What xterm hands over for each line, recorded in front of the session's
+    // own handler: a character missing here was lost before the connection (the
+    // window, the engine, xterm); one that is here but not on the screen was
+    // lost after it (the stream, the agent, tmux).
+    final emitted = StringBuffer();
+    final handler = view.terminal.onOutput;
+    view.terminal.onOutput = (d) {
+      emitted.write(d);
+      handler?.call(d);
+    };
     final failures = <String>[];
+    var lostBeforeSend = 0, lostAfterSend = 0;
     for (var i = 0; i < typingLines; i++) {
-      await typeKeys(t, 'echo TYPED$i-中文-\$(((6+$i)*7))\n');
+      emitted.clear();
+      final want = 'echo TYPED$i-中文-\$(((6+$i)*7))';
+      await typeKeys(t, '$want\n');
       final typed = RegExp(r'~\$ ?echo TYPED' '$i-中文-\\\$\\(\\(\\(6\\+$i\\)\\*7\\)\\)');
       final result = 'TYPED$i-中文-${(6 + i) * 7}';
       try {
@@ -188,10 +187,19 @@ void main() {
         // fall through: the check below records what was on screen
       }
       if (!typed.hasMatch(_screen(view.terminal)) || !_screen(view.terminal).contains(result)) {
-        failures.add('line $i not typed as sent.\nscreen tail:\n${tail()}');
+        final sent = emitted.toString();
+        final before = sent != '$want\r';
+        before ? lostBeforeSend++ : lostAfterSend++;
+        failures.add('line $i: ${before ? "xterm did not emit the line as typed" : "xterm emitted it whole, the shell did not get it"}\n'
+            '  typed:   ${want.replaceAll('\r', r'\r')}\\n\n'
+            '  emitted: ${sent.replaceAll('\r', r'\r')}\n'
+            'screen tail:\n${tail()}');
       }
     }
-    expect(failures, isEmpty, reason: '${failures.length} of $typingLines lines went wrong:\n${failures.join('\n------\n')}');    await shot(t, '02-terminal');
+    expect(failures, isEmpty,
+        reason: '${failures.length} of $typingLines lines went wrong ($lostBeforeSend lost before the connection, $lostAfterSend after):\n${failures.join('\n------\n')}');
+    if (stopAfterTyping) return;
+    await shot(t, '02-terminal');
 
     // ---- files: tree, editor, save ----
     await activity(t, '文件', title: '文件');
@@ -212,6 +220,8 @@ void main() {
     await settle(t, upTo: const Duration(milliseconds: 500));
     expect(editor.dirty, isFalse);
     expect(await wsl('cat /tmp/aurora3-ui-agent/home/docs/readme.txt'), 'edited in the editor');
+    await settle(t, upTo: const Duration(milliseconds: 800));
+    expect(find.textContaining('21 B'), findsOneWidget, reason: 'the tree shows the size after the save ("edited in the editor\\n" is 21 bytes), not the old 24');
     // another program changes the file; saving over it is refused, and the
     // other program's text survives
     await wsl("printf 'changed elsewhere, and longer\\n' > /tmp/aurora3-ui-agent/home/docs/readme.txt");
@@ -219,6 +229,7 @@ void main() {
     await t.pump();
     unawaited(editor.save());
     await waitFor(t, find.text('服务器上的文件已被修改'));
+    await settle(t, upTo: const Duration(milliseconds: 600)); // the dialog fades in
     await shot(t, '03-save-conflict');
     await click(t, find.text('取消'));
     await settle(t, upTo: const Duration(milliseconds: 400));

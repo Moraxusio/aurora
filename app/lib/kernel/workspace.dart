@@ -27,6 +27,10 @@ class Workspace extends ChangeNotifier {
   /// moment a link is up until agent.services has answered.
   bool servicesLoaded = false;
 
+  /// Raised when a file on the server changed because of something done here
+  /// (a save): the file tree reloads what it shows.
+  final ValueNotifier<int> filesRevision = ValueNotifier(0);
+
   /// Narrow layouts show either the side bar or the editor area.
   bool compactEditor = false;
 
@@ -186,6 +190,7 @@ class Workspace extends ChangeNotifier {
     for (final t in tabs) {
       t.dispose();
     }
+    filesRevision.dispose();
     super.dispose();
   }
 }

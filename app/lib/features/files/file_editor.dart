@@ -195,15 +195,17 @@ class FileEditorState extends State<FileEditor> {
     final link = widget.ws.link;
     if (link == null) return widget.ws.toast('未连接，没有保存', error: true);
     final text = _controller.text;
+    String? conflict;
     setState(() => _saving = true);
     try {
       final r = (await link.call('fs.write', {'root': widget.root, 'path': widget.path, 'content': text, 'if_match': _etag}) as Map).cast<String, dynamic>();
       _etag = r['etag'] as String? ?? _etag;
       _saved = text;
       widget.ws.toast('已保存 ${widget.path.split('/').last}');
+      widget.ws.filesRevision.value++; // the tree's size and time for this file
     } on OpError catch (e) {
-      if (e.code == codeConflict && mounted) {
-        await _conflict(e.message);
+      if (e.code == codeConflict) {
+        conflict = e.message;
       } else {
         widget.ws.toast(e.message, error: true);
       }
@@ -211,6 +213,9 @@ class FileEditorState extends State<FileEditor> {
       if (mounted) setState(() => _saving = false);
       _onChanged();
     }
+    // Asked after _saving is cleared: "overwrite" saves again, and a save that
+    // starts while one is still marked as running does nothing.
+    if (conflict != null && mounted) await _conflict(conflict);
   }
 
   /// The file changed on the server after it was opened. Nothing is lost:

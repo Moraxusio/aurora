@@ -13,6 +13,7 @@ import '../../kernel/feature.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
+import 'unit_kind.dart';
 
 class SystemdFeature extends Feature {
   const SystemdFeature();
@@ -86,6 +87,16 @@ class _UnitListState extends State<UnitList> {
   Future<void> _act(String unit, String action) async {
     final link = ws.link;
     if (link == null) return;
+    // Stopping or restarting a unit interrupts whatever depends on it, and a
+    // finger can hit the button by mistake: ask every time, not only the first.
+    if (action != 'start') {
+      final ok = await confirmDialog(context,
+          title: '${_actionLabel(action)} $unit？',
+          body: action == 'stop' ? '它提供的功能会中断，直到再次启动。' : '它会短暂中断。',
+          ok: _actionLabel(action),
+          danger: true);
+      if (!ok || !mounted) return;
+    }
     final allowed = _allow[unit] ?? const [];
     if (!allowed.contains(action)) {
       final label = _actionLabel(action);
@@ -139,7 +150,8 @@ class _UnitListState extends State<UnitList> {
     final shown = _units.where((u) {
       // Most of a system's 100+ units are static or one-shot and not running:
       // they are behind the toggle, so the list shows what is worth a look.
-      if (!_showAll && !const {'active', 'failed', 'activating', 'deactivating', 'reloading'}.contains(u['active'])) return false;
+      final kind = unitKind(u['active'] as String? ?? '', u['sub'] as String? ?? '');
+      if (!_showAll && kind != UnitKind.running && kind != UnitKind.failed && kind != UnitKind.busy) return false;
       if (u['load'] == 'not-found') return false;
       return q.isEmpty || '${u['name']} ${u['description']}'.toLowerCase().contains(q);
     }).toList();
@@ -173,24 +185,30 @@ class _UnitListState extends State<UnitList> {
 
   Widget _row(Ide ide, Map<String, dynamic> u) {
     final name = u['name'] as String;
-    final active = u['active'] as String? ?? '';
-    final sub = u['sub'] as String? ?? '';
-    final color = switch (active) { 'active' => ide.ok, 'failed' => ide.error, 'activating' || 'deactivating' || 'reloading' => ide.warn, _ => ide.textDim };
+    final kind = unitKind(u['active'] as String? ?? '', u['sub'] as String? ?? '');
+    final color = switch (kind) { UnitKind.running => ide.ok, UnitKind.failed => ide.error, UnitKind.busy => ide.warn, _ => ide.textDim };
     final allowed = _allow[name] ?? const <String>[];
-    final running = active == 'active';
+    final running = kind == UnitKind.running;
+    final canStop = running || kind == UnitKind.busy;
     return TreeRow(
       leading: _busy.contains(name) ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)) : StatusDot(color),
       label: name.endsWith('.service') ? name.substring(0, name.length - 8) : name,
-      detail: sub == 'running' || sub == 'dead' ? (u['file'] as String? ?? '') : sub,
+      detail: unitNote(kind, u['file'] as String? ?? ''),
+      labelColor: kind == UnitKind.exited || kind == UnitKind.stopped ? ide.textDim : null,
       onTap: () => _openLog(name),
+      // Buttons only where they mean something: a finished one-shot has
+      // nothing to stop, and a unit that is not running has nothing to
+      // restart. The same actions stay in the menu.
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         if (running) IconBtn(Icons.restart_alt, '重启', _busy.contains(name) ? null : () => _act(name, 'restart')),
-        IconBtn(running ? Icons.stop : Icons.play_arrow, running ? '停止' : '启动', _busy.contains(name) ? null : () => _act(name, running ? 'stop' : 'start')),
+        if (canStop) IconBtn(Icons.stop, '停止', _busy.contains(name) ? null : () => _act(name, 'stop')),
+        if (!canStop && kind != UnitKind.exited) IconBtn(Icons.play_arrow, '启动', _busy.contains(name) ? null : () => _act(name, 'start')),
       ]),
       menu: () => [
         MenuItem('查看日志', () => _openLog(name), icon: Icons.receipt_long_outlined),
         const MenuItem.separator(),
-        MenuItem(running ? '停止…' : '启动…', () => _act(name, running ? 'stop' : 'start'), icon: running ? Icons.stop : Icons.play_arrow),
+        if (!running) MenuItem('启动…', () => _act(name, 'start'), icon: Icons.play_arrow),
+        if (canStop) MenuItem('停止…', () => _act(name, 'stop'), icon: Icons.stop),
         MenuItem('重启…', () => _act(name, 'restart'), icon: Icons.restart_alt),
         if (allowed.isNotEmpty) MenuItem('收回授权（现允许：${allowed.map(_actionLabel).join('、')}）', () => _revoke(name), icon: Icons.lock_outline),
         const MenuItem.separator(),

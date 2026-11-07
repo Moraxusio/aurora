@@ -27,6 +27,12 @@ Marked "Aurora patch" in the code. Pinned by tests in `app/test/terminal_paint_t
    which the view's own background showed. Now each line's top is snapped to a
    whole *physical* pixel (the view passes `MediaQuery.devicePixelRatio`) and
    the line's background is painted down to the next line's top.
+5. **The mouse wheel was reported as the wrong button.** `core/mouse/button.dart`
+   gave the wheel the ids 68, 69, 70, 71 (`64 + 4` ..). A mouse report carries
+   `64 + (button - 4)`: up 64, down 65, left 66, right 67 (xterm's ctlseqs,
+   "Mouse Tracking"). A program that asked for the mouse (vim, htop, opencode)
+   received button 68, which is not a wheel to it, so scrolling did nothing.
+   Pinned by `app/test/terminal_wheel_test.dart`.
 4. **The character under the cursor disappeared.** The block cursor was an
    opaque rectangle over the cell. It now draws the character again on top of
    the block, in the terminal's background colour, as other terminals do.

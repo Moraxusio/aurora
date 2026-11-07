@@ -55,6 +55,14 @@ var managedConf = []string{
 	"bind-key -n PageUp copy-mode -u",
 	"bind-key -n PageDown send-keys -X page-down",
 	"set -g mouse on",
+	// The wheel, by what is in the pane. tmux's own binding hands the wheel to
+	// a full-screen program as a mouse report, and a program that did not ask
+	// for the mouse (less, man, git log) throws that away, so it never
+	// scrolled. Here: a program that asked for the mouse (vim, htop, opencode)
+	// gets the report; any other full-screen program gets arrow keys; a plain
+	// shell scrolls tmux's history (copy mode, left again at the bottom).
+	"bind-key -n WheelUpPane if-shell -F '#{mouse_any_flag}' { send-keys -M } { if-shell -F '#{alternate_on}' { send-keys -N 3 Up } { if-shell -F '#{pane_in_mode}' { send-keys -M } { copy-mode -e } } }",
+	"bind-key -n WheelDownPane if-shell -F '#{mouse_any_flag}' { send-keys -M } { if-shell -F '#{alternate_on}' { send-keys -N 3 Down } { send-keys -M } }",
 	"set -g history-limit 100000",
 	"set -g status-position top",
 	"set -g status-style 'bg=#111827,fg=#d1d5db'",

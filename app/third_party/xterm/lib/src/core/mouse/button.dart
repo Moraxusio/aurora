@@ -5,13 +5,18 @@ enum TerminalMouseButton {
 
   right(id: 2),
 
-  wheelUp(id: 64 + 4, isWheel: true),
+  // Aurora patch: the wheel buttons are 4 to 7 in X10 terms, and a report
+  // carries 64 + (button - 4): up 64, down 65, left 66, right 67 (xterm
+  // ctlseqs, "Mouse Tracking"). Upstream had 64 + 4 .. 64 + 7, so a program
+  // that asked for the mouse (vim, opencode, htop) saw button 68 and did not
+  // know it was the wheel.
+  wheelUp(id: 64, isWheel: true),
 
-  wheelDown(id: 64 + 5, isWheel: true),
+  wheelDown(id: 65, isWheel: true),
 
-  wheelLeft(id: 64 + 6, isWheel: true),
+  wheelLeft(id: 66, isWheel: true),
 
-  wheelRight(id: 64 + 7, isWheel: true),
+  wheelRight(id: 67, isWheel: true),
   ;
 
   /// The id that is used to report a button press or release to the terminal.

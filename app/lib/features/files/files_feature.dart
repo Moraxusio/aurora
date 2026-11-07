@@ -144,7 +144,29 @@ class _FileTreeState extends State<FileTree> {
         return (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase());
       });
       final shown = _hidden ? list : list.where((e) => !(e['name'] as String).startsWith('.')).toList();
-      n.children = [for (final e in shown) _Node(n.root, n.child(e['name'] as String), e['name'] as String, e)];
+      // A reload builds new nodes, but a folder the user had open stays open,
+      // with what it already showed until it is loaded again: otherwise a
+      // refresh would collapse the tree, and the walk in _refreshAll would stop
+      // at the first collapsed folder and never reload the ones below it.
+      final old = {for (final c in n.children ?? const <_Node>[]) c.name: c};
+      n.children = [
+        for (final e in shown)
+          () {
+            final node = _Node(n.root, n.child(e['name'] as String), e['name'] as String, e);
+            final was = old[node.name];
+            if (was != null && was.isDir && node.isDir) {
+              node.expanded = was.expanded;
+              node.children = was.children;
+            }
+            return node;
+          }()
+      ];
+      if (_selected != null) {
+        // keep the selection on the node that now stands for the same path
+        for (final c in n.children!) {
+          if (c.root == _selected!.root && c.path == _selected!.path) _selected = c;
+        }
+      }
     } on OpError catch (e) {
       n.error = e.message;
     } finally {

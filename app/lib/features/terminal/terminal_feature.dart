@@ -17,6 +17,7 @@ import 'package:xterm/xterm.dart';
 import '../../kernel/editor_tab.dart';
 import '../../kernel/feature.dart';
 import '../../kernel/input_mode.dart';
+import '../../kernel/visible_polling.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
@@ -98,25 +99,23 @@ class SessionList extends StatefulWidget {
   State<SessionList> createState() => _SessionListState();
 }
 
-class _SessionListState extends State<SessionList> {
+class _SessionListState extends State<SessionList> with VisiblePolling<SessionList> {
   List<Map<String, dynamic>> _sessions = [];
   bool _loading = true;
   String? _error;
-  Timer? _timer;
 
   Workspace get ws => widget.ws;
+
+  @override
+  Duration get pollEvery => const Duration(seconds: 5);
+
+  @override
+  void poll() => _load(quiet: true);
 
   @override
   void initState() {
     super.initState();
     _load();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _load(quiet: true));
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
   }
 
   Future<void> _load({bool quiet = false}) async {

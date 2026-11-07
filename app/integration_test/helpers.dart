@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter_test/flutter_test.dart';
 
 /// Path of app/tool/sendkeys.ps1 (--dart-define=AURORA3_UI_SENDKEYS=..).
@@ -28,4 +29,54 @@ Future<void> typeKeys(WidgetTester t, String text, {int gapMs = 15}) async {
   }
   lastTypeRefused = code != 0 && err.toString().contains('lost the focus');
   if (!lastTypeRefused) expect(code, 0, reason: 'sendkeys: $err');
+}
+
+Future<void> settle(WidgetTester t, {Duration upTo = const Duration(seconds: 10)}) async {
+  final end = DateTime.now().add(upTo);
+  while (DateTime.now().isBefore(end)) {
+    await t.pump(const Duration(milliseconds: 100));
+  }
+}
+
+Future<void> waitFor(WidgetTester t, Finder f, {Duration upTo = const Duration(seconds: 15)}) async {
+  final end = DateTime.now().add(upTo);
+  while (DateTime.now().isBefore(end)) {
+    await t.pump(const Duration(milliseconds: 100));
+    if (f.evaluate().isNotEmpty) return;
+  }
+  throw TestFailure('not found within $upTo: $f');
+}
+
+Future<void> waitUntil(WidgetTester t, bool Function() ok, String what, {Duration upTo = const Duration(seconds: 15)}) async {
+  final end = DateTime.now().add(upTo);
+  while (DateTime.now().isBefore(end)) {
+    await t.pump(const Duration(milliseconds: 100));
+    if (ok()) return;
+  }
+  throw TestFailure('did not happen within $upTo: $what');
+}
+
+/// A mouse click on the first match. flutter_test's own tap is a touch, which
+/// would switch the window to touch mode (bigger rows, the key bar).
+Future<void> click(WidgetTester t, Finder f) async {
+  final at = t.getCenter(f.first);
+  final g = await t.createGesture(kind: PointerDeviceKind.mouse);
+  await g.addPointer(location: at);
+  await g.down(at);
+  await t.pump();
+  await g.up();
+  await g.removePointer();
+  await t.pump();
+}
+
+/// Shows a feature's side bar. A click on the icon of the feature that is
+/// already open hides the side bar (as in an IDE), so the icon is tapped only
+/// when the side bar does not already show [title].
+Future<void> activity(WidgetTester t, String tooltip, {required String title}) async {
+  final shown = find.text(title.toUpperCase());
+  if (shown.evaluate().isEmpty) {
+    await click(t, find.byTooltip(tooltip).first);
+    await settle(t, upTo: const Duration(milliseconds: 500));
+  }
+  expect(shown, findsOneWidget, reason: 'the $tooltip side bar is shown');
 }

@@ -11,6 +11,7 @@ import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
 
 import '../../kernel/feature.dart';
+import '../../kernel/visible_polling.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
@@ -135,29 +136,32 @@ class ForwardPanel extends StatefulWidget {
   State<ForwardPanel> createState() => _ForwardPanelState();
 }
 
-class _ForwardPanelState extends State<ForwardPanel> {
+class _ForwardPanelState extends State<ForwardPanel> with VisiblePolling<ForwardPanel> {
   List<Map<String, dynamic>>? _ports;
   bool _loadingPorts = false;
   String? _portsError;
-  Timer? _timer;
 
   Workspace get ws => widget.ws;
   ForwardManager get mgr => widget.manager;
+
+  // the live byte counters redraw once a second, while the panel is visible
+  @override
+  Duration get pollEvery => const Duration(seconds: 1);
+
+  @override
+  void poll() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void initState() {
     super.initState();
     mgr.addListener(_tick);
-    // live counters
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
     _loadPorts();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
     mgr.removeListener(_tick);
     super.dispose();
   }

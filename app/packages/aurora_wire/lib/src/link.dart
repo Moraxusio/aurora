@@ -229,8 +229,14 @@ class Link {
     }
   }
 
+  /// Requests sent on any link since the program started. Every operation goes
+  /// through [open], so this is what the performance test reads to count what
+  /// a click on the window costs the server.
+  static int requestCount = 0;
+
   /// Opens a stream operation: the Request is sent, frames follow.
   Future<OpStream> open(String op, [Object? args, Priority priority = Priority.interactive]) async {
+    requestCount++;
     final YamuxStream st;
     try {
       st = await session.open(priority: priority);

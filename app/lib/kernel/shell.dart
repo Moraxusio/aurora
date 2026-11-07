@@ -372,7 +372,14 @@ String _stateText(FeatureState s) => switch (s) {
 
 // ---- side bar ----
 
-class _SideBar extends StatelessWidget {
+/// The side bar. Each feature's content is built the first time the feature is
+/// chosen and then kept, shown with an IndexedStack, as the editor area keeps
+/// its tabs. Choosing a feature again does not build its tree again and does
+/// not ask the server again: the file tree keeps the folders that are open,
+/// the unit list its filter, and nothing flashes a spinner. A new link (after a
+/// reconnect) or another server starts every feature afresh, because what was
+/// loaded from the old link may be stale.
+class _SideBar extends StatefulWidget {
   final Workspace ws;
   final Features features;
   final Feature feature;
@@ -380,30 +387,52 @@ class _SideBar extends StatelessWidget {
   const _SideBar({required this.ws, required this.features, required this.feature, required this.onPickFeature});
 
   @override
+  State<_SideBar> createState() => _SideBarState();
+}
+
+class _SideBarState extends State<_SideBar> {
+  /// Features that have been shown on this link: only these are built.
+  final Set<String> _visited = {};
+  Link? _link;
+
+  @override
   Widget build(BuildContext context) {
+    final ws = widget.ws, features = widget.features, feature = widget.feature;
     final ide = Ide.of(context);
-    Widget body;
-    String title = feature.title;
-    List<Widget> actions = const [];
-    if (ws.link == null) {
-      body = NotConnected(ws: ws);
-    } else {
-      final st = ws.stateOf(feature);
-      if (st == FeatureState.loading) {
-        body = const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
-      } else if (st != FeatureState.available) {
-        body = _Unavailable(ws: ws, feature: feature, state: st);
-      } else {
-        final v = feature.sideBar(context, ws);
-        if (v == null) {
-          body = EmptyHint(icon: feature.icon, text: '${feature.title}在编辑区里打开', actionLabel: '打开', onAction: () => feature.open(ws));
-        } else {
-          title = v.title;
-          actions = v.actions;
-          body = KeyedSubtree(key: ValueKey('${ws.serverId}/${feature.id}/${identityHashCode(ws.link)}'), child: v.body);
-        }
-      }
+    // a different link (reconnect) or none: forget what was built from the old one
+    if (!identical(_link, ws.link)) {
+      _link = ws.link;
+      _visited.clear();
     }
+    _visited.add(feature.id);
+
+    // the title and actions of the feature that is shown
+    var title = feature.title;
+    var actions = const <Widget>[];
+    Widget one(Feature f) {
+      if (ws.link == null) return NotConnected(ws: ws);
+      final st = ws.stateOf(f);
+      if (st == FeatureState.loading) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
+      if (st != FeatureState.available) return _Unavailable(ws: ws, feature: f, state: st);
+      final v = f.sideBar(context, ws);
+      if (v == null) return EmptyHint(icon: f.icon, text: '${f.title}在编辑区里打开', actionLabel: '打开', onAction: () => f.open(ws));
+      if (f.id == feature.id) {
+        title = v.title;
+        actions = v.actions;
+      }
+      return v.body;
+    }
+
+    final order = features.all;
+    final children = <Widget>[
+      for (final f in order)
+        if (_visited.contains(f.id))
+          // a stable key per feature and link: the state survives a switch, and a new link starts afresh
+          KeyedSubtree(key: ValueKey('${ws.serverId}/${f.id}/${identityHashCode(ws.link)}'), child: one(f))
+        else
+          const SizedBox.shrink(),
+    ];
+    final index = order.indexWhere((f) => f.id == feature.id).clamp(0, order.length - 1);
     return Container(
       color: ide.sideBar,
       child: Column(children: [
@@ -415,12 +444,20 @@ class _SideBar extends StatelessWidget {
             ...actions,
           ]),
         ),
-        Expanded(child: body),
+        Expanded(
+          child: IndexedStack(
+            index: index,
+            children: [
+              for (var k = 0; k < children.length; k++)
+                // a side bar that is not shown gets no ticks and no focus
+                TickerMode(enabled: k == index, child: children[k]),
+            ],
+          ),
+        ),
       ]),
     );
   }
 }
-
 /// A feature the agent does not offer right now, with the reason and, when it
 /// is just switched off, a button to switch it on (D-9, D-26).
 class _Unavailable extends StatelessWidget {

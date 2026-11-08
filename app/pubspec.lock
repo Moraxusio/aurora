@@ -47,6 +47,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  aurora_sub:
+    dependency: "direct main"
+    description:
+      path: "packages/aurora_sub"
+      relative: true
+    source: path
+    version: "0.1.0"
   aurora_tls:
     dependency: "direct main"
     description:

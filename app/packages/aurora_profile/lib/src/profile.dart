@@ -13,21 +13,35 @@ class Profile {
   /// Host keys the user confirmed (D-2).
   List<KnownHost> knownHosts;
 
-  Profile({List<ServerEntry>? servers, this.selected, List<KnownHost>? knownHosts})
+  /// Where proxy nodes come from: subscriptions and pasted links (D-83). They
+  /// belong to the user, not to a server; each server remembers which node it uses.
+  List<ProxySource> proxySources;
+
+  Profile({List<ServerEntry>? servers, this.selected, List<KnownHost>? knownHosts, List<ProxySource>? proxySources})
       : servers = servers ?? [],
-        knownHosts = knownHosts ?? [];
+        knownHosts = knownHosts ?? [],
+        proxySources = proxySources ?? [];
 
   factory Profile.fromJson(Map<String, dynamic> j) => Profile(
         servers: [for (final s in (j['servers'] as List? ?? const [])) ServerEntry.fromJson(_map(s))],
         selected: j['selected'] as String?,
         knownHosts: [for (final k in (j['known_hosts'] as List? ?? const [])) KnownHost.fromJson(_map(k))],
+        proxySources: [for (final s in (j['proxy_sources'] as List? ?? const [])) ProxySource.fromJson(_map(s))],
       );
 
   Map<String, dynamic> toJson() => {
         if (servers.isNotEmpty) 'servers': [for (final s in servers) s.toJson()],
         'selected': ?selected,
         if (knownHosts.isNotEmpty) 'known_hosts': [for (final k in knownHosts) k.toJson()],
+        if (proxySources.isNotEmpty) 'proxy_sources': [for (final s in proxySources) s.toJson()],
       };
+
+  ProxySource? proxySource(String id) {
+    for (final s in proxySources) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
 
   /// A deep copy.
   Profile copy() => Profile.fromJson(toJson());
@@ -78,7 +92,12 @@ class ServerEntry {
   /// Port forwards (the "net" service): opened again when the server connects.
   List<ForwardSpec> forwards;
 
-  ServerEntry({required this.id, required this.name, this.agentId, this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards}) : forwards = forwards ?? [];
+  /// The proxy node this server was told to use (the "proxy" service). The
+  /// agent keeps the node itself; this is what lets the client say which one
+  /// it is, and push it again when the provider changes it.
+  ProxyChoice? proxy;
+
+  ServerEntry({required this.id, required this.name, this.agentId, this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy}) : forwards = forwards ?? [];
 
   /// A new entry with a random id.
   factory ServerEntry.create(String name, {SshLogin? ssh}) => ServerEntry(id: newId(), name: name, ssh: ssh);
@@ -91,6 +110,7 @@ class ServerEntry {
         direct: j['direct'] == null ? null : DirectParams.fromJson(_map(j['direct'])),
         lastSeen: j['last_seen'] as int?,
         forwards: [for (final f in (j['forwards'] as List? ?? const [])) ForwardSpec.fromJson(_map(f))],
+        proxy: j['proxy'] == null ? null : ProxyChoice.fromJson(_map(j['proxy'])),
       );
 
   Map<String, dynamic> toJson() => {
@@ -101,7 +121,68 @@ class ServerEntry {
         'direct': ?direct?.toJson(),
         'last_seen': ?lastSeen,
         if (forwards.isNotEmpty) 'forwards': [for (final f in forwards) f.toJson()],
+        'proxy': ?proxy?.toJson(),
       };
+}
+
+/// A place proxy nodes come from (D-83, D-84): a subscription address, or links
+/// the user pasted. The address holds the account's key, so it is sealed with
+/// the rest of the profile and never shown whole. [nodes] is what the last
+/// fetch gave, in the agent's JSON (aurora_sub SubNode.toAgent), with the
+/// nodes' passwords: the profile is sealed, and the nodes are needed to push
+/// one to a server without fetching again.
+class ProxySource {
+  final String id;
+  String name;
+
+  /// The subscription address, or null for pasted links.
+  String? url;
+  List<Map<String, dynamic>> nodes;
+
+  /// Unix seconds of the last successful fetch (or of the paste).
+  int updated;
+
+  /// Why the last refresh failed, or null.
+  String? error;
+
+  ProxySource({required this.id, required this.name, this.url, List<Map<String, dynamic>>? nodes, this.updated = 0, this.error}) : nodes = nodes ?? [];
+
+  factory ProxySource.create(String name, {String? url}) => ProxySource(id: newId(), name: name, url: url, updated: _now());
+
+  factory ProxySource.fromJson(Map<String, dynamic> j) => ProxySource(
+        id: j['id'] as String,
+        name: j['name'] as String? ?? '',
+        url: j['url'] as String?,
+        nodes: [for (final n in (j['nodes'] as List? ?? const [])) _map(n)],
+        updated: j['updated'] as int? ?? 0,
+        error: j['error'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'url': ?url,
+        if (nodes.isNotEmpty) 'nodes': nodes,
+        'updated': updated,
+        'error': ?error,
+      };
+}
+
+/// Which node of which source a server uses. [key] is the node's identity
+/// (where it is and how it logs in, not its display name), so a provider that
+/// renames its nodes does not lose the choice.
+class ProxyChoice {
+  String source;
+  String key;
+
+  /// The name at the time of choosing, shown if the source no longer has the node.
+  String name;
+
+  ProxyChoice({required this.source, required this.key, required this.name});
+
+  factory ProxyChoice.fromJson(Map<String, dynamic> j) => ProxyChoice(source: j['source'] as String? ?? '', key: j['key'] as String? ?? '', name: j['name'] as String? ?? '');
+
+  Map<String, dynamic> toJson() => {'source': source, 'key': key, 'name': name};
 }
 
 /// One port forward: [host]:[port] on the server, opened on this machine's

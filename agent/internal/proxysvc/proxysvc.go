@@ -82,6 +82,7 @@ func (v svc) Operations() []service.Operation {
 		{Name: "proxy.set", Handle: e.set},
 		{Name: "proxy.clear", Handle: e.clear},
 		{Name: "proxy.test", Handle: e.test},
+		{Name: "proxy.check", Handle: e.check},
 	}
 }
 
@@ -394,11 +395,35 @@ func (e *Env) clear(context.Context, json.RawMessage) (any, error) {
 			return nil, wire.Errf(wire.CodeInternal, "保存代理配置失败：%v", err)
 		}
 	}
-	if e.proxy != nil {
-		_ = e.proxy.SetNode(nil)
-	}
+	// With no node there is nothing to listen for. A listener left up would
+	// still hand sessions and git proxy variables that lead nowhere: a session
+	// that asked for a proxy would start without a working one (D-49), and git
+	// would fail on every call instead of going direct (D-69).
+	e.stopLocked()
 	e.audit("proxy.clear", nil)
 	return map[string]any{"node": nil}, nil
+}
+
+// check says, for each node of a list, whether this agent can use it and if
+// not why. It dials nothing. The client asks before it lets the user choose, so
+// the rules for what is usable live here and nowhere else.
+func (e *Env) check(_ context.Context, raw json.RawMessage) (any, error) {
+	var a struct {
+		Nodes []netproxy.Node `json:"nodes"`
+	}
+	if err := decode(raw, &a); err != nil {
+		return nil, err
+	}
+	if len(a.Nodes) > 5000 {
+		return nil, wire.Errf(wire.CodeBadRequest, "节点太多")
+	}
+	reasons := make([]string, len(a.Nodes))
+	for i, n := range a.Nodes {
+		if err := n.Check(); err != nil {
+			reasons[i] = err.Error()
+		}
+	}
+	return map[string]any{"reasons": reasons}, nil
 }
 
 type testArgs struct {

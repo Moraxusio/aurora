@@ -55,6 +55,12 @@ type Node struct {
 	ObfsPassword string `json:"obfs_password,omitempty"`
 	UpMbps       int    `json:"up_mbps,omitempty"`
 	DownMbps     int    `json:"down_mbps,omitempty"`
+
+	// Unsupported is set by the client's parser when the subscription line uses
+	// something this struct cannot express (Reality, port hopping, a plugin).
+	// Such a node would otherwise look like a plain one and connect the wrong
+	// way, so Check reports the reason and the node is never dialled.
+	Unsupported string `json:"unsupported,omitempty"`
 }
 
 // TLSMode is how the server's certificate is checked (D-88). Exactly one of
@@ -90,6 +96,9 @@ func (n Node) Label() string {
 // Check reports why the node cannot be used, or nil. The messages are shown to
 // the user, so they say what to change.
 func (n Node) Check() error {
+	if n.Unsupported != "" {
+		return errors.New(n.Unsupported)
+	}
 	if strings.TrimSpace(n.Host) == "" || n.Port < 1 || n.Port > 65535 {
 		return errors.New("节点缺少地址或端口")
 	}

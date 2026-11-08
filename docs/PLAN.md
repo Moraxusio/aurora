@@ -43,7 +43,7 @@ Go 工具链、模块、构建脚本、tmux 构建锁。
 - G2.5 net。
 - G2.6 monitor：`sys.metrics`、`proc.list`、`log.tail` 已复制；`gpu.info` 等 terminal 的中性接口。
 - G2.7 systemd：`svc.info`、`svc.action` 已复制。
-- G2.8 proxy：按会话（D-47 至 D-50、D-53）。
+- G2.8 proxy：完成（D-47 至 D-50、D-53、D-83 至 D-94）。agent 的代理服务、`session.create` 的 `proxy` 参数、git 跟随服务开关；客户端的订阅解析、节点列表、新建会话的“走代理”勾选。协议：Trojan、Hysteria2、VLESS、VMess（不支持的见 D-94）。
 - G2.9 入口：`aurora3-agent run`，TCP 直连监听（17710，D-76）、Hello、yamux、按服务分发，Linux TCP 调优。这是客户端联调的前提，排在 G2.1 之前。
 - 验收：每个服务有开关测试；关闭后新操作被拒，已有会话不被结束。
 
@@ -112,6 +112,8 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | G4.1 amd64 tmux | 完成 | 97a42ec | 哈希与 v2 的 bundle.lock 一致 |
 | G2.2 files | 完成 | d2238a1、d154fb8、30381fc、1154d1f | 8 项 Linux 测试通过 |
 | G2.3 git | 完成 | 6fb8c8b、02d3e54、90ee666 | 9 项测试通过（5 项真实仓库，4 项代理） |
+| G2.8 proxy（agent） | 完成 | c7b7108 | VLESS、VMess、Trojan、Hysteria2 对真实 Xray 26.10.31 与 Hysteria 官方服务端互通；会话的代理变量、git 跟随开关；入口死锁一例由测试发现并修复 |
+| G2.8 proxy（客户端） | 完成 | 见下一次提交 | `aurora_sub`（订阅读取）、代理页、新建会话的勾选；端到端 `app/tool/proxy_e2e.ps1`：真实 agent、真实 tmux，会话里的 curl 与 git 都经节点到达（节点是另写的 Trojan 服务端，打印它被要求的目标） |
 | G2.6 monitor | 部分完成 | ff90f00 | `gpu.info` 未复制；操作未做行为测试 |
 | G2.7 systemd | 部分完成 | ff90f00 | 单元名检查有测试；操作未做行为测试 |
 | 内核 `internal/paths` | 完成 | 1154d1f、ff90f00 | 7 项测试通过 |
@@ -148,7 +150,9 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | github.com/hashicorp/yamux（Go） | 0.1.1 | MPL-2.0 | agent 端多路复用，沿用 v2 |
 | github.com/apernet/hysteria/core/v2（Go） | 2.13.0 | MIT | 代理上游，沿用 v2 |
 | github.com/apernet/quic-go（Go，间接） | — | MIT | p2p、hysteria |
-| github.com/coder/websocket（Go） | 1.8.15 | ISC | 沿用 v2 |
+| github.com/coder/websocket（Go） | 1.8.15 | ISC | 沿用 v2；现在也用于 VLESS 与 VMess 的 WebSocket 传输 |
+| golang.org/x/crypto（Go） | 0.58.0 | BSD-3-Clause | 已有；VMess 用其中的 chacha20poly1305 与 sha3，Hysteria2 的 Salamander 混淆用 blake2b |
+| yaml（Dart，aurora_sub） | 3.1.4 | MIT | 读 Clash 配置的 `proxies:` 段 |
 | github.com/creack/pty（Go） | 1.1.24 | MIT | 终端，沿用 v2 |
 | golang.org/x/net、x/sys、x/crypto（Go） | 见 go.mod | BSD-3-Clause | — |
 

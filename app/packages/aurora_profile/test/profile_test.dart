@@ -234,4 +234,72 @@ void main() {
       await expectLater(ProfileStore.open(path, DpapiSealer()), throwsA(isA<ProfileUnreadable>()));
     }, skip: skip);
   });
-}
+
+  group('proxy sources and the choice of a node', () {
+    const url = 'https://sub.example.com/api/v1/client/subscribe?token=SUBTOKEN-9f31c0aa';
+    const nodePass = 'node-password-77aa';
+
+    Profile withProxy() {
+      final p = sample();
+      final src = ProxySource.create('我的机场', url: url);
+      src.nodes = [
+        {'name': 'HK 01', 'proto': 'trojan', 'host': 'hk.example.com', 'port': 443, 'secret': nodePass, 'tls': {'enabled': true}},
+      ];
+      p.proxySources.add(src);
+      p.servers.single.proxy = ProxyChoice(source: src.id, key: 'trojan|hk.example.com|443|||$nodePass', name: 'HK 01');
+      return p;
+    }
+
+    test('JSON round trip keeps the sources, their nodes and the choice', () {
+      final p = withProxy();
+      final q = Profile.fromJson(jsonDecode(jsonEncode(p.toJson())) as Map<String, dynamic>);
+      expect(jsonEncode(q.toJson()), jsonEncode(p.toJson()));
+      expect(q.proxySources.single.url, url);
+      expect(q.proxySources.single.nodes.single['secret'], nodePass);
+      expect(q.servers.single.proxy!.name, 'HK 01');
+      expect(q.proxySource(q.proxySources.single.id), isNotNull);
+      expect(q.proxySource('nope'), isNull);
+    });
+
+    test('a profile written before proxies existed still opens', () {
+      final old = jsonEncode(sample().toJson());
+      final q = Profile.fromJson(jsonDecode(old) as Map<String, dynamic>);
+      expect(q.proxySources, isEmpty);
+      expect(q.servers.single.proxy, isNull);
+    });
+
+    test('a profile without any proxy writes none of the keys', () {
+      final j = sample().toJson();
+      expect(j.containsKey('proxy_sources'), isFalse);
+      expect((j['servers'] as List).single.containsKey('proxy'), isFalse);
+    });
+
+    test('on disk the subscription address and the node passwords are sealed', () async {
+      final store = await ProfileStore.open(path, XorSealer());
+      await store.update((p) {
+        final w = withProxy();
+        p.servers
+          ..clear()
+          ..addAll(w.servers);
+        p.proxySources
+          ..clear()
+          ..addAll(w.proxySources);
+      });
+      await store.close();
+      final raw = latin1.decode(File(path).readAsBytesSync(), allowInvalid: true);
+      for (final secret in [url, 'SUBTOKEN-9f31c0aa', nodePass, 'sub.example.com', 'hk.example.com']) {
+        expect(raw, isNot(contains(secret)), reason: secret);
+      }
+      final again = await ProfileStore.open(path, XorSealer());
+      expect(again.get().proxySources.single.url, url);
+      expect(again.get().proxySources.single.nodes.single['secret'], nodePass);
+      await again.close();
+    });
+
+    test('a different sealer cannot read it (D-72: bound to this machine)', () async {
+      final store = await ProfileStore.open(path, XorSealer());
+      await store.update((p) => p.proxySources.add(ProxySource.create('x', url: url)));
+      await store.close();
+      await expectLater(ProfileStore.open(path, XorSealer(0x33, 'other-machine')), throwsA(isA<ProfileUnreadable>()));
+    });
+  });}

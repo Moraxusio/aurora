@@ -13,6 +13,8 @@ dependencies:
     path: packages/aurora_install
   aurora_profile:
     path: packages/aurora_profile
+  aurora_sub:
+    path: packages/aurora_sub
   aurora_tls:
     path: packages/aurora_tls
   aurora_wire:

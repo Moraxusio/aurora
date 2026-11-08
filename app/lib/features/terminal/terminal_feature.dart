@@ -80,16 +80,102 @@ Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
     suggest = 's$i';
   }
   if (ctx == null || !ctx.mounted) return null;
-  final name = await askText(ctx, title: '新建终端会话', initial: suggest, hint: '字母、数字、点、下划线、连字符', ok: '创建');
-  if (name == null || name.isEmpty) return null;
+  // The proxy box is offered only when this agent has the proxy service on and
+  // a node is chosen (D-47): a box that can only fail would be a trap.
+  final r = await showDialog<NewSession>(context: ctx, builder: (_) => NewSessionDialog(initial: suggest, proxy: proxyOffer(ws)));
+  if (r == null || r.name.isEmpty) return null;
+  final name = r.name;
   if (!_nameRe.hasMatch(name)) {
     ws.toast('会话名只能用字母、数字、点、下划线、连字符', error: true);
     return null;
   }
-  final ok = await ws.guard(() => link.call('session.create', {'name': name}));
-  if (ok == null) return null;
+  final res = await ws.guard(() => link.call('session.create', {'name': name, if (r.proxy) 'proxy': true}));
+  if (res == null) return null;
+  // A name that was already a session is opened as it is (D-48): say that it
+  // was not given the proxy the box asked for, instead of letting the user think so.
+  if (r.proxy && (res as Map)['existed'] == true) {
+    ws.toast('会话“$name”早就有了，已打开；它启动时没有代理，不会因为这次勾选而改变', error: true);
+  }
   openSession(ws, name);
   return name;
+}
+
+/// What the new-session dialog may offer about the proxy.
+class ProxyOffer {
+  /// Null when the box can be ticked; otherwise why it cannot.
+  final String? unavailable;
+  final String? nodeName;
+  const ProxyOffer.available(this.nodeName) : unavailable = null;
+  const ProxyOffer.unavailable(String this.unavailable) : nodeName = null;
+  bool get available => unavailable == null;
+}
+
+ProxyOffer proxyOffer(Workspace ws) {
+  final s = ws.serviceInfo('proxy');
+  if (s == null) return const ProxyOffer.unavailable('这台服务器的 agent 没有代理功能');
+  if (s['enabled'] != true) return const ProxyOffer.unavailable('代理服务是关闭的：在“代理”页打开它');
+  final ops = ((s['ops'] as List?) ?? const []).cast<String>();
+  if (!ops.contains('proxy.set')) return const ProxyOffer.unavailable('agent 版本较旧，没有代理功能');
+  final c = ws.entry?.proxy;
+  if (c == null) return const ProxyOffer.unavailable('还没有选节点：在“代理”页选一个');
+  return ProxyOffer.available(c.name);
+}
+
+class NewSession {
+  final String name;
+  final bool proxy;
+  NewSession(this.name, this.proxy);
+}
+
+class NewSessionDialog extends StatefulWidget {
+  final String initial;
+  final ProxyOffer proxy;
+  const NewSessionDialog({super.key, required this.initial, required this.proxy});
+  @override
+  State<NewSessionDialog> createState() => _NewSessionDialogState();
+}
+
+class _NewSessionDialogState extends State<NewSessionDialog> {
+  late final TextEditingController _name = TextEditingController(text: widget.initial);
+  bool _proxy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _ok() => Navigator.pop(context, NewSession(_name.text.trim(), _proxy && widget.proxy.available));
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final p = widget.proxy;
+    return AlertDialog(
+      title: const Text('新建终端会话'),
+      content: SizedBox(
+        width: 380,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TextField(controller: _name, autofocus: true, decoration: const InputDecoration(hintText: '字母、数字、点、下划线、连字符'), onSubmitted: (_) => _ok()),
+          const SizedBox(height: 10),
+          CheckboxListTile(
+            key: const ValueKey('session-proxy'),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+            value: _proxy && p.available,
+            onChanged: p.available ? (v) => setState(() => _proxy = v ?? false) : null,
+            title: const Text('这个会话走代理'),
+            subtitle: Text(p.available ? '用“${p.nodeName}”。会话开始时就定下来，之后不能改。' : p.unavailable!, style: TextStyle(fontSize: 11.5, color: ide.textDim)),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: ide.textDim))),
+        FilledButton(onPressed: _ok, child: const Text('创建')),
+      ],
+    );
+  }
 }
 
 class SessionList extends StatefulWidget {

@@ -1,5 +1,6 @@
 // aurora3-testpeer runs the real agent entry (pinned TLS, Hello, yamux,
-// dispatch) with the test service and the portable net service (net.dial), for
+// dispatch) with the test service, the portable net service (net.dial) and the
+// proxy service (proxy.*, whose listener is only used if a test opens a session), for
 // client tests and benchmarks. It is not shipped. It prints one JSON line {"addr","pin","token"} on stdout and
 // runs until stdin is closed.
 package main
@@ -19,6 +20,7 @@ import (
 
 	"aurora3/internal/entry"
 	"aurora3/internal/netfwd"
+	"aurora3/internal/proxysvc"
 	"aurora3/internal/service"
 	"aurora3/internal/testsvc"
 	"aurora3/internal/wire"
@@ -71,10 +73,32 @@ func run(listen string, off, verbose bool, state string) error {
 	if verbose {
 		out = os.Stderr
 	}
-	srv, err := entry.New(cfg, cfgPath, "3.0.0-testpeer", []service.Service{testsvc.Service(), (&netfwd.Env{}).Service()}, nil, nil, log.New(out, "testpeer ", log.Lmicroseconds))
+	// The proxy service, wired as the agent wires it: its state lives in the
+	// entry's config, and the switch is read from the entry.
+	var srv *entry.Server
+	px := &proxysvc.Env{
+		Load: func() proxysvc.State {
+			var st proxysvc.State
+			if srv != nil {
+				_ = json.Unmarshal(srv.ProxyRaw(), &st)
+			}
+			return st
+		},
+		Save: func(st proxysvc.State) error {
+			b, err := json.Marshal(st)
+			if err != nil {
+				return err
+			}
+			return srv.SaveProxyRaw(b)
+		},
+		Enabled: func() bool { return srv != nil && srv.ServiceEnabled(proxysvc.ID) },
+	}
+	srv, err = entry.New(cfg, cfgPath, "3.0.0-testpeer", []service.Service{testsvc.Service(), (&netfwd.Env{}).Service(), px.Service()}, nil, nil, log.New(out, "testpeer ", log.Lmicroseconds))
 	if err != nil {
 		return err
 	}
+	px.Start()
+	defer px.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ready := make(chan struct{})

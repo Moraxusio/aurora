@@ -326,6 +326,26 @@ func TestChangingAndClearingTheNode(t *testing.T) {
 	if st["node"] != nil {
 		t.Fatalf("status still shows a node: %v", st["node"])
 	}
+	if st["running"] != false {
+		t.Fatalf("the listener is still up with no node: %v", st["running"])
+	}
+	// The part that matters to the user: with no node, a session that asks for
+	// a proxy is refused with the reason, and git is given none and goes direct.
+	if _, err := e.SessionEnv(); err == nil || !strings.Contains(err.Error(), "节点") {
+		t.Fatalf("a session was offered proxy variables with no node chosen: %v", err)
+	}
+	if g := e.GitEnv(); g != nil {
+		t.Fatalf("git is given proxy variables that lead nowhere: %v", g)
+	}
+	// choosing again brings it back on the same local credentials
+	call(t, e, "proxy.set", map[string]any{"node": a.node()})
+	vars3, err := e.SessionEnv()
+	if err != nil {
+		t.Fatalf("after choosing again: %v", err)
+	}
+	if vars3["HTTP_PROXY"] != vars["HTTP_PROXY"] {
+		t.Fatalf("the local proxy changed across clear and set: %q -> %q", vars["HTTP_PROXY"], vars3["HTTP_PROXY"])
+	}
 }
 
 // A node the agent cannot dial is refused when it is set, with a reason the
@@ -432,5 +452,31 @@ func TestStartRestoresTheSavedNode(t *testing.T) {
 	_ = proxiedGetStatus(t, vars2, "http://after-restart.example/")
 	if node.got() != "after-restart.example:80" {
 		t.Fatalf("the restored node saw %q", node.got())
+	}
+}
+
+// The client asks which nodes of a list the agent can use before it lets the
+// user choose; the answer is the agent's own rule, a reason per node.
+func TestCheckSaysWhyANodeCannotBeUsed(t *testing.T) {
+	e, _, _ := newEnv(t)
+	good := netproxy.Node{Proto: netproxy.ProtoVLESS, Host: "h.example", Port: 443, Secret: "b831381d-6324-4d53-ad4f-8cda48b30811", TLS: netproxy.TLSMode{Enabled: true}}
+	reality := good
+	reality.Unsupported = "Reality 暂不支持"
+	grpc := good
+	grpc.Transport = "grpc"
+	res, err := call(t, e, "proxy.check", map[string]any{"nodes": []netproxy.Node{good, reality, grpc}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := res["reasons"].([]any)
+	if len(r) != 3 || r[0] != "" || r[1] != "Reality 暂不支持" || !strings.Contains(fmt.Sprint(r[2]), "grpc") {
+		t.Fatalf("reasons %v", r)
+	}
+	// a node the client marked unsupported can never be chosen, whatever else it says
+	if _, err := call(t, e, "proxy.set", map[string]any{"node": reality}); err == nil || !strings.Contains(err.Error(), "Reality") {
+		t.Fatalf("an unsupported node was accepted: %v", err)
+	}
+	if e.Load().Node != nil {
+		t.Fatal("the refused node was saved")
 	}
 }

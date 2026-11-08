@@ -36,6 +36,11 @@ type Config struct {
 	ServiceActions map[string][]string `json:"service_actions,omitempty"`
 	UploadMaxBytes int64               `json:"upload_max_bytes,omitempty"`
 	AuditLog       string              `json:"audit_log,omitempty"`
+
+	// Proxy is the proxy service's state (the chosen node and the local
+	// listener's credentials). The entry keeps it as it is and does not look
+	// inside: it holds a password, so the file is 0600 like the token (D-90).
+	Proxy json.RawMessage `json:"proxy,omitempty"`
 }
 
 // Root is a top-level folder clients may work in.

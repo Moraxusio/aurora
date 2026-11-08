@@ -101,6 +101,18 @@ func (f *fakeTrojan) serve() {
 	}
 }
 
+// trojanNode is a Node for a server at addr (host:port) with TLS verification off:
+// the fake presents a throwaway certificate.
+func trojanNode(t *testing.T, addr, secret string) *Node {
+	t.Helper()
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := atoiPort(portStr)
+	return &Node{Proto: ProtoTrojan, Host: host, Port: port, Secret: secret, TLS: TLSMode{Enabled: true, Insecure: true}}
+}
+
 func startProxy(t *testing.T, trojanAddr, secret string) (*Proxy, Config) {
 	t.Helper()
 	// Grab a free port for the local listener.
@@ -116,10 +128,12 @@ func startProxy(t *testing.T, trojanAddr, secret string) (*Proxy, Config) {
 		Port:     port,
 		Username: "aurora",
 		Password: "s3cret-local",
-		Upstream: Upstream{Endpoints: []Endpoint{{Addr: trojanAddr, Secret: secret}}, Insecure: true},
 	}
 	p, err := Start(cfg, log.New(os.Stderr, "test: ", 0))
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetNode(trojanNode(t, trojanAddr, secret)); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { p.Close() })
@@ -290,7 +304,7 @@ func TestEnvCarriesCredentials(t *testing.T) {
 }
 
 func TestStartRefusesOpenListener(t *testing.T) {
-	if _, err := Start(Config{Listen: "127.0.0.1", Port: 3128, Upstream: Upstream{Endpoints: []Endpoint{{Addr: "x:1", Secret: "0123456789abcdef0123"}}, Insecure: true}}, log.New(io.Discard, "", 0)); err == nil {
+	if _, err := Start(Config{Listen: "127.0.0.1", Port: 3128}, log.New(io.Discard, "", 0)); err == nil {
 		t.Fatal("a proxy without credentials was accepted")
 	}
 }

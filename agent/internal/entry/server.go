@@ -42,6 +42,10 @@ type Server struct {
 	mu    sync.Mutex
 	conns map[wire.Session]struct{}
 	addr  net.Addr // the bound listener, once Run has started
+
+	// proxyMu guards cfg.Proxy alone, so it can be read while mu is held by
+	// agent.service (see ProxyRaw). Lock order: mu, then proxyMu.
+	proxyMu sync.RWMutex
 }
 
 // New loads or creates the identity in cfg.StateDir and builds the registry
@@ -99,6 +103,40 @@ func (s *Server) AddEntryOp(name string, h service.Handler) error { return s.reg
 
 // Audit is the audit writer the services share (D-26).
 func (s *Server) AuditLog() *Audit { return s.audit }
+
+// ServiceEnabled reports a service switch as it stands now, for services that
+// need to know it on every call (the proxy: D-49, D-69).
+func (s *Server) ServiceEnabled(id string) bool { return s.reg.Enabled(id) }
+
+// ProxyRaw returns the saved JSON of the config's "proxy" block.
+//
+// It takes only proxyMu, never s.mu. agent.service holds s.mu while it
+// switches a service, and a service's switch hook runs inside that: the proxy
+// service reads its state there, so this read must not wait for s.mu.
+func (s *Server) ProxyRaw() json.RawMessage {
+	s.proxyMu.RLock()
+	defer s.proxyMu.RUnlock()
+	return append(json.RawMessage(nil), s.cfg.Proxy...)
+}
+
+// SaveProxyRaw stores the proxy block and writes agent.json. On a write error
+// nothing changes. It is called by the proxy service, which owns the block,
+// and takes s.mu: it must not be called from inside a switch hook.
+func (s *Server) SaveProxyRaw(raw json.RawMessage) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := *s.cfg
+	next.Proxy = append(json.RawMessage(nil), raw...)
+	if s.cfgPath != "" {
+		if err := next.Save(s.cfgPath); err != nil {
+			return err
+		}
+	}
+	s.proxyMu.Lock()
+	s.cfg.Proxy = next.Proxy
+	s.proxyMu.Unlock()
+	return nil
+}
 
 // ServiceActions is a copy of the systemd allowlist as it stands now (D-28).
 // The systemd service reads it on every call, so a change made with

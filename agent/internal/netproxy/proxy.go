@@ -23,13 +23,14 @@ import (
 // Config is the local end: a loopback listener that speaks SOCKS5 and HTTP
 // CONNECT, and requires credentials.
 type Config struct {
-	Listen   string   `json:"listen,omitempty"` // default 127.0.0.1
-	Port     int      `json:"port,omitempty"`
-	Username string   `json:"username,omitempty"`
-	Password string   `json:"password,omitempty"`
-	Upstream Upstream `json:"upstream"`
+	Listen   string `json:"listen,omitempty"` // default 127.0.0.1
+	Port     int    `json:"port,omitempty"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
 	// MaxConns caps simultaneous tunnels (0 = 128).
 	MaxConns int `json:"max_conns,omitempty"`
+	// Timeout bounds the connection and handshake to the node (0 = 10 s).
+	Timeout time.Duration `json:"-"`
 }
 
 // Env is what sessions need to route their traffic through the proxy.
@@ -69,16 +70,24 @@ func (c Config) maxConns() int {
 
 func (c Config) hasAuth() bool { return c.Username != "" && c.Password != "" }
 
-// Stats is a snapshot of proxy activity for `aurora-agent status`.
+func (c Config) timeout() time.Duration {
+	if c.Timeout > 0 {
+		return c.Timeout
+	}
+	return 10 * time.Second
+}
+
+// Stats is a snapshot of proxy activity. It never carries a secret.
 type Stats struct {
-	Addr      string `json:"addr"`
-	Active    int64  `json:"active"`
-	Total     int64  `json:"total"`
-	Denied    int64  `json:"denied"`
-	Upstreams string `json:"upstream"`
-	// ViaHy2 and ViaTrojan count tunnels by the transport that carried them.
-	ViaHy2    int64 `json:"via_hy2"`
-	ViaTrojan int64 `json:"via_trojan"`
+	Addr   string `json:"addr"`
+	Active int64  `json:"active"`
+	Total  int64  `json:"total"`
+	Denied int64  `json:"denied"`
+	// Failed counts tunnels the node did not open; LastError is the latest reason.
+	Failed    int64  `json:"failed"`
+	LastError string `json:"last_error,omitempty"`
+	// Node is the label of the node in use ("" when none is chosen).
+	Node string `json:"node,omitempty"`
 }
 
 // Proxy is a running local listener.
@@ -96,13 +105,62 @@ type Proxy struct {
 	active atomic.Int64
 	total  atomic.Int64
 	denied atomic.Int64
+	failed atomic.Int64
 
-	hy        *hyTransport // nil without a Hysteria2 upstream
-	viaHy2    atomic.Int64
-	viaTrojan atomic.Int64
+	nodeMu  sync.Mutex
+	node    *liveNode
+	lastErr string
+}
+
+// liveNode is the node tunnels leave through, with the count of tunnels still
+// open on it. Replacing the node retires it: it closes once the last of its
+// tunnels has ended, so a switch never cuts a download in progress (D-90).
+type liveNode struct {
+	n       Node
+	d       dialer
+	mu      sync.Mutex
+	open    int
+	retired bool
+}
+
+func (l *liveNode) acquire() { l.mu.Lock(); l.open++; l.mu.Unlock() }
+
+func (l *liveNode) release() {
+	l.mu.Lock()
+	l.open--
+	done := l.retired && l.open <= 0
+	l.mu.Unlock()
+	if done {
+		l.d.Close()
+	}
+}
+
+func (l *liveNode) retire() {
+	l.mu.Lock()
+	l.retired = true
+	done := l.open <= 0
+	l.mu.Unlock()
+	if done {
+		l.d.Close()
+	}
+}
+
+// countedConn releases its node when it is closed, once.
+type countedConn struct {
+	net.Conn
+	l    *liveNode
+	once sync.Once
+}
+
+func (c *countedConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.l.release)
+	return err
 }
 
 // Start binds the listener and serves until Close. The caller must call Close.
+// The listener works as soon as it is up, but a tunnel can only open once a
+// node has been chosen with SetNode.
 func Start(cfg Config, logger *log.Logger) (*Proxy, error) {
 	if cfg.Port == 0 || cfg.Port > 65535 {
 		return nil, errors.New("代理端口无效")
@@ -113,16 +171,45 @@ func Start(cfg Config, logger *log.Logger) (*Proxy, error) {
 	if ip := net.ParseIP(cfg.listen()); ip == nil || !ip.IsLoopback() {
 		return nil, errors.New("本地代理只能监听回环地址")
 	}
-	if !cfg.Upstream.Valid() {
-		return nil, errors.New("上游代理配置不完整")
-	}
 	ln, err := net.Listen("tcp", cfg.Addr())
 	if err != nil {
 		return nil, fmt.Errorf("监听 %s 失败：%w", cfg.Addr(), err)
 	}
-	p := &Proxy{cfg: cfg, ln: ln, log: logger, sem: make(chan struct{}, cfg.maxConns()), conns: make(map[net.Conn]struct{}), hy: newHyTransport(cfg.Upstream.Hy2, logger)}
+	p := &Proxy{cfg: cfg, ln: ln, log: logger, sem: make(chan struct{}, cfg.maxConns()), conns: make(map[net.Conn]struct{})}
 	go p.accept()
 	return p, nil
+}
+
+// SetNode makes n the node new tunnels leave through. nil clears it. Tunnels
+// already open stay on the node they started on until they end.
+func (p *Proxy) SetNode(n *Node) error {
+	var next *liveNode
+	if n != nil {
+		var logf func(string, ...any)
+		if p.log != nil {
+			logf = p.log.Printf
+		}
+		d, err := newDialer(*n, p.cfg.timeout(), logf)
+		if err != nil {
+			return err
+		}
+		next = &liveNode{n: *n, d: d}
+	}
+	p.nodeMu.Lock()
+	old := p.node
+	p.node = next
+	p.lastErr = ""
+	p.nodeMu.Unlock()
+	if old != nil {
+		old.retire()
+	}
+	return nil
+}
+
+func (p *Proxy) current() *liveNode {
+	p.nodeMu.Lock()
+	defer p.nodeMu.Unlock()
+	return p.node
 }
 
 // Addr reports the bound address.
@@ -137,15 +224,20 @@ func (p *Proxy) Env() map[string]string {
 
 // Stats returns a snapshot.
 func (p *Proxy) Stats() Stats {
-	return Stats{
-		Addr:      p.Addr(),
-		Active:    p.active.Load(),
-		Total:     p.total.Load(),
-		Denied:    p.denied.Load(),
-		Upstreams: strings.Join(p.cfg.Upstream.Addrs(), ","),
-		ViaHy2:    p.viaHy2.Load(),
-		ViaTrojan: p.viaTrojan.Load(),
+	st := Stats{
+		Addr:   p.Addr(),
+		Active: p.active.Load(),
+		Total:  p.total.Load(),
+		Denied: p.denied.Load(),
+		Failed: p.failed.Load(),
 	}
+	p.nodeMu.Lock()
+	st.LastError = p.lastErr
+	if p.node != nil {
+		st.Node = p.node.n.Label()
+	}
+	p.nodeMu.Unlock()
+	return st
 }
 
 // Close stops accepting and waits for the open tunnels to finish.
@@ -154,9 +246,7 @@ func (p *Proxy) Close() error {
 		return nil
 	}
 	err := p.ln.Close()
-	if p.hy != nil {
-		p.hy.close()
-	}
+	_ = p.SetNode(nil)
 	p.connMu.Lock()
 	for c := range p.conns {
 		_ = c.Close()
@@ -235,25 +325,29 @@ func (p *Proxy) serve(c net.Conn) {
 	p.serveHTTP(c, br)
 }
 
-// dial reaches target over Hysteria2 when it works and over Trojan otherwise.
+// dial opens a tunnel to target through the node in use. The first reason a
+// tunnel could not open is kept for the status, so the user sees "wrong
+// password" or "UDP blocked" rather than a bare failure count.
 func (p *Proxy) dial(ctx context.Context, target string) (net.Conn, error) {
-	if p.hy != nil && p.hy.usable() {
-		c, err := p.hy.dial(ctx, target)
-		if err == nil {
-			p.viaHy2.Add(1)
-			return c, nil
-		}
-		var refused errTargetRefused
-		if errors.As(err, &refused) {
-			return nil, err
-		}
-		p.hy.markDown(err)
+	l := p.current()
+	if l == nil {
+		p.failed.Add(1)
+		p.nodeMu.Lock()
+		p.lastErr = errNoNode.Error()
+		p.nodeMu.Unlock()
+		return nil, errNoNode
 	}
-	c, err := p.cfg.Upstream.DialContext(ctx, target)
-	if err == nil {
-		p.viaTrojan.Add(1)
+	l.acquire()
+	c, err := l.d.DialContext(ctx, target)
+	if err != nil {
+		l.release()
+		p.failed.Add(1)
+		p.nodeMu.Lock()
+		p.lastErr = err.Error()
+		p.nodeMu.Unlock()
+		return nil, err
 	}
-	return c, err
+	return &countedConn{Conn: c, l: l}, nil
 }
 
 // ---- SOCKS5 (RFC 1928 + RFC 1929 user/password auth) ----

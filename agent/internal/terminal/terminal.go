@@ -62,6 +62,11 @@ type Env struct {
 	// run by systemd). A real agent sets it false.
 	NoUnit bool
 
+	// Proxy returns the proxy environment for a new session, or an error that
+	// says why the session cannot have one (the proxy service is off, or no
+	// node is chosen). Nil means this agent has no proxy service (D-49).
+	Proxy func() (map[string]string, error)
+
 	rt       tmuxRuntime
 	createMu sync.Mutex
 
@@ -139,9 +144,10 @@ func checkName(name string) error {
 }
 
 type sessionArgs struct {
-	Name string `json:"name"`
-	Root string `json:"root,omitempty"`
-	Path string `json:"path,omitempty"`
+	Name  string `json:"name"`
+	Root  string `json:"root,omitempty"`
+	Path  string `json:"path,omitempty"`
+	Proxy bool   `json:"proxy,omitempty"` // D-47: decided here, not changed later (D-48)
 }
 
 type sessionRow struct {
@@ -181,13 +187,31 @@ func (e *Env) sessionList(ctx context.Context, _ json.RawMessage) (any, error) {
 // innerCommand is the shell a new session runs: the bundled terminfo first,
 // then a login shell (v2 innerCommand, without session_user and proxy,
 // which come with G2.8).
-func (e *Env) innerCommand() string {
+//
+// envFile, when set, holds the proxy variables of a session made with proxy:true
+// (D-50): they carry a password, so they are not in tmux's argument list, which
+// any local user can read. rcFile is the bash startup file that reads them.
+//
+// A login shell runs /etc/profile.d and ~/.profile, and those may set or clear
+// a proxy of their own, so variables exported before the shell starts are not
+// reliable. For bash the session therefore runs in two steps: the login shell,
+// which does its usual startup, then an interactive bash whose startup file
+// reads the user's own bashrc and, last, the proxy variables, and deletes the
+// file. Another shell gets the variables before it starts, which a startup
+// file of its own can still override (the reply says which one applied).
+func (e *Env) innerCommand(envFile, rcFile string) string {
 	var b strings.Builder
 	b.WriteString("export AURORA3_SESSION=1; ")
 	if ti := e.terminfoDir(); ti != "" {
 		b.WriteString("export TERMINFO_DIRS=" + shellQuote(ti) + ":\"${TERMINFO_DIRS:-}\"; ")
 	}
 	b.WriteString("if [ -z \"$SHELL\" ] || [ ! -x \"$SHELL\" ]; then export SHELL=" + shellQuote(loginShell()) + "; fi; ")
+	if envFile != "" {
+		qe := shellQuote(envFile)
+		b.WriteString("case \"${SHELL##*/}\" in bash) export AURORA3_ENVFILE=" + qe + " AURORA3_RC=" + shellQuote(rcFile) +
+			"; exec \"$SHELL\" -l -c 'exec \"$SHELL\" --rcfile \"$AURORA3_RC\" -i';; esac; ")
+		b.WriteString("if [ -r " + qe + " ]; then . " + qe + "; rm -f " + qe + "; fi; ")
+	}
 	b.WriteString("exec \"$SHELL\" -l")
 	return b.String()
 }
@@ -202,7 +226,7 @@ func loginShell() string {
 }
 
 // ensure creates the session when it is missing, starting in dir if given.
-func (e *Env) ensure(ctx context.Context, name, dir string) error {
+func (e *Env) ensure(ctx context.Context, name, dir string, withProxy bool) error {
 	if err := checkName(name); err != nil {
 		return err
 	}
@@ -227,7 +251,31 @@ func (e *Env) ensure(ctx context.Context, name, dir string) error {
 	if noServer {
 		e.startingServer()
 	}
-	args := e.tmuxArgs(append(newArgs, loginShell(), "-c", e.innerCommand())...)
+	envFile, rcFile := "", ""
+	failed := false
+	if withProxy {
+		vars, err := e.proxyVars()
+		if err != nil {
+			return err
+		}
+		if rcFile, err = e.writeSessionRC(); err != nil {
+			return wire.Errf(wire.CodeInternal, "写入会话启动文件失败：%v", err)
+		}
+		envFile, err = e.writeSessionEnv(name, vars)
+		if err != nil {
+			return wire.Errf(wire.CodeInternal, "写入会话环境失败：%v", err)
+		}
+		// The session deletes the file once it has read it, which happens after
+		// this function has returned (tmux starts the shell on its own), so it
+		// is not deleted on success. If starting tmux fails nobody will read
+		// it, and the error path below removes it.
+		defer func() {
+			if failed {
+				_ = os.Remove(envFile)
+			}
+		}()
+	}
+	args := e.tmuxArgs(append(newArgs, loginShell(), "-c", e.innerCommand(envFile, rcFile))...)
 	cmdPath, cmdArgs := e.tmuxBin(), args
 	// A tmux server started from the agent would live in the agent's cgroup
 	// and die when the agent restarts or upgrades, so it gets its own unit
@@ -254,8 +302,10 @@ func (e *Env) ensure(ctx context.Context, name, dir string) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if strings.Contains(string(out), "duplicate session") && e.exists(ctx, name) {
+			failed = true // somebody else made it: this call's file is not used
 			return nil
 		}
+		failed = true
 		return wire.Errf(wire.CodeInternal, "创建会话失败：%s", strings.TrimSpace(string(out)))
 	}
 	return nil
@@ -277,11 +327,14 @@ func (e *Env) sessionCreate(ctx context.Context, raw json.RawMessage) (any, erro
 		}
 		dir = d
 	}
-	if err := e.ensure(ctx, a.Name, dir); err != nil {
+	existed := e.exists(ctx, a.Name)
+	if err := e.ensure(ctx, a.Name, dir, a.Proxy); err != nil {
 		return nil, err
 	}
-	e.audit("session.create", map[string]any{"name": a.Name})
-	return map[string]any{"name": a.Name}, nil
+	e.audit("session.create", map[string]any{"name": a.Name, "proxy": a.Proxy && !existed})
+	// A session that was already there keeps the environment it started with
+	// (D-48): say so, so a client does not claim it now goes through the proxy.
+	return map[string]any{"name": a.Name, "proxy": a.Proxy && !existed, "existed": existed}, nil
 }
 
 func (e *Env) audit(event string, f map[string]any) {

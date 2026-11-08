@@ -140,6 +140,15 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 打包脚本识别自有 `aurora_sub` 包，第三方 `yaml` 许可证正常收录；README 写明支持范围、手动订阅刷新、非 bash 限制、HTTP/HTTPS git 与旧 agent 需更新。计划产物为 `release3/Aurora-3.2.0`，不得覆盖旧包，不上传。
 - 此次不进行真实安装；测试 agent 使用临时配置，不更改用户的 3.1.1 身份或二进制。真实机场订阅和公网节点仍未验证。
 
+### 3.2.0 本地交付（2026-11-08）
+
+- 已从干净提交 `f587bca8119c768db4924f58e29ea2b7a665356e` 构建：`release3\Aurora-3.2.0`、同名 ZIP 及 `.zip.sha256`。Windows 客户端文件版本和产品版本均为 3.2.0；agent 为 linux/amd64，Go 构建信息记录 `vcs.modified=false`。
+- ZIP：20,167,370 字节，SHA-256 `ecba62afbaed92016a5db75009943acd67793714d3cb70ece87eccd3070f989c`。内置 agent：12,726,434 字节，SHA-256 `c06c628bde167baf67ab8841138e49152e656a7ee3a1bdd55b710ed19cc964bb`，发布密钥 ID `87828dfb18459372`。
+- 客户端 `aurora_install/test/e2e/verify_build.dart` 使用正式发布公钥接受原包；临时副本里同大小的 agent 字节篡改被 SHA-256 检查拒绝，清单版本篡改被签名检查拒绝，原包未改。
+- `proxy_ui_test.ps1 -AgentFile <包内 agent> -ExpectedVersion 3.2.0` 通过：实际运行的是包内 agent，但窗口客户端是 integration_test 调试构建，不把它称作对打包 Release 客户端的完整界面验收。
+- ZIP 内未发现测试 peer/node、外部 Xray/Hysteria 程序、profile、私钥或日志。`yaml`、Hysteria、WebSocket 等许可证已收录。
+- 隔离核对前后一致：v2 服务 PID 173、端口和文件状态，用户已安装的 v3 身份与 3.1.1 二进制、本机 profile 哈希；v2 发布目录仍为 13 项。未上传、未替换任何正式安装，未做 SSH 安装向导的再次安装验收。
+
 ## 5. 第三方依赖（DESIGN 5.9：只用 MIT、BSD、Apache-2.0）
 
 | 包 | 版本 | 许可证 | 用途 |

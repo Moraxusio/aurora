@@ -57,8 +57,6 @@ type Env struct {
 
 	mu    sync.Mutex
 	proxy *netproxy.Proxy
-	// pendingSave holds credentials made while saving was not allowed.
-	pendingSave *State
 }
 
 func (e *Env) audit(event string, f map[string]any) {
@@ -90,11 +88,9 @@ func (v svc) Operations() []service.Operation {
 // when it comes back on (D-53): sessions already running keep the variables
 // they started with, and find the port closed.
 //
-// The registry calls Switched while the entry holds the lock that saving the
-// config also takes (agent.service), so nothing here may save the config
-// before it returns. Turning the service on therefore starts the listener
-// from what is already saved, and a listener that needs a new port or
-// credentials gets them saved afterwards, outside that lock.
+// The entry persists the switch and releases its config lock before calling
+// this hook. Saving new listener credentials is synchronous: no delayed stale
+// save can race with a later proxy.set or proxy.clear.
 func (v svc) Switched(on bool) {
 	e := v.e
 	e.mu.Lock()
@@ -103,20 +99,12 @@ func (v svc) Switched(on bool) {
 		e.stopLocked()
 		return
 	}
-	saved := e.Save
-	e.Save = nil
 	err := e.startLocked()
-	e.Save = saved
 	if err != nil {
 		if e.Log != nil {
 			e.Log.Printf("代理服务启动失败：%v", err)
 		}
 		return
-	}
-	if e.pendingSave != nil && saved != nil {
-		st := *e.pendingSave
-		e.pendingSave = nil
-		go func() { _ = saved(st) }()
 	}
 }
 
@@ -188,12 +176,7 @@ func (e *Env) listenLocked(st *State) error {
 			return err
 		}
 		e.proxy = p
-		if changed {
-			if e.Save == nil {
-				cp := *st
-				e.pendingSave = &cp
-				return nil
-			}
+		if changed && e.Save != nil {
 			if err := e.Save(*st); err != nil {
 				_ = p.Close()
 				e.proxy = nil
@@ -264,6 +247,7 @@ func (e *Env) SessionEnv() (map[string]string, error) {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.Enabled!=nil&&!e.Enabled(){return nil,errors.New("代理服务已关闭，请先打开它")}
 	if e.proxy == nil {
 		if err := e.startLocked(); err != nil {
 			return nil, fmt.Errorf("代理没有启动：%v", err)
@@ -284,6 +268,7 @@ func (e *Env) GitEnv() map[string]string {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.Enabled!=nil&&!e.Enabled(){return nil}
 	if e.proxy == nil {
 		return nil
 	}

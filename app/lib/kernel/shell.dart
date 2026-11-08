@@ -18,6 +18,7 @@ import '../features/terminal/terminal_feature.dart' show createSession, openSess
 import '../state/app_state.dart';
 import '../theme/ide_theme.dart';
 import '../ui/add_server.dart';
+import '../ui/upgrade_agent.dart';
 import 'editor_tab.dart';
 import 'feature.dart';
 import 'input_mode.dart';
@@ -211,6 +212,7 @@ class _ShellState extends State<Shell> {
       // phone: one pane
       final showEditor = ws.compactEditor && ws.tabs.isNotEmpty;
       return Column(children: [
+        AgentUpgradeNotice(app:app,id:ws.serverId),
         _PhoneTop(ws: ws, showEditor: showEditor, onBack: () => setState(() => ws.compactEditor = false), onServers: () => setState(() => _serversOpen = !_serversOpen)),
         Expanded(
           child: Stack(children: [
@@ -235,6 +237,7 @@ class _ShellState extends State<Shell> {
 
     final wide = mode == 2;
     return Column(children: [
+      AgentUpgradeNotice(app:app,id:ws.serverId),
       Expanded(
         child: Row(children: [
           activity,

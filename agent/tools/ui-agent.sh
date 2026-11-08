@@ -2,11 +2,12 @@
 # Starts a real aurora3-agent for UI work, as the normal user under /tmp on
 # 127.0.0.1:17791 (no install, no systemd, no root). Prints the endpoint as
 # JSON and keeps running until stdin closes. All files are removed on exit.
-#   ui-agent.sh AGENT_BINARY [PORT] [WORK_DIR]
+#   ui-agent.sh AGENT_BINARY [PORT] [WORK_DIR] [CREATE_LEGACY_SESSION]
 set -u
 BIN=${1:?usage: ui-agent.sh AGENT_BINARY}
 PORT=${2:-17791}
 W=${3:-/tmp/aurora3-ui-agent}
+LEGACY=${4:-0}
 BANNER_PORT=$((PORT + 1))
 rm -rf "$W"; mkdir -p "$W/state" "$W/home/docs"
 cp "$BIN" "$W/aurora3-agent"; chmod 755 "$W/aurora3-agent"
@@ -45,4 +46,19 @@ trap cleanup EXIT
 for i in $(seq 50); do [ -f "$W/state/agent.crt" ] && ss -ltnH "sport = :$PORT" | grep -q . && break; sleep 0.1; done
 PIN=$(openssl x509 -in "$W/state/agent.crt" -outform der | sha256sum | cut -d' ' -f1)
 echo "{\"addr\":\"127.0.0.1:$PORT\",\"pin\":\"$PIN\",\"token\":\"$TOKEN\"}"
+if [ "$LEGACY" = 1 ]; then
+  # Do not delay the endpoint line: the Windows harness reads it before the
+  # first client session causes the bundled tmux to be unpacked.
+  (
+    for i in $(seq 300); do
+      TMUX=$(find "$W/state/bin" -maxdepth 1 -type f -name 'tmux-*' -perm -111 2>/dev/null | head -1)
+      if [ -x "$TMUX" ] && "$TMUX" -L aurora3 list-sessions >/dev/null 2>&1; then
+        "$TMUX" -L aurora3 has-session -t =legacy >/dev/null 2>&1 || "$TMUX" -L aurora3 new-session -d -s legacy
+        "$TMUX" -L aurora3 set-option -u -t =legacy: @aurora3_proxy
+        break
+      fi
+      sleep 0.1
+    done
+  ) &
+fi
 cat >/dev/null

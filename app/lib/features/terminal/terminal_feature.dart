@@ -93,7 +93,7 @@ Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
   if (res == null) return null;
   // A name that was already a session is opened as it is (D-48): say that it
   // was not given the proxy the box asked for, instead of letting the user think so.
-  if (r.proxy && (res as Map)['existed'] == true) {
+  if (r.proxy && (res as Map)['existed'] == true && res['proxy'] != true) {
     ws.toast('会话“$name”早就有了，已打开；它启动时没有代理，不会因为这次勾选而改变', error: true);
   }
   openSession(ws, name);
@@ -118,6 +118,7 @@ ProxyOffer proxyOffer(Workspace ws) {
   if (!ops.contains('proxy.set')) return const ProxyOffer.unavailable('agent 版本较旧，没有代理功能');
   final c = ws.entry?.proxy;
   if (c == null) return const ProxyOffer.unavailable('还没有选节点：在“代理”页选一个');
+  if (c.pending) return const ProxyOffer.unavailable('节点参数待同步：请先在“代理”页同步成功');
   return ProxyOffer.available(c.name);
 }
 

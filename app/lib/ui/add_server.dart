@@ -158,13 +158,20 @@ class _AddServerPageState extends State<AddServerPage> {
     _progress(InstallProgress(InstallStep.connect, 'ok'));
     InstallOutcome o;
     try {
+      final existing=widget.existing;
+      final link=existing==null?null:widget.app.link(existing.id);
+      if(existing!=null&&link!=null){final offer=widget.app.upgrades.offer(existing.id,link);if(offer.available)await widget.app.upgrades.begin(existing.id,offer);}
       final inst = Installer(remote, widget.app.builds,
+          policy: widget.app.upgradePolicy,
           sudoPassword: _sudo.text.isEmpty ? null : _sudo.text,
           serverName: _name.text.trim().isEmpty ? host : _name.text.trim(),
           onProgress: _progress);
       o = await inst.install();
+      if(existing!=null&&widget.app.profile.server(existing.id)?.upgrade!=null){await widget.app.upgrades.record(existing.id,state:o.result,message:o.message,blockTarget:const {'rolled_back','rollback_failed'}.contains(o.result));}
     } on Object catch (e) {
       o = InstallOutcome('failed', '$e');
+      final id=widget.existing?.id;
+      if(id!=null && widget.app.profile.server(id)?.upgrade!=null) await widget.app.upgrades.record(id,state:'failed',message:o.message,blockTarget:false);
     } finally {
       await remote.close();
     }

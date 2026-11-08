@@ -45,7 +45,7 @@ class ProxyPanel extends StatefulWidget {
 
 class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> {
   Workspace get ws => widget.ws;
-  late final ProxyModel model = ProxyModel(ws.app);
+  late final ProxyModel model = ws.app.proxies;
 
   Map<String, dynamic>? _status;
   String? _statusError;
@@ -310,6 +310,8 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
         ]),
         const SizedBox(height: 4),
         Text(line, style: TextStyle(fontSize: 12.5, color: color)),
+        if (choice?.pending == true || choice?.syncError != null)
+          Text(choice?.syncError ?? '节点参数待同步；连接恢复后会自动重试', style: TextStyle(fontSize: 11.5, color: ide.warn)),
         if (moved)
           Padding(
             padding: const EdgeInsets.only(top: 6),

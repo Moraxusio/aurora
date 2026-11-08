@@ -38,6 +38,14 @@ func main() {
 		os.Exit(directInfoCmd(os.Args[2:]))
 	case "uninstall":
 		os.Exit(uninstallCmd(os.Args[2:]))
+	case "upgrade-worker":
+		if len(os.Args) != 3 {
+			os.Exit(2)
+		}
+		if err := upgradeWorker(os.Args[2]); err != nil {
+			fmt.Fprintln(os.Stderr, "升级任务失败，请查看任务状态")
+			os.Exit(1)
+		}
 	default:
 		usage()
 	}

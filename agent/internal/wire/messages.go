@@ -42,6 +42,7 @@ type AgentInfo struct {
 	Host      string     `json:"host"`
 	OS        string     `json:"os"`
 	Version   string     `json:"version"`
+	Arch      string     `json:"arch,omitempty"`
 	ExeSHA256 string     `json:"exe_sha256,omitempty"`
 	Caps      []string   `json:"caps"`
 	Direct    DirectInfo `json:"direct"`

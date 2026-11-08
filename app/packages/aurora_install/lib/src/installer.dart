@@ -11,6 +11,7 @@ import 'package:aurora_tls/aurora_tls.dart';
 
 import 'manifest.dart';
 import 'remote.dart';
+import 'policy.dart';
 
 /// A signed agent build on this machine: a directory with manifest.json,
 /// manifest.sig and the file the manifest names (agent/cmd/aurora3-release).
@@ -128,8 +129,9 @@ class Installer {
   final String? sudoPassword;
   final String? serverName;
   final void Function(InstallProgress p)? onProgress;
+  final UpgradePolicy? policy;
 
-  Installer(this.remote, this.builds, {this.sudoPassword, this.serverName, this.onProgress});
+  Installer(this.remote, this.builds, {this.sudoPassword, this.serverName, this.onProgress, this.policy});
 
   void _p(InstallStep s, String status, [String msg = '', double? f]) =>
       onProgress?.call(InstallProgress(s, status, msg, f));
@@ -145,14 +147,26 @@ class Installer {
       _p(InstallStep.inspect, 'fail', e.message);
       return InstallOutcome('unsupported', e.message);
     }
-    final build = builds.where((b) => b.arch == host.arch).firstOrNull;
+    final candidates = builds.where((b) => b.arch == host.arch).toList()
+      ..sort((a, b) => compareVersions(b.manifest.version, a.manifest.version) ?? 0);
+    final build = candidates.where((b) {
+      final p = policy;
+      if (p == null) return true;
+      if (p.revoked.contains(b.manifest.version)) return false;
+      return p.minOK == null || compareVersions(b.manifest.version, p.minOK!)! >= 0;
+    }).firstOrNull;
     if (build == null) {
       final have = builds.map((b) => b.arch).toSet().join('、');
-      final m = '服务器的架构是 ${host.uname}，本客户端带的 agent 只支持 ${have.isEmpty ? '（无）' : have}';
+      final m = candidates.isEmpty
+          ? '服务器的架构是 ${host.uname}，本客户端带的 agent 只支持 ${have.isEmpty ? '（无）' : have}'
+          : '没有未撤回且不低于最低安全版本的 agent 可用于此服务器';
       _p(InstallStep.inspect, 'fail', m);
       return InstallOutcome('unsupported', m);
     }
     _p(InstallStep.inspect, 'ok', '${host.uname}，${host.root ? 'root' : 'sudo'}');
+    // Recheck the actual bytes immediately before upload, not only when the
+    // application first opened its bundled-build directory.
+    if (await File(build.path).length()!=build.manifest.size || await sha256File(build.path)!=build.manifest.sha256.toLowerCase()) return InstallOutcome('failed','内置 agent 已被修改，拒绝上传');
 
     // A private upload directory: mktemp -d is 0700 and owned by the login
     // user, so no other user can swap the binary before root runs it.
@@ -175,11 +189,18 @@ class Installer {
       // The install checks the SHA-256 again against the manifest's value,
       // after root has the file (G3.1 prepare).
       _p(InstallStep.upload, 'ok');
+      if (policy != null) {
+        final p = policy!;
+        await remote.upload('$dir/policy.json', Stream.value(p.bytes), p.bytes.length, 0x180);
+        final sig = utf8.encode(p.signature);
+        await remote.upload('$dir/policy.sig', Stream.value(sig), sig.length, 0x180);
+      }
       final args = [
         bin,
         'install',
         '--sha256',
         build.manifest.sha256.toLowerCase(),
+        if (policy != null) ...['--policy', '$dir/policy.json', '--policy-signature', '$dir/policy.sig'],
         if (serverName != null && serverName!.isNotEmpty) ...['--name', serverName!],
         if (!host.root) ...['--user', host.user],
       ];

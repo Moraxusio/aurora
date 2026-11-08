@@ -96,8 +96,10 @@ class ServerEntry {
   /// agent keeps the node itself; this is what lets the client say which one
   /// it is, and push it again when the provider changes it.
   ProxyChoice? proxy;
+  UpgradeRecord? upgrade;
+  List<String> failedUpgrades;
 
-  ServerEntry({required this.id, required this.name, this.agentId, this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy}) : forwards = forwards ?? [];
+  ServerEntry({required this.id, required this.name, this.agentId, this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy, this.upgrade, List<String>? failedUpgrades}) : forwards = forwards ?? [], failedUpgrades = failedUpgrades ?? [];
 
   /// A new entry with a random id.
   factory ServerEntry.create(String name, {SshLogin? ssh}) => ServerEntry(id: newId(), name: name, ssh: ssh);
@@ -111,6 +113,8 @@ class ServerEntry {
         lastSeen: j['last_seen'] as int?,
         forwards: [for (final f in (j['forwards'] as List? ?? const [])) ForwardSpec.fromJson(_map(f))],
         proxy: j['proxy'] == null ? null : ProxyChoice.fromJson(_map(j['proxy'])),
+        upgrade: j['upgrade'] == null ? null : UpgradeRecord.fromJson(_map(j['upgrade'])),
+        failedUpgrades: (j['failed_upgrades'] as List? ?? const []).cast<String>(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -122,7 +126,22 @@ class ServerEntry {
         'last_seen': ?lastSeen,
         if (forwards.isNotEmpty) 'forwards': [for (final f in forwards) f.toJson()],
         'proxy': ?proxy?.toJson(),
+        'upgrade': ?upgrade?.toJson(),
+        if (failedUpgrades.isNotEmpty) 'failed_upgrades': failedUpgrades,
       };
+}
+
+/// A safe, secret-free upgrade receipt, persisted before upload/commit.
+class UpgradeRecord {
+  String target, previous, state;
+  String? job, message;
+  int started;
+  UpgradeRecord({required this.target, required this.previous, required this.state, this.job, this.message, int? started}) : started = started ?? _now();
+  /// [interrupted] is terminal for automatic recovery: the user must inspect
+  /// the server (or use SSH fallback) before any new upload is considered.
+  bool get terminal => const {'upgraded', 'installed', 'up_to_date', 'rolled_back', 'rollback_failed', 'refused', 'failed', 'interrupted'}.contains(state);
+  factory UpgradeRecord.fromJson(Map<String,dynamic> j) => UpgradeRecord(target: j['target'] as String, previous: j['previous'] as String, state: j['state'] as String, job: j['job'] as String?, message: j['message'] as String?, started: j['started'] as int?);
+  Map<String,dynamic> toJson() => {'target':target,'previous':previous,'state':state,'job':?job,'message':?message,'started':started};
 }
 
 /// A place proxy nodes come from (D-83, D-84): a subscription address, or links
@@ -178,11 +197,17 @@ class ProxyChoice {
   /// The name at the time of choosing, shown if the source no longer has the node.
   String name;
 
-  ProxyChoice({required this.source, required this.key, required this.name});
+  /// Durable work queue: remains true on an offline/failed push, across app
+  /// restarts, and is cleared only after this exact generation was accepted.
+  bool pending;
+  int revision;
+  String? syncError;
 
-  factory ProxyChoice.fromJson(Map<String, dynamic> j) => ProxyChoice(source: j['source'] as String? ?? '', key: j['key'] as String? ?? '', name: j['name'] as String? ?? '');
+  ProxyChoice({required this.source, required this.key, required this.name, this.pending = false, this.revision = 0, this.syncError});
 
-  Map<String, dynamic> toJson() => {'source': source, 'key': key, 'name': name};
+  factory ProxyChoice.fromJson(Map<String, dynamic> j) => ProxyChoice(source: j['source'] as String? ?? '', key: j['key'] as String? ?? '', name: j['name'] as String? ?? '', pending: j['pending'] as bool? ?? false, revision: j['revision'] as int? ?? 0, syncError: j['sync_error'] as String?);
+
+  Map<String, dynamic> toJson() => {'source': source, 'key': key, 'name': name, if (pending) 'pending': true, if (revision != 0) 'revision': revision, 'sync_error': ?syncError};
 }
 
 /// One port forward: [host]:[port] on the server, opened on this machine's

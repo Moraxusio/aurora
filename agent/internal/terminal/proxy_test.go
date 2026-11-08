@@ -18,6 +18,37 @@ import (
 
 const testProxyPass = "pw-PROXY-secret-9f3a1c77"
 
+func TestProxyImpactIncludesKnownAndLegacyUnknownSessions(t *testing.T) {
+	e := newEnv(t)
+	proxyEnvFor(e)
+	ctx := context.Background()
+	for _, a := range []string{`{"name":"on","proxy":true}`, `{"name":"off"}`, `{"name":"legacy"}`} {
+		if _, err := e.sessionCreate(ctx, json.RawMessage(a)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := e.tmux(ctx, "set-option", "-u", "-t", "=legacy:", "@aurora3_proxy"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := e.ProxyInfoOp()(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result.(map[string]any)
+	if m["count"] != 1 || m["unknown"] != 1 {
+		t.Fatal(m)
+	}
+	names := m["sessions"].([]string)
+	if len(names) != 1 || names[0] != "on" {
+		t.Fatal(names)
+	}
+	// The entry operation is usable even when terminal's service is off.
+	e.Service().(interface{ Switched(bool) }).Switched(false)
+	if _, err = e.ProxyInfoOp()(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func proxyEnvFor(e *Env) {
 	e.Proxy = func() (map[string]string, error) {
 		return map[string]string{

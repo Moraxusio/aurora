@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"aurora3/internal/entry"
+	"aurora3/internal/update"
 	"aurora3/internal/wire"
 )
 
@@ -126,7 +127,9 @@ func (f *fakeSys) ResetFailed(string) {}
 
 func (f *fakeSys) Units(string) []string { return append([]string{}, f.tmuxUnits...) }
 
-func (f *fakeSys) TmuxSessions(string) ([]string, error) { return append([]string{}, f.sessions...), f.sessionsErr }
+func (f *fakeSys) TmuxSessions(string) ([]string, error) {
+	return append([]string{}, f.sessions...), f.sessionsErr
+}
 
 func (f *fakeSys) KillTmux(string) error {
 	f.log = append(f.log, "kill-tmux")
@@ -250,6 +253,12 @@ func (r *rig) snapshot() map[string]string {
 		if rel == LockPath || rel == filepath.Dir(LockPath) {
 			return nil
 		}
+		// Failure metadata is intentionally durable after rollback. Production
+		// files/identity still have to match byte for byte; the journal is
+		// checked separately by TestFailedVersionIsNotRetried.
+		if rel == filepath.Join(StateDir, "failed-upgrades.json") {
+			return nil
+		}
 		fi, _ := d.Info()
 		v := fi.Mode().String()
 		if !d.IsDir() {
@@ -261,6 +270,47 @@ func (r *rig) snapshot() map[string]string {
 		return nil
 	})
 	return out
+}
+
+func TestFailedVersionIsNotRetried(t *testing.T) {
+	r := newRig(t)
+	if got := r.install("3.0.1", false, ""); got.Result != ResultInstalled {
+		t.Fatal(got)
+	}
+	if got := r.install("3.0.2", true, ""); got.Result != ResultRolledBack {
+		t.Fatal(got)
+	}
+	bad, err := update.FailureFor(filepath.Join(r.root, StateDir), "3.0.2")
+	if err != nil || !bad {
+		t.Fatal(bad, err)
+	}
+	before := r.snapshot()
+	if got := r.install("3.0.2", false, ""); got.Result != ResultRefused || !strings.Contains(got.Message, "失败") {
+		t.Fatal(got)
+	}
+	same(t, "retry must not change installed files", before, r.snapshot())
+	if got := r.install("3.0.3", false, ""); got.Result != ResultUpgraded {
+		t.Fatal(got)
+	}
+}
+
+func TestSignedPolicyOnlyAllowsSafeRevocationRollback(t *testing.T) {
+	r := newRig(t)
+	r.install("3.2.0", false, "")
+	p := update.Policy{Product: update.ProductAgent, Channel: update.ChannelStable, Created: "2026-11-09", Revoked: []string{"3.2.0"}, MinOK: "3.1.0"}
+	self, sum := r.agent("3.1.1", false)
+	result := Run(r.env(self, "3.1.1"), Options{SHA256: sum, Policy: &p})
+	if result.Result != ResultUpgraded || result.Version != "3.1.1" {
+		t.Fatal(result)
+	}
+	self, sum = r.agent("3.0.9", false)
+	if got := Run(r.env(self, "3.0.9"), Options{SHA256: sum, Policy: &p}); got.Result != ResultRefused {
+		t.Fatal("unsafe target accepted", got)
+	}
+	self, sum = r.agent("3.2.0", false)
+	if got := Run(r.env(self, "3.2.0"), Options{SHA256: sum, Policy: &p}); got.Result != ResultRefused {
+		t.Fatal("revoked target accepted", got)
+	}
 }
 
 func (r *rig) sysState() string {

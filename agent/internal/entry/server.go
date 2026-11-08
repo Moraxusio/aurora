@@ -22,6 +22,7 @@ import (
 	"aurora3/internal/p2p"
 	"aurora3/internal/paths"
 	"aurora3/internal/service"
+	"aurora3/internal/update"
 	"aurora3/internal/wire"
 )
 
@@ -46,6 +47,10 @@ type Server struct {
 	// proxyMu guards cfg.Proxy alone, so it can be read while mu is held by
 	// agent.service (see ProxyRaw). Lock order: mu, then proxyMu.
 	proxyMu sync.RWMutex
+	// Service transitions are serialized separately from config writes. A
+	// service hook must never run with mu held (the hook may save its config).
+	switchMu  sync.Mutex
+	transfers update.Gate
 }
 
 // New loads or creates the identity in cfg.StateDir and builds the registry
@@ -101,6 +106,11 @@ func (s *Server) Pin() string { return s.pin }
 // service, so it cannot be switched off (D-46, D-52). Call before Run.
 func (s *Server) AddEntryOp(name string, h service.Handler) error { return s.reg.AddEntry(name, h) }
 
+func (s *Server) AddEntryStream(name string, h service.StreamHandler) error {
+	return s.reg.AddEntryStream(name, h)
+}
+func (s *Server) TransferGate() *update.Gate { return &s.transfers }
+
 // Audit is the audit writer the services share (D-26).
 func (s *Server) AuditLog() *Audit { return s.audit }
 
@@ -120,8 +130,7 @@ func (s *Server) ProxyRaw() json.RawMessage {
 }
 
 // SaveProxyRaw stores the proxy block and writes agent.json. On a write error
-// nothing changes. It is called by the proxy service, which owns the block,
-// and takes s.mu: it must not be called from inside a switch hook.
+// nothing changes. Hooks run outside s.mu and can call this synchronously.
 func (s *Server) SaveProxyRaw(raw json.RawMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -348,6 +357,12 @@ func (s *Server) serveStream(ctx context.Context, st net.Conn) {
 		return
 	}
 	if transferOp(req.Op) {
+		leave, err := s.transfers.Enter()
+		if err != nil {
+			_ = wire.WriteJSON(st, wire.ErrResponse(wire.Errf(wire.CodeUnavailable, "%v", err)))
+			return
+		}
+		defer leave()
 		st = &transferConn{Conn: st, idle: transferIdleTimeout}
 		stop := context.AfterFunc(ctx, func() { _ = st.Close() })
 		defer stop()
@@ -392,7 +407,7 @@ func (s *Server) Info() wire.AgentInfo {
 		port = a.Port
 	}
 	d := wire.DirectInfo{Port: port, Addrs: s.directAddrs(port), CertSHA256: s.pin}
-	return wire.AgentInfo{ID: s.id, Name: name, Host: host, OS: osName() + " " + runtime.GOARCH, Version: s.version, Caps: caps, Direct: d}
+	return wire.AgentInfo{ID: s.id, Name: name, Host: host, OS: osName() + " " + runtime.GOARCH, Version: s.version, Arch: runtime.GOARCH, Caps: caps, Direct: d}
 }
 
 func (s *Server) agentInfo(context.Context, json.RawMessage) (any, error) {
@@ -403,8 +418,10 @@ func (s *Server) agentServices(context.Context, json.RawMessage) (any, error) {
 	return map[string]any{"services": s.reg.Statuses()}, nil
 }
 
-// agentSetService switches a service and saves the switch to agent.json
-// (D-26, D-41). On a save failure the switch is put back.
+// agentSetService persists the choice before applying it (D-26, D-41). Failed
+// persistence has no runtime side effects. Hooks run outside the config lock:
+// proxy.set takes its own lock and then saves, so the reverse order here would
+// deadlock with a concurrent proxy.set/clear.
 func (s *Server) agentSetService(_ context.Context, raw json.RawMessage) (any, error) {
 	var a struct {
 		ID      string `json:"id"`
@@ -416,25 +433,28 @@ func (s *Server) agentSetService(_ context.Context, raw json.RawMessage) (any, e
 	if a.ID == "" || a.Enabled == nil {
 		return nil, wire.Errf(wire.CodeBadRequest, "缺少服务名或开关值")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	before := s.reg.Enabled(a.ID)
-	if err := s.reg.SetEnabled(a.ID, *a.Enabled); err != nil {
+	s.switchMu.Lock()
+	defer s.switchMu.Unlock()
+	if !s.reg.Has(a.ID) {
 		return nil, wire.Errf(wire.CodeNotFound, "未知的服务：%s", a.ID)
 	}
+	s.mu.Lock()
+	next := *s.cfg
+	next.Services = map[string]bool{}
+	for k, v := range s.cfg.Services {
+		next.Services[k] = v
+	}
+	next.Services[a.ID] = *a.Enabled
 	if s.cfgPath != "" {
-		next := *s.cfg
-		next.Services = map[string]bool{}
-		for k, v := range s.cfg.Services {
-			next.Services[k] = v
-		}
-		next.Services[a.ID] = *a.Enabled
 		if err := next.Save(s.cfgPath); err != nil {
-			_ = s.reg.SetEnabled(a.ID, before)
+			s.mu.Unlock()
 			return nil, wire.Errf(wire.CodeInternal, "保存配置失败：%v", err)
 		}
-		s.cfg.Services = next.Services
 	}
+	s.cfg.Services = next.Services
+	s.mu.Unlock()
+	// Has was checked above; the registry's table never changes.
+	_ = s.reg.SetEnabled(a.ID, *a.Enabled)
 	s.audit.Write("agent.service", map[string]any{"id": a.ID, "enabled": *a.Enabled})
 	return map[string]any{"services": s.reg.Statuses()}, nil
 }

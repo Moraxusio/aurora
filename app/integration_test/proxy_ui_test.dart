@@ -20,6 +20,8 @@ const pin = String.fromEnvironment('AURORA3_PROXY_UI_PIN');
 const token = String.fromEnvironment('AURORA3_PROXY_UI_TOKEN');
 const nodePort = int.fromEnvironment('AURORA3_PROXY_UI_NODE_PORT');
 const expectedVersion = String.fromEnvironment('AURORA3_PROXY_UI_VERSION');
+const upgradeFixture = String.fromEnvironment('AURORA3_PROXY_UI_UPGRADE');
+const oldAgent = bool.fromEnvironment('AURORA3_PROXY_UI_OLD_AGENT');
 
 class _Provider {
   final HttpServer server;
@@ -79,6 +81,31 @@ void main() {
 
     await waitFor(t, find.textContaining('127.0.0.1:17796'), upTo: const Duration(seconds: 20));
     expect(app.link(app.profile.servers.single.id)!.server.version, expectedVersion);
+
+    // Connecting only shows a passive version notice. The upload dialog is
+    // opened by an explicit click; old agents show the SSH compatibility path
+    // instead of silently attempting a direct upgrade.
+    if (upgradeFixture.isNotEmpty) {
+      final notice = find.widgetWithText(TextButton, '升级 agent');
+      await waitFor(t, notice, upTo: const Duration(seconds: 15));
+      await click(t, notice);
+      if (oldAgent) {
+        expect(find.text('打开 SSH 升级向导'), findsOneWidget);
+        await click(t, find.text('打开 SSH 升级向导'));
+        await waitFor(t, find.textContaining('重新安装或配对'), upTo: const Duration(seconds: 10));
+        expect(find.byType(BackButton), findsOneWidget);
+        await t.tap(find.byType(BackButton));
+        await t.pumpAndSettle();
+        // 3.2.0 deliberately has no proxy service. This branch is only the
+        // version notice/SSH fallback assertion; the current-agent branch
+        // below covers the proxy UI and close confirmation.
+        return;
+      } else {
+        expect(find.text('确认升级'), findsOneWidget);
+        expect(find.textContaining('30 秒安静窗口'), findsOneWidget);
+        await click(t, find.text('取消'));
+      }
+    }
     await activity(t, '代理', title: '代理');
     await waitFor(t, find.byTooltip('添加订阅或节点…'));
     await click(t, find.byTooltip('添加订阅或节点…'));
@@ -145,5 +172,25 @@ void main() {
     terminal.onOutput!(r'''case "$HTTP_PROXY" in http://aurora:*@127.0.0.1:*) echo UI-PROXY-"ENABLED";; *) echo UI-PROXY-"MISSING";; esac''' '\r');
     await waitUntil(t, () => screen().contains('UI-PROXY-ENABLED'), 'the session created by the checked dialog has proxy variables');
     expect(screen(), isNot(contains('UI-PROXY-MISSING')));
+
+    // The entry operation reports the known proxy session and the legacy
+    // session created by ui-agent.sh without a marker. Cancel must leave the
+    // switch on; only the second explicit confirmation turns it off.
+    if (!oldAgent) {
+      await click(t, find.byTooltip('概览与设置'));
+      final proxySwitch = find.byKey(const ValueKey('service-switch-proxy'));
+      await waitFor(t, proxySwitch, upTo: const Duration(seconds: 10));
+      expect(t.widget<Switch>(proxySwitch).value, isTrue);
+      await click(t, proxySwitch);
+      await waitFor(t, find.text('关闭代理服务？'));
+      expect(find.textContaining('将影响 1 个代理会话'), findsOneWidget);
+      expect(find.textContaining('另有 1 个旧会话的代理状态未知'), findsOneWidget);
+      await click(t, find.text('取消'));
+      expect(t.widget<Switch>(proxySwitch).value, isTrue);
+      await click(t, proxySwitch);
+      await waitFor(t, find.text('关闭代理服务？'));
+      await click(t, find.text('关闭'));
+      await waitUntil(t, () => !t.widget<Switch>(proxySwitch).value, 'proxy switch turns off after confirmation');
+    }
   });
 }

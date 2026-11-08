@@ -275,6 +275,47 @@ void main() {
       expect(raw, isNot(contains(s)), reason: s);
     }
   }, skip: skip);
+
+  test('offline subscription changes survive application restart and synchronize on the next connection', () async {
+    final src = await model.addSubscription('queue', provider.url.toString());
+    await model.choose(app.profile.servers.single,link,model.rows(src,{}).first);
+    final id = app.profile.servers.single.id;
+    final port = node.port;
+    await node.close();
+    node = await FakeTrojan.start('queued-rotated-password',port:port);
+    provider.body = clashFor(port,pass:'queued-rotated-password');
+    final refreshed = await model.refresh(src.id);
+    expect(refreshed.changedServers,[id]);
+    expect(app.profile.server(id)!.proxy!.pending,true);
+    final generation = app.profile.server(id)!.proxy!.revision;
+
+    final reopened = AppState();
+    await reopened.initAt(app.storePath!);
+    expect(reopened.profile.server(id)!.proxy!.pending,true,reason:'queue is not just in memory');
+    await reopened.proxies.connected(id,link);
+    expect(reopened.profile.server(id)!.proxy!.pending,false);
+    expect(reopened.profile.server(id)!.proxy!.revision,generation);
+    final result=await link.call('proxy.test',{'target':'queued-sync.invalid:80'}) as Map;
+    expect(result['ok'],true,reason:'${result['error']}');
+    expect(node.targets,contains('queued-sync.invalid:80'));
+    reopened.dispose();
+  },skip:skip);
+
+  test('service-off sync stays queued and a fresh connection retries it', () async {
+    final src = await model.addSubscription('queue',provider.url.toString());
+    await model.choose(app.profile.servers.single,link,model.rows(src,{}).first);
+    final id=app.profile.servers.single.id;
+    await app.update((p){p.server(id)!.proxy!.pending=true;p.server(id)!.proxy!.revision++;});
+    await link.call('agent.service',{'id':'proxy','enabled':false});
+    await expectLater(model.repush(app.profile.server(id)!,link),throwsA(isA<OpError>()));
+    expect(app.profile.server(id)!.proxy!.pending,true);
+    expect(app.profile.server(id)!.proxy!.syncError,isNotEmpty);
+    await link.call('agent.service',{'id':'proxy','enabled':true});
+    final fresh=ProxyModel(app);
+    await fresh.connected(id,link);
+    expect(app.profile.server(id)!.proxy!.pending,false);
+    expect(app.profile.server(id)!.proxy!.syncError,isNull);
+  },skip:skip);
 }
 
 FakeTrojan? node2;

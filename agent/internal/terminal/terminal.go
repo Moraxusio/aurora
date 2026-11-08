@@ -126,6 +126,24 @@ func (v svc) Switched(on bool) {
 // works while terminal is off (D-52).
 func (e *Env) KillOp() service.Handler { return e.sessionKill }
 
+// ProxyInfoOp belongs to the entry so an off terminal service does not hide
+// sessions that will lose their proxy connectivity.
+func (e *Env) ProxyInfoOp() service.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (any, error) {
+		count, unknown := 0, 0
+		names := []string{}
+		for _, s := range e.Sessions(ctx) {
+			if s.Proxy == nil {
+				unknown++
+			} else if *s.Proxy {
+				count++
+				names = append(names, s.Name)
+			}
+		}
+		return map[string]any{"count": count, "unknown": unknown, "sessions": names}, nil
+	}
+}
+
 func decode(args json.RawMessage, v any) error {
 	if len(args) == 0 || string(args) == "null" {
 		return nil
@@ -155,6 +173,7 @@ type sessionRow struct {
 	Attached int    `json:"attached"`
 	Windows  int    `json:"windows"`
 	Created  int64  `json:"created"`
+	Proxy    *bool  `json:"proxy,omitempty"`
 }
 
 func (e *Env) exists(ctx context.Context, name string) bool {
@@ -164,17 +183,22 @@ func (e *Env) exists(ctx context.Context, name string) bool {
 
 // Sessions lists the sessions (also used by uninstall checks, D-31).
 func (e *Env) Sessions(ctx context.Context) []sessionRow {
-	out, _, _ := e.tmux(ctx, "list-sessions", "-F", "#{session_name}|#{session_attached}|#{session_windows}|#{session_created}")
+	out, _, _ := e.tmux(ctx, "list-sessions", "-F", "#{session_name}|#{session_attached}|#{session_windows}|#{session_created}|#{@aurora3_proxy}")
 	rows := []sessionRow{}
 	for _, line := range strings.Split(out, "\n") {
 		p := strings.Split(line, "|")
-		if len(p) != 4 {
+		if len(p) != 5 {
 			continue
 		}
 		a, _ := strconv.Atoi(p[1])
 		w, _ := strconv.Atoi(p[2])
 		c, _ := strconv.ParseInt(p[3], 10, 64)
-		rows = append(rows, sessionRow{p[0], a, w, c})
+		var proxy *bool
+		if p[4] == "1" || p[4] == "0" {
+			v := p[4] == "1"
+			proxy = &v
+		}
+		rows = append(rows, sessionRow{Name: p[0], Attached: a, Windows: w, Created: c, Proxy: proxy})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 	return rows
@@ -307,6 +331,13 @@ func (e *Env) ensure(ctx context.Context, name, dir string, withProxy bool) erro
 		}
 		failed = true
 		return wire.Errf(wire.CodeInternal, "创建会话失败：%s", strings.TrimSpace(string(out)))
+	}
+	flag := "0"
+	if withProxy {
+		flag = "1"
+	}
+	if _, msg, err := e.tmux(ctx, "set-option", "-t", "="+name+":", "@aurora3_proxy", flag); err != nil {
+		return wire.Errf(wire.CodeInternal, "会话已创建，但代理状态记录失败：%s", strings.TrimSpace(msg))
 	}
 	return nil
 }

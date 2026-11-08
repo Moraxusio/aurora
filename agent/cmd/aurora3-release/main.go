@@ -41,6 +41,8 @@ func main() {
 		err = signCmd(os.Args[2:], os.Stdout)
 	case "verify":
 		err = verifyCmd(os.Args[2:], os.Stdout)
+	case "policy":
+		err = policyCmd(os.Args[2:], os.Stdout)
 	default:
 		usage()
 	}

@@ -5,3 +5,4 @@ library;
 export 'src/installer.dart';
 export 'src/manifest.dart';
 export 'src/remote.dart';
+export 'src/policy.dart';

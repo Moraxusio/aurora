@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"aurora3/internal/bundle"
@@ -22,6 +23,7 @@ import (
 	"aurora3/internal/service"
 	"aurora3/internal/systemd"
 	"aurora3/internal/terminal"
+	"aurora3/internal/upgrade"
 )
 
 const defaultConfigPath = entry.DefaultConfigPath
@@ -51,6 +53,20 @@ func run(cfgPath string) error {
 	// session.kill belongs to the entry, so it works while terminal is off (D-52).
 	if err := srv.AddEntryOp("session.kill", term.KillOp()); err != nil {
 		return err
+	}
+	if err := srv.AddEntryOp("session.proxy", term.ProxyInfoOp()); err != nil {
+		return err
+	}
+	u := &upgrade.Env{StateDir: cfg.StateDir, Version: Version, Arch: runtime.GOARCH, Gate: srv.TransferGate(), Launch: launchUpgrade}
+	for _, op := range u.Operations() {
+		if op.Stream != nil {
+			err = srv.AddEntryStream(op.Name, op.Stream)
+		} else {
+			err = srv.AddEntryOp(op.Name, op.Handle)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	ctx, stop := signalContext()
 	defer stop()

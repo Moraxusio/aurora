@@ -85,6 +85,30 @@ rules:
 SubNode byName(SubResult r, String name) => r.nodes.firstWhere((n) => n.name == name, orElse: () => throw StateError('no node "$name" in ${r.nodes.map((n) => n.name).toList()}'));
 
 void main() {
+  group('capability descriptors contain no real credentials', () {
+    test('password, UUID and obfuscation password are replaced', () {
+      for (final proto in ['trojan','hysteria2','vless','vmess']) {
+        final original = proto == 'vless' || proto == 'vmess' ? 'b831381d-6324-4d53-ad4f-8cda48b30811' : 'synthetic-provider-password';
+        final n = SubNode(proto:proto,host:'node.invalid',port:443,secret:original,obfsPassword:'synthetic-obfs-password');
+        final check = n.toCheck();
+        final json = jsonEncode(check);
+        expect(json,isNot(contains(original)));
+        expect(json,isNot(contains('synthetic-obfs-password')));
+        expect(check['host'],'node.invalid');
+        expect(n.toAgent()['secret'],original,reason:'real dialing still needs the actual credential');
+      }
+    });
+    test('missing/invalid credentials and too-short obfs are not disguised as valid', () {
+      expect(SubNode(proto:'trojan',host:'h',port:1).toCheck().containsKey('secret'),false);
+      expect(SubNode(proto:'vless',host:'h',port:1,secret:'broken').toCheck()['secret'],'invalid-uuid');
+      expect(SubNode(proto:'hysteria2',host:'h',port:1,obfsPassword:'ab').toCheck()['obfs_password'],'xx');
+      final n = SubNode(proto:'trojan',host:'h',port:1,secret:'密码-credential',obfsPassword:'混淆密码');
+      expect(utf8.encode(n.toCheck()['secret'] as String).length, utf8.encode(n.secret).length);
+      expect(utf8.encode(n.toCheck()['obfs_password'] as String).length, utf8.encode(n.obfsPassword).length);
+      expect(n.toCheck()['secret_length'], utf8.encode(n.secret).length);
+      expect(n.toCheck()['obfs_password_length'], utf8.encode(n.obfsPassword).length);
+    });
+  });
   group('Clash file', () {
     final r = parseSubscription(clash);
 

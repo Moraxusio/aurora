@@ -20,3 +20,5 @@ func installCmd([]string) int {
 func directInfoCmd([]string) int { return installCmd(nil) }
 
 func uninstallCmd([]string) int { return installCmd(nil) }
+
+func upgradeWorker(string) error { return errors.New("upgrade worker runs on Linux only") }

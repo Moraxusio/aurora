@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/ide_theme.dart';
 import '../ui/add_server.dart';
+import '../ui/upgrade_agent.dart';
 import 'editor_tab.dart';
 import 'registry.dart';
 import 'widgets.dart';
@@ -43,6 +44,7 @@ class _OverviewViewState extends State<OverviewView> {
     'systemd': 'systemd 服务管理',
     'terminal': '终端',
     'net': '端口转发',
+    'proxy': '代理出口',
   };
   static const _about = {
     'files': '浏览、编辑、上传、下载、改名、删除文件',
@@ -51,6 +53,7 @@ class _OverviewViewState extends State<OverviewView> {
     'systemd': '查看服务状态，按授权名单启动、停止、重启服务',
     'terminal': 'tmux 终端会话，断线和 agent 重启后会话不丢',
     'net': '列出服务器上监听的端口，转发到本机',
+    'proxy': '终端和 Git 的代理出口；关闭会中断代理连接，会话本身保留',
   };
 
   Future<void> _switch(String id, bool on) async {
@@ -64,6 +67,21 @@ class _OverviewViewState extends State<OverviewView> {
     if (!on && id == 'net') {
       final ok = await confirmDialog(context, title: '关闭端口转发服务？', body: '正在转发的连接会中断，之后新的连接也会失败，直到再打开。', ok: '关闭');
       if (!ok) return;
+    }
+    if (!on && id == 'proxy') {
+      String affected;
+      try {
+        final r = await link.call('session.proxy') as Map;
+        affected = '将影响 ${r['count']} 个代理会话';
+        final names = (r['sessions'] as List).cast<String>();
+        if (names.isNotEmpty) affected += '：${names.join('、')}';
+        if ((r['unknown'] as num) > 0) affected += '。另有 ${r['unknown']} 个旧会话的代理状态未知';
+      } on Object {
+        affected = '当前 agent 无法准确统计代理会话数量';
+      }
+      if (!mounted) return;
+      final ok = await confirmDialog(context, title: '关闭代理服务？', body: '$affected。\n现有代理连接会中断，但终端会话和进程仍保留；Git 将改为直连。', ok: '关闭');
+      if (!ok || !mounted) return;
     }
     setState(() => _switching.add(id));
     await ws.guard(() => link.call('agent.service', {'id': id, 'enabled': on}));
@@ -166,6 +184,7 @@ class _OverviewViewState extends State<OverviewView> {
           kv('直连地址', d == null ? '—' : d.addrs.join('  ')),
           kv('证书指纹', d?.pin ?? '—'),
           if (info != null) ...[kv('系统', info.os), kv('主机名', info.host), kv('agent 版本', info.version)],
+          if(info!=null) Align(alignment:Alignment.centerLeft,child:TextButton.icon(onPressed:()=>showAgentUpgrade(context,ws.app,ws.serverId),icon:const Icon(Icons.system_update_alt),label:const Text('检查并升级 agent'))),
           kv('保存的密码', s == null ? '—' : ([if ((s.password ?? '').isNotEmpty) 'SSH 密码', if ((s.privateKey ?? '').isNotEmpty) '私钥', if ((s.sudoPassword ?? '').isNotEmpty) 'sudo 密码'].join('、')).ifEmpty('无')),
           section('服务'),
           Text('服务开关是功能选择，不是安全边界：持有直连令牌就能取得 root 权限。每次改动都写入服务器的审计日志。', style: TextStyle(color: ide.textDim, fontSize: 12)),
@@ -223,7 +242,7 @@ class _OverviewViewState extends State<OverviewView> {
             Text(unavailable ? '不可用：${svc['reason'] ?? ''}' : (_about[id] ?? ''), style: TextStyle(color: unavailable ? ide.warn : ide.textDim, fontSize: 12)),
           ]),
         ),
-        Switch(value: svc['enabled'] == true, onChanged: _switching.contains(id) ? null : (v) => _switch(id, v)),
+        Switch(key: ValueKey('service-switch-$id'), value: svc['enabled'] == true, onChanged: _switching.contains(id) ? null : (v) => _switch(id, v)),
       ]),
     );
   }

@@ -15,7 +15,8 @@ param(
     [Parameter(Mandatory)][string]$Version,
     # Not v2-release: that is v2's release folder (D-75).
     [string]$Out = 'release3',
-    [string]$Key = '<release-key>'
+    [string]$Key = '<release-key>',
+    [string]$Policy = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -63,6 +64,10 @@ if ($LASTEXITCODE) { throw 'sign' }
 # Checked with the release key compiled into the tools, as the client does.
 & "$work\aurora3-release.exe" verify --dir "$dir\agent\amd64"
 if ($LASTEXITCODE) { throw 'verify' }
+$policyArgs = @('policy', '--key', $Key, '--out', "$dir\agent")
+if ($Policy) { $policyArgs += @('--input', $Policy) }
+& "$work\aurora3-release.exe" @policyArgs
+if ($LASTEXITCODE) { throw 'sign upgrade policy' }
 
 # 3. The client.
 Push-Location (Join-Path $repo 'app')

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// One outbound server of a subscription, in the shape the agent takes
 /// (agent/internal/netproxy/node.go). The field names are the agent's JSON.
 class SubNode {
@@ -79,6 +81,33 @@ class SubNode {
         if (downMbps > 0) 'down_mbps': downMbps,
         if (unsupported.isNotEmpty) 'unsupported': unsupported,
       };
+
+  /// Capability checking never opens a connection and needs no real account
+  /// credential. Preserve only presence/syntax/length facts using fixed
+  /// placeholders, including for old agents that already expose proxy.check.
+  Map<String, dynamic> toCheck() {
+    final m = toAgent();
+    final uuid = RegExp(r'^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$');
+    if (secret.isNotEmpty) {
+      m['secret'] = proto == 'vless' || proto == 'vmess'
+          ? (uuid.hasMatch(secret.trim())
+              ? (secret.contains('-') ? '00000000-0000-4000-8000-000000000000' : '00000000000040008000000000000000')
+              : 'invalid-uuid')
+          : _lengthPlaceholder(secret);
+    }
+    final obfsBytes = utf8.encode(obfsPassword).length;
+    if (secret.isNotEmpty) m['secret_length'] = utf8.encode(secret).length;
+    if (obfsPassword.isNotEmpty) {
+      m['obfs_password'] = 'x' * obfsBytes;
+      m['obfs_password_length'] = obfsBytes;
+    }
+    return m;
+  }
+
+  /// Keep only the byte length, which the agent needs for checks such as
+  /// Salamander's minimum length. ASCII placeholders make the transmitted
+  /// UTF-8 byte count exactly equal to the original without carrying content.
+  String _lengthPlaceholder(String value) => 'x' * utf8.encode(value).length;
 
   /// How the certificate is checked, in words: shown beside the node so the
   /// user sees a node that skips the check (D-88).

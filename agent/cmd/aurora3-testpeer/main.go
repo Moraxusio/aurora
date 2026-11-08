@@ -8,6 +8,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,6 +25,8 @@ import (
 	"aurora3/internal/proxysvc"
 	"aurora3/internal/service"
 	"aurora3/internal/testsvc"
+	"aurora3/internal/update"
+	"aurora3/internal/upgrade"
 	"aurora3/internal/wire"
 )
 
@@ -31,14 +35,26 @@ func main() {
 	off := flag.Bool("test-off", false, "start with the test service switched off")
 	verbose := flag.Bool("v", false, "log to stderr")
 	state := flag.String("state", "", "keep identity and token in this directory across runs (restart tests); default: a fresh temporary one")
+	upgradeFixture := flag.String("upgrade-fixture", "", "test-only: trust fixture public key and emulate an independent worker")
 	flag.Parse()
-	if err := run(*listen, *off, *verbose, *state); err != nil {
+	if *upgradeFixture != "" {
+		pub, err := os.ReadFile(filepath.Join(*upgradeFixture, "trust.pub"))
+		if err != nil {
+			panic(err)
+		}
+		key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(pub)))
+		if err != nil || len(key) != ed25519.PublicKeySize {
+			panic("invalid fixture public key")
+		}
+		update.TrustedPublicKeys = []ed25519.PublicKey{key}
+	}
+	if err := run(*listen, *off, *verbose, *state, *upgradeFixture != ""); err != nil {
 		fmt.Fprintln(os.Stderr, "aurora3-testpeer:", err)
 		os.Exit(1)
 	}
 }
 
-func run(listen string, off, verbose bool, state string) error {
+func run(listen string, off, verbose bool, state string, upgradeTest bool) error {
 	// Tests kill this process (to check a dead agent), so a deferred removal
 	// may never run; leftovers of earlier runs are removed here instead.
 	sweepStale()
@@ -93,12 +109,40 @@ func run(listen string, off, verbose bool, state string) error {
 		},
 		Enabled: func() bool { return srv != nil && srv.ServiceEnabled(proxysvc.ID) },
 	}
-	srv, err = entry.New(cfg, cfgPath, "3.0.0-testpeer", []service.Service{testsvc.Service(), (&netfwd.Env{}).Service(), px.Service()}, nil, nil, log.New(out, "testpeer ", log.Lmicroseconds))
+	version := "3.0.0-testpeer"
+	if upgradeTest {
+		version = "3.3.0"
+	}
+	srv, err = entry.New(cfg, cfgPath, version, []service.Service{testsvc.Service(), (&netfwd.Env{}).Service(), px.Service()}, nil, nil, log.New(out, "testpeer ", log.Lmicroseconds))
 	if err != nil {
 		return err
 	}
 	px.Start()
 	defer px.Close()
+	if upgradeTest {
+		u := &upgrade.Env{StateDir: cfg.StateDir, Version: version, Arch: "amd64", Gate: srv.TransferGate(), Quiet: time.Millisecond, Launch: func(dir string) error {
+			b, err := os.ReadFile(filepath.Join(dir, "status.json"))
+			if err != nil {
+				return err
+			}
+			var j upgrade.Job
+			if err = json.Unmarshal(b, &j); err != nil {
+				return err
+			}
+			j.State = "upgraded"
+			return upgrade.WriteJob(dir, j)
+		}}
+		for _, op := range u.Operations() {
+			if op.Stream != nil {
+				err = srv.AddEntryStream(op.Name, op.Stream)
+			} else {
+				err = srv.AddEntryOp(op.Name, op.Handle)
+			}
+			if err != nil {
+				return err
+			}
+		}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ready := make(chan struct{})

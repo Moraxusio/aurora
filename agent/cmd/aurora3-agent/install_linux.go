@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"aurora3/internal/install"
+	"aurora3/internal/update"
 )
 
 // installCmd: aurora3-agent install --sha256 HEX [--name N] [--user U] [--probe]
@@ -23,13 +24,30 @@ func installCmd(args []string) int {
 	name := fs.String("name", "", "服务器名称（仅新安装）")
 	user := fs.String("user", "", "其主目录作为第一个文件根目录（仅新安装）")
 	probe := fs.Bool("probe", false, "只探测，不做改动")
+	policyFile := fs.String("policy", "", "签名撤回清单")
+	policySig := fs.String("policy-signature", "", "撤回清单签名")
 	_ = fs.Parse(args)
 	detach()
 	if !*probe && os.Geteuid() != 0 {
 		install.Emit(os.Stdout, install.Result{Result: install.ResultRefused, Message: "安装需要 root 权限"})
 		return 1
 	}
-	r := install.Run(env(), install.Options{SHA256: *sum, Name: *name, User: *user, ProbeOnly: *probe})
+	var policy *update.Policy
+	if *policyFile != "" || *policySig != "" {
+		b, err := os.ReadFile(*policyFile)
+		s, err2 := os.ReadFile(*policySig)
+		if err != nil || err2 != nil {
+			install.Emit(os.Stdout, install.Result{Result: install.ResultRefused, Message: "无法读取签名撤回清单"})
+			return 1
+		}
+		p, err := update.VerifyPolicy(b, s)
+		if err != nil {
+			install.Emit(os.Stdout, install.Result{Result: install.ResultRefused, Message: err.Error()})
+			return 1
+		}
+		policy = &p
+	}
+	r := install.Run(env(), install.Options{SHA256: *sum, Name: *name, User: *user, ProbeOnly: *probe, Policy: policy})
 	return install.ExitCode(r)
 }
 

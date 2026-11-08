@@ -178,6 +178,8 @@ type Options struct {
 	Name      string // server name, new installs only
 	User      string // whose home is the first root, new installs only
 	ProbeOnly bool
+	// Verified by the caller; only revoked versions can move backwards.
+	Policy *update.Policy
 }
 
 func (e *Env) p(abs string) string { return filepath.Join(e.Root, abs) }
@@ -223,7 +225,7 @@ func Run(e *Env, o Options) Result {
 	return r
 }
 
-func (e *Env) run(o Options) Result {
+func (e *Env) run(o Options) (result Result) {
 	if e.ConfirmTimeout <= 0 {
 		e.ConfirmTimeout = 30 * time.Second
 	}
@@ -237,6 +239,15 @@ func (e *Env) run(o Options) Result {
 			return Result{Result: ResultRefused, Message: err.Error()}
 		}
 		defer unlock()
+		// Write the failure journal before releasing the install lock, so a
+		// second process cannot slip in and retry the failed target meanwhile.
+		defer func() {
+			if (result.Result == ResultRolledBack || result.Result == ResultRollbackFailed) && result.Previous != "" {
+				if err := update.RecordFailure(e.p(StateDir), update.Failure{Version: e.Version, Message: result.Message}); err != nil {
+					result.Message += "；记录失败版本失败：" + err.Error()
+				}
+			}
+		}()
 	}
 
 	e.step("probe", "start", "")
@@ -251,6 +262,26 @@ func (e *Env) run(o Options) Result {
 	}
 	if pr.Problem != "" {
 		return Result{Result: ResultRefused, Message: pr.Problem, Previous: pr.Installed, Probe: pr}
+	}
+	if !o.ProbeOnly {
+		if bad, err := update.FailureFor(e.p(StateDir), e.Version); err != nil {
+			return Result{Result: ResultRefused, Message: "读取失败版本记录失败：" + err.Error()}
+		} else if bad {
+			return Result{Result: ResultRefused, Message: "这个版本曾升级失败，拒绝重复推送：" + e.Version}
+		}
+	}
+	if o.Policy != nil {
+		current := pr.Installed
+		if current == "" {
+			current = "0.0.0"
+		}
+		// Same-version pairing remains possible only when the target is safe.
+		if err := o.Policy.CheckTarget(current, e.Version); err != nil && (current != e.Version || o.Policy.TargetRefusal(e.Version) != nil) {
+			return Result{Result: ResultRefused, Message: err.Error(), Previous: pr.Installed}
+		}
+		if pr.Installed != "" && pr.Installed != e.Version {
+			pr.Action = "upgrade"
+		}
 	}
 	if pr.Action == "none" {
 		r := e.direct()

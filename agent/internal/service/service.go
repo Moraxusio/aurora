@@ -126,6 +126,16 @@ func (r *Registry) AddEntry(name string, h Handler) error {
 	return nil
 }
 
+// AddEntryStream registers a stream operation that cannot be switched off.
+func (r *Registry) AddEntryStream(name string, h StreamHandler) error {
+	if _, dup := r.ops[name]; dup {
+		return fmt.Errorf("operation %q already registered", name)
+	}
+	r.ops[name] = ""
+	r.streams[name] = h
+	return nil
+}
+
 // EntryOps lists the operations that belong to the entry (D-46), sorted.
 func (r *Registry) EntryOps() []string {
 	var out []string
@@ -191,6 +201,8 @@ func (r *Registry) DispatchStream(ctx context.Context, name string, st net.Conn,
 
 // SetEnabled changes a switch at run time. The caller writes agent.json and
 // the audit log (D-26); the registry only enforces the switch (D-44).
+// The caller must serialize changes and must not hold its config lock across
+// this call: a Switchable hook may need to persist its own state.
 func (r *Registry) SetEnabled(id string, on bool) error {
 	if _, ok := r.services[id]; !ok {
 		return fmt.Errorf("unknown service %q", id)
@@ -204,6 +216,9 @@ func (r *Registry) SetEnabled(id string, on bool) error {
 	}
 	return nil
 }
+
+// Has reports whether a service is compiled in. The table is immutable.
+func (r *Registry) Has(id string) bool { _, ok := r.services[id]; return ok }
 
 // Switchable is implemented by a service that must act when it is switched
 // at run time, such as terminal disconnecting attached windows (D-51). The

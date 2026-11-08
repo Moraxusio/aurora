@@ -10,6 +10,10 @@ import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/foundation.dart';
 
+import '../features/proxy/proxy_model.dart';
+import 'profile_access.dart';
+import 'upgrade_model.dart';
+
 /// Where the signed agent builds are: `agent/` next to the executable in a
 /// release folder (M1.7), or AURORA3_AGENT_DIR for development.
 String agentDir() {
@@ -19,7 +23,9 @@ String agentDir() {
   return '$exe${Platform.pathSeparator}agent';
 }
 
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier implements ProfileAccess {
+  late final ProxyModel proxies = ProxyModel(this);
+  late final UpgradeModel upgrades = UpgradeModel(this, () => builds, () => upgradePolicy);
   ProfileStore? _store;
 
   /// Why the profile cannot be used (no keystore, unreadable file), or null.
@@ -32,8 +38,10 @@ class AppState extends ChangeNotifier {
 
   /// Signed agent builds that verified, by architecture.
   List<AgentBuild> builds = [];
+  UpgradePolicy? upgradePolicy;
   String? buildsError;
 
+  @override
   Profile get profile => _store?.get() ?? Profile();
   bool get ready => _store != null;
 
@@ -73,6 +81,7 @@ class AppState extends ChangeNotifier {
   Future<void> loadBuilds() async {
     builds = [];
     buildsError = null;
+    upgradePolicy = null;
     // Tests sign builds with a throwaway key and trust it through the
     // environment; it replaces the release key for this process only, and the
     // UI says so. A release never sets it.
@@ -94,6 +103,8 @@ class AppState extends ChangeNotifier {
       buildsError = '没有找到内置的 agent（${dir.path}）';
       return;
     }
+    try { upgradePolicy = await UpgradePolicy.open(dir.path, trusted: trusted); }
+    on Object catch (e) { buildsError = '$e'; builds = []; return; }
     final errs = <String>[];
     await for (final d in dir.list()) {
       if (d is! Directory) continue;
@@ -106,6 +117,7 @@ class AppState extends ChangeNotifier {
     if (builds.isEmpty) buildsError = errs.isEmpty ? '内置的 agent 目录是空的' : errs.join('\n');
   }
 
+  @override
   Future<void> update(FutureOr<void> Function(Profile p) fn) async {
     await _store!.update(fn);
     notifyListeners();
@@ -114,6 +126,7 @@ class AppState extends ChangeNotifier {
   // ---- connections ----
 
   ConnStatus status(String id) => _conns[id]?.status ?? ConnStatus(ConnState.idle);
+  @override
   Link? link(String id) {
     final l = _conns[id]?.link;
     return l != null && !l.isClosed ? l : null;
@@ -136,6 +149,9 @@ class AppState extends ChangeNotifier {
       c = Connection(t, goodAddr: s.direct!.goodAddr);
       _conns[id] = c;
       _subs[id] = c.changes.listen((st) {
+        final freshLink = link(id);
+        if (st.state == ConnState.connected && freshLink != null) unawaited(proxies.connected(id, freshLink));
+        if (st.state == ConnState.connected && freshLink != null) unawaited(upgrades.connected(id, freshLink));
         if (st.state == ConnState.connected && st.addr != null && st.addr != s.direct?.goodAddr) {
           unawaited(update((p) {
             final e = p.server(id);

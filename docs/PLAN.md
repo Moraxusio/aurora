@@ -113,7 +113,7 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | G2.2 files | 完成 | d2238a1、d154fb8、30381fc、1154d1f | 8 项 Linux 测试通过 |
 | G2.3 git | 完成 | 6fb8c8b、02d3e54、90ee666 | 9 项测试通过（5 项真实仓库，4 项代理） |
 | G2.8 proxy（agent） | 完成 | c7b7108 | VLESS、VMess、Trojan、Hysteria2 对真实 Xray 26.10.31 与 Hysteria 官方服务端互通；会话的代理变量、git 跟随开关；入口死锁一例由测试发现并修复 |
-| G2.8 proxy（客户端） | 完成 | 见下一次提交 | `aurora_sub`（订阅读取）、代理页、新建会话的勾选；端到端 `app/tool/proxy_e2e.ps1`：真实 agent、真实 tmux，会话里的 curl 与 git 都经节点到达（节点是另写的 Trojan 服务端，打印它被要求的目标） |
+| G2.8 proxy（客户端） | 完成 | a2e5063 | `aurora_sub`（订阅读取）、代理页、新建会话的勾选；端到端 `app/tool/proxy_e2e.ps1`：真实 agent、真实 tmux，会话里的 curl 与 git 都经节点到达（节点是另写的 Trojan 服务端，打印它被要求的目标） |
 | G2.6 monitor | 部分完成 | ff90f00 | `gpu.info` 未复制；操作未做行为测试 |
 | G2.7 systemd | 部分完成 | ff90f00 | 单元名检查有测试；操作未做行为测试 |
 | 内核 `internal/paths` | 完成 | 1154d1f、ff90f00 | 7 项测试通过 |
@@ -131,6 +131,14 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | G5.6 SSH 与安装（不含界面） | 完成 | 见 git log | `app/packages/aurora_install`：用 dartssh2 登录（密码或私钥），主机密钥在发送任何凭据前交给回调决定（D-2），不符时停止。签名清单按 Go 的 `update.VerifyFor` 同样的规则校验：v3 发布密钥的 Ed25519 签名（BoringSSL 实现，`aurora_tls` 新增）、key_id、产品 `aurora3-agent`、渠道、文件大小与 SHA-256（D-3）。读取架构和 root/sudo 情况，上传到 `mktemp -d` 建的私有目录，以 root 运行 `aurora3-agent install`，把各阶段转成进度，读回直连参数（D-4）；sudo 密码只走标准输入，不进命令行（D-6）。上传用 exec 加 `cat`，不依赖 SFTP。`update.ProductAgent` 改为 `aurora3-agent`；新工具 `aurora3-release`（sign、verify、pubkey）和测试用 SSH 服务器 `aurora3-sshpeer`。测试：Dart 19 项（Go 签名的清单与 6 种篡改、sudo 与 root 的命令、拒绝条件、结果解析），Go 4 项；WSL 端到端（`agent/tools/install-e2e.ps1`）两种登录各跑一次：root 登录，以及普通用户加密码 sudo（临时用户，测完删除）。都覆盖了错误主机密钥、错误密码、安装、direct-info、直连到新 agent，全部通过，v2 不变 |
 | 3.1.0 终端输入、内核与功能、IDE 界面 | 完成（2026-11-08），未发布 | 5b0e76f、628639f、d74242f | 终端打不了字：Flutter Windows 引擎要求文本输入客户端带 view ID，xterm 4.0.0 没带，字符一个也到不了终端，而 Enter、方向键、Ctrl+字母不受影响；xterm 收进 `app/third_party/xterm`（MIT，两处标注的改动，见其中的 AURORA.md），测试去掉了以前对这个错误的过滤，改成从 Windows 键盘路径（SendInput，中文按 Unicode 包）输入 30 行逐行核对，去掉补丁则测试失败。agent：`net` 服务（`net.ports`、`net.dial`），systemd 的 `svc.list` 和 `agent.actions`（D-81），`net.ports` 同端口选取固定。客户端按内核与功能重写（D-78），IDE 布局和鼠标、触控两套尺寸（D-79），文件编辑器（D-80）、git、systemd 与日志、端口转发（D-82）。测试：整窗口对真实 agent（终端输入、编辑与被拒绝的保存、git 差异与提交、systemd 列表、转发带字节、三种宽度）通过；Dart 单元 12、`aurora_wire` 44（含转发 5）、`aurora_profile` 20；Go 在 WSL：install 55、entry 11、files 9、paths 8、systemd 3、netfwd 7、git 9、terminal 5（连跑 40 次）；`install-real` 64、`terminal-survives` 16、`install-e2e` 24、`terminal-e2e` 15；v2 前后不变 |
 | G5.5 凭据存储 | Windows 完成，其它平台未做 | 见 git log | `app/packages/aurora_profile`：服务器、SSH 登录（含 sudo 密码，D-6）、直连参数（D-22）和客户端自己的 known_hosts（D-2）存在同一个加密文件里，原子写入（同 v2 的 `client.Store`）。Windows 用 DPAPI 当前用户范围，经 FFI 调用 `crypt32.dll`，带固定的 entropy，其它程序为同一用户加密的数据（包括 v2）打不开。文件头记录加密方式，打不开的文件不会被覆盖，只能由用户选择移到一边重来。没有明文实现：其它平台的 `platformSealer()` 直接拒绝（D-72），WSL 中已验证。20 项测试通过，包括 DPAPI 往返、1 MiB、篡改检测、不同 entropy 打不开 |
+
+### 3.2.0 打包前回归（2026-11-08）
+
+- 新增 `app/tool/proxy_ui_test.ps1` / `integration_test/proxy_ui_test.dart`：真实 Windows 窗口、真实临时 Linux agent（17796）、独立测试 Trojan 节点、本地 HTTP Clash 订阅；从界面添加 URL、不可用节点不能选、跳过证书校验需确认、单节点和批量测速、选用节点、勾选并创建会话，实际 bash 里核对代理环境。
+- 窗口测试发现代理页的真实缺陷：每次重建节点行都丢失测速结果。修复单节点与批量操作的 `_timed` 缓存；修复前断言“显示毫秒数”失败，修复后通过，选节点重建后结果仍在。
+- 原有 `ui_test.ps1 -TypingLines 6` 通过：终端输入、文件保存/冲突、git、systemd、端口转发、宽度切换；6 行无干扰、无错误。应用单元测试 53 项通过，专用端到端 2 项不在该轮运行；agent 对真实 Xray 与 Hysteria 的互通以及 entry、proxysvc、发布签名测试通过，Linux `go vet ./...` 通过。
+- 打包脚本识别自有 `aurora_sub` 包，第三方 `yaml` 许可证正常收录；README 写明支持范围、手动订阅刷新、非 bash 限制、HTTP/HTTPS git 与旧 agent 需更新。计划产物为 `release3/Aurora-3.2.0`，不得覆盖旧包，不上传。
+- 此次不进行真实安装；测试 agent 使用临时配置，不更改用户的 3.1.1 身份或二进制。真实机场订阅和公网节点仍未验证。
 
 ## 5. 第三方依赖（DESIGN 5.9：只用 MIT、BSD、Apache-2.0）
 

@@ -11,7 +11,7 @@ $gomod = Join-Path $env:USERPROFILE 'go\pkg\mod'
 $sb = New-Object Text.StringBuilder
 
 function Add-License($title, $file) {
-    if (-not (Test-Path $file)) { throw "licence file missing for ${title}: $file" }
+    if (-not $file -or -not (Test-Path $file)) { throw "licence file missing for ${title}: $file" }
     [void]$sb.AppendLine(('=' * 78))
     [void]$sb.AppendLine($title)
     [void]$sb.AppendLine(('=' * 78))
@@ -29,7 +29,7 @@ $deps = & 'flutter' pub deps --no-dev --style=compact --directory (Join-Path $re
     Where-Object { $_ -match '^- (\S+) (\d\S*)' } | ForEach-Object { [pscustomobject]@{ name = $Matches[1]; version = $Matches[2] } }
 if (@($deps).Count -lt 20) { throw "pub deps listed only $(@($deps).Count) packages" }
 foreach ($d in ($deps | Sort-Object name -Unique)) {
-    if ($d.name -in 'aurora_install', 'aurora_profile', 'aurora_tls', 'aurora_wire', 'aurora', 'flutter', 'flutter_web_plugins', 'sky_engine') { continue }
+    if ($d.name -in 'aurora_install', 'aurora_profile', 'aurora_sub', 'aurora_tls', 'aurora_wire', 'aurora', 'flutter', 'flutter_web_plugins', 'sky_engine') { continue }
     # xterm is vendored (app/third_party/xterm, patched): its licence is there.
     $p = if ($d.name -eq 'xterm') { Join-Path $repo 'app\third_party\xterm' } else { Join-Path $pub "$($d.name)-$($d.version)" }
     $lic = @('LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING') | ForEach-Object { Join-Path $p $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1

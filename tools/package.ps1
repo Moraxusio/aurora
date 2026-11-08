@@ -90,6 +90,19 @@ Aurora $Version (Windows)
 - 保存的服务器和密码在 %LOCALAPPDATA%\Aurora3\profile.bin，用 Windows DPAPI 加密，
   只有当前 Windows 用户能打开。
 
+代理功能（3.2.0）：
+- 在“代理”页添加 Clash 订阅 URL，或粘贴节点链接；选用节点后，新建终端时勾选
+  “这个会话走代理”。git 的 HTTP/HTTPS 远程操作跟随代理服务开关。
+- 代理在受控服务器的 agent 上运行，流量不经这台电脑。不会登录、安装或修改代理服务器。
+- 已支持 Trojan（TCP/TLS）、Hysteria2（含 Salamander）、VLESS 和 VMess AEAD
+  （TCP 或 WebSocket，可加 TLS）。Reality、XTLS Vision、gRPC、h2、XHTTP、端口跳跃、
+  旧版 VMess、Shadowsocks、TUIC、AnyTLS 等尚不支持；节点会留在列表并说明原因。
+- 订阅 URL 只加密存放在本机；选中节点的凭据会发送给受控服务器，服务器重启后仍可使用。
+  “测速”也由受控服务器执行，需要向它临时发送被测节点的参数。
+- 订阅更新请使用“重新读取订阅”按钮。代理变量保证在 bash 启动文件之后生效；
+  其它 shell 的启动脚本仍可能覆盖变量。已有会话不会因勾选而改成代理会话。
+- 请使用本包的 agent：旧版 3.1.1 没有代理服务。更新客户端不会自动替换正在运行的 agent。
+
 内置 agent：$($m.file)
   版本 $($m.version)，SHA-256 $($m.sha256)
   由发布密钥 $($m.key_id) 签名（agent\amd64\manifest.sig）。

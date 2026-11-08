@@ -221,6 +221,11 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
     setState(() {
       _testing = true;
       _cancel = false;
+      for (final row in rows.where((r) => r.usable)) {
+        row.ms = null;
+        row.testError = null;
+        _timed[row.node.key] = row;
+      }
     });
     try {
       await model.testAll(link, rows, onEach: () {
@@ -234,7 +239,14 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
   Future<void> _testOne(NodeRow row) async {
     final link = ws.link;
     if (link == null) return;
-    setState(() => row.ms = null);
+    setState(() {
+      row.ms = null;
+      row.testError = null;
+      // _source builds fresh rows on every frame. Keep the object the async
+      // test fills, so the next build can recover its result instead of
+      // throwing it away (and so switching sidebars keeps the result).
+      _timed[row.node.key] = row;
+    });
     await model.test(link, row);
     if (mounted) setState(() {});
   }

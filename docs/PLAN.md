@@ -149,6 +149,15 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - ZIP 内未发现测试 peer/node、外部 Xray/Hysteria 程序、profile、私钥或日志。`yaml`、Hysteria、WebSocket 等许可证已收录。
 - 隔离核对前后一致：v2 服务 PID 173、端口和文件状态，用户已安装的 v3 身份与 3.1.1 二进制、本机 profile 哈希；v2 发布目录仍为 13 项。未上传、未替换任何正式安装，未做 SSH 安装向导的再次安装验收。
 
+### 可靠性、升级与凭据收尾（2026-11-09，未打包）
+
+- D-95 已落地：服务开关用独立串行锁，保存 `agent.json` 后才调用服务钩子，修复代理保存/开关的锁顺序死锁；代理监听凭据同步保存，不再有可能覆盖新状态的后台写入。客户端订阅选择增加加密 profile 内的 `pending`、`revision`、`sync_error`，按服务器串行选择/清除/补发；在线刷新自动补发，离线变化跨 AppState 重开保留并在重连后同步，旧响应不能清掉新 revision。能力检查只发送固定占位值及 UTF-8 长度/格式事实，测速和实际选择仍临时发送真实凭据。tmux 会话保存 `@aurora3_proxy` 标记，旧会话显示未知；关闭代理前显示已知受影响会话、名称和未知数。
+- D-96 已落地：连接后只提示版本，不自动上传；新 agent 经 TLS/yamux 接收签名 manifest、agent 和签名撤回策略，重新校验架构、大小、SHA-256、`min_from`、`revoked`、`min_ok`；仅当前版本已撤回时允许安全降级。文件传输结束后等待 30 秒安静窗口，最长 15 分钟；独立 `systemd` worker 使用现有四阶段安装器，状态持久化，worker 超时/失联会记失败目标并拒绝盲目重推，结果不携带直连令牌。旧 agent 明示打开 SSH 兼容向导。新增 Dart→Go 真实上传联调，客户端重连可查询回执，终态不会被迟到的 `starting` 覆盖。
+- 回归证据：Go `update/upgrade/entry/proxysvc/service/netproxy/wire` 定向测试通过；Linux 交叉测试 `install` 57 项、`terminal` 14 项通过；App 全包 61 项通过（代理 E2E 专用脚本的 2 项按环境跳过）；`aurora_install` 8 项通过、`aurora_profile` 26 项、`aurora_sub` 39 项、`aurora_wire` 23 项通过；新增可靠性模型 5 项、Dart→Go 升级联调 1 项通过；Flutter analyze 无问题。Windows 原生 `go test ./...` 仍只受既有 Linux-only `internal/files/search_text.go` 引用 `paths.SkipDirs` 影响，Linux 测试已覆盖相关安装/终端路径。
+- 真实窗口证据（运行会抢焦点）：当前 agent 窗口测试通过版本提示、用户取消升级、代理会话数量/旧会话未知数、关闭代理取消与确认；旧 3.2.0 agent 窗口测试通过版本提示及 SSH 兼容升级入口。测试夹具、临时 agent、节点和 tmux 均已清理。
+- WSL 真实升级验收（使用本轮最新代码重建 fixture）通过：正常直连升级、30 秒安静窗口、客户端提交后断开、坏版本回滚、失败目标拒绝重推、普通降级拒绝、签名撤回后的安全降级；tmux 进程全程存活。验收后已恢复原 3.1.1 二进制、配置、证书和 `agent-id`，并再次确认 v2 PID/端口/文件状态不变。没有生成新发布包，没有上传。
+- 仍未验证：公网 203.0.113.10、真实机场订阅/真实节点、arm64 真机、Android/macOS/iOS；这些不因本轮本地和 WSL 验收而宣称完成。
+
 ## 5. 第三方依赖（DESIGN 5.9：只用 MIT、BSD、Apache-2.0）
 
 | 包 | 版本 | 许可证 | 用途 |

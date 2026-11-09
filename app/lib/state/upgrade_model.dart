@@ -42,19 +42,19 @@ class UpgradeModel {
     final safe = candidates.where((b) => policy()?.revoked.contains(b.manifest.version) != true && (policy()?.minOK == null || compareVersions(b.manifest.version,policy()!.minOK!)! >= 0)).toList();
     final b = safe.isEmpty ? candidates.first : safe.first;
     if (parseVersion(current) == null) return UpgradeOffer(current,b,'当前是开发版本，不能自动判断升级方向',direct);
-    final record = app.profile.server(id)?.upgrade;
+    final record = app.server(id)?.upgrade;
     if (record?.state == 'interrupted') {
       return UpgradeOffer(current, b, '上次升级连接中断，结果无法确认；请先查询，或通过 SSH 兼容向导核查后再操作', direct);
     }
     if (record != null && !record.terminal) return UpgradeOffer(current,b,'有升级任务未完成，请先查询结果',direct);
-    if (app.profile.server(id)?.failedUpgrades.contains(b.manifest.version) == true) return UpgradeOffer(current,b,'此目标版本曾升级失败，不会再次推送',direct);
+    if (app.server(id)?.failedUpgrades.contains(b.manifest.version) == true) return UpgradeOffer(current,b,'此目标版本曾升级失败，不会再次推送',direct);
     final p = policy();
     final why = p?.refusal(current,b.manifest.version) ?? (p == null && compareVersions(b.manifest.version,current)! <= 0 ? '已是最新版本或服务器版本更新' : null);
     return UpgradeOffer(current,b,why,direct);
   }
 
   Future<void> connected(String id, Link link) async {
-    final r = app.profile.server(id)?.upgrade;
+    final r = app.server(id)?.upgrade;
     if (r == null || (r.terminal && r.state != 'interrupted') || _running.containsKey(id)) return;
     if(identical(_watching[id],link))return;
     _watching[id]=link;
@@ -62,14 +62,14 @@ class UpgradeModel {
     try {
       do {
         await recover(id,link);
-        if(app.profile.server(id)?.upgrade?.terminal!=false)return;
+        if(app.server(id)?.upgrade?.terminal!=false)return;
         await Future<void>.delayed(const Duration(seconds:2));
       } while(!link.isClosed && identical(app.link(id),link) && DateTime.now().isBefore(until));
     } finally {if(identical(_watching[id],link))_watching.remove(id);}
   }
 
   Future<void> recover(String id,Link link) async {
-    final r = app.profile.server(id)?.upgrade;
+    final r = app.server(id)?.upgrade;
     if (r == null || (r.terminal && r.state != 'interrupted')) return;
     // A rollback target may be an older agent without the status operation.
     if (!link.server.caps.contains('agent.upgrade.status')) {
@@ -87,7 +87,7 @@ class UpgradeModel {
     try {
       final result = await link.call('agent.upgrade.status', {'id':r.job}) as Map;
       if (result['id'] != r.job || result['version'] != r.target) throw OpError(codeConflict, '升级任务回执与请求不匹配');
-      final current = app.profile.server(id)?.upgrade;
+      final current = app.server(id)?.upgrade;
       if (current == null || (current.terminal && current.state != 'interrupted') || current.job != r.job || current.target != r.target) return;
       await record(id,state:result['state'] as String,message:result['message'] as String?);
     } on OpError catch(e) {
@@ -148,7 +148,7 @@ class UpgradeModel {
       final result=await stream.response().timeout(const Duration(minutes:16)) as Map;
       await record(id,state:result['state'] as String,job:result['id'] as String,message:'升级已提交；独立进程运行，断线后会重新查询');
     } on Object catch(e) {
-      final r=app.profile.server(id)?.upgrade;
+      final r=app.server(id)?.upgrade;
       // A lost response is not a failed upgrade. Keep the durable job id and
       // query after reconnect rather than uploading the same target again.
       final refused = e is OpError && e.code != codeUnavailable;

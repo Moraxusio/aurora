@@ -38,23 +38,28 @@ class TerminalFeature extends Feature {
   List<String> get ops => const ['session.list', 'session.create', 'terminal'];
 
   @override
-  SideBarView? sideBar(BuildContext context, Workspace ws) => SideBarView(title: '终端会话', body: SessionList(ws: ws));
+  SideBarView? sideBar(BuildContext context, Workspace ws) => SideBarView(
+    title: '终端会话',
+    body: SessionList(ws: ws),
+  );
 
   @override
   List<Command> commands(Workspace ws) => [
-        Command(id: 'terminal.new', title: '新建终端会话…', group: '终端', icon: Icons.add, shortcut: 'Ctrl+Shift+`', run: () => createSession(ws)),
-      ];
+    Command(id: 'terminal.new', title: '新建终端会话…', group: '终端', icon: Icons.add, shortcut: 'Ctrl+Shift+`', run: () => createSession(ws)),
+  ];
 }
 
 /// Opens a session as a tab (or brings its tab to the front).
 void openSession(Workspace ws, String name) {
-  ws.openTab(EditorTab(
-    id: 'term:$name',
-    title: name,
-    icon: Icons.terminal,
-    tooltip: 'tmux 会话 $name',
-    builder: (_) => SessionView(key: ValueKey('${ws.serverId}/$name'), ws: ws, session: name),
-  ));
+  ws.openTab(
+    EditorTab(
+      id: 'term:$name',
+      title: name,
+      icon: Icons.terminal,
+      tooltip: 'tmux 会话 $name',
+      builder: (_) => SessionView(key: ValueKey('${ws.serverId}/$name'), ws: ws, session: name),
+    ),
+  );
 }
 
 final _nameRe = RegExp(r'^[A-Za-z0-9._-]{1,64}$');
@@ -82,7 +87,10 @@ Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
   if (ctx == null || !ctx.mounted) return null;
   // The proxy box is offered only when this agent has the proxy service on and
   // a node is chosen (D-47): a box that can only fail would be a trap.
-  final r = await showDialog<NewSession>(context: ctx, builder: (_) => NewSessionDialog(initial: suggest, proxy: proxyOffer(ws)));
+  final r = await showDialog<NewSession>(
+    context: ctx,
+    builder: (_) => NewSessionDialog(initial: suggest, proxy: proxyOffer(ws)),
+  );
   if (r == null || r.name.isEmpty) return null;
   final name = r.name;
   if (!_nameRe.hasMatch(name)) {
@@ -156,23 +164,35 @@ class _NewSessionDialogState extends State<NewSessionDialog> {
       title: const Text('新建终端会话'),
       content: SizedBox(
         width: 380,
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(controller: _name, autofocus: true, decoration: const InputDecoration(hintText: '字母、数字、点、下划线、连字符'), onSubmitted: (_) => _ok()),
-          const SizedBox(height: 10),
-          CheckboxListTile(
-            key: const ValueKey('session-proxy'),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            dense: true,
-            value: _proxy && p.available,
-            onChanged: p.available ? (v) => setState(() => _proxy = v ?? false) : null,
-            title: const Text('这个会话走代理'),
-            subtitle: Text(p.available ? '用“${p.nodeName}”。会话开始时就定下来，之后不能改。' : p.unavailable!, style: TextStyle(fontSize: 11.5, color: ide.textDim)),
-          ),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _name,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: '字母、数字、点、下划线、连字符'),
+              onSubmitted: (_) => _ok(),
+            ),
+            const SizedBox(height: 10),
+            CheckboxListTile(
+              key: const ValueKey('session-proxy'),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+              value: _proxy && p.available,
+              onChanged: p.available ? (v) => setState(() => _proxy = v ?? false) : null,
+              title: const Text('这个会话走代理'),
+              subtitle: Text(p.available ? '用“${p.nodeName}”。会话开始时就定下来，之后不能改。' : p.unavailable!, style: TextStyle(fontSize: 11.5, color: ide.textDim)),
+            ),
+          ],
+        ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: ide.textDim))),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('取消', style: TextStyle(color: ide.textDim)),
+        ),
         FilledButton(onPressed: _ok, child: const Text('创建')),
       ],
     );
@@ -190,6 +210,7 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   List<Map<String, dynamic>> _sessions = [];
   bool _loading = true;
   String? _error;
+  String? _active;
 
   Workspace get ws => widget.ws;
 
@@ -202,7 +223,20 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   @override
   void initState() {
     super.initState();
+    _active = ws.activeId;
+    ws.addListener(_selectionChanged);
     _load();
+  }
+
+  void _selectionChanged() {
+    if (_active == ws.activeId) return;
+    setState(() => _active = ws.activeId);
+  }
+
+  @override
+  void dispose() {
+    ws.removeListener(_selectionChanged);
+    super.dispose();
   }
 
   Future<void> _load({bool quiet = false}) async {
@@ -242,29 +276,38 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     if (_error != null) return EmptyHint(icon: Icons.error_outline, text: _error!, actionLabel: '重试', onAction: _load);
-    return Column(children: [
-      Container(
-        height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: Row(children: [
-          IconBtn(Icons.add, '新建会话', () async {
-            final n = await createSession(ws, context: context);
-            if (n != null) _load();
-          }),
-          const Spacer(),
-          IconBtn(Icons.refresh, '刷新', _load),
-        ]),
-      ),
-      const Divider(),
-      Expanded(
-        child: _loading
-            ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-            : _sessions.isEmpty
-                ? EmptyHint(icon: Icons.terminal, text: '还没有会话', actionLabel: '新建会话', onAction: () async {
+    return Column(
+      children: [
+        Container(
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Row(
+            children: [
+              IconBtn(Icons.add, '新建会话', () async {
+                final n = await createSession(ws, context: context);
+                if (n != null) _load();
+              }),
+              const Spacer(),
+              IconBtn(Icons.refresh, '刷新', _load),
+            ],
+          ),
+        ),
+        const Divider(),
+        Expanded(
+          child: _loading
+              ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+              : _sessions.isEmpty
+              ? EmptyHint(
+                  icon: Icons.terminal,
+                  text: '还没有会话',
+                  actionLabel: '新建会话',
+                  onAction: () async {
                     final n = await createSession(ws, context: context);
                     if (n != null) _load();
-                  })
-                : ListView(children: [
+                  },
+                )
+              : ListView(
+                  children: [
                     for (final s in _sessions)
                       TreeRow(
                         leading: Icon(Icons.terminal, size: 14, color: (s['attached'] as num? ?? 0) > 0 ? ide.ok : ide.textDim),
@@ -280,9 +323,11 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
                           MenuItem('结束会话…', () => _kill(s['name'] as String), icon: Icons.close, danger: true),
                         ],
                       ),
-                  ]),
-      ),
-    ]);
+                  ],
+                ),
+        ),
+      ],
+    );
   }
 }
 
@@ -451,91 +496,113 @@ class _SessionViewState extends State<SessionView> {
     final ide = Ide.of(context);
     final touch = InputMode.isTouch(context);
     final theme = terminalTheme(ide);
-    return Column(children: [
-      Expanded(
-        child: Stack(children: [
-          Positioned.fill(
-            child: CallbackShortcuts(
-              bindings: {
-                const SingleActivator(LogicalKeyboardKey.keyC, control: true, shift: true): _copy,
-                const SingleActivator(LogicalKeyboardKey.keyV, control: true, shift: true): _paste,
-              },
-              child: TerminalView(
-                _term,
-                controller: _controller,
-                focusNode: _focus,
-                autofocus: true,
-                theme: theme,
-                textStyle: const TerminalStyle(fontSize: 14, fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback),
-                padding: const EdgeInsets.fromLTRB(10, 6, 4, 4),
-                onSecondaryTapDown: (d, _) {
-                  final sel = _controller.selection;
-                  showMenuAt(context, d.globalPosition, [
-                    MenuItem('复制', sel == null ? null : _copy, icon: Icons.copy, hint: 'Ctrl+Shift+C'),
-                    MenuItem('粘贴', _paste, icon: Icons.paste, hint: 'Ctrl+Shift+V'),
-                    const MenuItem.separator(),
-                    MenuItem('清屏', () => _term.keyInput(TerminalKey.keyL, ctrl: true), icon: Icons.clear_all),
-                  ]);
-                },
-              ),
-            ),
-          ),
-          if (_state.isNotEmpty)
-            Positioned(
-              right: 12,
-              top: 10,
-              child: Material(
-                color: ide.tabBar,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: ide.border)),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    if (_t == null && _state.startsWith('正在')) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5))),
-                    Text(_state),
-                    if (_t == null && !_state.startsWith('正在')) TextButton(onPressed: _attach, child: const Text('重新连接')),
-                  ]),
+    return Column(
+      children: [
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.keyC, control: true, shift: true): _copy,
+                    const SingleActivator(LogicalKeyboardKey.keyV, control: true, shift: true): _paste,
+                  },
+                  child: TerminalView(
+                    _term,
+                    controller: _controller,
+                    focusNode: _focus,
+                    autofocus: true,
+                    theme: theme,
+                    textStyle: const TerminalStyle(fontSize: 14, fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback),
+                    padding: const EdgeInsets.fromLTRB(10, 6, 4, 4),
+                    onSecondaryTapDown: (d, _) {
+                      final sel = _controller.selection;
+                      showMenuAt(context, d.globalPosition, [
+                        MenuItem('复制', sel == null ? null : _copy, icon: Icons.copy, hint: 'Ctrl+Shift+C'),
+                        MenuItem('粘贴', _paste, icon: Icons.paste, hint: 'Ctrl+Shift+V'),
+                        const MenuItem.separator(),
+                        MenuItem('清屏', () => _term.keyInput(TerminalKey.keyL, ctrl: true), icon: Icons.clear_all),
+                      ]);
+                    },
+                  ),
                 ),
               ),
-            ),
-        ]),
-      ),
-      if (touch) _keyBar(ide),
-    ]);
+              if (_state.isNotEmpty)
+                Positioned(
+                  right: 12,
+                  top: 10,
+                  child: Material(
+                    color: ide.tabBar,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      side: BorderSide(color: ide.border),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_t == null && _state.startsWith('正在'))
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
+                            ),
+                          Text(_state),
+                          if (_t == null && !_state.startsWith('正在')) TextButton(onPressed: _attach, child: const Text('重新连接')),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (touch) _keyBar(ide),
+      ],
+    );
   }
 
   /// The keys a touch keyboard does not have.
   Widget _keyBar(Ide ide) {
     Widget k(String label, VoidCallback f, {bool on = false}) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-          child: InkWell(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: f,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 36),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: on ? ide.selection : ide.hover,
             borderRadius: BorderRadius.circular(4),
-            onTap: f,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 36),
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(color: on ? ide.selection : ide.hover, borderRadius: BorderRadius.circular(4), border: on ? Border.all(color: ide.accent) : null),
-              child: Text(label, style: const TextStyle(fontSize: 13)),
-            ),
+            border: on ? Border.all(color: ide.accent) : null,
           ),
-        );
+          child: Text(label, style: const TextStyle(fontSize: 13)),
+        ),
+      ),
+    );
     return Container(
       color: ide.sideBar,
       height: 46,
-      child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 4), children: [
-        k('Esc', () => _key(TerminalKey.escape)),
-        k('Tab', () => _key(TerminalKey.tab)),
-        k('Ctrl', () => setState(() => _ctrl = !_ctrl), on: _ctrl),
-        k('↑', () => _key(TerminalKey.arrowUp)),
-        k('↓', () => _key(TerminalKey.arrowDown)),
-        k('←', () => _key(TerminalKey.arrowLeft)),
-        k('→', () => _key(TerminalKey.arrowRight)),
-        k('Home', () => _key(TerminalKey.home)),
-        k('End', () => _key(TerminalKey.end)),
-        k('PgUp', () => _key(TerminalKey.pageUp)),
-        k('PgDn', () => _key(TerminalKey.pageDown)),
-        k('粘贴', _paste),
-      ]),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        children: [
+          k('Esc', () => _key(TerminalKey.escape)),
+          k('Tab', () => _key(TerminalKey.tab)),
+          k('Ctrl', () => setState(() => _ctrl = !_ctrl), on: _ctrl),
+          k('↑', () => _key(TerminalKey.arrowUp)),
+          k('↓', () => _key(TerminalKey.arrowDown)),
+          k('←', () => _key(TerminalKey.arrowLeft)),
+          k('→', () => _key(TerminalKey.arrowRight)),
+          k('Home', () => _key(TerminalKey.home)),
+          k('End', () => _key(TerminalKey.end)),
+          k('PgUp', () => _key(TerminalKey.pageUp)),
+          k('PgDn', () => _key(TerminalKey.pageDown)),
+          k('粘贴', _paste),
+        ],
+      ),
     );
   }
 }

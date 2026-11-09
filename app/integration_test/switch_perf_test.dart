@@ -35,8 +35,10 @@ const out = String.fromEnvironment('AURORA3_PERF_OUT');
 class Sample {
   final String what;
   final int settleMs, frames, slow, worstMs, requests;
-  Sample(this.what, this.settleMs, this.frames, this.slow, this.worstMs, this.requests);
-  Map<String, Object> toJson() => {'what': what, 'settle_ms': settleMs, 'frames': frames, 'slow_frames': slow, 'worst_frame_ms': worstMs, 'requests': requests};
+  final int buildWorstUs, rasterWorstUs;
+  Sample(this.what, this.settleMs, this.frames, this.slow, this.worstMs, this.requests, this.buildWorstUs, this.rasterWorstUs);
+  Map<String, Object> toJson() => {'what': what, 'settle_ms': settleMs, 'frames': frames, 'slow_frames': slow, 'worst_frame_ms': worstMs, 'requests': requests,
+    'build_worst_us': buildWorstUs, 'raster_worst_us': rasterWorstUs};
 }
 
 void main() {
@@ -58,6 +60,11 @@ void main() {
       s.direct = DirectParams(port: 17791, addrs: [addr], pin: pin, token: token);
       p.servers.add(s);
       p.selected = s.id;
+      // A cached airport subscription is normal client state, not empty-profile
+      // microbenchmarking. Only synthetic data is used; no real URL or account.
+      p.proxySources.add(ProxySource(id: 'perf-fixture', name: 'synthetic', nodes: [
+        for (var i = 0; i < 2000; i++) {'name': 'fixture $i', 'proto': 'trojan', 'host': 'node-$i.invalid', 'port': 443, 'secret': 'synthetic-only', 'tls': {'enabled': true}},
+      ]));
     });
     await store.close();
     final app = AppState();
@@ -95,9 +102,11 @@ void main() {
       final settleMs = sw.elapsedMilliseconds - 3 * 16;
       await t.pump(const Duration(milliseconds: 100)); // late frame timings arrive
       int ms(ui.FrameTiming f) => (f.totalSpan.inMicroseconds / 1000).round();
-      final slow = timings.where((f) => ms(f) > 17).length;
+      final slow = timings.where((f) => f.buildDuration.inMicroseconds > 16667 || f.rasterDuration.inMicroseconds > 16667).length;
       final worst = timings.isEmpty ? 0 : timings.map(ms).reduce((a, b) => a > b ? a : b);
-      return Sample(what, settleMs, timings.length, slow, worst, Link.requestCount - r0);
+      int maxUs(Iterable<int> values) => values.fold(0, (a, b) => a > b ? a : b);
+      return Sample(what, settleMs, timings.length, slow, worst, Link.requestCount - r0,
+        maxUs(timings.map((f) => f.buildDuration.inMicroseconds)), maxUs(timings.map((f) => f.rasterDuration.inMicroseconds)));
     }
 
     final samples = <Sample>[];
@@ -108,6 +117,7 @@ void main() {
       ('git', '源代码管理', '源代码管理'),
       ('systemd', '系统服务', '系统服务'),
       ('net', '端口转发', '端口转发'),
+      ('proxy', '代理', '代理'),
     ];
     for (final round in ['first visit', 'second visit']) {
       for (final (key, tip, title) in bars) {
@@ -131,15 +141,16 @@ void main() {
     await click(t, find.textContaining('a.txt').first);
     await settle(t, upTo: const Duration(seconds: 1));
     final tabs = ['readme.txt', 'a.txt'];
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 10; i++) {
       final name = tabs[i % 2];
-      samples.add(await measure('editor tab $name', () => click(t, find.descendant(of: find.byType(ListView), matching: find.textContaining(name)).first)));
+      final path = name == 'readme.txt' ? '/docs/readme.txt' : '/proj/a.txt';
+      samples.add(await measure('editor tab $name', () => click(t, find.byTooltip(path))));
     }
 
     // print and save
     for (final s in samples) {
       // ignore: avoid_print
-      print('PERF ${s.what.padRight(34)} settle ${s.settleMs.toString().padLeft(5)} ms   frames ${s.frames.toString().padLeft(3)}   slow(>17ms) ${s.slow.toString().padLeft(3)}   worst ${s.worstMs.toString().padLeft(4)} ms   requests ${s.requests}');
+      print('PERF ${s.what.padRight(34)} settle ${s.settleMs.toString().padLeft(5)} ms   build ${s.buildWorstUs} us   raster ${s.rasterWorstUs} us   slow ${s.slow}   requests ${s.requests}');
     }
     // ignore: avoid_print
     print('PERF total requests during the run: ${Link.requestCount - before}');

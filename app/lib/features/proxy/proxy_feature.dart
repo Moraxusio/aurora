@@ -33,7 +33,10 @@ class ProxyFeature extends Feature {
   List<String> get ops => const ['proxy.status', 'proxy.set', 'proxy.clear', 'proxy.test', 'proxy.check'];
 
   @override
-  SideBarView? sideBar(BuildContext context, Workspace ws) => SideBarView(title: '代理', body: ProxyPanel(ws: ws));
+  SideBarView? sideBar(BuildContext context, Workspace ws) => SideBarView(
+    title: '代理',
+    body: ProxyPanel(ws: ws),
+  );
 }
 
 class ProxyPanel extends StatefulWidget {
@@ -171,7 +174,9 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
       context: context,
       builder: (c) => AlertDialog(
         title: Text('删除“${s.name}”？'),
-        content: Text(using.isEmpty ? '会删掉保存的订阅地址和节点。' : '${using.length} 台服务器正在用它的节点：${using.map((e) => e.name).join('、')}。\n删除只是让客户端忘掉这个来源；服务器上已经选好的节点不会改，直到你清除它。'),
+        content: Text(
+          using.isEmpty ? '会删掉保存的订阅地址和节点。' : '${using.length} 台服务器正在用它的节点：${using.map((e) => e.name).join('、')}。\n删除只是让客户端忘掉这个来源；服务器上已经选好的节点不会改，直到你清除它。',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('删除')),
@@ -228,9 +233,14 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
       }
     });
     try {
-      await model.testAll(link, rows, onEach: () {
-        if (mounted) setState(() {});
-      }, cancelled: () => _cancel || !mounted);
+      await model.testAll(
+        link,
+        rows,
+        onEach: () {
+          if (mounted) setState(() {});
+        },
+        cancelled: () => _cancel || !mounted,
+      );
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -260,19 +270,32 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
     if (entry == null) return const SizedBox.shrink();
     final sources = ws.app.profile.proxySources;
     final choice = entry.proxy;
-    return ListView(children: [
-      _current(ide, entry),
-      SectionHeader('来源  ${sources.length}', actions: [
-        if (_busy == 'new') const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5))),
-        IconBtn(Icons.add, '添加订阅或节点…', _busy == null ? _add : null),
-      ]),
-      if (sources.isEmpty)
-        Padding(
-          padding: const EdgeInsets.all(14),
-          child: Text('还没有来源。点 + 填入机场的订阅地址，或粘贴节点链接。订阅只在这台电脑上读取，服务器只会收到你选中的那一个节点。', style: TextStyle(color: ide.textDim, fontSize: 12)),
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _current(ide, entry)),
+        SliverToBoxAdapter(
+          child: SectionHeader(
+            '来源  ${sources.length}',
+            actions: [
+              if (_busy == 'new')
+                const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
+                ),
+              IconBtn(Icons.add, '添加订阅或节点…', _busy == null ? _add : null),
+            ],
+          ),
         ),
-      for (final s in sources) ..._source(ide, s, choice),
-    ]);
+        if (sources.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Text('还没有来源。点 + 填入机场的订阅地址，或粘贴节点链接。订阅只在这台电脑上读取，服务器只会收到你选中的那一个节点。', style: TextStyle(color: ide.textDim, fontSize: 12)),
+            ),
+          ),
+        for (final s in sources) ..._source(ide, s, choice),
+      ],
+    );
   }
 
   Widget _current(Ide ide, ServerEntry entry) {
@@ -290,9 +313,15 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
     } else if (node == null) {
       line = '还没有选节点。新建终端时勾选“走代理”，需要先选一个。';
     } else {
-      final verify = switch (node['verify']) { 'pin' => '指纹校验', 'none' => '不校验证书', 'no-tls' => '无 TLS', _ => '系统根证书' };
+      final verify = switch (node['verify']) {
+        'pin' => '指纹校验',
+        'none' => '不校验证书',
+        'no-tls' => '无 TLS',
+        _ => '系统根证书',
+      };
       final err = st['last_error'] as String?;
-      line = '${node['name'] ?? node['host']}  ·  ${node['proto']}  ·  $verify'
+      line =
+          '${node['name'] ?? node['host']}  ·  ${node['proto']}  ·  $verify'
           '${running ? '' : '  ·  未运行'}'
           '${(st['total'] ?? 0) == 0 ? '' : '  ·  ${st['total']} 次连接，${st['failed']} 次失败'}'
           '${err == null ? '' : '\n最近的失败：$err'}';
@@ -302,22 +331,32 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 10, 10, 4),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(border: Border.all(color: ide.border), borderRadius: BorderRadius.circular(4)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text('这台服务器现在用的节点', style: TextStyle(fontSize: 11, color: ide.textDim))),
-          if (node != null) IconBtn(Icons.link_off, '不再使用代理节点', _clearChoice),
-        ]),
-        const SizedBox(height: 4),
-        Text(line, style: TextStyle(fontSize: 12.5, color: color)),
-        if (choice?.pending == true || choice?.syncError != null)
-          Text(choice?.syncError ?? '节点参数待同步；连接恢复后会自动重试', style: TextStyle(fontSize: 11.5, color: ide.warn)),
-        if (moved)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text('这个节点已经不在订阅里了。服务器上仍在用原来的，直到你换一个或清除。', style: TextStyle(fontSize: 11.5, color: ide.warn)),
+      decoration: BoxDecoration(
+        border: Border.all(color: ide.border),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('这台服务器现在用的节点', style: TextStyle(fontSize: 11, color: ide.textDim)),
+              ),
+              if (node != null) IconBtn(Icons.link_off, '不再使用代理节点', _clearChoice),
+            ],
           ),
-      ]),
+          const SizedBox(height: 4),
+          Text(line, style: TextStyle(fontSize: 12.5, color: color)),
+          if (choice?.pending == true || choice?.syncError != null)
+            Text(choice?.syncError ?? '节点参数待同步；连接恢复后会自动重试', style: TextStyle(fontSize: 11.5, color: ide.warn)),
+          if (moved)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('这个节点已经不在订阅里了。服务器上仍在用原来的，直到你换一个或清除。', style: TextStyle(fontSize: 11.5, color: ide.warn)),
+            ),
+        ],
+      ),
     );
   }
 
@@ -331,58 +370,86 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
       }
     }
     final q = _filter.trim().toLowerCase();
-    final shown = [for (final r in rows) if (q.isEmpty || r.node.name.toLowerCase().contains(q) || r.node.host.toLowerCase().contains(q)) r];
+    final shown = [
+      for (final r in rows)
+        if (q.isEmpty || r.node.name.toLowerCase().contains(q) || r.node.host.toLowerCase().contains(q)) r,
+    ];
     final usable = rows.where((r) => r.usable).length;
     final updated = s.updated == 0 ? '' : formatTime(s.updated * 1000);
     return [
-      SectionHeader(
-        '${s.name}  ·  $usable/${rows.length} 可用',
-        actions: [
-          if (_busy == s.id) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5))),
-          if (_testing) IconBtn(Icons.stop, '停止测速', () => setState(() => _cancel = true)) else IconBtn(Icons.speed, '从这台服务器测速', ws.link == null ? null : () => _testAll(rows)),
-          if (s.url != null) IconBtn(Icons.refresh, '重新读取订阅', _busy == null ? () => _refresh(s) : null),
-          IconBtn(Icons.delete_outline, '删除这个来源', () => _remove(s)),
-        ],
+      SliverToBoxAdapter(
+        child: SectionHeader(
+          '${s.name}  ·  $usable/${rows.length} 可用',
+          actions: [
+            if (_busy == s.id)
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
+              ),
+            if (_testing)
+              IconBtn(Icons.stop, '停止测速', () => setState(() => _cancel = true))
+            else
+              IconBtn(Icons.speed, '从这台服务器测速', ws.link == null ? null : () => _testAll(rows)),
+            if (s.url != null) IconBtn(Icons.refresh, '重新读取订阅', _busy == null ? () => _refresh(s) : null),
+            IconBtn(Icons.delete_outline, '删除这个来源', () => _remove(s)),
+          ],
+        ),
       ),
-      if (s.error != null) Padding(padding: const EdgeInsets.fromLTRB(14, 4, 14, 4), child: Text('上次更新失败：${s.error}', style: TextStyle(color: ide.error, fontSize: 12))),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
-        child: Text('${s.url == null ? '粘贴的节点' : '订阅'}${updated.isEmpty ? '' : '  ·  更新于 $updated'}', style: TextStyle(color: ide.textDim, fontSize: 11)),
+      if (s.error != null)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+            child: Text('上次更新失败：${s.error}', style: TextStyle(color: ide.error, fontSize: 12)),
+          ),
+        ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+          child: Text('${s.url == null ? '粘贴的节点' : '订阅'}${updated.isEmpty ? '' : '  ·  更新于 $updated'}', style: TextStyle(color: ide.textDim, fontSize: 11)),
+        ),
       ),
       if (rows.length > 12)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
-          child: SizedBox(
-            height: 30,
-            child: TextField(
-              style: const TextStyle(fontSize: 12),
-              decoration: const InputDecoration(isDense: true, hintText: '按名称或地址筛选', prefixIcon: Icon(Icons.search, size: 16)),
-              onChanged: (v) => setState(() => _filter = v),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
+            child: SizedBox(
+              height: 30,
+              child: TextField(
+                style: const TextStyle(fontSize: 12),
+                decoration: const InputDecoration(isDense: true, hintText: '按名称或地址筛选', prefixIcon: Icon(Icons.search, size: 16)),
+                onChanged: (v) => setState(() => _filter = v),
+              ),
             ),
           ),
         ),
-      for (final r in shown) _row(ide, r, choice),
+      // Airport subscriptions can contain thousands of entries. Create only
+      // visible rows, instead of building the whole source on every visit,
+      // filter change or periodic status update.
+      SliverList.builder(itemCount: shown.length, itemBuilder: (_, i) => _row(ide, shown[i], choice)),
     ];
   }
 
   Widget _row(Ide ide, NodeRow r, ProxyChoice? choice) {
     final chosen = choice != null && choice.source == r.source.id && choice.key == r.node.key;
     final t = r.ms != null ? '${r.ms} ms' : (r.testError != null ? '失败' : '');
-    final sub = r.usable
-        ? [r.node.proto, r.node.verify, if (r.testError != null) r.testError!].join('  ·  ')
-        : r.blocked;
+    final sub = r.usable ? [r.node.proto, r.node.verify, if (r.testError != null) r.testError!].join('  ·  ') : r.blocked;
     return TreeRow(
-      leading: chosen ? Icon(Icons.check_circle, size: 14, color: ide.ok) : Icon(r.usable ? Icons.circle_outlined : Icons.block, size: 14, color: r.usable ? ide.textDim : ide.error),
+      leading: chosen
+          ? Icon(Icons.check_circle, size: 14, color: ide.ok)
+          : Icon(r.usable ? Icons.circle_outlined : Icons.block, size: 14, color: r.usable ? ide.textDim : ide.error),
       label: r.node.name.isEmpty ? r.node.host : r.node.name,
       detail: t.isEmpty ? null : t,
       subtitle: sub,
       labelColor: r.usable ? null : ide.textDim,
       selected: chosen,
       onTap: r.usable ? () => _choose(r) : null,
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (r.usable) IconBtn(Icons.speed, '测速', ws.link == null ? null : () => _testOne(r)),
-        if (r.usable && !chosen) IconBtn(Icons.check, '用这个节点', () => _choose(r)),
-      ]),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (r.usable) IconBtn(Icons.speed, '测速', ws.link == null ? null : () => _testOne(r)),
+          if (r.usable && !chosen) IconBtn(Icons.check, '用这个节点', () => _choose(r)),
+        ],
+      ),
       menu: () => [
         if (r.usable) MenuItem('用这个节点', () => _choose(r), icon: Icons.check),
         if (r.usable) MenuItem('测速', () => _testOne(r), icon: Icons.speed),
@@ -437,26 +504,52 @@ class _AddSourceDialogState extends State<_AddSourceDialog> {
       title: const Text('添加代理来源'),
       content: SizedBox(
         width: 460,
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SegmentedButton<bool>(
-            segments: const [ButtonSegment(value: false, label: Text('订阅地址')), ButtonSegment(value: true, label: Text('粘贴节点'))],
-            selected: {_pasted},
-            onSelectionChanged: (s) => setState(() => _pasted = s.first),
-          ),
-          const SizedBox(height: 12),
-          TextField(controller: _name, decoration: const InputDecoration(labelText: '名称（可不填）')),
-          const SizedBox(height: 8),
-          if (!_pasted) ...[
-            TextField(controller: _url, autofocus: true, decoration: const InputDecoration(labelText: '订阅地址', hintText: 'https://…'), onSubmitted: (_) => _ok()),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('订阅地址')),
+                ButtonSegment(value: true, label: Text('粘贴节点')),
+              ],
+              selected: {_pasted},
+              onSelectionChanged: (s) => setState(() => _pasted = s.first),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(labelText: '名称（可不填）'),
+            ),
             const SizedBox(height: 8),
-            Text('地址里含有你账号的密钥：只保存在这台电脑，加密存放，不会发给服务器。支持 Clash 配置，以及一行一个节点链接的订阅（vless、vmess、trojan、hysteria2）。', style: TextStyle(fontSize: 11.5, color: ide.textDim)),
-          ] else ...[
-            TextField(controller: _text, autofocus: true, maxLines: 6, decoration: const InputDecoration(labelText: '节点链接，每行一个；或 Clash 的 proxies 配置')),
+            if (!_pasted) ...[
+              TextField(
+                controller: _url,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: '订阅地址', hintText: 'https://…'),
+                onSubmitted: (_) => _ok(),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '地址里含有你账号的密钥：只保存在这台电脑，加密存放，不会发给服务器。支持 Clash 配置，以及一行一个节点链接的订阅（vless、vmess、trojan、hysteria2）。',
+                style: TextStyle(fontSize: 11.5, color: ide.textDim),
+              ),
+            ] else ...[
+              TextField(
+                controller: _text,
+                autofocus: true,
+                maxLines: 6,
+                decoration: const InputDecoration(labelText: '节点链接，每行一个；或 Clash 的 proxies 配置'),
+              ),
+            ],
           ],
-        ]),
+        ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: ide.textDim))),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('取消', style: TextStyle(color: ide.textDim)),
+        ),
         FilledButton(onPressed: _ok, child: const Text('添加')),
       ],
     );

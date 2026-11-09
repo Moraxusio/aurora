@@ -27,6 +27,11 @@ class Workspace extends ChangeNotifier {
   /// moment a link is up until agent.services has answered.
   bool servicesLoaded = false;
 
+  /// Connection/profile/service changes invalidate view configurations. Tab
+  /// activation alone does not: a retained editor must not be rebuilt merely
+  /// because the user chooses a different side bar or editor tab.
+  int viewRevision = 0;
+
   /// Raised when a file on the server changed because of something done here
   /// (a save): the file tree reloads what it shows.
   final ValueNotifier<int> filesRevision = ValueNotifier(0);
@@ -39,12 +44,13 @@ class Workspace extends ChangeNotifier {
     _onApp();
   }
 
-  ServerEntry? get entry => app.profile.server(serverId);
+  ServerEntry? get entry => app.server(serverId);
   String get name => entry?.name ?? serverId;
   Link? get link => app.link(serverId);
   ConnStatus get status => app.status(serverId);
 
   void _onApp() {
+    viewRevision++;
     final l = link;
     if (l != null && !identical(l, _servicesFor)) {
       _servicesFor = l;
@@ -71,6 +77,7 @@ class Workspace extends ChangeNotifier {
     }
     // an answer or an error: either way the wait is over
     if (identical(l, link)) servicesLoaded = true;
+    viewRevision++;
     notifyListeners();
   }
 

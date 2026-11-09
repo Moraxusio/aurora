@@ -114,7 +114,7 @@ class ServerEntry {
         forwards: [for (final f in (j['forwards'] as List? ?? const [])) ForwardSpec.fromJson(_map(f))],
         proxy: j['proxy'] == null ? null : ProxyChoice.fromJson(_map(j['proxy'])),
         upgrade: j['upgrade'] == null ? null : UpgradeRecord.fromJson(_map(j['upgrade'])),
-        failedUpgrades: (j['failed_upgrades'] as List? ?? const []).cast<String>(),
+        failedUpgrades: (j['failed_upgrades'] as List? ?? const []).cast<String>().toList(),
       );
 
   Map<String, dynamic> toJson() => {

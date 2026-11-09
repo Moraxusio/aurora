@@ -86,6 +86,16 @@ class ProfileStore {
   /// A deep copy of the current profile.
   Profile get() => _p.copy();
 
+  /// Small defensive snapshots for UI hot paths. Reading a server name or a
+  /// tab's connection state must not clone every node in every subscription.
+  String? get selected => _p.selected;
+  ServerEntry? server(String id) {
+    final value = _p.server(id);
+    return value == null ? null : ServerEntry.fromJson(value.toJson());
+  }
+
+  List<ServerEntry> get servers => [for (final s in _p.servers) ServerEntry.fromJson(s.toJson())];
+
   /// The profile after every successful [update].
   Stream<Profile> get changes => _changes.stream;
 

@@ -6,6 +6,7 @@ import 'package:aurora_wire/aurora_wire.dart';
 /// Shared, widget-free access used by durable background work.
 abstract interface class ProfileAccess {
   Profile get profile;
+  ServerEntry? server(String id);
   Future<void> update(FutureOr<void> Function(Profile) change);
   Link? link(String id);
 }

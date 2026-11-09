@@ -6,7 +6,7 @@ import '../state/app_state.dart';
 import 'add_server.dart';
 
 Future<void> showAgentUpgrade(BuildContext context,AppState app,String id) async {
-  final link=app.link(id),server=app.profile.server(id);
+  final link=app.link(id),server=app.server(id);
   if(link==null||server==null)return;
   final o=app.upgrades.offer(id,link);
   final confirmed=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(
@@ -40,7 +40,7 @@ class _UpgradeProgressState extends State<_UpgradeProgress>{
   }
   @override void dispose(){poll?.cancel();widget.app.removeListener(changed);super.dispose();}
   @override Widget build(BuildContext context){
-    final r=widget.app.profile.server(widget.id)?.upgrade;
+    final r=widget.app.server(widget.id)?.upgrade;
     return AlertDialog(title:const Text('agent 升级'),content:SizedBox(width:460,child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
       if(r?.terminal!=true)LinearProgressIndicator(value:fraction),const SizedBox(height:12),Text(note),if(r!=null)...[const SizedBox(height:8),Text('状态：${r.state}\n${r.message ?? ''}'),if(r.job!=null)SelectableText('任务：${r.job}')],
       const SizedBox(height:8),const Text('提交后关闭此窗口不会中止服务器的升级。重连或重新打开客户端时会查询任务状态。',style:TextStyle(fontSize:12)),
@@ -55,7 +55,7 @@ class AgentUpgradeNotice extends StatelessWidget{
   const AgentUpgradeNotice({super.key,required this.app,required this.id});
   @override Widget build(BuildContext context){
     final l=app.link(id);if(l==null)return const SizedBox.shrink();
-    final o=app.upgrades.offer(id,l),r=app.profile.server(id)?.upgrade;
+    final o=app.upgrades.offer(id,l),r=app.server(id)?.upgrade;
     if(r!=null&&(!r.terminal||r.state=='interrupted')){return ListTile(dense:true,title:Text('agent 升级任务：${r.state}'),subtitle:Text(r.message??'重连后查询结果'),trailing:TextButton(onPressed:()=>app.upgrades.recover(id,l),child:const Text('查询结果')));}
     if(o.build==null||o.current==o.build!.manifest.version)return const SizedBox.shrink();
     final versionNewer=app.upgradePolicy?.revoked.contains(o.current)==true||o.available;

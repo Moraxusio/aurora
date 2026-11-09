@@ -13,6 +13,7 @@ class MemoryProfile implements ProfileAccess {
   @override
   Profile profile = Profile(servers:[ServerEntry(id:'s',name:'server')]);
   final Map<String,Link> links={};
+  @override ServerEntry? server(String id) => profile.server(id);
   @override Link? link(String id)=>links[id];
   @override Future<void> update(FutureOr<void> Function(Profile) fn) async { await fn(profile); }
 }

@@ -226,7 +226,7 @@ void main() {
     final fresh = await link.call('proxy.test', {'target': 'after.example:80'}) as Map;
     expect(fresh['ok'], true, reason: '${fresh['error']}');
     expect(node.targets, contains('after.example:80'));
-  });
+  }, skip: skip);
 
   test('a node that left the subscription: the server keeps what it has and is not silently switched', () async {
     final src = await model.addSubscription('x', provider.url.toString());
@@ -240,7 +240,7 @@ void main() {
     expect(await model.repush(app.profile.servers.single, link), false, reason: 'nothing to push');
     final st = await link.call('proxy.status') as Map;
     expect((st['node'] as Map)['port'], node.port, reason: 'the server still uses the node it was given');
-  });
+  }, skip: skip);
   test('removing a source forgets the choice that came from it, not the server\'s setting', () async {
     final src = await model.addSubscription('x', provider.url.toString());
     final rows = model.rows(src, {});

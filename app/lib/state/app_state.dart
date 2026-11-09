@@ -43,6 +43,10 @@ class AppState extends ChangeNotifier implements ProfileAccess {
 
   @override
   Profile get profile => _store?.get() ?? Profile();
+  @override
+  ServerEntry? server(String id) => _store?.server(id);
+  String? get selected => _store?.selected;
+  List<ServerEntry> get servers => _store?.servers ?? const [];
   bool get ready => _store != null;
 
   Future<void> init() => initAt(null);

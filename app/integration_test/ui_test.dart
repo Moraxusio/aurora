@@ -226,9 +226,22 @@ void main() {
     await click(t, find.byTooltip('暂存').last);
     await settle(t, upTo: const Duration(seconds: 1));
     await waitFor(t, find.textContaining('暂存的更改  1'));
-    await t.enterText(find.widgetWithText(TextField, '提交说明（提交到 main）'), 'add new file');
+    final commitMessage = find.widgetWithText(TextField, '提交说明（提交到 main）');
+    await click(t, commitMessage);
+    await typeKeys(t, 'add new file');
+    expect(t.widget<TextField>(commitMessage).controller!.text, 'add new file');
     await click(t, find.textContaining('提交 1 个文件'));
-    await waitFor(t, find.textContaining('暂存的更改  0'));
+    try {
+      await waitFor(t, find.textContaining('暂存的更改  0'));
+    } on TestFailure {
+      // The profile runner uses real editable widgets/platform text input;
+      // retain useful evidence if a commit click or its UI result goes stale.
+      // ignore: avoid_print
+      print('UI-COMMIT-DIAGNOSTIC ${await wsl('cd /tmp/aurora3-ui-agent/home/proj && git log --format=%s -1 && git status --porcelain')}');
+      // ignore: avoid_print
+      print('UI-COMMIT-TEXT ${find.byType(Text).evaluate().map((e) => (e.widget as Text).data).whereType<String>().toList()}');
+      rethrow;
+    }
     expect(await wsl('cd /tmp/aurora3-ui-agent/home/proj && git log --format=%s -1'), 'add new file');
     // history lists it
     await click(t, find.text('历史'));

@@ -116,6 +116,27 @@ void main() {
       expect(s.get().servers, isEmpty);
     });
 
+    test('small server snapshots stay defensive without visiting subscription nodes', () async {
+      final s = await ProfileStore.open(path, XorSealer());
+      await s.update((p) {
+        p.servers.add(ServerEntry(id: 'one', name: 'before', failedUpgrades: ['3.0.1']));
+        p.proxySources.add(_CountingSource());
+        p.selected = 'one';
+      });
+      _CountingSource.copies = 0;
+      expect(s.selected, 'one');
+      final snapshot = s.server('one')!;
+      snapshot.name = 'changed outside the store';
+      snapshot.failedUpgrades.add('3.0.2');
+      s.servers.single.failedUpgrades.clear();
+      expect(s.server('one')!.name, 'before');
+      expect(s.server('one')!.failedUpgrades, ['3.0.1']);
+      expect(_CountingSource.copies, 0);
+      s.get();
+      expect(_CountingSource.copies, greaterThan(0), reason: 'control: full profile reads do visit the nodes');
+      await s.close();
+    });
+
     test('a failing update changes neither memory nor file', () async {
       final s = await ProfileStore.open(path, XorSealer());
       await s.update((p) => p.selected = 'one');
@@ -303,3 +324,15 @@ void main() {
       await expectLater(ProfileStore.open(path, XorSealer(0x33, 'other-machine')), throwsA(isA<ProfileUnreadable>()));
     });
   });}
+
+class _CountingSource extends ProxySource {
+  static int copies = 0;
+  _CountingSource() : super(id: 'source', name: 'fixture', nodes: [
+    {'proto': 'trojan', 'host': 'node.invalid', 'port': 443, 'secret': 'synthetic-only'},
+  ]);
+  @override
+  Map<String, dynamic> toJson() {
+    copies++;
+    return super.toJson();
+  }
+}

@@ -8,6 +8,7 @@
 #   Aurora-<version>\
 #     aurora.exe, flutter_windows.dll, aurora_tls.dll, data\   the client
 #     agent\amd64\  manifest.json, manifest.sig, aurora3-agent-<v>-linux-amd64
+#     agent\policy.json, policy.sig  signed upgrade policy
 #     LICENSES.txt  every third-party component and its licence
 #     README.txt
 # plus Aurora-<version>.zip and its SHA-256.
@@ -25,7 +26,10 @@ $flutter = 'flutter'
 if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw "version must be MAJOR.MINOR.PATCH: $Version" }
 if (-not (Test-Path $Key)) { throw "release key not found: $Key" }
 $dir = Join-Path $Out "Aurora-$Version"
-if (Test-Path $dir) { throw "$dir exists; remove it or use another version" }
+$zip = Join-Path $Out "Aurora-$Version.zip"
+foreach ($target in @($dir, $zip, "$zip.sha256")) {
+    if (Test-Path $target) { throw "$target exists; use another version (release artifacts are never overwritten)" }
+}
 $work = Join-Path $env:LOCALAPPDATA "Temp\aurora3\package-$Version"
 if (Test-Path $work) { Remove-Item $work -Recurse -Force }
 New-Item -ItemType Directory -Force $work, $dir | Out-Null
@@ -95,7 +99,12 @@ Aurora $Version (Windows)
 - 保存的服务器和密码在 %LOCALAPPDATA%\Aurora3\profile.bin，用 Windows DPAPI 加密，
   只有当前 Windows 用户能打开。
 
-代理功能（3.3.0）：
+本次更新（3.3.1）：
+- 修复全屏终端滚轮偶发失灵、重新进入程序后滚动反向跳动，以及侧栏偏移导致鼠标坐标不准。
+- 优化密集彩色终端的绘制、输入法位置通知和页面切换；大型代理订阅按可见行创建界面。
+- 以上修复在客户端中生效；已有 3.3.0 agent 不必为了这些显示与滚轮修复立即升级。
+
+代理功能：
 - 在“代理”页添加 Clash 订阅 URL，或粘贴节点链接；选用节点后，新建终端时勾选
   “这个会话走代理”。git 的 HTTP/HTTPS 远程操作跟随代理服务开关。
 - 代理在受控服务器的 agent 上运行，流量不经这台电脑。不会登录、安装或修改代理服务器。
@@ -120,8 +129,6 @@ Aurora $Version (Windows)
 "@ | Set-Content -Encoding utf8 "$dir\README.txt"
 
 # 6. Zip and hash.
-$zip = Join-Path $Out "Aurora-$Version.zip"
-if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path $dir -DestinationPath $zip
 $h = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
 "$h  Aurora-$Version.zip" | Set-Content -Encoding ascii "$zip.sha256"

@@ -166,6 +166,14 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 包内 `agent/policy.json`、`policy.sig` 的正式公钥验签通过，篡改策略被拒绝；ZIP sidecar SHA-256 匹配。包内 19 项文件中未发现测试 peer/node、fixture、profile、私钥或真实凭据文本。
 - 仅生成本地文件，未上传 GitHub、未上传服务器；公网 202 和真实机场仍未验收。
 
+### 3.3.1 本地发布包（2026-11-09）
+
+- 从干净提交 `5c5aa4364eb110777d35065285d5860edb4150dd` 构建到 `release3\Aurora-3.3.1`、同名 ZIP 和 `.zip.sha256`。包含终端滚轮生命周期、密集彩色绘制、IME 通知、页面配置保留、服务器快照及大型订阅列表优化。修复在客户端生效，现有 3.3.0 agent 不必为了这些显示/滚轮修复立即升级。
+- ZIP：20,233,146 字节，SHA-256 `0bd6b374d344d871d5639efd1b16c7ed8280bd3dd1bddeb74f7b09efc24a2b3c`；sidecar 匹配，CRC 检查通过，ZIP 的 19 个文件与产物目录逐字节一致。
+- 内置 linux/amd64 agent：12,796,066 字节，SHA-256 `a2204ee860af15d19aadb388b98aaaaa9857f7435ed4e02b8c3ad881888c9a44`，版本 3.3.1，签名密钥 ID `87828dfb18459372`；Go 构建信息 `vcs.modified=false`。Go 发布工具和 Dart 客户端正式公钥验签通过，策略验签及普通降级拒绝通过；临时副本中的同大小 agent 篡改、清单及策略字节篡改均被拒绝，原包未改。
+- Windows 文件版本/产品版本均为 `3.3.1.0`；客户端 AOT 文件 `data/app.so` SHA-256 `c907ef5aa3590bdbf26b4b62bb7f36bad9faf60d1ae8560abfa068caa069096b`。包内未发现测试 peer/node、fixture、profile 或私钥文件。性能与完整窗口回归为第 6.0 节所述的 Profile 构建验收，不将此次静态发布包校验称为 Release 客户端的再次完整交互验收。
+- 只更新本地发布产物，没有上传、没有替换正式客户端进程或服务器 agent；旧 3.3.0 ZIP 哈希不变，v2 发布目录仍为 13 项。公网 202 和真实机场仍未验收。
+
 ## 5. 第三方依赖（DESIGN 5.9：只用 MIT、BSD、Apache-2.0）
 
 | 包 | 版本 | 许可证 | 用途 |

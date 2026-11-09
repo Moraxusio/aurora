@@ -76,9 +76,12 @@ class _RenderInfiniteScrollView extends RenderShiftedBox {
   ViewportOffset _position;
   set position(ViewportOffset value) {
     if (_position == value) return;
-    if (attached) _position.removeListener(markNeedsLayout);
+    // Aurora patch: attach() registers _onScroll, so the swap must move the
+    // same listener; the upstream code left the new position without one and
+    // the wheel went dead after a rebuild.
+    if (attached) _position.removeListener(_onScroll);
     _position = value;
-    if (attached) _position.addListener(markNeedsLayout);
+    if (attached) _position.addListener(_onScroll);
     markNeedsLayout();
   }
 

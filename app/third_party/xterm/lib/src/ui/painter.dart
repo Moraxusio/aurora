@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:ui';
 import 'package:flutter/painting.dart';
 
@@ -26,6 +27,21 @@ class TerminalPainter {
   /// cell no longer produces the same visual output. For example, when
   /// [_textStyle] is changed, or when the system font changes.
   final _paragraphCache = ParagraphCache(10240);
+  // Aurora patch: keep bounded, exact-key runs as well as single glyphs. A
+  // dense TUI used to issue one drawRect + drawParagraph per cell per frame.
+  final _runs = LinkedHashMap<(String, int, int, int), Paragraph?>();
+
+  void _clearRuns() {
+    for (final p in _runs.values) {
+      p?.dispose();
+    }
+    _runs.clear();
+  }
+
+  void dispose() {
+    _clearRuns();
+    _paragraphCache.clear();
+  }
 
   TerminalStyle get textStyle => _textStyle;
   TerminalStyle _textStyle;
@@ -34,6 +50,7 @@ class TerminalPainter {
     _textStyle = value;
     _cellSize = _measureCharSize();
     _paragraphCache.clear();
+    _clearRuns();
   }
 
   TextScaler get textScaler => _textScaler;
@@ -43,6 +60,7 @@ class TerminalPainter {
     _textScaler = value;
     _cellSize = _measureCharSize();
     _paragraphCache.clear();
+    _clearRuns();
   }
 
   TerminalTheme get theme => _theme;
@@ -52,6 +70,7 @@ class TerminalPainter {
     _theme = value;
     _colorPalette = PaletteBuilder(value).build();
     _paragraphCache.clear();
+    _clearRuns();
   }
 
   Size _measureCharSize() {
@@ -84,6 +103,7 @@ class TerminalPainter {
   void clearFontCache() {
     _cellSize = _measureCharSize();
     _paragraphCache.clear();
+    _clearRuns();
   }
 
   /// Paints the cursor based on the current cursor type. [under] is the cell the
@@ -111,8 +131,10 @@ class TerminalPainter {
       case TerminalCursorType.block:
         paint.style = PaintingStyle.fill;
         canvas.drawRect(offset & _cellSize, paint);
-        if (under != null && (under.content & CellContent.codepointMask) > 0x20) {
-          paintCellForeground(canvas, offset, under, colorOverride: _theme.background);
+        if (under != null &&
+            (under.content & CellContent.codepointMask) > 0x20) {
+          paintCellForeground(canvas, offset, under,
+              colorOverride: _theme.background);
         }
         return;
       case TerminalCursorType.underline:
@@ -154,24 +176,136 @@ class TerminalPainter {
     double? lineHeight,
   }) {
     final cellData = CellData.empty();
+    final next = CellData.empty();
     final cellWidth = _cellSize.width;
-
-    for (var i = 0; i < line.length; i++) {
-      line.getCellData(i, cellData);
-
-      final charWidth = cellData.content >> CellContent.widthShift;
-      final cellOffset = offset.translate(i * cellWidth, 0);
-
-      paintCell(canvas, cellOffset, cellData, lineHeight: lineHeight);
-
-      if (charWidth == 2) {
-        i++;
+    // Paint background spans before foreground. Besides reducing draw calls,
+    // this prevents the following cell's background covering an overhanging
+    // italic/wide glyph from the previous cell.
+    var start = 0;
+    Color? background;
+    void flushBackground(int end) {
+      if (background != null && end > start) {
+        canvas.drawRect(
+          Rect.fromLTWH(offset.dx + start * cellWidth, offset.dy,
+              (end - start) * cellWidth + 1, lineHeight ?? _cellSize.height),
+          Paint()..color = background!,
+        );
       }
+    }
+
+    for (var i = 0; i < line.length;) {
+      line.getCellData(i, cellData);
+      final color = cellData.flags & CellFlags.inverse != 0
+          ? resolveForegroundColor(cellData.foreground)
+          : cellData.background & CellColor.typeMask == CellColor.normal
+              ? null
+              : resolveBackgroundColor(cellData.background);
+      if (color != background) {
+        flushBackground(i);
+        start = i;
+        background = color;
+      }
+      i += cellData.content >> CellContent.widthShift == 2 ? 2 : 1;
+    }
+    flushBackground(line.length);
+
+    for (var i = 0; i < line.length;) {
+      line.getCellData(i, cellData);
+      final code = cellData.content & CellContent.codepointMask;
+      final width = cellData.content >> CellContent.widthShift;
+      if (code <= 0x20 && cellData.flags & CellFlags.underline == 0) {
+        i += width == 2 ? 2 : 1;
+        continue;
+      }
+      var end = i + 1;
+      if (_canRun(cellData)) {
+        while (end < line.length && end - i < 64) {
+          line.getCellData(end, next);
+          if (!_canRun(next) ||
+              next.foreground != cellData.foreground ||
+              next.background != cellData.background ||
+              next.flags != cellData.flags) break;
+          end++;
+        }
+      }
+      if (end - i >= 2) {
+        final chars = <int>[];
+        for (var c = i; c < end; c++) {
+          line.getCellData(c, next);
+          chars.add(next.content & CellContent.codepointMask);
+        }
+        final text = String.fromCharCodes(chars);
+        final key =
+            (text, cellData.foreground, cellData.background, cellData.flags);
+        Paragraph? run;
+        if (_runs.containsKey(key)) {
+          run = _runs.remove(key);
+        } else {
+          run = _buildRun(text, cellData);
+        }
+        _runs[key] = run;
+        if (_runs.length > 2048) _runs.remove(_runs.keys.first)?.dispose();
+        if (run != null) {
+          canvas.drawParagraph(run, offset.translate(i * cellWidth, 0));
+          i = end;
+          continue;
+        }
+        // Proportional/fallback fonts that fail the exact cell advance check
+        // use the original fixed-cell renderer; never squeeze/stretch a run.
+        for (; i < end; i++) {
+          line.getCellData(i, next);
+          paintCellForeground(canvas, offset.translate(i * cellWidth, 0), next);
+        }
+        continue;
+      }
+      paintCellForeground(canvas, offset.translate(i * cellWidth, 0), cellData);
+      i += width == 2 ? 2 : 1;
     }
   }
 
+  bool _canRun(CellData cell) {
+    final code = cell.content & CellContent.codepointMask;
+    return code >= 0x20 &&
+        code <= 0x7e &&
+        cell.content >> CellContent.widthShift == 1 &&
+        cell.flags & (CellFlags.italic | CellFlags.underline) == 0;
+  }
+
+  Paragraph? _buildRun(String text, CellData cell) {
+    var color = cell.flags & CellFlags.inverse == 0
+        ? resolveForegroundColor(cell.foreground)
+        : resolveBackgroundColor(cell.background);
+    if (cell.flags & CellFlags.faint != 0) color = color.withValues(alpha: 0.5);
+    final style = _textStyle
+        .toTextStyle(color: color, bold: cell.flags & CellFlags.bold != 0)
+        .copyWith(fontFeatures: const [
+      FontFeature.disable('liga'),
+      FontFeature.disable('calt'),
+      FontFeature.disable('kern')
+    ]);
+    final builder = ParagraphBuilder(style.getParagraphStyle())
+      ..pushStyle(style.getTextStyle(textScaler: _textScaler))
+      ..addText(text);
+    final paragraph = builder.build()
+      ..layout(const ParagraphConstraints(width: double.infinity));
+    // Exact grid validation once on cache miss. ASCII in a true monospace
+    // font passes; CJK, emoji, combining marks and proportional fonts never
+    // enter the fast path or fall back without changing their position.
+    for (var i = 0; i < text.length; i++) {
+      final boxes = paragraph.getBoxesForRange(i, i + 1);
+      if (boxes.length != 1 ||
+          (boxes.single.left - i * _cellSize.width).abs() > 0.05 ||
+          (boxes.single.right - (i + 1) * _cellSize.width).abs() > 0.05) {
+        paragraph.dispose();
+        return null;
+      }
+    }
+    return paragraph;
+  }
+
   @pragma('vm:prefer-inline')
-  void paintCell(Canvas canvas, Offset offset, CellData cellData, {double? lineHeight}) {
+  void paintCell(Canvas canvas, Offset offset, CellData cellData,
+      {double? lineHeight}) {
     paintCellBackground(canvas, offset, cellData, lineHeight: lineHeight);
     paintCellForeground(canvas, offset, cellData);
   }
@@ -179,12 +313,16 @@ class TerminalPainter {
   /// Paints the character in the cell represented by [cellData] to [canvas] at
   /// [offset].
   @pragma('vm:prefer-inline')
-  void paintCellForeground(Canvas canvas, Offset offset, CellData cellData, {Color? colorOverride}) {
+  void paintCellForeground(Canvas canvas, Offset offset, CellData cellData,
+      {Color? colorOverride}) {
     final charCode = cellData.content & CellContent.codepointMask;
     if (charCode == 0) return;
 
     // an override colour is not the cell's own, so its glyph is not cached under the cell's key
-    final cacheKey = colorOverride == null ? cellData.getHash() ^ _textScaler.hashCode : hashValues(cellData.getHash(), colorOverride.toARGB32(), 7) ^ _textScaler.hashCode;
+    final cacheKey = colorOverride == null
+        ? cellData.getHash() ^ _textScaler.hashCode
+        : hashValues(cellData.getHash(), colorOverride.toARGB32(), 7) ^
+            _textScaler.hashCode;
     var paragraph = _paragraphCache.getLayoutFromCache(cacheKey);
 
     if (paragraph == null) {
@@ -231,7 +369,8 @@ class TerminalPainter {
   /// Paints the background of a cell represented by [cellData] to [canvas] at
   /// [offset].
   @pragma('vm:prefer-inline')
-  void paintCellBackground(Canvas canvas, Offset offset, CellData cellData, {double? lineHeight}) {
+  void paintCellBackground(Canvas canvas, Offset offset, CellData cellData,
+      {double? lineHeight}) {
     late Color color;
     final colorType = cellData.background & CellColor.typeMask;
 
@@ -248,7 +387,8 @@ class TerminalPainter {
     final widthScale = doubleWidth ? 2 : 1;
     // Aurora patch: the background covers the line down to the next line's top
     // (render.dart snaps both to the pixel grid), not the nominal cell height.
-    final size = Size(_cellSize.width * widthScale + 1, lineHeight ?? _cellSize.height);
+    final size =
+        Size(_cellSize.width * widthScale + 1, lineHeight ?? _cellSize.height);
     canvas.drawRect(offset & size, paint);
   }
 

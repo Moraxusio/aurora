@@ -53,6 +53,8 @@ class CustomTextEdit extends StatefulWidget {
 
 class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   TextInputConnection? _connection;
+  Rect? _lastEditableRect;
+  Rect? _lastCaretRect;
 
   @override
   void initState() {
@@ -121,16 +123,23 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
       return;
     }
 
-    _connection?.setEditableSizeAndTransform(
-      rect.size,
-      Matrix4.translationValues(0, 0, 0),
-    );
-
-    _connection?.setCaretRect(caretRect);
+    // Aurora patch: a full-screen application commonly redraws without moving
+    // the cursor. Do not make three platform-channel calls for the same rect.
+    if (_lastEditableRect != rect) {
+      _lastEditableRect = rect;
+      _connection?.setEditableSizeAndTransform(
+        rect.size,
+        Matrix4.translationValues(rect.left, rect.top, 0),
+      );
+    }
+    final localCaret = caretRect.shift(-rect.topLeft);
+    if (_lastCaretRect == localCaret) return;
+    _lastCaretRect = localCaret;
+    _connection?.setCaretRect(localCaret);
     // Aurora patch: Windows places the IME candidate window by the marked
     // text rect, not the caret rect; without it the window sits at the
     // top-left corner instead of at the cursor.
-    _connection?.setComposingRect(caretRect);
+    _connection?.setComposingRect(localCaret);
   }
 
   void _onFocusChange() {
@@ -177,6 +186,8 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
       );
 
       _connection = TextInput.attach(this, config);
+      _lastEditableRect = null;
+      _lastCaretRect = null;
 
       _connection!.show();
 

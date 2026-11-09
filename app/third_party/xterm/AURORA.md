@@ -37,6 +37,36 @@ Marked "Aurora patch" in the code. Pinned by tests in `app/test/terminal_paint_t
    opaque rectangle over the cell. It now draws the character again on top of
    the block, in the terminal's background colour, as other terminals do.
 
+`lib/src/ui/infinite_scroll_view.dart`, `scroll_handler.dart` (2026-11-09):
+
+6. Move the actual `_onScroll` listener when Flutter replaces its scroll
+   position. Previously it was left on the old position, and the new one never
+   reported a scroll. Reset the scroll accumulator when switching buffers or
+   terminal objects; otherwise reentering a TUI could replay dozens of reverse
+   mouse reports. Use local pointer coordinates, not window coordinates, and
+   convert pixel deltas rather than a lifetime absolute offset when font size
+   changes. Regression cases are in `app/test/terminal_wheel_test.dart`.
+
+`lib/src/ui/render.dart`, `custom_text_edit.dart`, `painter.dart` (2026-11-09):
+
+7. Cell-only updates and scrolling repaint instead of laying out the terminal
+   again. Buffer/scrollback extent and viewport changes still do layout. Report
+   the IME rectangles after painting at most once per frame, skip unfocused or
+   unpainted terminals and duplicate rectangles, and use a proper viewport
+   transform with a local caret rectangle. No output-buffering timer or engine
+   modification is used. See `app/test/terminal_render_work_test.dart`.
+8. Paint adjacent equal backgrounds in spans and equal-style, single-cell
+   ASCII in short paragraph runs (bounded exact-key LRU). Validate each run's
+   per-character advances before using it, and disable ligatures/kerning. Wide
+   characters, CJK, emoji, italic/underlined text and proportional-font runs
+   that do not exactly fit the grid keep the fixed-cell renderer. Caches are
+   invalidated on font/scale/theme changes and released on render disposal.
+   Compare against the fixed-cell renderer in
+   `app/test/terminal_run_paint_test.dart` and
+   `app/integration_test/terminal_run_pixels_test.dart`; the latter uses real
+   Windows fonts. `terminal_scroll_perf_test.dart` drives native Windows wheel
+   events through the actual agent and tmux under continuous coloured redraws.
+
 Flutter's Windows engine (3.47, `shell/platform/windows/text_input_plugin.cc`)
 rejects `TextInput.setClient` without a view ID ("Could not set client, view ID
 is null"). Without a text input client, Windows delivers typed characters

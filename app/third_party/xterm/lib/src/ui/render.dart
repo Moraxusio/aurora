@@ -157,10 +157,28 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
   var _stickToBottom = true;
 
+  Object? _layoutBuffer;
+  int _layoutLineCount = -1;
+
   void _onScroll() {
     _stickToBottom = _scrollOffset >= _maxScrollExtent;
-    markNeedsLayout();
-    _notifyEditableRect();
+    markNeedsPaint();
+  }
+
+  // Aurora patch: every terminal write and every wheel notch used to call the
+  // platform text-input channel (three messages) immediately, before layout.
+  // With dense output that is hundreds of calls per second on the UI thread.
+  // The rectangle only has to be right when a frame is shown, so it is sent
+  // once per frame, after layout.
+  bool _editableRectScheduled = false;
+
+  void _scheduleEditableRect() {
+    if (_editableRectScheduled || _onEditableRect == null) return;
+    _editableRectScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _editableRectScheduled = false;
+      if (attached && hasSize) _notifyEditableRect();
+    });
   }
 
   void _onFocusChange() {
@@ -168,12 +186,19 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   }
 
   void _onTerminalChange() {
-    markNeedsLayout();
-    _notifyEditableRect();
+    // Aurora patch: full-screen redraws change cells, not viewport geometry.
+    // Only a buffer/scrollback extent change needs layout. Parsing stays
+    // immediate, so mouse/keyboard latency is not hidden behind an 8 ms timer.
+    if (_layoutBuffer != _terminal.buffer ||
+        _layoutLineCount != _terminal.buffer.lines.length) {
+      markNeedsLayout();
+    } else {
+      markNeedsPaint();
+    }
   }
 
   void _onControllerUpdate() {
-    markNeedsLayout();
+    markNeedsPaint();
   }
 
   @override
@@ -198,6 +223,12 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   }
 
   @override
+  void dispose() {
+    _painter.dispose();
+    super.dispose();
+  }
+
+  @override
   bool hitTestSelf(Offset position) {
     return true;
   }
@@ -219,6 +250,8 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     if (_stickToBottom) {
       _offset.correctBy(_maxScrollExtent - _scrollOffset);
     }
+    _layoutBuffer = _terminal.buffer;
+    _layoutLineCount = _terminal.buffer.lines.length;
   }
 
   /// Total height of the terminal in pixels. Includes scrollback buffer.
@@ -313,14 +346,14 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   }
 
   void _notifyEditableRect() {
+    if (!_focusNode.hasFocus || _onEditableRect == null) return;
     final cursor = localToGlobal(cursorOffset);
+    if (!cursor.dx.isFinite || !cursor.dy.isFinite) return;
 
-    final rect = Rect.fromLTRB(
-      cursor.dx,
-      cursor.dy,
-      size.width,
-      cursor.dy + _painter.cellSize.height,
-    );
+    // Editable bounds are the viewport, not "local right - global caret x"
+    // (which could be negative with an IDE side bar). The text-input client
+    // applies this viewport origin as its transform.
+    final rect = localToGlobal(Offset.zero) & size;
 
     final caretRect = cursor & _painter.cellSize;
 
@@ -399,6 +432,9 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   @override
   void paint(PaintingContext context, Offset offset) {
     _paint(context, offset);
+    // An offstage retained terminal is not painted and must not report an
+    // invisible caret. All cursor/resize/scroll changes are final after layout.
+    _scheduleEditableRect();
     context.setWillChangeHint();
   }
 
@@ -444,7 +480,8 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
       if (_shouldShowCursor) {
         // the cell under the cursor, so a block cursor can draw its character again
-        final cy = _terminal.buffer.absoluteCursorY, cx = _terminal.buffer.cursorX;
+        final cy = _terminal.buffer.absoluteCursorY,
+            cx = _terminal.buffer.cursorX;
         CellData? under;
         if (cy >= 0 && cy < lines.length && cx >= 0 && cx < lines[cy].length) {
           under = CellData.empty();

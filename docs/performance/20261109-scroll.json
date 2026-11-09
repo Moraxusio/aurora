@@ -1,0 +1,27 @@
+{
+  "mode": "Windows profile (flutter drive --profile)",
+  "baseline_commit": "9bc0624",
+  "fixture": "temporary normal-user WSL agent, real tmux, native Windows wheel, continuous coloured full-screen redraw, 2000 synthetic cached nodes",
+  "opencode_itself_tested": false,
+  "baseline_wheel_samples": [
+    {"what": "first program, down", "native_notches": 12, "received_reports": 56, "build_worst_us": 10145, "raster_worst_us": 82537, "slow_frames": 13},
+    {"what": "first program, up", "native_notches": 12, "received_reports": 56, "build_worst_us": 11219, "raster_worst_us": 80222, "slow_frames": 13},
+    {"what": "second program, down", "native_notches": 12, "received_reports": 56, "build_worst_us": 12134, "raster_worst_us": 79892, "slow_frames": 13},
+    {"what": "after ten tab switches, up", "native_notches": 12, "received_reports": 56, "build_worst_us": 10861, "raster_worst_us": 77926, "slow_frames": 13},
+    {"what": "after sidebar resize, down", "native_notches": 12, "received_reports": 56, "build_worst_us": 14117, "raster_worst_us": 107535, "slow_frames": 12}
+  ],
+  "fixed_wheel_samples_final_run": [
+    {"what": "first program, down", "native_notches": 12, "received_reports": 56, "build_worst_us": 1825, "raster_worst_us": 5854, "slow_frames": 0},
+    {"what": "first program, up", "native_notches": 12, "received_reports": 56, "build_worst_us": 2057, "raster_worst_us": 5838, "slow_frames": 0},
+    {"what": "second program, down", "native_notches": 12, "received_reports": 56, "build_worst_us": 1231, "raster_worst_us": 4807, "slow_frames": 0},
+    {"what": "after ten tab switches, up", "native_notches": 12, "received_reports": 56, "build_worst_us": 1387, "raster_worst_us": 5031, "slow_frames": 0},
+    {"what": "after sidebar resize, down", "native_notches": 12, "received_reports": 56, "build_worst_us": 1894, "raster_worst_us": 8226, "slow_frames": 0}
+  ],
+  "baseline_tab_build_times_us_under_redraw": [8496, 11675, 11421, 12171, 11372, 12254, 13080, 10238, 12014, 11542, 12691, 11357, 12502, 11719, 12047, 11366, 13075, 12030, 12186, 11364],
+  "fixed_tab_build_times_us_under_redraw": [1320, 2028, 2201, 2247, 2186, 2216, 2532, 2127, 2347, 2234, 2424, 2754, 2155, 2344, 2934, 2757, 2691, 2752],
+  "baseline_idle_tab_worst_build_us_after_visiting_proxy": [12840, 12114, 8098, 9445, 12799, 13706, 12420, 15002, 12685, 12036],
+  "fixed_idle_tab_worst_build_us_after_visiting_proxy": [1180, 1315, 1205, 1196, 1216, 1155, 1225, 1127, 1541, 1190],
+  "proxy_first_visit_worst_build_us": {"baseline": 28026, "fixed": 16347},
+  "slow_frame_definition": "buildDuration > 16667 us OR rasterDuration > 16667 us; not totalSpan",
+  "limits": "Machine/run-specific measurements, not a universal zero-jank guarantee. OpenCode itself is not installed in this WSL test environment. No installed agent, user profile, v2 process or release package was changed."
+}

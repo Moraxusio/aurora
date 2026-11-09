@@ -216,6 +216,21 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 
 ## 6. TCP 性能基准
 
+### 6.0 终端滚轮与页面切换（2026-11-09，客户端修复，未打新包）
+
+- 用户报告：在 Aurora 3 的终端内运行 OpenCode 时滚轮卡顿/偶发失灵，切换功能页掉帧。此次仅改客户端和测试代码；v2 只读参考，没有修改 v2、安装 agent 或正式服务器状态，Flutter 引擎没有重建。
+- 已复现并修复：xterm `InfiniteScrollView` 换 position 时没有迁移 `_onScroll` 监听；切回备用缓冲区保留旧滚动计数（一格向下会发出 80 多个向上报告）；有 IDE 侧栏偏移时将全局坐标当局部坐标（测试第 5 列被报成第 22 列）。改为正确迁移监听、重置计数、局部坐标及增量像素累计，保留触控板的不足一行输入，不因改变字体重放旧输入。
+- 渲染层：单纯字符/光标变化只重绘，滚动范围或缓冲区尺寸变化才布局；IME 位置在实际绘制后按帧合并并去重，不给后台未绘制终端持续发平台消息。合并同色背景与严格等宽的单格 ASCII 文本段，缓存有界；中文/emoji/宽字符和不能保持网格的字体回退逐格绘制。临时的固定 8 ms 输出缓冲已撤掉，不以增加交互延迟换取表面平滑。
+- 页面层：缓存已保留侧栏/编辑器的 widget 配置并隔离 repaint，纯切页不重建其它页面；真实连接、profile、服务和 inherited theme 变化仍刷新配置。服务器快照只复制所读服务器，不再为查一个名称/升级提示复制全部机场节点；返回值仍为隔离副本，失败升级列表也不共享可变 List。代理节点行用 `SliverList.builder` 按需创建。
+- 可复现对比：`app/tool/switch_perf.dart OUT.json [TARGET.dart]` 用 CMD 启动 `flutter drive --profile`，对真实普通用户临时 WSL agent 测量，不读用户 profile。基线为 `9bc0624` 的独立 worktree，双方同一夹具（2000 个合成节点、相同页面、真实 tmux 和系统字体）。空闲切页不能冒充终端负载，分别测量：
+  - 含大型代理页的切标签：UI build 最慢由 8.1–15.0 ms 降至 1.1–1.5 ms；首次代理页由 28.0 ms 降至 16.3 ms。
+  - 连续彩色全屏重绘中，原生 Windows 鼠标滚轮五组各 12 格，程序在 tmux 内每组实际收到 56 个同向报告、0 个反向报告；覆盖退出重进、10 次标签切换和侧栏宽度变化。
+  - 同负载基线 raster 最慢 77.9–107.5 ms，每组 12–13 个超过 16.7 ms 的 build/raster 慢帧；修复后两轮 raster 最慢 4.7–8.3 ms，五组均 0 个慢帧。重绘时切标签的 build 由约 8.5–13.1 ms 降至 0.9–3.6 ms。数据是本机这轮实测，不声称任何机器都零掉帧。
+- 验证范围：像素对照覆盖 ASCII、中文、emoji、粗体/暗色/反色/斜体/下划线、不同背景及 1/1.25/1.5/2 倍缩放；真实 Windows Consolas、Courier New、Arial 对照通过（无超过 3 色阶的通道差异）。真实窗口完整回归通过：6 行 Windows 中英文键盘输入无干扰/无错误、文件保存/冲突拒绝、Git 差异与提交、systemd、端口转发、三档布局。Profile 回归把 Git 提交说明改走真实键盘输入，因为 `enterText` 在该模式不产生原生编辑输入。
+- 新增滚轮测试在未修复的 `9bc0624` 副本中四项均失败（监听、重进反向重放、坐标、字体变化），修复代码中全部通过；另有保留页面不重建、2000 节点行虚拟化、IME 通知去重及服务器快照隔离测试。基线和修复后的 Profile 原始结果见 `docs/performance/20261109-scroll.json`。
+- 最终回归：App 73 项通过，代理专用端到端脚本的 2 项按环境跳过；`aurora_profile` 27 项通过；`flutter analyze` 无问题。临时性能 agent 已退出，v2 的 PID 173/7710 端口状态不变。用户正式 WSL v3 已是 3.3.0，本轮只读核对，不执行旧 3.1.1 备份恢复。
+- 限制：WSL 未安装 OpenCode 本体，此次真实滚轮性能验收用相同 DEC 备用缓冲区/SGR 鼠标模式的独立全屏重绘程序，不把等效负载说成 OpenCode 本体验收；尚未打新发布包，`release3/Aurora-3.3.0` 不含此次修复。
+
 同一个 `aurora3-testpeer`（真实的 TLS、Hello、hashicorp/yamux 与分发），分别用 Go 客户端（`agent/cmd/aurora3-bench`，即 v2 的客户端协议栈）和 Dart 客户端（`app/packages/aurora_wire/bin/bench.dart`）跑同样的项目。本机回环，i7-1165G7，8 线程。复现：`agent/tools/bench.ps1`（Windows）、`agent/tools/bench-linux.sh`（WSL）。
 
 ### 6.1 现在：Dart 客户端用 BoringSSL（D-77，2026-11-06）

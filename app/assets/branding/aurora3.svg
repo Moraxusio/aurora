@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Aurora 3">
+  <!-- Original Aurora 3 artwork. No v2 or third-party artwork is embedded. -->
+  <defs>
+    <linearGradient id="night" x2="1" y2="1"><stop stop-color="#142747"/><stop offset="1" stop-color="#14132f"/></linearGradient>
+    <linearGradient id="peak" x2="1" y2="1"><stop stop-color="#64f0dc"/><stop offset="1" stop-color="#4989ff"/></linearGradient>
+    <linearGradient id="ribbon" x2="1" y2="0"><stop stop-color="#8f79ff"/><stop offset="1" stop-color="#d77ef0"/></linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#night)"/>
+  <path d="M40 190 106 54Q111 42 126 42H142L212 190H174L127 87 79 190Z" fill="url(#peak)"/>
+  <path d="M43 175C80 122 111 180 149 132C166 109 185 105 208 111L219 143C177 124 169 196 127 178C90 160 78 204 46 211Z" fill="url(#ribbon)"/>
+  <rect x="166" y="166" width="74" height="74" rx="22" fill="#132440" stroke="#7886dd" stroke-width="2"/>
+  <path d="M183 181H209Q225 181 225 195Q225 203 217 207Q225 211 225 219Q225 233 209 233H183V221H208Q213 221 213 217Q213 213 207 213H195V201H207Q213 201 213 197Q213 193 208 193H183Z" fill="#edf4ff"/>
+</svg>

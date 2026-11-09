@@ -19,6 +19,7 @@ import '../state/app_state.dart';
 import '../theme/ide_theme.dart';
 import '../ui/add_server.dart';
 import '../ui/upgrade_agent.dart';
+import 'desktop_lifecycle.dart';
 import 'editor_tab.dart';
 import 'feature.dart';
 import 'input_mode.dart';
@@ -45,6 +46,7 @@ class _ShellState extends State<Shell> {
   double _sideWidth = 300;
   bool _serversOpen = false;
   int? _mode;
+  late final Future<bool> Function() _exitGuard = _beforeExit;
 
   AppState get app => widget.app;
 
@@ -52,6 +54,7 @@ class _ShellState extends State<Shell> {
   void initState() {
     super.initState();
     app.addListener(_onApp);
+    DesktopLifecycle.beforeExit = _exitGuard;
     _onApp();
   }
 
@@ -69,11 +72,33 @@ class _ShellState extends State<Shell> {
 
   @override
   void dispose() {
+    if (DesktopLifecycle.beforeExit == _exitGuard) DesktopLifecycle.beforeExit = null;
     app.removeListener(_onApp);
     for (final w in _spaces.values) {
       w.dispose();
     }
     super.dispose();
+  }
+
+  Future<bool> _beforeExit() async {
+    if (!mounted) return false;
+    if (widget.features.transfers.active > 0) {
+      final ok = await confirmDialog(context, title: '还有文件正在传输',
+        body: '${widget.features.transfers.active} 个传输尚未完成。退出客户端会中断这些传输。点窗口的叉只隐藏到托盘，不会中断。', ok: '仍然退出');
+      if (!ok || !mounted) return false;
+    }
+    // Do not close any tab until every check passed: cancelling a later
+    // prompt must not destroy a buffer whose earlier prompt said discard.
+    for (final ws in _spaces.values.toList()) {
+      for (final tab in ws.tabs.toList()) {
+        if (tab.dirty.value && tab.confirmClose != null && !await tab.confirmClose!()) return false;
+        if (!mounted) return false;
+      }
+    }
+    for (final ws in _spaces.values.toList()) {
+      if (!await ws.flushViews()) return false;
+    }
+    return true;
   }
 
   void _onApp() {
@@ -129,8 +154,8 @@ class _ShellState extends State<Shell> {
           enabled: () => ws.active != null,
           run: () => ws.closeTab(ws.activeId!),
         ),
-        Command(id: 'tab.next', title: '下一个标签', group: '视图', shortcut: 'Ctrl+Tab', enabled: () => ws.tabs.length > 1, run: () => ws.next(1)),
-        Command(id: 'tab.prev', title: '上一个标签', group: '视图', shortcut: 'Ctrl+Shift+Tab', enabled: () => ws.tabs.length > 1, run: () => ws.next(-1)),
+        Command(id: 'tab.next', title: '下一个标签', group: '视图', shortcut: 'Ctrl+Tab', enabled: () => ws.visibleTabs.length > 1, run: () => ws.next(1)),
+        Command(id: 'tab.prev', title: '上一个标签', group: '视图', shortcut: 'Ctrl+Shift+Tab', enabled: () => ws.visibleTabs.length > 1, run: () => ws.next(-1)),
         Command(id: 'side.toggle', title: '显示或隐藏侧栏', group: '视图', shortcut: 'Ctrl+B', run: () => setState(() => _sideOpen = !_sideOpen)),
         Command(id: 'server.overview', title: '服务器概览与设置', group: '服务器', icon: Icons.info_outline, run: () => ws.openTab(overviewTab(ws, widget.features))),
         Command(id: 'server.reconnect', title: '重新连接', group: '服务器', icon: Icons.sync, run: () => app.connect(ws.serverId)),
@@ -205,7 +230,12 @@ class _ShellState extends State<Shell> {
 
   Widget _layout(BuildContext context, Workspace ws, int mode, List<Command> cmds, Ide ide) {
     final side = _SideBar(ws: ws, features: widget.features, feature: _feature, onPickFeature: (f) => _pick(ws, f));
-    final editor = _EditorArea(ws: ws, features: widget.features, onAdd: _addServer);
+    final editor = IndexedStack(index: _spaces.values.toList().indexOf(ws), children: [
+      for (final space in _spaces.values)
+        TickerMode(key: ObjectKey(space), enabled: identical(space, ws),
+          child: ExcludeFocus(excluding: !identical(space, ws), child: ListenableBuilder(listenable: space,
+            builder: (_, _) => _EditorArea(ws: space, features: widget.features, onAdd: _addServer)))),
+    ]);
     final activity = _ActivityBar(
       ws: ws,
       features: widget.features,
@@ -219,60 +249,37 @@ class _ShellState extends State<Shell> {
     final status = _StatusBar(ws: ws, app: app, onTapConn: () => app.connect(ws.serverId));
     Widget servers() => _ServerSwitcher(app: app, onClose: () => setState(() => _serversOpen = false), onAdd: _addServer);
 
-    if (mode == 0) {
-      // phone: one pane
-      final showEditor = ws.compactEditor && ws.tabs.isNotEmpty;
-      return Column(
-        children: [
-          AgentUpgradeNotice(app: app, id: ws.serverId),
-          _PhoneTop(
-            ws: ws,
-            showEditor: showEditor,
-            onBack: () => setState(() => ws.compactEditor = false),
-            onServers: () => setState(() => _serversOpen = !_serversOpen),
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                Positioned.fill(child: showEditor ? editor : side),
-                if (_serversOpen) Positioned.fill(child: servers()),
-              ],
-            ),
-          ),
-          if (!showEditor)
-            _ActivityBar(
-              ws: ws,
-              features: widget.features,
-              current: _featureId,
-              vertical: false,
-              onPick: (f) => _pick(ws, f),
-              onServers: () => setState(() => _serversOpen = !_serversOpen),
-              onPalette: () => showPalette(context, cmds),
-              onOverview: () => ws.openTab(overviewTab(ws, widget.features)),
-            ),
-          status,
-        ],
-      );
-    }
-
+    final narrow = mode == 0;
+    final showEditor = !narrow || (ws.compactEditor && ws.visibleTabs.isNotEmpty);
     final wide = mode == 2;
     return Column(
       children: [
         AgentUpgradeNotice(app: app, id: ws.serverId),
+        if (narrow) _PhoneTop(ws: ws, showEditor: showEditor,
+          onBack: () => setState(() => ws.compactEditor = false),
+          onServers: () => setState(() => _serversOpen = !_serversOpen)),
         Expanded(
+          key: const ValueKey('main-content'),
           child: Row(
             children: [
-              activity,
+              if (!narrow) activity,
               if (_sideOpen && wide) ...[
                 SizedBox(width: _sideWidth, child: side),
                 _Splitter(onDrag: (dx) => setState(() => _sideWidth = (_sideWidth + dx).clamp(220, 520))),
               ],
               Expanded(
+                key: const ValueKey('editor-slot'),
                 child: Stack(
                   children: [
-                    Positioned.fill(child: editor),
+                    // Keep this subtree at the same keyed position for every
+                    // width/server. A narrow side bar must not unmount dirty
+                    // editors or disconnect terminal streams.
+                    Positioned.fill(key: const ValueKey('editor-fill'),
+                      child: ExcludeFocus(excluding: !showEditor, child: Offstage(offstage: !showEditor,
+                        child: TickerMode(enabled: showEditor, child: editor)))),
+                    if (narrow && !showEditor) Positioned.fill(child: side),
                     // medium: the side bar floats over the editor
-                    if (_sideOpen && !wide) ...[
+                    if (_sideOpen && mode == 1) ...[
                       Positioned.fill(
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
@@ -293,7 +300,7 @@ class _ShellState extends State<Shell> {
                         left: 0,
                         top: 0,
                         bottom: 0,
-                        width: 300,
+                        width: narrow ? MediaQuery.sizeOf(context).width : 300,
                         child: Material(elevation: 10, color: ide.sideBar, child: servers()),
                       ),
                   ],
@@ -302,6 +309,9 @@ class _ShellState extends State<Shell> {
             ],
           ),
         ),
+        if (narrow && !showEditor) _ActivityBar(ws: ws, features: widget.features, current: _featureId, vertical: false,
+          onPick: (f) => _pick(ws, f), onServers: () => setState(() => _serversOpen = !_serversOpen),
+          onPalette: () => showPalette(context, cmds), onOverview: () => ws.openTab(overviewTab(ws, widget.features))),
         status,
       ],
     );
@@ -576,7 +586,7 @@ class _SideBarState extends State<_SideBar> {
               children: [
                 for (var k = 0; k < children.length; k++)
                   // a side bar that is not shown gets no ticks and no focus
-                  TickerMode(enabled: k == index, child: children[k]),
+                  TickerMode(enabled: k == index, child: ExcludeFocus(excluding: k != index, child: children[k])),
               ],
             ),
           ),
@@ -644,26 +654,28 @@ class _EditorAreaState extends State<_EditorArea> {
     }
     _bodies.removeWhere((tab, _) => !ws.tabs.contains(tab));
     final ide = Ide.of(context);
-    if (ws.tabs.isEmpty) return _Welcome(ws: ws, features: features);
+    final shown = ws.visibleTabs;
     final active = ws.activeId;
     return Column(
       children: [
-        _TabStrip(ws: ws),
+        if (shown.isNotEmpty) _TabStrip(ws: ws),
         Expanded(
           child: Container(
             color: ide.editor,
             // every tab stays built; only the active one is shown, so a terminal
             // keeps its screen and an editor its unsaved text
             child: IndexedStack(
-              index: ws.tabs.indexWhere((t) => t.id == active).clamp(0, ws.tabs.length - 1),
+              index: shown.any((t) => t.id == active) ? ws.tabs.indexWhere((t) => t.id == active) + 1 : 0,
               children: [
+                _Welcome(ws: ws, features: features),
                 for (final t in ws.tabs)
                   TickerMode(
                     key: ObjectKey(t),
-                    enabled: t.id == active,
+                    enabled: t.id == active && shown.contains(t),
                     child: KeyedSubtree(
                       key: ValueKey(t.id),
-                      child: RepaintBoundary(child: _bodies.putIfAbsent(t, () => Builder(builder: t.builder))),
+                      child: ExcludeFocus(excluding: t.id != active || !shown.contains(t),
+                        child: RepaintBoundary(child: _bodies.putIfAbsent(t, () => Builder(builder: t.builder)))),
                     ),
                   ),
               ],
@@ -691,7 +703,7 @@ class _TabStrip extends StatelessWidget {
       ),
       child: ListView(
         scrollDirection: Axis.horizontal,
-        children: [for (final t in ws.tabs) _TabButton(ws: ws, tab: t, active: t.id == ws.activeId)],
+        children: [for (final t in ws.visibleTabs) _TabButton(ws: ws, tab: t, active: t.id == ws.activeId)],
       ),
     );
   }
@@ -711,12 +723,12 @@ class _TabButton extends StatelessWidget {
       items: () => [
         MenuItem('关闭', () => ws.closeTab(tab.id), icon: Icons.close, hint: 'Ctrl+W'),
         MenuItem('关闭其它', () async {
-          for (final o in ws.tabs.where((x) => x.id != tab.id).toList()) {
+          for (final o in ws.visibleTabs.where((x) => x.id != tab.id).toList()) {
             if (!await ws.closeTab(o.id)) break;
           }
         }),
         MenuItem('全部关闭', () async {
-          for (final o in ws.tabs.toList()) {
+          for (final o in ws.visibleTabs.toList()) {
             if (!await ws.closeTab(o.id)) break;
           }
         }),
@@ -837,6 +849,8 @@ class _Welcome extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Image.asset('assets/branding/aurora3-256.png', width: 52, height: 52, semanticLabel: 'Aurora 3'),
+            const SizedBox(height: 12),
             Text(ws.name, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(connected ? '${ws.link!.server.os} · agent ${ws.link!.server.version}' : '未连接', style: TextStyle(color: ide.textDim)),
@@ -945,13 +959,13 @@ class _PhoneTop extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (showEditor && ws.tabs.length > 1)
+          if (showEditor && ws.visibleTabs.length > 1)
             PopupMenuButton<String>(
               tooltip: '切换标签',
-              icon: Badge(label: Text('${ws.tabs.length}'), child: const Icon(Icons.tab)),
+              icon: Badge(label: Text('${ws.visibleTabs.length}'), child: const Icon(Icons.tab)),
               onSelected: ws.activate,
               itemBuilder: (_) => [
-                for (final x in ws.tabs)
+                for (final x in ws.visibleTabs)
                   PopupMenuItem(
                     value: x.id,
                     child: Row(
@@ -1056,6 +1070,8 @@ class _EmptyShell extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Image.asset('assets/branding/aurora3-256.png', width: 52, height: 52, semanticLabel: 'Aurora 3'),
+              const SizedBox(height: 16),
               Text('还没有服务器', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 8),
               Text('填写 Linux 服务器的 SSH 地址和账号，Aurora 会通过 SSH 安装 agent，之后直接连接。', style: TextStyle(color: ide.textDim)),

@@ -2,6 +2,7 @@
 // The kernel keeps every open tab's widget alive while another is shown, so a
 // terminal keeps its screen and an editor its unsaved text.
 import 'package:flutter/material.dart';
+import 'package:aurora_profile/aurora_profile.dart';
 
 class EditorTab {
   /// Unique within a workspace, e.g. "term:main" or "file:home:/etc/hosts".
@@ -13,6 +14,10 @@ class EditorTab {
   /// Longer description for the tooltip (a full path).
   final String? tooltip;
   final WidgetBuilder builder;
+  final WorkspacePath? file;
+  // File buffers are unique per server/path. Membership, rather than copying
+  // editors, gives each project its own tab list without divergent dirty text.
+  final Set<String> projects = {};
 
   /// Unsaved changes: a dot instead of the close button, and a question on close.
   final ValueNotifier<bool> dirty = ValueNotifier(false);
@@ -23,7 +28,7 @@ class EditorTab {
   /// Asked before the tab closes; false keeps it open.
   Future<bool> Function()? confirmClose;
 
-  EditorTab({required this.id, required this.title, required this.icon, required this.builder, this.iconColor, this.tooltip});
+  EditorTab({required this.id, required this.title, required this.icon, required this.builder, this.iconColor, this.tooltip, this.file});
 
   void dispose() {
     dirty.dispose();

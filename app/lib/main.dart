@@ -6,6 +6,7 @@ import 'kernel/input_mode.dart';
 import 'kernel/registry.dart';
 import 'kernel/shell.dart';
 import 'kernel/widgets.dart';
+import 'kernel/desktop_lifecycle.dart';
 import 'state/app_state.dart';
 import 'theme/ide_theme.dart';
 import 'ui/add_server.dart';
@@ -29,7 +30,14 @@ class _AuroraAppState extends State<AuroraApp> {
   final _input = InputMode();
 
   @override
+  void initState() {
+    super.initState();
+    DesktopLifecycle.start();
+  }
+
+  @override
   void dispose() {
+    DesktopLifecycle.stop();
     _features.dispose();
     _input.dispose();
     super.dispose();
@@ -43,13 +51,16 @@ class _AuroraAppState extends State<AuroraApp> {
       onPointerDown: _input.onPointer,
       onPointerHover: _input.onPointer,
       child: MaterialApp(
-        title: 'Aurora',
+        title: 'Aurora 3',
         debugShowCheckedModeBanner: false,
         scaffoldMessengerKey: Toast.key,
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),
         themeMode: ThemeMode.system,
-        builder: (context, child) => InputMode.scope(mode: _input, child: child!),
+        builder: (context, child) => ValueListenableBuilder<bool>(valueListenable: DesktopLifecycle.visible,
+          child: InputMode.scope(mode: _input, child: child!),
+          builder: (_, visible, child) => ExcludeFocus(excluding: !visible,
+            child: Offstage(offstage: !visible, child: TickerMode(enabled: visible, child: child!)))),
         home: Home(app: widget.app, features: _features),
       ),
     );

@@ -59,6 +59,7 @@ Future<void> main(List<String> args) async {
       await lines.first.timeout(const Duration(seconds: 30)),
     ) as Map;
     final environment = Map<String, String>.from(Platform.environment)
+      ..['AURORA3_INSTANCE_SCOPE'] = 'integration-$pid'
       ..remove('AURORA3_AGENT_DIR')
       ..remove('AURORA3_TRUST_KEY');
     final test = await Process.start(

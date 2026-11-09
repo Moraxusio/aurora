@@ -127,6 +127,22 @@ class AppState extends ChangeNotifier implements ProfileAccess {
     notifyListeners();
   }
 
+  /// View snapshots already live in Workspace. Persisting them must not
+  /// rebuild every page or re-run connection hooks on every folder click.
+  Future<void> saveWorkspaceViews(String id, Map<String, WorkspaceView> views) => _store!.update((p) {
+    final server = p.server(id);
+    if (server == null) return;
+    for (final item in views.entries) {
+      final copy = WorkspaceView.fromJson(item.value.toJson());
+      if (item.key.isEmpty) {
+        server.browserView = copy;
+      } else {
+        final project = server.workspace(item.key);
+        if (project != null) project.view = copy;
+      }
+    }
+  });
+
   // ---- connections ----
 
   ConnStatus status(String id) => _conns[id]?.status ?? ConnStatus(ConnState.idle);

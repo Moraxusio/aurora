@@ -9,6 +9,7 @@
 import 'dart:async';
 
 import 'package:aurora_wire/aurora_wire.dart';
+import 'package:aurora_profile/aurora_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:re_editor/re_editor.dart';
@@ -77,9 +78,11 @@ import '../../theme/ide_theme.dart';
 /// The tab for [path] under [root]. The editor's state is reached through a
 /// key so closing the tab can ask about unsaved changes.
 EditorTab fileEditorTab(Workspace ws, {required String root, required String path, int? line}) {
+  path = WorkspacePath.normalize(path);
   final key = GlobalKey<FileEditorState>();
   final view = FileEditor(key: key, ws: ws, root: root, path: path, line: line);
-  final tab = EditorTab(id: 'file:$root:$path', title: path.split('/').last, icon: Icons.description_outlined, tooltip: path, builder: (_) => view);
+  final tab = EditorTab(id: 'file:$root:$path', title: path.split('/').last, icon: Icons.description_outlined, tooltip: path, builder: (_) => view,
+    file: WorkspacePath(root: root, path: path));
   tab.confirmClose = () async {
     final st = key.currentState;
     if (st == null || !st.dirty) return true;

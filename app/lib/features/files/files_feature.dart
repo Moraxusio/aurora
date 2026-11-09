@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:aurora_wire/aurora_wire.dart';
+import 'package:aurora_profile/aurora_profile.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -15,6 +16,8 @@ import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'file_editor.dart';
 import 'transfers.dart';
+import 'project_workspaces.dart';
+import 'file_tree_row.dart';
 
 class FilesFeature extends Feature {
   final Transfers transfers;
@@ -50,12 +53,14 @@ class _Node {
   final String root;
   final String path; // "/" for a root
   final String name;
-  final Map<String, dynamic>? entry; // null for a root
+  Map<String, dynamic>? entry; // null for a root
+  final String? location;
   bool expanded = false;
   bool loading = false;
   String? error;
   List<_Node>? children;
-  _Node(this.root, this.path, this.name, this.entry);
+  int request = 0;
+  _Node(this.root, this.path, this.name, this.entry, {this.location});
 
   bool get isDir => entry == null || entry!['type'] == 'dir' || entry!['target'] == 'dir';
   String child(String n) => path == '/' ? '/$n' : '$path/$n';
@@ -70,11 +75,67 @@ class FileTree extends StatefulWidget {
 }
 
 class _FileTreeState extends State<FileTree> {
+  final Set<String> _visited = {};
+  final Map<String, Widget> _pages = {};
+  String? _restoring;
+  @override
+  void initState() {
+    super.initState();
+    widget.ws.addListener(_changed);
+  }
+  @override
+  void dispose() {
+    widget.ws.removeListener(_changed);
+    super.dispose();
+  }
+  void _changed() { if (mounted) setState(() {}); }
+  @override
+  Widget build(BuildContext context) {
+    final ws = widget.ws;
+    final key = ws.projectKey;
+    _visited.add(key);
+    final ids = {'', ...?ws.entry?.workspaces.map((p) => p.id)};
+    _visited.removeWhere((id) => !ids.contains(id));
+    _pages.removeWhere((id, _) => !ids.contains(id));
+    final keys = _visited.toList();
+    if (_restoring != key) {
+      _restoring = key;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ws.projectKey == key) ws.restoreFiles((f) => fileEditorTab(ws, root: f.root, path: f.path));
+      });
+    }
+    return Column(children: [
+      ProjectWorkspaceBar(ws: ws),
+      Expanded(child: IndexedStack(index: keys.indexOf(key), children: [
+        for (final id in keys) TickerMode(key: ValueKey(id), enabled: id == key,
+          child: ExcludeFocus(excluding: id != key, child: RepaintBoundary(child: _pages.putIfAbsent(id, () => _FileTreePage(ws: ws, transfers: widget.transfers, projectId: id))))),
+      ])),
+    ]);
+  }
+}
+
+class _FileTreePage extends StatefulWidget {
+  final Workspace ws;
+  final Transfers transfers;
+  final String projectId;
+  const _FileTreePage({required this.ws, required this.transfers, required this.projectId});
+  @override
+  State<_FileTreePage> createState() => _FileTreePageState();
+}
+
+class _FileTreePageState extends State<_FileTreePage> {
   final List<_Node> _roots = [];
   _Node? _selected;
   bool _hidden = false;
   String? _error;
   bool _loadingRoots = true;
+  Set<WorkspacePath> _expanded = {};
+  String _folderShape = '';
+  final _scroll = ScrollController();
+  int _generation = 0;
+  bool _treeSet = false;
+  Future<void>? _refreshing;
+  bool _refreshAgain = false;
 
   Workspace get ws => widget.ws;
 
@@ -83,6 +144,11 @@ class _FileTreeState extends State<FileTree> {
     super.initState();
     widget.transfers.addListener(_tick);
     ws.filesRevision.addListener(_onFilesChanged);
+    ws.addListener(_onWorkspace);
+    final view = ws.viewForProject(widget.projectId);
+    _expanded = view.expanded.toSet();
+    _treeSet = view.treeSet;
+    _folderShape = _shape();
     _loadRoots();
   }
 
@@ -90,6 +156,8 @@ class _FileTreeState extends State<FileTree> {
   void dispose() {
     widget.transfers.removeListener(_tick);
     ws.filesRevision.removeListener(_onFilesChanged);
+    ws.removeListener(_onWorkspace);
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -103,23 +171,48 @@ class _FileTreeState extends State<FileTree> {
     if (mounted) setState(() {});
   }
 
+  String _shape() => ws.entry?.workspace(widget.projectId)?.folders.map((f) => '${f.root}:${f.path}').join('|') ?? '';
+  void _onWorkspace() {
+    final shape = _shape();
+    if (shape == _folderShape) return;
+    _folderShape = shape;
+    _loadRoots();
+  }
+
+  void _rememberExpansion() {
+    _treeSet = true;
+    if (ws.projectKey == widget.projectId) ws.rememberExpanded(_expanded.toList());
+  }
+
   Future<void> _loadRoots() async {
+    final generation = ++_generation;
     final link = ws.link;
     if (link == null) return;
     try {
       final r = await link.call('fs.roots') as Map;
       final list = [for (final x in r['roots'] as List) (x as Map).cast<String, dynamic>()];
-      if (!mounted) return;
+      if (!mounted || generation != _generation) return;
+      final project = ws.entry?.workspace(widget.projectId);
+      final nodes = project == null
+          ? [for (final x in list) _Node(x['id'] as String, '/', (x['label'] as String?) ?? x['id'] as String, null, location: x['path'] as String?)]
+          : [for (final f in project.folders) _Node(f.root, f.path, f.path == '/' ? (list.where((r) => r['id'] == f.root).firstOrNull?['label'] as String? ?? f.root) : f.name,
+              null, location: '${f.root}:${f.path}')];
       setState(() {
         _roots
           ..clear()
-          ..addAll([for (final x in list) _Node(x['id'] as String, '/', (x['label'] as String?) ?? x['id'] as String, null)]);
+          ..addAll(nodes);
+        _selected = null;
         _loadingRoots = false;
         _error = null;
       });
-      if (_roots.isNotEmpty) await _expand(_roots.first, true);
+      for (final n in _roots.toList()) {
+        if (!mounted || generation != _generation) return;
+        final open = _expanded.contains(WorkspacePath(root: n.root, path: n.path)) ||
+          (!_treeSet && (project != null || identical(n, _roots.first)));
+        if (open) await _expand(n, true, remember: false);
+      }
     } on OpError catch (e) {
-      if (mounted) {
+      if (mounted && generation == _generation) {
         setState(() {
           _error = e.message;
           _loadingRoots = false;
@@ -128,7 +221,11 @@ class _FileTreeState extends State<FileTree> {
     }
   }
 
-  Future<void> _load(_Node n) async {
+  Future<void> _load(_Node n, {bool restore = true}) async {
+    if (!mounted) return;
+    final generation = _generation;
+    final request = ++n.request;
+    final hidden = _hidden;
     final link = ws.link;
     if (link == null) return;
     setState(() {
@@ -137,6 +234,7 @@ class _FileTreeState extends State<FileTree> {
     });
     try {
       final r = await link.call('fs.list', {'root': n.root, 'path': n.path, 'hidden': _hidden}) as Map;
+      if (!mounted || generation != _generation || n.request != request || hidden != _hidden) return;
       final list = [for (final e in r['entries'] as List) (e as Map).cast<String, dynamic>()];
       list.sort((a, b) {
         final da = a['type'] == 'dir' || a['target'] == 'dir', db = b['type'] == 'dir' || b['target'] == 'dir';
@@ -154,9 +252,11 @@ class _FileTreeState extends State<FileTree> {
           () {
             final node = _Node(n.root, n.child(e['name'] as String), e['name'] as String, e);
             final was = old[node.name];
-            if (was != null && was.isDir && node.isDir) {
-              node.expanded = was.expanded;
-              node.children = was.children;
+            if (was != null && was.isDir == node.isDir) {
+              was.entry = e;
+              return was;
+            } else if (node.isDir) {
+              node.expanded = _expanded.contains(WorkspacePath(root: node.root, path: node.path));
             }
             return node;
           }()
@@ -167,29 +267,49 @@ class _FileTreeState extends State<FileTree> {
           if (c.root == _selected!.root && c.path == _selected!.path) _selected = c;
         }
       }
+      if (restore) {
+        for (final c in n.children!.where((c) => c.isDir && c.expanded && c.children == null)) {
+          if (!mounted || generation != _generation) return;
+          await _load(c);
+        }
+      }
     } on OpError catch (e) {
-      n.error = e.message;
+      if (mounted && generation == _generation && request == n.request && hidden == _hidden) n.error = e.message;
     } finally {
-      if (mounted) setState(() => n.loading = false);
+      if (mounted && generation == _generation && request == n.request) setState(() => n.loading = false);
     }
   }
 
-  Future<void> _expand(_Node n, bool on) async {
+  Future<void> _expand(_Node n, bool on, {bool remember = true}) async {
+    if (!mounted) return;
     setState(() => n.expanded = on);
+    final path = WorkspacePath(root: n.root, path: n.path);
+    on ? _expanded.add(path) : _expanded.remove(path);
+    if (remember) _rememberExpansion();
     if (on && n.children == null) await _load(n);
   }
 
-  Future<void> _refreshAll() async {
+  Future<void> _refreshAll() {
+    _refreshAgain = true;
+    return _refreshing ??= _refreshLoop().whenComplete(() => _refreshing = null);
+  }
+
+  Future<void> _refreshLoop() async {
+    while (_refreshAgain && mounted) {
+    _refreshAgain = false;
+    final generation = _generation;
     Future<void> walk(_Node n) async {
-      if (!n.expanded) return;
-      await _load(n);
-      for (final c in n.children ?? const <_Node>[]) {
+      if (!mounted || generation != _generation || !n.expanded) return;
+      await _load(n, restore: false);
+      if (!mounted || generation != _generation) return;
+      for (final c in List<_Node>.of(n.children ?? const <_Node>[])) {
         await walk(c);
       }
     }
 
-    for (final r in _roots) {
+    for (final r in _roots.toList()) {
       await walk(r);
+    }
     }
   }
 
@@ -336,11 +456,14 @@ class _FileTreeState extends State<FileTree> {
       if (dir) MenuItem('新建文件…', () => _newFile(n), icon: Icons.note_add_outlined),
       if (dir) MenuItem('新建文件夹…', () => _mkdir(n), icon: Icons.create_new_folder_outlined),
       if (dir) MenuItem('上传到这里…', () => _upload(n), icon: Icons.upload_file),
+      if (dir) MenuItem('以此文件夹创建工作区…', () => createProjectWorkspace(context, ws, initial: WorkspacePath(root: n.root, path: n.path)), icon: Icons.workspaces_outline),
+      if (dir && ws.project != null) MenuItem('添加到当前工作区', () => ws.addFolder(WorkspacePath(root: n.root, path: n.path)), icon: Icons.create_new_folder_outlined),
       if (!dir) MenuItem('打开', () => _open(n), icon: Icons.edit_note),
       if (!dir) MenuItem('下载…', () => _download(n), icon: Icons.download),
       const MenuItem.separator(),
       MenuItem('复制路径', () => copyText(n.path, what: '已复制路径'), icon: Icons.copy),
       if (dir) MenuItem('刷新', () => _load(n), icon: Icons.refresh),
+      if (isRoot && widget.projectId.isNotEmpty) MenuItem('从工作区移除文件夹', () => ws.removeFolder(WorkspacePath(root: n.root, path: n.path)), icon: Icons.folder_off_outlined),
       if (!isRoot) ...[
         const MenuItem.separator(),
         MenuItem('重命名…', () => _rename(n), icon: Icons.drive_file_rename_outline),
@@ -351,34 +474,17 @@ class _FileTreeState extends State<FileTree> {
 
   // ---- build ----
 
-  Iterable<Widget> _rows(_Node n, int depth) sync* {
-    final ide = Ide.of(context);
-    yield TreeRow(
-      depth: depth,
-      selected: identical(_selected, n),
-      leading: n.loading
-          ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5))
-          : n.isDir
-              ? Icon(n.expanded ? Icons.expand_more : Icons.chevron_right, size: 16, color: ide.textDim)
-              : const SizedBox.shrink(), // keeps a file's name under its folder's name
-      label: n.name,
-      labelColor: n.entry?['type'] == 'link' ? ide.accent : null,
-      detail: n.isDir || n.entry == null ? null : formatSize((n.entry!['size'] as num?) ?? 0),
-      onTap: () => _open(n),
-      menu: () {
-        setState(() => _selected = n);
-        return _menu(n);
-      },
-    );
+  Iterable<({_Node node, int depth, String? note})> _rows(_Node n, int depth) sync* {
+    yield (node: n, depth: depth, note: null);
     if (n.expanded) {
       if (n.error != null) {
-        yield Padding(padding: EdgeInsets.only(left: 28.0 + depth * 14, top: 2, bottom: 4, right: 8), child: Text(n.error!, style: TextStyle(color: ide.error, fontSize: 12)));
+        yield (node: n, depth: depth + 1, note: n.error);
       }
       for (final c in n.children ?? const <_Node>[]) {
         yield* _rows(c, depth + 1);
       }
       if (n.children != null && n.children!.isEmpty && n.error == null) {
-        yield Padding(padding: EdgeInsets.only(left: 28.0 + depth * 14, top: 2, bottom: 4), child: Text('（空）', style: TextStyle(color: ide.textDim, fontSize: 12)));
+        yield (node: n, depth: depth + 1, note: '（空文件夹）');
       }
     }
   }
@@ -389,6 +495,7 @@ class _FileTreeState extends State<FileTree> {
     if (_error != null) return EmptyHint(icon: Icons.error_outline, text: _error!, actionLabel: '重试', onAction: _loadRoots);
     if (_loadingRoots) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
     final target = _target;
+    final rows = [for (final r in _roots) ..._rows(r, 0)];
     return Column(children: [
       Container(
         height: 30,
@@ -407,8 +514,22 @@ class _FileTreeState extends State<FileTree> {
         ]),
       ),
       const Divider(),
+      if (_selected != null) FileLocation(root: _selected!.root, path: _selected!.path),
       Expanded(
-        child: ListView(children: [for (final r in _roots) ..._rows(r, 0)]),
+        child: _roots.isEmpty
+          ? EmptyHint(icon: Icons.folder_open_outlined, text: widget.projectId.isEmpty ? '服务器没有可用的根目录' : '工作区里还没有文件夹',
+              actionLabel: widget.projectId.isEmpty ? '刷新' : '添加远程文件夹',
+              onAction: widget.projectId.isEmpty ? _loadRoots : () => addProjectFolder(context, ws))
+          : ListView.builder(controller: _scroll, itemCount: rows.length, itemBuilder: (context, i) {
+            final row = rows[i], n = rows[i].node;
+            if (row.note != null) { return Padding(padding: EdgeInsets.only(left: 30 + row.depth * 18.0, top: 5, bottom: 5),
+              child: Text(row.note!, style: TextStyle(fontSize: 11, color: n.error == null ? ide.textDim : ide.error))); }
+            return FileTreeRow(key: ObjectKey(n), name: n.name, path: n.path, depth: row.depth,
+              folder: n.isDir, expanded: n.expanded, loading: n.loading, selected: identical(_selected, n),
+              root: n.entry == null, location: n.location, link: n.entry?['type'] == 'link',
+              detail: n.isDir ? null : formatSize((n.entry!['size'] as num?) ?? 0), onTap: () => _open(n),
+              menu: () { setState(() => _selected = n); return _menu(n); });
+          }),
       ),
       if (widget.transfers.list.isNotEmpty) _TransferList(transfers: widget.transfers),
     ]);

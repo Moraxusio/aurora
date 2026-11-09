@@ -99,7 +99,15 @@ class ServerEntry {
   UpgradeRecord? upgrade;
   List<String> failedUpgrades;
 
-  ServerEntry({required this.id, required this.name, this.agentId, this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy, this.upgrade, List<String>? failedUpgrades}) : forwards = forwards ?? [], failedUpgrades = failedUpgrades ?? [];
+  /// Named projects are client-side views of folders, not new agent roots or
+  /// permissions. A null selection keeps the complete server browser visible.
+  List<ProjectWorkspace> workspaces;
+  String? selectedWorkspace;
+  WorkspaceView browserView;
+
+  ServerEntry({required this.id, required this.name, this.agentId, this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy, this.upgrade, List<String>? failedUpgrades,
+    List<ProjectWorkspace>? workspaces, this.selectedWorkspace, WorkspaceView? browserView})
+      : forwards = forwards ?? [], failedUpgrades = failedUpgrades ?? [], workspaces = workspaces ?? [], browserView = browserView ?? WorkspaceView();
 
   /// A new entry with a random id.
   factory ServerEntry.create(String name, {SshLogin? ssh}) => ServerEntry(id: newId(), name: name, ssh: ssh);
@@ -115,6 +123,9 @@ class ServerEntry {
         proxy: j['proxy'] == null ? null : ProxyChoice.fromJson(_map(j['proxy'])),
         upgrade: j['upgrade'] == null ? null : UpgradeRecord.fromJson(_map(j['upgrade'])),
         failedUpgrades: (j['failed_upgrades'] as List? ?? const []).cast<String>().toList(),
+        workspaces: [for (final w in j['workspaces'] as List? ?? const []) ProjectWorkspace.fromJson(_map(w))],
+        selectedWorkspace: j['selected_workspace'] as String?,
+        browserView: j['browser_view'] == null ? null : WorkspaceView.fromJson(_map(j['browser_view'])),
       );
 
   Map<String, dynamic> toJson() => {
@@ -128,7 +139,73 @@ class ServerEntry {
         'proxy': ?proxy?.toJson(),
         'upgrade': ?upgrade?.toJson(),
         if (failedUpgrades.isNotEmpty) 'failed_upgrades': failedUpgrades,
+        if (workspaces.isNotEmpty) 'workspaces': [for (final w in workspaces) w.toJson()],
+        'selected_workspace': ?selectedWorkspace,
+        if (!browserView.isEmpty) 'browser_view': browserView.toJson(),
       };
+
+  ProjectWorkspace? workspace(String? id) {
+    if (id == null) return null;
+    for (final w in workspaces) { if (w.id == id) return w; }
+    return null;
+  }
+
+  WorkspaceView viewFor(String? id) => workspace(id)?.view ?? browserView;
+}
+
+/// A path is relative to an existing agent root. Never turn a workspace into
+/// an arbitrary absolute server path or accept parent traversal from a profile.
+class WorkspacePath {
+  final String root, path;
+  WorkspacePath({required this.root, required String path}) : path = normalize(path) {
+    if (root.isEmpty || root.contains('\u0000')) throw const FormatException('invalid workspace root');
+  }
+  static String normalize(String value) {
+    if (value.contains('\u0000') || value.split('/').contains('..')) throw const FormatException('invalid workspace path');
+    final parts = value.split('/').where((p) => p.isNotEmpty && p != '.');
+    return '/${parts.join('/')}';
+  }
+  String get name => path == '/' ? root : path.split('/').last;
+  bool contains(WorkspacePath other) => root == other.root && (path == '/' || path == other.path || other.path.startsWith('$path/'));
+  factory WorkspacePath.fromJson(Map<String, dynamic> j) => WorkspacePath(root: j['root'] as String, path: j['path'] as String);
+  Map<String, dynamic> toJson() => {'root': root, 'path': path};
+  @override bool operator ==(Object other) => other is WorkspacePath && other.root == root && other.path == path;
+  @override int get hashCode => Object.hash(root, path);
+}
+
+class WorkspaceView {
+  List<WorkspacePath> expanded, files;
+  WorkspacePath? activeFile;
+  bool treeSet;
+  WorkspaceView({List<WorkspacePath>? expanded, List<WorkspacePath>? files, this.activeFile, this.treeSet = false}) : expanded = expanded ?? [], files = files ?? [];
+  bool get isEmpty => !treeSet && expanded.isEmpty && files.isEmpty && activeFile == null;
+  factory WorkspaceView.fromJson(Map<String, dynamic> j) => WorkspaceView(
+    expanded: [for (final p in j['expanded'] as List? ?? const []) WorkspacePath.fromJson(_map(p))],
+    files: [for (final p in j['files'] as List? ?? const []) WorkspacePath.fromJson(_map(p))],
+    activeFile: j['active_file'] == null ? null : WorkspacePath.fromJson(_map(j['active_file'])),
+    treeSet: j['tree_set'] as bool? ?? false,
+  );
+  Map<String, dynamic> toJson() => {
+    if (expanded.isNotEmpty) 'expanded': [for (final p in expanded) p.toJson()],
+    if (files.isNotEmpty) 'files': [for (final p in files) p.toJson()],
+    'active_file': ?activeFile?.toJson(),
+    if (treeSet) 'tree_set': true,
+  };
+}
+
+class ProjectWorkspace {
+  final String id;
+  String name;
+  List<WorkspacePath> folders;
+  WorkspaceView view;
+  ProjectWorkspace({required this.id, required this.name, List<WorkspacePath>? folders, WorkspaceView? view})
+      : folders = folders ?? [], view = view ?? WorkspaceView();
+  factory ProjectWorkspace.fromJson(Map<String, dynamic> j) => ProjectWorkspace(
+    id: j['id'] as String, name: j['name'] as String? ?? '工作区',
+    folders: [for (final p in j['folders'] as List? ?? const []) WorkspacePath.fromJson(_map(p))],
+    view: j['view'] == null ? null : WorkspaceView.fromJson(_map(j['view'])),
+  );
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'folders': [for (final p in folders) p.toJson()], if (!view.isEmpty) 'view': view.toJson()};
 }
 
 /// A safe, secret-free upgrade receipt, persisted before upload/commit.

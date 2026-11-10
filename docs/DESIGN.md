@@ -27,7 +27,7 @@ v2（标签 `archive/v2-final`，提交 `f0d209c`）已封存，只读参考，�
 ## 3. 仓库结构（D-74）
 
 ```
-aurora-next/
+Aurora 3 源码仓库/
   agent/          Go：aurora3-agent（模块 aurora3）、tmux 构建工具
   app/            Flutter：客户端（多端）
   docs/           本文、实施计划、旧讨论记录
@@ -249,7 +249,7 @@ Aurora 不修改任何代理服务器（D-83）。受控服务器（装 agent，
 | D-71 | v3 使用独立的名字、路径、端口（见第 4 节），与 v2 共存。修正 D-55、D-56 |
 | D-72 | 多端凭据存储使用系统密钥库（见 5.2） |
 | D-73 | 第一版客户端只用 TCP 直连，不做 QUIC 与打洞；yamux 用 Dart 自行实现，并对 Go agent 测试；TCP 性能按 5.3 优化 |
-| D-74 | 新仓库 `aurora-next`，客户端与 agent 合一（见第 3 节） |
+| D-74 | 新仓库 `aurora`，客户端与 agent 合一（见第 3 节） |
 | D-75 | 测试和部署不影响封存的 v2（见第 4 节） |
 | D-76 | v3 默认直连端口为 17710（修正 D-71 中的 7710）。原因：WSL 上的 v2 配置为 `127.0.0.1:7710`。17710 在 WSL 和 203.0.113.10 上都空闲，且不在两台机器的临时端口范围内。新机器安装前仍在探测阶段检查端口是否被占用 |
 | D-77 | 客户端的 TLS 不用 Dart 自带的 `SecureSocket`，改用随 App 编译的 BoringSSL（0.20261020.0，Apache-2.0），由 Dart 构建钩子为每个平台编译，不修改 Flutter 引擎。TCP 仍用 Dart 的普通 Socket，密文与明文经 FFI 在 Dart 与 BoringSSL 之间传递，不经过 IO 线程。原因：`SecureSocket` 固定 8 KiB 缓冲并在 IO 线程上加解密，本机只有 46–72 MB/s（dart-lang/sdk#64115，上游的修复在 2026-09 被拒绝）；Mbed TLS 4.1 的 AES-GCM 只有约 300 MB/s。Windows x64 构建需要 NASM 3.02（构建工具，不进安装包） |
@@ -267,3 +267,4 @@ Aurora 不修改任何代理服务器（D-83）。受控服务器（装 agent，
 - 客户端 QUIC 与打洞（D-73 之后再定）。
 - 第三方插件。
 - 发布私钥的离线备份（D-68）。
+

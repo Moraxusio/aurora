@@ -318,3 +318,12 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - Android 没有“可执行文件旁的 agent 目录”，所以 `tools/package-android.ps1` 把已签名的 agent（`amd64/` 下的二进制、manifest.json、manifest.sig，以及 policy.json、policy.sig）复制到 `app/assets/agent/` 再构建，构建后清理，不提交。首次启动时 `unpackAgentAssets` 只是把它们复制到 `files/agent`，`AgentBuild.open` 仍照常验 Ed25519 签名、大小和 SHA-256，文件被改动会被拒绝，与 Windows 一样。
 - 三个 APK 内的 5 个 agent 文件与 3.4.0 签名源逐字节一致；APK v2 签名与 3.5.0 同一证书；未检出本机路径/用户名/测试服务器地址。`aurora_profile` 的 pointycastle 改为 ^4.0.0（与 dartssh2 4.1.0 一致），4 项 sealer 测试仍通过。
 - 未验证：没有在真机或模拟器上运行；解包、SSH 登录、上传、安装 agent、直连在 Android 上都未实际跑过。
+
+### 3.6.0 编辑器多格式文件 + Windows/Android 统一版本（2026-11-10）
+
+- 见 DESIGN D-99、D-100。编辑器：图片（缩放）、PDF（pdfrx，MIT，PDFium 由构建时下载）、Markdown 预览、CSV/TSV 表格；视频/音频暂不播放，提示下载。PDFium 及其 17 个组件许可证存在 `app/third_party/pdfium`，写入 LICENSES.txt；`licenses.ps1` 排除 `flutter_localizations`。
+- 测试：`app` 全量 102 项通过（15 项按设计跳过），其中新增：类型判断与 CSV 解析、按字节读取（成功、超上限、短流、断流、取消）、查看器 widget（预览不丢未保存文字且编辑器状态不重建、图片解码、损坏图片、超限、读取失败）。
+- 统一版本：同一个 `-Version 3.6.0` 构建 Windows 包和 3 个 APK，versionCode 31600/32600/34600 由版本号推算（后两位为 ABI），APK 内的 agent 与 Windows 包的逐字节一致。
+- Windows ZIP：24,764,182 字节，SHA-256 `40df587e86e9ace6f96d0645f46b7bc75b1374e609988751756ca3bb4a866606`，27 个文件与目录逐字节一致；agent SHA-256 `4e2b84b8fdd4c870dec99ba5c66b17676ed51c0cf81e6fb51735877444e4b6e0`，发布密钥 `87828dfb18459372` 验签通过。
+- APK SHA-256：arm64-v8a `54dc1c1a810080cdb842ddcc2176c08227d2009fca1880907d1917cbf2dd4f5a`；armeabi-v7a `d95cbe60db611478fa0727c6b55544069adeebca3a2f78196a49a79a05dfc806`；x86_64 `09e9f2fa1201ced86665c918203fbf4b6825caded106681fe6118b47703e9ff0`。证书与 3.5.x 相同，包内 agent 与签名源一致，未检出本机路径、用户名、测试服务器地址。
+- 未验证：真实窗口/真机上的查看器观感与手感；大 PDF、高分辨率图片的内存和性能；Android 上的 PDFium（libpdfium.so 已打包，未运行）；Android 上的 Keystore、agent 安装；篁改拒绝测试未在重打后重复。尚未推送到 GitHub。

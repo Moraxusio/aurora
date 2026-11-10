@@ -214,13 +214,17 @@ class AppState extends ChangeNotifier implements ProfileAccess {
 
   /// Adds a server after a successful install (or saves new parameters for
   /// an existing one after re-pairing).
-  Future<String> saveInstalled({String? id, required String name, required SshLogin ssh, required InstallOutcome o}) async {
+  ///
+  /// [instance] is the agent instance a new entry is made for (D-101); an
+  /// existing entry keeps its own.
+  Future<String> saveInstalled(
+      {String? id, required String name, required SshLogin ssh, required InstallOutcome o, String instance = ''}) async {
     final d = o.direct!;
     late String sid;
     await update((p) {
       var e = id == null ? null : p.server(id);
       if (e == null) {
-        e = ServerEntry.create(name, ssh: ssh);
+        e = ServerEntry.create(name, ssh: ssh, instance: instance);
         p.servers.add(e);
         p.selected = e.id; // a server just added is the one the user wants to see
       }

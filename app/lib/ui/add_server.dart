@@ -35,6 +35,11 @@ class _AddServerPageState extends State<AddServerPage> {
   bool _useKey = false;
   bool _save = true;
 
+  /// The agent instance of this client on the server (D-101). A server added
+  /// here gets a new one; reinstalling an entry keeps its own, and an old
+  /// entry (empty) stays on the default instance.
+  late final String _instance = widget.existing != null ? widget.existing!.instance : newInstanceName();
+
   _Phase _phase = _Phase.form;
   final List<_StepRow> _steps = [];
   double? _upload;
@@ -163,6 +168,7 @@ class _AddServerPageState extends State<AddServerPage> {
       if(existing!=null&&link!=null){final offer=widget.app.upgrades.offer(existing.id,link);if(offer.available)await widget.app.upgrades.begin(existing.id,offer);}
       final inst = Installer(remote, widget.app.builds,
           policy: widget.app.upgradePolicy,
+          instance: _instance,
           sudoPassword: _sudo.text.isEmpty ? null : _sudo.text,
           serverName: _name.text.trim().isEmpty ? host : _name.text.trim(),
           onProgress: _progress);
@@ -188,7 +194,7 @@ class _AddServerPageState extends State<AddServerPage> {
         sudoPassword: _save && _sudo.text.isNotEmpty ? _sudo.text : null,
       );
       await widget.app.saveInstalled(
-          id: widget.existing?.id, name: _name.text.trim().isEmpty ? host : _name.text.trim(), ssh: ssh, o: o);
+          id: widget.existing?.id, name: _name.text.trim().isEmpty ? host : _name.text.trim(), ssh: ssh, o: o, instance: _instance);
     }
     setState(() {
       _outcome = o;

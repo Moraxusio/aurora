@@ -32,6 +32,11 @@ class OverviewView extends StatefulWidget {
 
 class _OverviewViewState extends State<OverviewView> {
   bool _busy = false;
+
+  /// This client's agent instance on the server (D-101); empty is the default one.
+  String get _instance => ws.entry?.instance ?? '';
+  String get _cfgDir => _instance.isEmpty ? '/etc/aurora3' : '/etc/aurora3.d/$_instance';
+  String get _stateDir => _instance.isEmpty ? '/var/lib/aurora3' : '/var/lib/aurora3.d/$_instance';
   String? _note;
   final Set<String> _switching = {};
 
@@ -107,7 +112,7 @@ class _OverviewViewState extends State<OverviewView> {
         title: purge ? '彻底清除？' : '卸载 agent？',
         body: purge
             ? '停止 agent，删除程序、配置、证书、令牌、审计日志和状态目录。之后重新安装会是一台新的服务器，要重新配对。'
-            : '停止 agent，删除程序和 systemd 单元。配置和身份保留在 /etc/aurora3 和 /var/lib/aurora3，以后重新安装时令牌和指纹不变。',
+            : '停止 agent，删除程序和 systemd 单元。配置和身份保留在 $_cfgDir 和 $_stateDir，以后重新安装时令牌和指纹不变。',
         ok: purge ? '彻底清除' : '卸载',
         danger: true);
     if (!ok) return;
@@ -123,7 +128,7 @@ class _OverviewViewState extends State<OverviewView> {
         return;
       }
       var sudo = ws.entry?.ssh?.sudoPassword;
-      final inst = Installer(r, const [], sudoPassword: sudo);
+      final inst = Installer(r, const [], sudoPassword: sudo, instance: _instance);
       var o = await inst.uninstall(purge: purge);
       if (o.result == 'sessions' && mounted) {
         final force = await confirmDialog(context, title: '还有终端会话在运行', body: '会话：${o.sessions.join('、')}\n\n继续卸载会结束这些会话和里面运行的程序。', ok: '结束会话并卸载', danger: true);
@@ -183,6 +188,7 @@ class _OverviewViewState extends State<OverviewView> {
           kv('主机密钥', kh == null ? '—' : '${kh.type} ${kh.fingerprint}'),
           kv('直连地址', d == null ? '—' : d.addrs.join('  ')),
           kv('证书指纹', d?.pin ?? '—'),
+          kv('agent 实例', _instance.isEmpty ? '默认（共用名称）' : '$_instance（这个客户端独用的 agent，与其它客户端互不影响）'),
           if (info != null) ...[kv('系统', info.os), kv('主机名', info.host), kv('agent 版本', info.version)],
           if(info!=null) Align(alignment:Alignment.centerLeft,child:TextButton.icon(onPressed:()=>showAgentUpgrade(context,ws.app,ws.serverId),icon:const Icon(Icons.system_update_alt),label:const Text('检查并升级 agent'))),
           kv('保存的密码', s == null ? '—' : ([if ((s.password ?? '').isNotEmpty) 'SSH 密码', if ((s.privateKey ?? '').isNotEmpty) '私钥', if ((s.sudoPassword ?? '').isNotEmpty) 'sudo 密码'].join('、')).ifEmpty('无')),

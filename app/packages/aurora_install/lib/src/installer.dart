@@ -131,7 +131,22 @@ class Installer {
   final void Function(InstallProgress p)? onProgress;
   final UpgradePolicy? policy;
 
-  Installer(this.remote, this.builds, {this.sudoPassword, this.serverName, this.onProgress, this.policy});
+  /// The agent instance this run works on (D-101). Empty is the default
+  /// instance, which keeps the names of agents installed before instances
+  /// existed. A named instance has its own binary, service, config, port and
+  /// tmux, so it never affects another client's agent on the same server.
+  final String instance;
+
+  Installer(this.remote, this.builds,
+      {this.sudoPassword, this.serverName, this.onProgress, this.policy, this.instance = ''}) {
+    final e = checkInstanceName(instance);
+    if (e != null) throw ArgumentError.value(instance, 'instance', e);
+  }
+
+  /// Where this instance's binary lives on the server.
+  String get _agentBin => instance.isEmpty ? '/usr/local/bin/aurora3-agent' : '/usr/local/bin/aurora3-agent-$instance';
+
+  List<String> get _instanceArgs => instance.isEmpty ? const [] : ['--instance', instance];
 
   void _p(InstallStep s, String status, [String msg = '', double? f]) =>
       onProgress?.call(InstallProgress(s, status, msg, f));
@@ -198,6 +213,7 @@ class Installer {
       final args = [
         bin,
         'install',
+        ..._instanceArgs,
         '--sha256',
         build.manifest.sha256.toLowerCase(),
         if (policy != null) ...['--policy', '$dir/policy.json', '--policy-signature', '$dir/policy.sig'],
@@ -223,7 +239,7 @@ class Installer {
       return InstallOutcome('unsupported', e.message);
     }
     _p(InstallStep.inspect, 'ok');
-    final out = await _asRoot(host, ['/usr/local/bin/aurora3-agent', 'direct-info']);
+    final out = await _asRoot(host, [_agentBin, 'direct-info', ..._instanceArgs]);
     return _outcome(out);
   }
 
@@ -242,8 +258,9 @@ class Installer {
     }
     _p(InstallStep.inspect, 'ok');
     final r = await _asRoot(host, [
-      '/usr/local/bin/aurora3-agent',
+      _agentBin,
       'uninstall',
+      ..._instanceArgs,
       if (probe) '--probe',
       if (force) '--force',
       if (purge) '--purge',
@@ -361,6 +378,17 @@ class _Host {
   final String uname, arch, user;
   final bool root, sudoNeedsPassword;
   _Host(this.uname, this.arch, this.user, this.root, this.sudoNeedsPassword);
+}
+
+/// Why [name] cannot name an agent instance, or null when it can. The rules
+/// are the agent's (entry.ValidInstance): empty is the default instance, else
+/// 1 to 16 lower-case letters and digits starting with a letter, and not a
+/// word that is part of a default name.
+String? checkInstanceName(String name) {
+  if (name.isEmpty) return null;
+  if (!RegExp(r'^[a-z][a-z0-9]{0,15}$').hasMatch(name)) return '实例名 "$name" 无效：只能是 1 到 16 位小写字母和数字，且以字母开头';
+  if (const {'tmux', 'upgrade', 'agent', 'default', 'install'}.contains(name)) return '实例名 "$name" 是保留字';
+  return null;
 }
 
 /// Single-quotes [s] for sh.

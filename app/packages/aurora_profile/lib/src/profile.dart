@@ -80,6 +80,12 @@ class ServerEntry {
   /// The agent's own id (wire.AgentInfo.ID), once paired.
   String? agentId;
 
+  /// Which agent instance on the server is this client's (D-101). Empty is the
+  /// default instance, which is what every entry made before instances
+  /// existed uses. A new entry gets its own random name, so each client has an
+  /// agent that no other client's agent shares anything with.
+  String instance;
+
   /// How to reach the server over SSH for install and re-pairing.
   SshLogin? ssh;
 
@@ -105,17 +111,19 @@ class ServerEntry {
   String? selectedWorkspace;
   WorkspaceView browserView;
 
-  ServerEntry({required this.id, required this.name, this.agentId, this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy, this.upgrade, List<String>? failedUpgrades,
+  ServerEntry({required this.id, required this.name, this.agentId, this.instance = '', this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy, this.upgrade, List<String>? failedUpgrades,
     List<ProjectWorkspace>? workspaces, this.selectedWorkspace, WorkspaceView? browserView})
       : forwards = forwards ?? [], failedUpgrades = failedUpgrades ?? [], workspaces = workspaces ?? [], browserView = browserView ?? WorkspaceView();
 
   /// A new entry with a random id.
-  factory ServerEntry.create(String name, {SshLogin? ssh}) => ServerEntry(id: newId(), name: name, ssh: ssh);
+  factory ServerEntry.create(String name, {SshLogin? ssh, String instance = ''}) =>
+      ServerEntry(id: newId(), name: name, ssh: ssh, instance: instance);
 
   factory ServerEntry.fromJson(Map<String, dynamic> j) => ServerEntry(
         id: j['id'] as String,
         name: j['name'] as String? ?? '',
         agentId: j['agent_id'] as String?,
+        instance: j['instance'] as String? ?? '',
         ssh: j['ssh'] == null ? null : SshLogin.fromJson(_map(j['ssh'])),
         direct: j['direct'] == null ? null : DirectParams.fromJson(_map(j['direct'])),
         lastSeen: j['last_seen'] as int?,
@@ -132,6 +140,7 @@ class ServerEntry {
         'id': id,
         'name': name,
         'agent_id': ?agentId,
+        if (instance.isNotEmpty) 'instance': instance,
         'ssh': ?ssh?.toJson(),
         'direct': ?direct?.toJson(),
         'last_seen': ?lastSeen,
@@ -428,6 +437,10 @@ String newId() {
   }
   return b.toString();
 }
+
+/// A fresh agent instance name (D-101): "c" and 8 hex digits, which the
+/// agent accepts (lower case, starts with a letter, at most 16, no hyphen).
+String newInstanceName() => 'c${newId().substring(0, 8)}';
 
 int _now() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
 

@@ -229,4 +229,46 @@ void main() {
     expect(r.commands.last, "sudo -n -- '/usr/local/bin/aurora3-agent' 'direct-info'");
     expect(r.uploadPath, isNull);
   });
+
+  group('instances (D-101)', () {
+    test('a named instance installs with --instance', () async {
+      final r = FakeRemote()
+        ..uname = 'Linux\nx86_64\n0\nroot\nroot\n'
+        ..installOut = resultLine('installed');
+      final o = await Installer(r, [build], instance: 'c1a2b3c4d').install();
+      expect(o.ok, isTrue);
+      final inst = r.commands.lastWhere((c) => c.contains("'install'"));
+      expect(inst, startsWith("'/tmp/aurora3-upload-AbCd1234/aurora3-agent' 'install' '--instance' 'c1a2b3c4d' "));
+    }, skip: skip);
+
+    test('the default instance adds no flag', () async {
+      final r = FakeRemote()
+        ..uname = 'Linux\nx86_64\n0\nroot\nroot\n'
+        ..installOut = resultLine('installed');
+      await Installer(r, [build]).install();
+      expect(r.commands.lastWhere((c) => c.contains("'install'")), isNot(contains('--instance')));
+    }, skip: skip);
+
+    test('uninstall and direct-info address the instance own binary', () async {
+      final r = FakeRemote()
+        ..uname = 'Linux\nx86_64\n0\nroot\nroot\n'
+        ..installOut = resultLine('uninstalled');
+      await Installer(r, const [], instance: 'alice').uninstall(force: true, purge: true);
+      expect(r.commands.last, "'/usr/local/bin/aurora3-agent-alice' 'uninstall' '--instance' 'alice' '--force' '--purge'");
+      r.installOut = resultLine('direct');
+      await Installer(r, const [], instance: 'alice').readDirect();
+      expect(r.commands.last, "'/usr/local/bin/aurora3-agent-alice' 'direct-info' '--instance' 'alice'");
+    });
+
+    test('names the agent would refuse are refused before anything runs', () {
+      final r = FakeRemote();
+      for (final bad in ['Alice', 'a-b', '1abc', '../x', 'a b', 'tmux', 'default', 'averyveryverylongname']) {
+        expect(() => Installer(r, const [], instance: bad), throwsArgumentError, reason: bad);
+        expect(checkInstanceName(bad), isNotNull, reason: bad);
+      }
+      for (final ok in ['', 'a', 'alice', 'c1a2b3c4d', 'abcdefghijklmnop']) {
+        expect(checkInstanceName(ok), isNull, reason: ok);
+      }
+    });
+  });
 }

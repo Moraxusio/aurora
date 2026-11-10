@@ -86,6 +86,32 @@ void main() {
     });
   });
 
+  group('agent instance (D-101)', () {
+    test('is kept in the profile; an old entry without one is the default instance', () {
+      final p = Profile();
+      p.servers.add(ServerEntry.create('mine', instance: 'c1a2b3c4d'));
+      p.servers.add(ServerEntry.create('old'));
+      final j = jsonDecode(jsonEncode(p.toJson())) as Map<String, dynamic>;
+      final servers = (j['servers'] as List).cast<Map<String, dynamic>>();
+      expect(servers[0]['instance'], 'c1a2b3c4d');
+      expect(servers[1].containsKey('instance'), isFalse, reason: 'the default instance writes nothing');
+      final back = Profile.fromJson(j);
+      expect(back.servers[0].instance, 'c1a2b3c4d');
+      expect(back.servers[1].instance, '');
+      // A profile written before instances existed has no key at all.
+      servers[1].remove('instance');
+      expect(Profile.fromJson(j).servers[1].instance, '');
+    });
+
+    test('new names are valid for the agent and differ', () {
+      final names = {for (var i = 0; i < 200; i++) newInstanceName()};
+      expect(names.length, 200);
+      for (final n in names) {
+        expect(RegExp(r'^[a-z][a-z0-9]{0,15}$').hasMatch(n), isTrue, reason: n);
+      }
+    });
+  });
+
   group('store', () {
     test('missing file opens empty; saved profile reopens', () async {
       final s = await ProfileStore.open(path, XorSealer());

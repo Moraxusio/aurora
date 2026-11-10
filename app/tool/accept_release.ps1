@@ -4,7 +4,7 @@
 # the release folder's agent\ directory, and AURORA3_TRUST_KEY unset, so the
 # real release key decides. The SSH side is agent/tools/ui-ssh.sh (root,
 # every v3 name removed afterwards, v2 compared).
-#   powershell -File app\tool\accept_release.ps1 -Release release3\Aurora-3.0.0
+#   powershell -File app\tool\accept_release.ps1 -Release dist\Aurora-3.0.0
 param([Parameter(Mandatory)][string]$Release, [string]$Distro = 'Ubuntu-24.04')
 $ErrorActionPreference = 'Stop'
 $app = Split-Path -Parent $PSScriptRoot

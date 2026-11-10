@@ -8,6 +8,10 @@
 *.test
 *.out
 
+# Release output and signing keys
+/dist/
+*.key
+
 # Flutter app
 /app/**/.dart_tool/
 /app/**/build/

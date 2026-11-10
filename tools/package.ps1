@@ -2,7 +2,7 @@
 # aurora3-agent it installs, signed with the v3 release key (D-3, D-13).
 # Nothing is uploaded (G7.2).
 #
-#   powershell -File tools\package.ps1 -Version 3.0.0 [-Out release3]
+#   powershell -File tools\package.ps1 -Version 3.0.0 [-Out dist] [-Key <release.key>]
 #
 # Layout of the output:
 #   Aurora-<version>\
@@ -14,9 +14,9 @@
 # plus Aurora-<version>.zip and its SHA-256.
 param(
     [Parameter(Mandatory)][string]$Version,
-    # Not v2-release: that is v2's release folder (D-75).
-    [string]$Out = 'release3',
-    [string]$Key = '<release-key>',
+    [string]$Out = $(if ($env:AURORA_RELEASE_OUT) { $env:AURORA_RELEASE_OUT } else { Join-Path (Split-Path -Parent $PSScriptRoot) 'dist' }),
+    # Release signing key (never commit it). Or set AURORA_RELEASE_KEY.
+    [string]$Key = $env:AURORA_RELEASE_KEY,
     [string]$Policy = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -24,7 +24,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $go = 'go'
 $flutter = 'flutter'
 if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw "version must be MAJOR.MINOR.PATCH: $Version" }
-if (-not (Test-Path $Key)) { throw "release key not found: $Key" }
+if (-not $Key -or -not (Test-Path $Key)) { throw "release key not found: $Key" }
 $dir = Join-Path $Out "Aurora-$Version"
 $zip = Join-Path $Out "Aurora-$Version.zip"
 foreach ($target in @($dir, $zip, "$zip.sha256")) {

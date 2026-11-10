@@ -6,10 +6,10 @@
 
 | 工具 | 位置 | 说明 |
 |---|---|---|
-| Go 1.26.0 | `<go-sdk>` | 安装包 SHA-256 与 go.dev 一致。构建用 `GOTOOLCHAIN=local`、`CGO_ENABLED=0`，离线时加 `GOPROXY=off` |
-| Flutter 3.47.9（Dart 3.13.7） | `<flutter-sdk>` | zip 的 SHA-256 `d8e2b597…3f68a9e` 与官方发布清单一致。访问 GitHub 和 pub.dev 需要在命令里设 `HTTPS_PROXY=http://127.0.0.1:<proxy-port>`（本机代理），不改全局配置 |
+| Go 1.26.0 | 本机 Go 安装目录 | 安装包 SHA-256 与 go.dev 一致。构建用 `GOTOOLCHAIN=local`、`CGO_ENABLED=0`，离线时加 `GOPROXY=off` |
+| Flutter 3.47.9（Dart 3.13.7） | 本机 Flutter SDK 目录 | zip 的 SHA-256 `d8e2b597…3f68a9e` 与官方发布清单一致。网络受限时可在命令里临时设置 `HTTPS_PROXY`，不改全局配置 |
 | Visual Studio 生成工具 2026 | 已装 | Flutter Windows 桌面构建用；`aurora_tls` 的构建钩子用其中的 cl.exe 与 lib.exe |
-| NASM 3.02 | `<nasm-dir>` | `aurora_tls` 在 Windows x64 上汇编 BoringSSL 用。哈希与来源见 `app/packages/aurora_tls/third_party/README.md` |
+| NASM 3.02 | 本机 NASM 目录（或 PATH 中的 `nasm`） | `aurora_tls` 在 Windows x64 上汇编 BoringSSL 用。哈希与来源见 `app/packages/aurora_tls/third_party/README.md` |
 | WSL 的 gcc/g++ 13.3 | 已有 | Windows 上交叉构建 Linux 版时，构建钩子经 `wsl` 调用 `x86_64-linux-gnu-g++` |
 | WSL Ubuntu-24.04 | 已有 | 跑着 v2 agent。v3 的 Linux 测试在这里跑，只用 `/tmp` 下的临时目录，不碰 v2 的名字（DESIGN 第 4 节） |
 | Android SDK | 未装 | G5 的 Android 部分开始前安装 |
@@ -83,7 +83,7 @@ Go 工具链、模块、构建脚本、tmux 构建锁。
 | M1.6 | 界面三：文件（浏览、上传下载、新建、改名、删除）、监控（CPU、内存、磁盘、进程） | 完成 |
 | M1.7 | 打包：签名 amd64 agent，随程序放进文件夹；WSL 上完整验收"添加、安装、连接、终端、文件、开关、卸载"，v2 前后不变 | 完成（2026-11-07） |
 
-初版交付：`release3\Aurora-3.0.0`（及同目录的 zip 和 `.sha256`），由 `tools\package.ps1 -Version 3.0.0` 生成，没有上传。agent `aurora3-agent-3.0.0-linux-amd64` 的 SHA-256 为 `9a44d006a08c5650cab3ba43d400107748a76e0a9964e4c6e94ce791a6408e5e`，用发布密钥 `87828dfb18459372` 签名；两次打包得到相同的 agent，构建可复现。验收：`app\tool\accept_release.ps1` 用这个文件夹自己的 agent（不设测试密钥）在界面里装进 WSL，连接、新建会话、卸载；改动 agent 一个字节后客户端拒绝安装；`ui_test`、`install-real`（64 项）、`terminal-survives`（16 项）、`install-e2e`（24 项）、`terminal-e2e`（15 项）和全部 Go、Dart 单元测试通过；v2 的单元、PID、二进制、配置、端口前后一致。`v2-release` 是 v2 的发布目录，v3 不写入。
+初版交付：`release3\Aurora-3.0.0`（及同目录的 zip 和 `.sha256`），由 `tools\package.ps1 -Version 3.0.0` 生成，没有上传。agent `aurora3-agent-3.0.0-linux-amd64` 的 SHA-256 为 `9a44d006a08c5650cab3ba43d400107748a76e0a9964e4c6e94ce791a6408e5e`，用发布密钥 `87828dfb18459372` 签名；两次打包得到相同的 agent，构建可复现。验收：`app\tool\accept_release.ps1` 用这个文件夹自己的 agent（不设测试密钥）在界面里装进 WSL，连接、新建会话、卸载；改动 agent 一个字节后客户端拒绝安装；`ui_test`、`install-real`（64 项）、`terminal-survives`（16 项）、`install-e2e`（24 项）、`terminal-e2e`（15 项）和全部 Go、Dart 单元测试通过；v2 的单元、PID、二进制、配置、端口前后一致。v2 的发布目录，v3 不写入。
 
 不在初版里：Android、git 界面、devtools、net、代理（G2.8）、VPS、arm64 服务器。会话按 root 运行（D-25），`session_user` 在代理之后做。
 
@@ -160,7 +160,7 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 
 ### 3.3.0 本地发布包（2026-11-09）
 
-- 已由提交 `ade6c70` 及其父提交构建到 `release3\Aurora-3.3.0`，没有覆盖 3.2.0，也没有写入 v2 的 `v2-release`。
+- 已由提交 `ade6c70` 及其父提交构建到 `release3\Aurora-3.3.0`，没有覆盖 3.2.0，也没有写入 v2 的发布目录。
 - ZIP：20,220,073 字节，SHA-256 `5a9ee4e2d164ba9e3c50d7c97e18ce6e6d1427c0ffa94afb980f4c8e5c37cc47`。
 - 内置 agent：12,796,066 字节，SHA-256 `3d6cbf888573fbf7f428bc140e17967e276b3ecaa0468c6d495e34d73d836efa`；manifest 版本 `3.3.0`，发布密钥 ID `87828dfb18459372`。正式 Go 发布工具验签和无测试密钥的 Dart `AgentBuild.open` 验签均通过。
 - 包内 `agent/policy.json`、`policy.sig` 的正式公钥验签通过，篡改策略被拒绝；ZIP sidecar SHA-256 匹配。包内 19 项文件中未发现测试 peer/node、fixture、profile、私钥或真实凭据文本。
@@ -185,7 +185,7 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 
 ### 3.4.0 本地发布包（2026-11-10）
 
-- 从干净提交 `a648ef9` 构建到 `release3\Aurora-3.4.0`、同名 ZIP 和 `.zip.sha256`，没有覆盖任何旧包，也没有写入 v2 的 `v2-release`。内容：项目工作区、文件管理器层次、Windows 托盘常驻与单实例、新图标。改动都在客户端，已有 agent 不必为此升级。
+- 从干净提交 `a648ef9` 构建到 `release3\Aurora-3.4.0`、同名 ZIP 和 `.zip.sha256`，没有覆盖任何旧包，也没有写入 v2 的发布目录。内容：项目工作区、文件管理器层次、Windows 托盘常驻与单实例、新图标。改动都在客户端，已有 agent 不必为此升级。
 - ZIP：20,242,549 字节，SHA-256 `a166e8e0a27f5a3d7b0d49caf3646f48d54c165836231d9e8ac8af5cc27e74b1`，sidecar 与重新计算一致；ZIP 的 20 个文件与产物目录逐字节一致（0 处差异）。Windows 文件版本和产品版本均为 3.4.0。
 - 内置 linux/amd64 agent：12,796,066 字节，SHA-256 `afa8cb0fbd610f9eef34c0fbd1d6cc9b6ac0384984e4988cc120827cf5e156f0`，版本 3.4.0，发布密钥 ID `87828dfb18459372`。tmux 内置包与 `bundle.lock` 一致；Go 发布工具验签通过；无测试密钥的 Dart `AgentBuild.open` 验签通过（`ok aurora3-agent 3.4.0 amd64`）。
 - 篡改检查（只改临时副本，原包不动）：同大小的 agent 字节翻转被拒绝（退出码 1），清单版本改动被拒绝（退出码 1），未改动的副本通过（退出码 0）。包内有新图标资源 `aurora3-256.png`；未发现私钥、测试 peer、fixture、profile、订阅或日志文件。`data/app.so` SHA-256 `11c387a651f4d9c4a398a262655ce5e058b53223678ec40017aff6e9ce7964bd`。
@@ -207,7 +207,7 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | dbus（file_picker_linux 的依赖） | 0.8.0 | MPL-2.0 | 只在 Linux 版里用于文件对话框。2026-11-07 用户同意例外：与 hashicorp/yamux 一样，不修改它，随程序附上许可证 |
 | Flutter 应用的其它运行时依赖（共 50 个） | 见 `app/pubspec.lock` | MIT、BSD-2/3-Clause、Apache-2.0 | 2026-11-07 逐个核对 pub.dev 上的许可证原文；发布文件夹里的 `LICENSES.txt` 按包列出 |
 | hooks、code_assets、native_toolchain_c（Dart 团队） | 2.2.0、2.1.0、0.19.5 | BSD-3-Clause | 构建钩子，只在构建时用 |
-| NASM（构建工具，不进安装包） | 3.02 | BSD-2-Clause | 只在 Windows x64 上汇编 BoringSSL；位于 `<nasm-dir>` |
+| NASM（构建工具，不进安装包） | 3.02 | BSD-2-Clause | 只在 Windows x64 上汇编 BoringSSL；位于 本机 NASM 目录（或 PATH 中的 `nasm`） |
 | github.com/hashicorp/yamux（Go） | 0.1.1 | MPL-2.0 | agent 端多路复用，沿用 v2 |
 | github.com/apernet/hysteria/core/v2（Go） | 2.13.0 | MIT | 代理上游，沿用 v2 |
 | github.com/apernet/quic-go（Go，间接） | — | MIT | p2p、hysteria |

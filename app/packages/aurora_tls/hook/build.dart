@@ -157,8 +157,6 @@ Future<String> _findNasm() async {
     final f = File('$dir\\nasm.exe');
     if (f.existsSync()) return f.path;
   }
-  const fallback = r'nasm';
-  if (File(fallback).existsSync()) return fallback;
   throw Exception('NASM not found: set AURORA_NASM to nasm.exe (NASM 3.02)');
 }
 

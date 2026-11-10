@@ -10,7 +10,7 @@ Aurora 提供比 SSH 更强的远程服务器管理能力。
 - **客户端**：Flutter/Dart 编写，一套代码面向 Windows、Linux、macOS、Android、iOS（D-70）。负责安装 agent、建立连接、提供界面。
 - **VPS**：可选，只提供代理网络和打洞，不承担任何凭据。
 
-v2（`aurora-v2`，标签 `archive/v2-final`，提交 `f0d209c`）已封存，只读参考，不修改，不在其目录里构建（D-75）。
+v2（标签 `archive/v2-final`，提交 `f0d209c`）已封存，只读参考，不修改，不在其目录里构建（D-75）。
 
 ## 2. 使用流程
 
@@ -35,7 +35,7 @@ aurora-next/
 
 - 客户端与 agent 在同一仓库，协议两端一起改，共用一个版本号。
 - 客户端安装包内置 agent（D-3、D-14），构建时从 `agent/` 取产物。
-- 本仓库由 `aurora-v3` 克隆而来，保留其全部提交历史。`aurora-v3` 之后不再使用，但不删除。
+- 本仓库由 早期的 `aurora-v3` 仓库 克隆而来，保留其全部提交历史。`aurora-v3` 之后不再使用，但不删除。
 
 ## 4. 与 v2 隔离（D-71、D-75）
 
@@ -223,7 +223,7 @@ Aurora 不修改任何代理服务器（D-83）。受控服务器（装 agent，
 
 ### 5.9 客户端（D-70）
 
-- Flutter 稳定版（当前 3.47.9，Dart 3.13.7），安装在 `<flutter-sdk>`。第一批目标是 Windows 桌面和 Android；Linux、macOS、iOS 在同一代码上逐步打开。不做 Web。
+- Flutter 稳定版（当前 3.47.9，Dart 3.13.7），安装在 本机 Flutter SDK 目录。第一批目标是 Windows 桌面和 Android；Linux、macOS、iOS 在同一代码上逐步打开。不做 Web。
 - 客户端全部用 Dart 实现，不嵌入 Go 库（路线 B）。协议栈见 5.3。
 - SSH：`dartssh2` 4.1.0（纯 Dart，MIT），主机指纹由客户端自己校验（D-2）。
 - 依赖规则：只用许可证与分发兼容的包（MIT、BSD、Apache-2.0），不用 GPL。每个第三方包在实施计划中登记版本与许可证。
@@ -239,7 +239,7 @@ Aurora 不修改任何代理服务器（D-83）。受控服务器（装 agent，
 | 算法 | ed25519 |
 | 公钥（base64） | `ZkXgb9QfuaRzm77NoOxMTOrB+8hMkbx2lc5gRTKdtrk=` |
 | key_id | `87828dfb18459372` |
-| 私钥位置 | `<release-key>`，不进任何仓库、安装包或文档 |
+| 私钥位置 | 发布私钥文件（路径由 `-Key` 参数或 `AURORA_RELEASE_KEY` 指定），不进任何仓库、安装包或文档 |
 
 ## 6. 新增决定（本次汇总）
 

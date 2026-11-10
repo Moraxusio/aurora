@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 
 import '../state/app_state.dart';
+import '../features/files/transfers.dart';
 import 'editor_tab.dart';
 import 'feature.dart';
 import 'widgets.dart';
@@ -51,6 +52,10 @@ class Workspace extends ChangeNotifier {
   /// Raised when a file on the server changed because of something done here
   /// (a save): the file tree reloads what it shows.
   final ValueNotifier<int> filesRevision = ValueNotifier(0);
+
+  /// The transfer list the file tree shows; set when the tree is built. The
+  /// viewers download through it, so their transfers appear in the same list.
+  Transfers? transfers;
 
   /// Narrow layouts show either the side bar or the editor area.
   bool compactEditor = false;

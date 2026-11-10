@@ -4,16 +4,29 @@
 #   -Out       where the APKs and SHA256SUMS.txt go
 # The release keystore stays outside the repository:
 #   AURORA_ANDROID_KEYSTORE, AURORA_ANDROID_STORE_PASS (and AURORA_ANDROID_KEY_ALIAS, default aurora3)
+#
+# One version for every client: -Version is the same MAJOR.MINOR.PATCH that
+# tools\package.ps1 gets for Windows. Android's versionCode is derived from it
+# (MAJOR*10000 + MINOR*100 + PATCH), so a newer version always installs over an
+# older one and the two clients can never disagree. -AgentDir defaults to the
+# agent inside the Windows package of the same version in -Out, so both ship the
+# same signed agent.
 param(
   [Parameter(Mandatory = $true)][string]$Version,
-  [Parameter(Mandatory = $true)][int]$BuildNumber,
-  [Parameter(Mandatory = $true)][string]$AgentDir,
+  [string]$AgentDir,
   [Parameter(Mandatory = $true)][string]$Out
 )
 $ErrorActionPreference = 'Stop'
+if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw "version must be MAJOR.MINOR.PATCH: $Version" }
+$p = $Version.Split('.')
+if ([int]$p[1] -gt 99 -or [int]$p[2] -gt 99) { throw 'MINOR and PATCH must be 0-99 for the Android version code' }
+$BuildNumber = [int]$p[0] * 10000 + [int]$p[1] * 100 + [int]$p[2]
+if (-not $AgentDir) { $AgentDir = Join-Path $Out "Aurora-$Version\agent" }
 $repo = Split-Path -Parent $PSScriptRoot
 $dest = Join-Path $repo 'app\assets\agent'
 if (-not (Test-Path (Join-Path $AgentDir 'amd64\manifest.sig'))) { throw "no signed agent in $AgentDir" }
+$agentVersion = (Get-Content (Join-Path $AgentDir 'amd64\manifest.json') -Raw | ConvertFrom-Json).version
+if ($agentVersion -ne $Version) { throw "the agent in ${AgentDir} is ${agentVersion}, not ${Version}; build the Windows package of this version first" }
 function Clear-Agent { Get-ChildItem $dest -Recurse -File | Where-Object { $_.Name -ne '.gitkeep' } | Remove-Item -Force }
 Clear-Agent
 Copy-Item (Join-Path $AgentDir 'policy.json'), (Join-Path $AgentDir 'policy.sig') $dest

@@ -41,6 +41,9 @@ import '../../kernel/editor_tab.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
+import 'file_kind.dart';
+import 'file_preview.dart';
+import 'file_viewers.dart';
 
 /// The highlighter language for a file name, or null for plain text.
 ({String name, CodeHighlightThemeMode mode})? languageFor(String file) {
@@ -79,10 +82,23 @@ import '../../theme/ide_theme.dart';
 /// key so closing the tab can ask about unsaved changes.
 EditorTab fileEditorTab(Workspace ws, {required String root, required String path, int? line}) {
   path = WorkspacePath.normalize(path);
+  final id = 'file:$root:$path';
+  final title = path.split('/').last;
+  final file = WorkspacePath(root: root, path: path);
+  // Not text: a viewer of its own, no editing, nothing to save or discard.
+  final kind = kindOf(path);
+  if (kind != FileKind.text) {
+    final (icon, view) = switch (kind) {
+      FileKind.image => (Icons.image_outlined, ImageViewer(ws: ws, root: root, path: path) as Widget),
+      FileKind.pdf => (Icons.picture_as_pdf_outlined, PdfFileViewer(ws: ws, root: root, path: path)),
+      FileKind.video => (Icons.movie_outlined, MediaUnsupported(ws: ws, root: root, path: path, kind: kind)),
+      _ => (Icons.audiotrack_outlined, MediaUnsupported(ws: ws, root: root, path: path, kind: kind)),
+    };
+    return EditorTab(id: id, title: title, icon: icon, tooltip: path, builder: (_) => view, file: file);
+  }
   final key = GlobalKey<FileEditorState>();
   final view = FileEditor(key: key, ws: ws, root: root, path: path, line: line);
-  final tab = EditorTab(id: 'file:$root:$path', title: path.split('/').last, icon: Icons.description_outlined, tooltip: path, builder: (_) => view,
-    file: WorkspacePath(root: root, path: path));
+  final tab = EditorTab(id: id, title: title, icon: Icons.description_outlined, tooltip: path, builder: (_) => view, file: file);
   tab.confirmClose = () async {
     final st = key.currentState;
     if (st == null || !st.dirty) return true;
@@ -112,6 +128,7 @@ class FileEditorState extends State<FileEditor> {
   bool _saving = false;
   final bool _readOnly = false; // a later step: open read-only (e.g. a file the user cannot write)
   String? _langName;
+  bool _preview = false;
 
   bool get dirty => _phase == _Phase.ready && !_readOnly && _controller.text != _saved;
 
@@ -316,7 +333,22 @@ class FileEditorState extends State<FileEditor> {
               theme: dark ? vs2015Theme : githubTheme,
             ),
     );
+    final pk = previewOf(widget.path);
     return Column(children: [
+      if (pk != PreviewKind.none)
+        Container(
+          height: 28,
+          color: ide.tabBar,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Row(children: [
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () => setState(() => _preview = !_preview),
+              icon: Icon(_preview ? Icons.edit_outlined : Icons.visibility_outlined, size: 15),
+              label: Text(_preview ? '编辑' : (pk == PreviewKind.markdown ? '预览' : '表格')),
+            ),
+          ]),
+        ),
       if (_readOnly || _saving)
         Container(
           height: 24,
@@ -325,8 +357,21 @@ class FileEditorState extends State<FileEditor> {
           alignment: Alignment.centerLeft,
           child: Text(_saving ? '正在保存…' : '只读', style: TextStyle(color: ide.textDim, fontSize: 12)),
         ),
+      // Keys: without them the Column matches this new child to the editor's
+      // slot and rebuilds the editor (scroll position, cursor and focus lost).
+      if (_preview && pk != PreviewKind.none)
+        Expanded(
+          key: const ValueKey('preview'),
+          child: pk == PreviewKind.markdown
+              ? MarkdownPreview(text: _controller.text)
+              : CsvPreview(text: _controller.text, tabSeparated: extOf(widget.path) == 'tsv'),
+        ),
       Expanded(
-        child: CallbackShortcuts(
+        key: const ValueKey('editor'),
+        // kept alive while the preview shows: unsaved text and undo survive
+        child: Offstage(
+          offstage: _preview && pk != PreviewKind.none,
+          child: CallbackShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.keyS, control: true): save,
           },
@@ -347,6 +392,7 @@ class FileEditorState extends State<FileEditor> {
             horizontalScrollbarHeight: 10,
           ),
         ),
+      ),
       ),
     ]);
   }

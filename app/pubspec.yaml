@@ -27,6 +27,8 @@ dependencies:
   # third_party/xterm/AURORA.md.
   xterm:
     path: third_party/xterm
+  flutter_markdown_plus: ^1.0.12
+  pdfrx: ^2.12.0
 
 dev_dependencies:
   flutter_test:

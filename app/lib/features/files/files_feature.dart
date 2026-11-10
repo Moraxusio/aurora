@@ -15,6 +15,7 @@ import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'file_editor.dart';
+import 'download_action.dart';
 import 'transfers.dart';
 import 'project_workspaces.dart';
 import 'file_tree_row.dart';
@@ -35,7 +36,10 @@ class FilesFeature extends Feature {
   List<String> get ops => const ['fs.roots', 'fs.list', 'fs.read', 'fs.write', 'fs.mkdir', 'fs.rename', 'fs.delete', 'fs.upload', 'fs.download'];
 
   @override
-  SideBarView? sideBar(BuildContext context, Workspace ws) => SideBarView(title: '文件', body: FileTree(ws: ws, transfers: transfers), actions: const []);
+  SideBarView? sideBar(BuildContext context, Workspace ws) {
+    ws.transfers = transfers;
+    return SideBarView(title: '文件', body: FileTree(ws: ws, transfers: transfers), actions: const []);
+  }
 
   @override
   List<Command> commands(Workspace ws) => [
@@ -427,18 +431,8 @@ class _FileTreePageState extends State<_FileTreePage> {
     );
   }
 
-  Future<void> _download(_Node n) async {
-    final link = ws.link;
-    if (link == null) return;
-    final dir = await FilePicker.getDirectoryPath(dialogTitle: '下载 ${n.name} 到…');
-    if (dir == null) return;
-    var where = '$dir${Platform.pathSeparator}${n.name}';
-    for (var i = 1; await File(where).exists(); i++) {
-      final dot = n.name.lastIndexOf('.');
-      where = dot > 0 ? '$dir${Platform.pathSeparator}${n.name.substring(0, dot)} ($i)${n.name.substring(dot)}' : '$dir${Platform.pathSeparator}${n.name} ($i)';
-    }
-    widget.transfers.download(link, n.root, n.path, where, (n.entry?['size'] as num?)?.toInt() ?? 0, onDone: () => Toast.show('已下载 ${n.name}'));
-  }
+  Future<void> _download(_Node n) =>
+      downloadRemoteFile(ws, root: n.root, path: n.path, size: (n.entry?['size'] as num?)?.toInt() ?? 0);
 
   void _open(_Node n) {
     setState(() => _selected = n);

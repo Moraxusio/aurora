@@ -29,7 +29,7 @@ $deps = & 'flutter' pub deps --no-dev --style=compact --directory (Join-Path $re
     Where-Object { $_ -match '^- (\S+) (\d\S*)' } | ForEach-Object { [pscustomobject]@{ name = $Matches[1]; version = $Matches[2] } }
 if (@($deps).Count -lt 20) { throw "pub deps listed only $(@($deps).Count) packages" }
 foreach ($d in ($deps | Sort-Object name -Unique)) {
-    if ($d.name -in 'aurora_install', 'aurora_profile', 'aurora_sub', 'aurora_tls', 'aurora_wire', 'aurora', 'flutter', 'flutter_web_plugins', 'sky_engine') { continue }
+    if ($d.name -in 'aurora_install', 'aurora_profile', 'aurora_sub', 'aurora_tls', 'aurora_wire', 'aurora', 'flutter', 'flutter_localizations', 'flutter_web_plugins', 'sky_engine') { continue }
     # xterm is vendored (app/third_party/xterm, patched): its licence is there.
     $p = if ($d.name -eq 'xterm') { Join-Path $repo 'app\third_party\xterm' } else { Join-Path $pub "$($d.name)-$($d.version)" }
     $lic = @('LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING') | ForEach-Object { Join-Path $p $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -44,6 +44,15 @@ foreach ($d in ($deps | Sort-Object name -Unique)) {
 [void]$sb.AppendLine('Their licences, and those of the libraries the engine includes, are in')
 [void]$sb.AppendLine('data\flutter_assets\NOTICES.Z (gzip-compressed text).')
 [void]$sb.AppendLine('')
+
+# PDFium (pdfium.dll / libpdfium.so, fetched at build time by pdfrx from
+# bblanchon/pdfium-binaries): the archive's LICENSE and licenses\ folder,
+# kept in app/third_party/pdfium so they ship with every build.
+$pdfiumDir = Join-Path $repo 'app\third_party\pdfium'
+Add-License 'PDFium chromium/8125 (pdfium.dll in the Windows build, libpdfium.so in the Android build)' (Join-Path $pdfiumDir 'LICENSE')
+foreach ($f in (Get-ChildItem (Join-Path $pdfiumDir 'licenses') -File | Sort-Object Name)) {
+    Add-License "PDFium component licence: $($f.Name)" $f.FullName
+}
 
 # BoringSSL, compiled into aurora_tls.dll.
 Add-License 'BoringSSL 0.20261020.0 (in aurora_tls.dll)' (Join-Path $repo 'app\packages\aurora_tls\third_party\boringssl\LICENSE')

@@ -51,4 +51,4 @@ powershell -File tools\package.ps1 -Version X.Y.Z -Key path\to\release.key
 
 ## 许可证
 
-本仓库尚未选定许可证。第三方组件及其许可见发布包中的 `LICENSES.txt`（由 `tools/licenses.ps1` 生成）。
+本项目使用 [Apache License 2.0](LICENSE)，版权声明见 [NOTICE](NOTICE)。第三方组件及其许可见发布包中的 `LICENSES.txt`（由 `tools/licenses.ps1` 生成）。

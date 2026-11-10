@@ -57,7 +57,9 @@ type Env struct {
 	Roots    []Root
 	Audit    Auditor
 	Bundle   Bundle
-	Socket   string // tests: a private tmux socket
+	Socket   string // the instance's tmux socket (D-101); tests: a private one
+	// UnitPrefix names this instance's transient tmux units; empty is UnitPrefix.
+	UnitPrefix string
 	// NoUnit starts tmux servers without systemd-run (tests, or an agent not
 	// run by systemd). A real agent sets it false.
 	NoUnit bool
@@ -310,7 +312,7 @@ func (e *Env) ensure(ctx context.Context, name, dir string, withProxy bool) erro
 			return wire.Errf(wire.CodeUnavailable, "缺少 systemd-run，无法创建会话")
 		}
 		home, _ := os.UserHomeDir()
-		pre := []string{"--quiet", "--collect", "--unit", fmtUnit(),
+		pre := []string{"--quiet", "--collect", "--unit", e.fmtUnit(),
 			"--property", "Type=forking", "--setenv", "HOME=" + home, "--setenv", "LANG=C.UTF-8", "--setenv", "TERM=xterm-256color",
 			"--setenv", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"}
 		if ti := e.terminfoDir(); ti != "" {

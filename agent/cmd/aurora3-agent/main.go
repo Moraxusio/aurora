@@ -3,9 +3,9 @@
 //
 //	aurora3-agent version
 //	aurora3-agent run [--config /etc/aurora3/agent.json]
-//	aurora3-agent install --sha256 HEX [--name N] [--user U] [--probe]
-//	aurora3-agent direct-info
-//	aurora3-agent uninstall [--probe] [--force] [--purge]
+//	aurora3-agent install --sha256 HEX [--name N] [--user U] [--probe] [--instance I]
+//	aurora3-agent direct-info [--instance I]
+//	aurora3-agent uninstall [--probe] [--force] [--purge] [--instance I]
 package main
 
 import (
@@ -39,10 +39,15 @@ func main() {
 	case "uninstall":
 		os.Exit(uninstallCmd(os.Args[2:]))
 	case "upgrade-worker":
-		if len(os.Args) != 3 {
+		// upgrade-worker DIR [INSTANCE]
+		if len(os.Args) != 3 && len(os.Args) != 4 {
 			os.Exit(2)
 		}
-		if err := upgradeWorker(os.Args[2]); err != nil {
+		instance := ""
+		if len(os.Args) == 4 {
+			instance = os.Args[3]
+		}
+		if err := upgradeWorker(os.Args[2], instance); err != nil {
 			fmt.Fprintln(os.Stderr, "升级任务失败，请查看任务状态")
 			os.Exit(1)
 		}
@@ -52,6 +57,6 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: aurora3-agent version | run [--config PATH] | install --sha256 HEX [--name N] [--user U] [--probe] | direct-info | uninstall [--probe] [--force] [--purge]")
+	fmt.Fprintln(os.Stderr, "usage: aurora3-agent version | run [--config PATH] | install --sha256 HEX [--name N] [--user U] [--probe] [--instance I] | direct-info [--instance I] | uninstall [--probe] [--force] [--purge] [--instance I]")
 	os.Exit(2)
 }

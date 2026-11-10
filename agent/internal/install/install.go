@@ -33,8 +33,10 @@ import (
 )
 
 // Absolute paths on the server (D-71). Env.Root prefixes them in tests.
+const defaultBin = "/usr/local/bin/aurora3-agent"
+
 const (
-	BinPath    = "/usr/local/bin/aurora3-agent"
+	BinPath    = defaultBin
 	UnitName   = "aurora3-agent.service"
 	UnitPath   = "/etc/systemd/system/" + UnitName
 	ConfigPath = entry.DefaultConfigPath
@@ -114,6 +116,7 @@ type Progress struct {
 
 // Probe is what the first stage found. It changes nothing.
 type Probe struct {
+	Instance  string   `json:"instance,omitempty"`
 	Arch      string   `json:"arch"`
 	OS        string   `json:"os"`
 	Bundled   string   `json:"bundled"`             // this binary's version
@@ -164,6 +167,9 @@ type Env struct {
 	Dial           Dialer
 	Self           string // the running executable (what gets installed)
 	Version        string // its version
+	// Instance is the agent this run works on (D-101); empty is the default
+	// instance. Every name, path, port and tmux socket follows from it.
+	Instance       string
 	Roots          func(user string) []entry.Root
 	Out            io.Writer
 	ConfirmTimeout time.Duration
@@ -183,6 +189,47 @@ type Options struct {
 }
 
 func (e *Env) p(abs string) string { return filepath.Join(e.Root, abs) }
+
+// lay is the layout of e.Instance. An invalid name never gets here: the
+// entry points refuse it first (checkInstance).
+func (e *Env) lay() entry.Layout {
+	l, err := entry.LayoutFor(e.Instance)
+	if err != nil {
+		l, _ = entry.LayoutFor("")
+	}
+	return l
+}
+
+func (e *Env) checkInstance() error { return entry.ValidInstance(e.Instance) }
+
+// unit is the systemd unit text of this instance, with ExecStart pointing at
+// bin. For the default instance it is Unit with only the binary replaced.
+func (e *Env) unit(bin string) string {
+	l := e.lay()
+	u := Unit
+	if l.Instance != "" {
+		u = strings.Replace(u, "Aurora 3 agent (", "Aurora 3 agent ["+l.Instance+"] (", 1)
+		u = strings.Replace(u, "--config "+entry.DefaultConfigPath, "--config "+l.ConfigPath, 1)
+		u = strings.Replace(u, "aurora3-tmux-*", l.TmuxPattern, 1)
+	}
+	return strings.Replace(u, "ExecStart="+defaultBin+" ", "ExecStart="+bin+" ", 1)
+}
+
+// pickPort finds a port for a new named instance: the first one in the
+// instance range that no instance on this machine is configured for and that
+// is free right now. 0 when there is none.
+func (e *Env) pickPort() int {
+	taken := map[int]bool{}
+	for _, p := range entry.ConfiguredPorts(e.Root) {
+		taken[p] = true
+	}
+	for p := entry.FirstInstancePort; p <= entry.LastInstancePort; p++ {
+		if !taken[p] && e.Sys.PortFree(p) {
+			return p
+		}
+	}
+	return 0
+}
 
 // rel turns a path under Root back into the server's absolute path.
 func (e *Env) rel(p string) string {
@@ -226,6 +273,9 @@ func Run(e *Env, o Options) Result {
 }
 
 func (e *Env) run(o Options) (result Result) {
+	if err := e.checkInstance(); err != nil {
+		return Result{Result: ResultRefused, Message: err.Error()}
+	}
 	if e.ConfirmTimeout <= 0 {
 		e.ConfirmTimeout = 30 * time.Second
 	}
@@ -243,7 +293,7 @@ func (e *Env) run(o Options) (result Result) {
 		// second process cannot slip in and retry the failed target meanwhile.
 		defer func() {
 			if (result.Result == ResultRolledBack || result.Result == ResultRollbackFailed) && result.Previous != "" {
-				if err := update.RecordFailure(e.p(StateDir), update.Failure{Version: e.Version, Message: result.Message}); err != nil {
+				if err := update.RecordFailure(e.p(e.lay().StateDir), update.Failure{Version: e.Version, Message: result.Message}); err != nil {
 					result.Message += "；记录失败版本失败：" + err.Error()
 				}
 			}
@@ -264,7 +314,7 @@ func (e *Env) run(o Options) (result Result) {
 		return Result{Result: ResultRefused, Message: pr.Problem, Previous: pr.Installed, Probe: pr}
 	}
 	if !o.ProbeOnly {
-		if bad, err := update.FailureFor(e.p(StateDir), e.Version); err != nil {
+		if bad, err := update.FailureFor(e.p(e.lay().StateDir), e.Version); err != nil {
 			return Result{Result: ResultRefused, Message: "读取失败版本记录失败：" + err.Error()}
 		} else if bad {
 			return Result{Result: ResultRefused, Message: "这个版本曾升级失败，拒绝重复推送：" + e.Version}
@@ -341,10 +391,17 @@ func (e *Env) run(o Options) (result Result) {
 
 // probe looks and changes nothing.
 func (e *Env) probe() *Probe {
-	pr := &Probe{Arch: runtime.GOARCH, OS: osName(e.p("/etc/os-release")), Bundled: e.Version, Port: portOf(entry.DefaultListen)}
+	pr := &Probe{Arch: runtime.GOARCH, OS: osName(e.p("/etc/os-release")), Bundled: e.Version, Port: portOf(entry.DefaultListen), Instance: e.Instance}
 	for _, v := range v2Paths {
 		if exists(e.p(v)) {
 			pr.V2 = true
+		}
+	}
+	if e.lay().Instance != "" {
+		// A new named instance gets the first port no other instance holds.
+		// An existing config below overrides it.
+		if pr.Port = e.pickPort(); pr.Port == 0 {
+			pr.Problem = fmt.Sprintf("端口 %d 到 %d 都已被占用，无法为新实例分配端口", entry.FirstInstancePort, entry.LastInstancePort)
 		}
 	}
 	pr.Leftover = e.leftovers()
@@ -356,18 +413,18 @@ func (e *Env) probe() *Probe {
 		pr.Problem = fmt.Sprintf("这个 aurora3-agent 是开发版本（%s），不能安装", e.Version)
 		return pr
 	}
-	if exists(e.p(BinPath)) {
+	if exists(e.p(e.lay().Bin)) {
 		pr.Installed = "unknown"
-		if v, err := e.Sys.BinaryVersion(e.p(BinPath)); err == nil && v != "" {
+		if v, err := e.Sys.BinaryVersion(e.p(e.lay().Bin)); err == nil && v != "" {
 			pr.Installed = v
 		}
 	}
-	pr.Active = e.Sys.IsActive(UnitName)
-	if exists(e.p(ConfigPath)) {
+	pr.Active = e.Sys.IsActive(e.lay().UnitName)
+	if exists(e.p(e.lay().ConfigPath)) {
 		pr.Config = true
-		c, err := entry.LoadConfig(e.p(ConfigPath))
+		c, err := entry.LoadConfig(e.p(e.lay().ConfigPath))
 		if err != nil {
-			pr.Problem = fmt.Sprintf("现有配置 %s 无法解析：%v", ConfigPath, err)
+			pr.Problem = fmt.Sprintf("现有配置 %s 无法解析：%v", e.lay().ConfigPath, err)
 			return pr
 		}
 		pr.Port = portOf(c.Listen)
@@ -401,11 +458,11 @@ func (e *Env) probe() *Probe {
 func (e *Env) leftovers() []string {
 	var out []string
 	for _, pat := range []string{
-		filepath.Join(StateDir, "install-*"),
-		filepath.Join(StateDir, "rollback-*"),
-		tempGlob(BinPath),
-		tempGlob(UnitPath),
-		tempGlob(ConfigPath),
+		filepath.Join(e.lay().StateDir, "install-*"),
+		filepath.Join(e.lay().StateDir, "rollback-*"),
+		tempGlob(e.lay().Bin),
+		tempGlob(e.lay().UnitPath),
+		tempGlob(e.lay().ConfigPath),
 	} {
 		m, _ := filepath.Glob(e.p(pat))
 		for _, f := range m {
@@ -434,11 +491,11 @@ func (e *Env) prepare(o Options, pr *Probe) (*staged, error) {
 			_ = os.RemoveAll(e.p(l))
 		}
 	}
-	s := &staged{stateExisted: isDir(e.p(StateDir))}
-	if err := os.MkdirAll(e.p(StateDir), 0o700); err != nil {
+	s := &staged{stateExisted: isDir(e.p(e.lay().StateDir))}
+	if err := os.MkdirAll(e.p(e.lay().StateDir), 0o700); err != nil {
 		return nil, err
 	}
-	dir, err := os.MkdirTemp(e.p(StateDir), "install-")
+	dir, err := os.MkdirTemp(e.p(e.lay().StateDir), "install-")
 	if err != nil {
 		e.dropStage(s)
 		return nil, err
@@ -466,7 +523,7 @@ func (e *Env) prepare(o Options, pr *Probe) (*staged, error) {
 	}
 
 	if pr.Config {
-		c, err := entry.LoadConfig(e.p(ConfigPath))
+		c, err := entry.LoadConfig(e.p(e.lay().ConfigPath))
 		if err != nil {
 			return nil, fmt.Errorf("现有配置无法解析：%w", err)
 		}
@@ -476,8 +533,8 @@ func (e *Env) prepare(o Options, pr *Probe) (*staged, error) {
 		if user == "" {
 			user = "root"
 		}
-		c := &entry.Config{Name: o.Name, Listen: entry.DefaultListen, Token: wire.NewToken(), StateDir: StateDir,
-			Roots: e.Roots(user), AuditLog: StateDir + "/audit.log"}
+		c := &entry.Config{Instance: e.lay().Instance, Name: o.Name, Listen: fmt.Sprintf(":%d", pr.Port), Token: wire.NewToken(), StateDir: e.lay().StateDir,
+			Roots: e.Roots(user), AuditLog: e.lay().StateDir + "/audit.log"}
 		if err := c.Validate(); err != nil {
 			return nil, err
 		}
@@ -494,8 +551,8 @@ func (e *Env) prepare(o Options, pr *Probe) (*staged, error) {
 
 	// The unit is checked as written, except that ExecStart points at the
 	// staged copy, which must exist and be executable for the check to pass.
-	vu := filepath.Join(dir, UnitName)
-	text := strings.Replace(Unit, "ExecStart="+BinPath+" ", "ExecStart="+s.bin+" ", 1)
+	vu := filepath.Join(dir, e.lay().UnitName)
+	text := e.unit(s.bin)
 	if err := os.WriteFile(vu, []byte(text), 0o644); err != nil {
 		return nil, err
 	}
@@ -514,7 +571,7 @@ func (e *Env) dropStage(s *staged) {
 		_ = os.RemoveAll(s.dir)
 	}
 	if !s.stateExisted {
-		_ = os.Remove(e.p(StateDir)) // only if nothing else is in it
+		_ = os.Remove(e.p(e.lay().StateDir)) // only if nothing else is in it
 	}
 }
 
@@ -542,33 +599,33 @@ type switched struct {
 // them leaves everything unchanged (committed false).
 func (e *Env) switchOver(s *staged, pr *Probe) (*switched, error) {
 	sw := &switched{was: before{
-		Bin: exists(e.p(BinPath)), Unit: exists(e.p(UnitPath)), Config: pr.Config, ConfigDir: isDir(e.p(ConfigDir)),
-		State: s.stateExisted, Enabled: e.Sys.IsEnabled(UnitName), Active: pr.Active, Version: pr.Installed,
+		Bin: exists(e.p(e.lay().Bin)), Unit: exists(e.p(e.lay().UnitPath)), Config: pr.Config, ConfigDir: isDir(e.p(e.lay().ConfigDir)),
+		State: s.stateExisted, Enabled: e.Sys.IsEnabled(e.lay().UnitName), Active: pr.Active, Version: pr.Installed,
 	}}
 	undo := func(err error) (*switched, error) {
 		for _, t := range sw.temps {
 			_ = os.Remove(t)
 		}
 		if !sw.was.ConfigDir {
-			_ = os.RemoveAll(e.p(ConfigDir)) // created by put below
+			_ = os.RemoveAll(e.p(e.lay().ConfigDir)) // created by put below
 		}
 		if sw.dir != "" {
 			_ = os.RemoveAll(sw.dir)
 		}
 		return sw, err
 	}
-	dir, err := os.MkdirTemp(e.p(StateDir), "rollback-")
+	dir, err := os.MkdirTemp(e.p(e.lay().StateDir), "rollback-")
 	if err != nil {
 		return undo(err)
 	}
 	sw.dir = dir
 	if sw.was.Bin {
-		if _, err := copyFile(e.p(BinPath), filepath.Join(dir, "aurora3-agent"), 0o755); err != nil {
+		if _, err := copyFile(e.p(e.lay().Bin), filepath.Join(dir, "aurora3-agent"), 0o755); err != nil {
 			return undo(err)
 		}
 	}
 	if sw.was.Unit {
-		if _, err := copyFile(e.p(UnitPath), filepath.Join(dir, UnitName), 0o644); err != nil {
+		if _, err := copyFile(e.p(e.lay().UnitPath), filepath.Join(dir, e.lay().UnitName), 0o644); err != nil {
 			return undo(err)
 		}
 	}
@@ -594,17 +651,17 @@ func (e *Env) switchOver(s *staged, pr *Probe) (*switched, error) {
 		}
 		return tmp, writeSynced(tmp, data, mode)
 	}
-	binTmp, err := put(e.p(BinPath), s.bin, nil, 0o755, 0o755)
+	binTmp, err := put(e.p(e.lay().Bin), s.bin, nil, 0o755, 0o755)
 	if err != nil {
 		return undo(err)
 	}
-	unitTmp, err := put(e.p(UnitPath), "", []byte(Unit), 0o644, 0o755)
+	unitTmp, err := put(e.p(e.lay().UnitPath), "", []byte(e.unit(e.lay().Bin)), 0o644, 0o755)
 	if err != nil {
 		return undo(err)
 	}
 	cfgTmp := ""
 	if s.cfg != "" {
-		if cfgTmp, err = put(e.p(ConfigPath), s.cfg, nil, 0o600, 0o700); err != nil {
+		if cfgTmp, err = put(e.p(e.lay().ConfigPath), s.cfg, nil, 0o600, 0o700); err != nil {
 			return undo(err)
 		}
 	}
@@ -613,31 +670,31 @@ func (e *Env) switchOver(s *staged, pr *Probe) (*switched, error) {
 	}
 
 	sw.committed = true
-	if err := os.Rename(binTmp, e.p(BinPath)); err != nil {
+	if err := os.Rename(binTmp, e.p(e.lay().Bin)); err != nil {
 		return sw, err
 	}
 	if err := e.failAt("rename-bin"); err != nil {
 		return sw, err
 	}
-	if err := os.Rename(unitTmp, e.p(UnitPath)); err != nil {
+	if err := os.Rename(unitTmp, e.p(e.lay().UnitPath)); err != nil {
 		return sw, err
 	}
 	if cfgTmp != "" {
-		if err := os.Rename(cfgTmp, e.p(ConfigPath)); err != nil {
+		if err := os.Rename(cfgTmp, e.p(e.lay().ConfigPath)); err != nil {
 			return sw, err
 		}
 	}
-	for _, d := range []string{BinPath, UnitPath, ConfigPath} {
+	for _, d := range []string{e.lay().Bin, e.lay().UnitPath, e.lay().ConfigPath} {
 		syncDir(filepath.Dir(e.p(d)))
 	}
 	if err := e.Sys.DaemonReload(); err != nil {
 		return sw, err
 	}
-	if err := e.Sys.Enable(UnitName); err != nil {
+	if err := e.Sys.Enable(e.lay().UnitName); err != nil {
 		return sw, err
 	}
-	e.Sys.ResetFailed(UnitName)
-	if err := e.Sys.Restart(UnitName); err != nil {
+	e.Sys.ResetFailed(e.lay().UnitName)
+	if err := e.Sys.Restart(e.lay().UnitName); err != nil {
 		return sw, err
 	}
 	return sw, e.failAt("restart")
@@ -651,7 +708,7 @@ func (e *Env) confirm(c *entry.Config, want string) (*wire.AgentInfo, string, er
 	cert := filepath.Join(e.p(c.StateDir), "agent.crt")
 	var last error
 	for {
-		if !e.Sys.IsActive(UnitName) {
+		if !e.Sys.IsActive(e.lay().UnitName) {
 			last = errors.New("服务没有在运行")
 		} else if pin, err := readPin(cert); err != nil {
 			last = fmt.Errorf("证书还没有生成：%w", err)
@@ -692,31 +749,31 @@ func (e *Env) rollback(s *staged, sw *switched, cause string) Result {
 	}
 	// Stopped whenever our unit exists: a crash-looping new version is not
 	// "active" but would keep restarting.
-	if exists(e.p(UnitPath)) || e.Sys.IsActive(UnitName) {
-		note("停止服务", e.Sys.Stop(UnitName))
+	if exists(e.p(e.lay().UnitPath)) || e.Sys.IsActive(e.lay().UnitName) {
+		note("停止服务", e.Sys.Stop(e.lay().UnitName))
 	}
 	// Disable while the unit file still exists, or the symlink would dangle.
-	if !was.Enabled && e.Sys.IsEnabled(UnitName) {
-		note("取消开机启动", e.Sys.Disable(UnitName))
+	if !was.Enabled && e.Sys.IsEnabled(e.lay().UnitName) {
+		note("取消开机启动", e.Sys.Disable(e.lay().UnitName))
 	}
-	note("恢复程序", restore(e.p(BinPath), filepath.Join(sw.dir, "aurora3-agent"), was.Bin, 0o755))
-	note("恢复单元", restore(e.p(UnitPath), filepath.Join(sw.dir, UnitName), was.Unit, 0o644))
+	note("恢复程序", restore(e.p(e.lay().Bin), filepath.Join(sw.dir, "aurora3-agent"), was.Bin, 0o755))
+	note("恢复单元", restore(e.p(e.lay().UnitPath), filepath.Join(sw.dir, e.lay().UnitName), was.Unit, 0o644))
 	if !was.Config {
-		if err := os.Remove(e.p(ConfigPath)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.Remove(e.p(e.lay().ConfigPath)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			note("删除新配置", err)
 		}
 		if !was.ConfigDir {
-			note("删除配置目录", os.RemoveAll(e.p(ConfigDir)))
+			note("删除配置目录", os.RemoveAll(e.p(e.lay().ConfigDir)))
 		}
 	}
 	note("systemctl daemon-reload", e.Sys.DaemonReload())
 	if was.Enabled {
-		note("恢复开机启动", e.Sys.Enable(UnitName))
+		note("恢复开机启动", e.Sys.Enable(e.lay().UnitName))
 	}
 	// The new version may have crash-looped into systemd's start limit.
-	e.Sys.ResetFailed(UnitName)
+	e.Sys.ResetFailed(e.lay().UnitName)
 	if was.Active {
-		note("启动原来的服务", e.Sys.Restart(UnitName))
+		note("启动原来的服务", e.Sys.Restart(e.lay().UnitName))
 	}
 	note("恢复", e.failAt("restore"))
 	if len(errs) == 0 {
@@ -728,7 +785,7 @@ func (e *Env) rollback(s *staged, sw *switched, cause string) Result {
 			if _, _, err := e.confirm(s.conf, want); err != nil {
 				errs = append(errs, "原来的服务没有恢复："+err.Error())
 			}
-		} else if e.Sys.IsActive(UnitName) {
+		} else if e.Sys.IsActive(e.lay().UnitName) {
 			errs = append(errs, "服务仍在运行")
 		}
 	}
@@ -743,7 +800,7 @@ func (e *Env) rollback(s *staged, sw *switched, cause string) Result {
 	if !was.State {
 		// Created by this run: the new agent may have written its
 		// certificate and id there.
-		_ = os.RemoveAll(e.p(StateDir))
+		_ = os.RemoveAll(e.p(e.lay().StateDir))
 	}
 	e.step("rollback", "ok", "")
 	return Result{Result: ResultRolledBack, Message: cause + "。已恢复到安装前的状态", Version: was.Version, Previous: was.Version}
@@ -784,16 +841,19 @@ func DirectInfo(e *Env) Result {
 }
 
 func (e *Env) direct() Result {
+	if err := e.checkInstance(); err != nil {
+		return Result{Result: ResultRefused, Message: err.Error()}
+	}
 	if e.ConfirmTimeout <= 0 {
 		e.ConfirmTimeout = 30 * time.Second
 	}
-	c, err := entry.LoadConfig(e.p(ConfigPath))
+	c, err := entry.LoadConfig(e.p(e.lay().ConfigPath))
 	if err != nil {
-		return Result{Result: ResultRefused, Message: fmt.Sprintf("读取 %s 失败：%v", ConfigPath, err)}
+		return Result{Result: ResultRefused, Message: fmt.Sprintf("读取 %s 失败：%v", e.lay().ConfigPath, err)}
 	}
 	d := &wire.DirectInfo{Port: portOf(c.Listen), Token: c.Token}
 	r := Result{Direct: d}
-	if v, err := e.Sys.BinaryVersion(e.p(BinPath)); err == nil {
+	if v, err := e.Sys.BinaryVersion(e.p(e.lay().Bin)); err == nil {
 		r.Version = v
 	}
 	pin, err := readPin(filepath.Join(e.p(c.StateDir), "agent.crt"))

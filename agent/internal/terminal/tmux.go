@@ -388,4 +388,10 @@ func isDir(path string) bool {
 
 func shellQuote(v string) string { return "'" + strings.ReplaceAll(v, "'", "'\\''") + "'" }
 
-func fmtUnit() string { return fmt.Sprintf("%s%d", UnitPrefix, time.Now().UnixMilli()) }
+func (e *Env) fmtUnit() string {
+	p := e.UnitPrefix
+	if p == "" {
+		p = UnitPrefix
+	}
+	return fmt.Sprintf("%s%d", p, time.Now().UnixMilli())
+}

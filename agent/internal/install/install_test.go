@@ -28,6 +28,7 @@ import (
 // BinPath, which writes its certificate and answers Hello unless broken.
 type fakeSys struct {
 	root      string
+	inst      string // the instance this fake systemd runs ("" is the default one)
 	active    bool
 	enabled   bool
 	running   string // version answering Hello; "" when not answering
@@ -40,6 +41,12 @@ type fakeSys struct {
 	sessions    []string
 	sessionsErr error
 	stopFails   map[string]bool
+}
+
+// lay is the layout of this fake's instance.
+func (f *fakeSys) lay() entry.Layout {
+	l, _ := entry.LayoutFor(f.inst)
+	return l
 }
 
 func (f *fakeSys) op(name string) error {
@@ -64,7 +71,7 @@ func (f *fakeSys) Enable(string) error {
 	if err := f.op("enable"); err != nil {
 		return err
 	}
-	if !exists(filepath.Join(f.root, UnitPath)) {
+	if !exists(filepath.Join(f.root, f.lay().UnitPath)) {
 		return errors.New("unit file missing")
 	}
 	f.enabled = true
@@ -78,7 +85,7 @@ func (f *fakeSys) Disable(string) error {
 	return nil
 }
 func (f *fakeSys) Stop(unit string) error {
-	if strings.HasPrefix(unit, "aurora3-tmux-") {
+	if strings.Contains(unit, "-tmux-") {
 		f.log = append(f.log, "stop "+unit)
 		if f.stopFails[unit] {
 			return errors.New("refused to stop " + unit)
@@ -103,14 +110,14 @@ func (f *fakeSys) Restart(string) error {
 		return err
 	}
 	f.active, f.running = false, ""
-	b, err := os.ReadFile(filepath.Join(f.root, BinPath))
+	b, err := os.ReadFile(filepath.Join(f.root, f.lay().Bin))
 	if err != nil {
 		return err
 	}
 	if !bytes.Contains(b, []byte("aurora3-agent ")) {
 		return errors.New("not an agent")
 	}
-	c, err := entry.LoadConfig(filepath.Join(f.root, ConfigPath))
+	c, err := entry.LoadConfig(filepath.Join(f.root, f.lay().ConfigPath))
 	if err != nil {
 		return err // the real unit would fail the same way
 	}
@@ -170,7 +177,7 @@ func (f *fakeSys) dial(_ context.Context, addr, pin, token string) (*wire.AgentI
 	if !f.active || f.running == "" {
 		return nil, errors.New("connection refused")
 	}
-	c, err := entry.LoadConfig(filepath.Join(f.root, ConfigPath))
+	c, err := entry.LoadConfig(filepath.Join(f.root, f.lay().ConfigPath))
 	if err != nil {
 		return nil, err
 	}
@@ -181,10 +188,10 @@ func (f *fakeSys) dial(_ context.Context, addr, pin, token string) (*wire.AgentI
 	if token != c.Token {
 		return nil, errors.New("令牌错误")
 	}
-	if addr != "127.0.0.1:17710" {
+	if want := fmt.Sprintf("127.0.0.1:%d", entry.ListenPort(c.Listen)); addr != want {
 		return nil, fmt.Errorf("unexpected addr %s", addr)
 	}
-	return &wire.AgentInfo{ID: "agent-1", Version: f.running, Direct: wire.DirectInfo{Port: 17710, Addrs: []string{"10.0.0.5:17710"}}}, nil
+	return &wire.AgentInfo{ID: "agent-1", Version: f.running, Direct: wire.DirectInfo{Port: entry.ListenPort(c.Listen), Addrs: []string{fmt.Sprintf("10.0.0.5:%d", entry.ListenPort(c.Listen))}}}, nil
 }
 
 type rig struct {
@@ -222,7 +229,7 @@ func (r *rig) agent(v string, broken bool) (string, string) {
 
 func (r *rig) env(self, version string) *Env {
 	r.out.Reset()
-	return &Env{Root: r.root, Sys: r.sys, Dial: r.sys.dial, Self: self, Version: version, Out: &r.out,
+	return &Env{Root: r.root, Instance: r.sys.inst, Sys: r.sys, Dial: r.sys.dial, Self: self, Version: version, Out: &r.out,
 		Roots:          func(string) []entry.Root { return []entry.Root{{ID: "home", Path: "/root"}} },
 		ConfirmTimeout: 300 * time.Millisecond, PollEvery: 10 * time.Millisecond}
 }

@@ -13,12 +13,17 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"aurora3/internal/entry"
 	"aurora3/internal/install"
 	"aurora3/internal/update"
 	"aurora3/internal/upgrade"
 )
 
-func launchUpgrade(dir string) error {
+func launchUpgrade(instance, dir string) error {
+	lay, err := entry.LayoutFor(instance)
+	if err != nil {
+		return err
+	}
 	self, err := os.Executable()
 	if err != nil {
 		return err
@@ -41,10 +46,10 @@ func launchUpgrade(dir string) error {
 	if cerr != nil {
 		return cerr
 	}
-	return exec.Command("systemd-run", "--quiet", "--collect", "--unit", "aurora3-upgrade-"+filepath.Base(dir), "--property=Type=exec", "--property=RuntimeMaxSec=20min", worker, "upgrade-worker", dir).Run()
+	return exec.Command("systemd-run", "--quiet", "--collect", "--unit", lay.UpgradeUnit+filepath.Base(dir), "--property=Type=exec", "--property=RuntimeMaxSec=20min", worker, "upgrade-worker", dir, instance).Run()
 }
 
-func upgradeWorker(dir string) (resultErr error) {
+func upgradeWorker(dir, instance string) (resultErr error) {
 	detach()
 	defer func() {
 		if resultErr == nil {
@@ -115,7 +120,7 @@ func upgradeWorker(dir string) (resultErr error) {
 	// Self. A safe rollback target may predate --policy or upgrade-worker and
 	// must not be expected to understand the new control protocol.
 	var privateOutput bytes.Buffer
-	env := env()
+	env := env(instance)
 	env.Self, env.Version, env.Out = bin, m.Version, &privateOutput
 	result := install.Run(env, install.Options{SHA256: m.SHA256, Policy: &p})
 	j.State = result.Result

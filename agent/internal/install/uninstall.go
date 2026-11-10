@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"aurora3/internal/entry"
 )
 
 // Uninstall (D-31 to D-34, D-37), run as root over SSH like install:
@@ -68,6 +70,9 @@ func Uninstall(e *Env, o UninstallOptions) UninstallResult {
 }
 
 func (e *Env) uninstall(o UninstallOptions) UninstallResult {
+	if err := e.checkInstance(); err != nil {
+		return UninstallResult{Result: ResultRefused, Message: err.Error()}
+	}
 	if !o.Probe {
 		unlock, err := lock(e.p(LockPath))
 		if err != nil {
@@ -82,19 +87,19 @@ func (e *Env) uninstall(o UninstallOptions) UninstallResult {
 		r.Result, r.Message = ResultRefused, err.Error()
 		return r
 	}
-	for _, p := range []string{BinPath, UnitPath, ConfigDir, StateDir, ToolsDir} {
+	for _, p := range []string{e.lay().Bin, e.lay().UnitPath, e.lay().ConfigDir, e.lay().StateDir, ToolsDir} {
 		if exists(e.p(p)) {
 			r.Present = append(r.Present, p)
 		}
 	}
-	sessions, err := e.Sys.TmuxSessions(e.p(StateDir))
+	sessions, err := e.Sys.TmuxSessions(e.p(e.lay().StateDir))
 	if err != nil {
 		e.step("probe", "fail", err.Error())
 		r.Result, r.Message = ResultRefused, "无法列出终端会话："+err.Error()
 		return r
 	}
 	r.Sessions = append(r.Sessions, sessions...)
-	r.Units = e.Sys.Units(tmuxUnitPattern)
+	r.Units = e.Sys.Units(e.lay().TmuxPattern)
 	e.step("probe", "ok", "")
 	if o.Probe {
 		r.Result = ResultProbe
@@ -115,14 +120,14 @@ func (e *Env) uninstall(o UninstallOptions) UninstallResult {
 		run  func() error
 	}{
 		{"stop-agent", func() error {
-			if !exists(e.p(UnitPath)) && !e.Sys.IsActive(UnitName) {
+			if !exists(e.p(e.lay().UnitPath)) && !e.Sys.IsActive(e.lay().UnitName) {
 				return nil
 			}
-			if err := e.Sys.Stop(UnitName); err != nil {
+			if err := e.Sys.Stop(e.lay().UnitName); err != nil {
 				return err
 			}
-			if e.Sys.IsEnabled(UnitName) {
-				return e.Sys.Disable(UnitName)
+			if e.Sys.IsEnabled(e.lay().UnitName) {
+				return e.Sys.Disable(e.lay().UnitName)
 			}
 			return nil
 		}},
@@ -130,16 +135,16 @@ func (e *Env) uninstall(o UninstallOptions) UninstallResult {
 		// with nothing to manage it (D-37).
 		{"stop-sessions", func() error {
 			var errs []string
-			for _, u := range e.Sys.Units(tmuxUnitPattern) {
+			for _, u := range e.Sys.Units(e.lay().TmuxPattern) {
 				if err := e.Sys.Stop(u); err != nil {
 					errs = append(errs, err.Error())
 				}
 			}
 			// A tmux server started outside a unit (the agent run by hand).
-			if err := e.Sys.KillTmux(e.p(StateDir)); err != nil {
+			if err := e.Sys.KillTmux(e.p(e.lay().StateDir)); err != nil {
 				errs = append(errs, err.Error())
 			}
-			if left := e.Sys.Units(tmuxUnitPattern); len(left) > 0 {
+			if left := e.Sys.Units(e.lay().TmuxPattern); len(left) > 0 {
 				errs = append(errs, "仍在运行："+strings.Join(left, " "))
 			}
 			if len(errs) > 0 {
@@ -148,16 +153,16 @@ func (e *Env) uninstall(o UninstallOptions) UninstallResult {
 			return nil
 		}},
 		{"remove-unit", func() error {
-			if err := removeIfExists(e.p(UnitPath)); err != nil {
+			if err := removeIfExists(e.p(e.lay().UnitPath)); err != nil {
 				return err
 			}
 			if err := e.Sys.DaemonReload(); err != nil {
 				return err
 			}
-			e.Sys.ResetFailed(UnitName)
+			e.Sys.ResetFailed(e.lay().UnitName)
 			return nil
 		}},
-		{"remove-binary", func() error { return removeIfExists(e.p(BinPath)) }},
+		{"remove-binary", func() error { return removeIfExists(e.p(e.lay().Bin)) }},
 	}
 	if o.Purge {
 		steps = append(steps,
@@ -165,10 +170,19 @@ func (e *Env) uninstall(o UninstallOptions) UninstallResult {
 				name string
 				run  func() error
 			}{"purge", func() error {
-				for _, d := range []string{ConfigDir, StateDir, ToolsDir} {
+				for _, d := range []string{e.lay().ConfigDir, e.lay().StateDir, ToolsDir} {
+					// The tools directory is shared by every instance; only the
+					// default instance owns it.
+					if d == ToolsDir && e.lay().Instance != "" {
+						continue
+					}
 					if err := os.RemoveAll(e.p(d)); err != nil {
 						return err
 					}
+				}
+				if e.lay().Instance != "" { // the parents, when no other instance is left in them
+					_ = os.Remove(e.p(entry.InstancesConfigDir))
+					_ = os.Remove(e.p(entry.InstancesStateDir))
 				}
 				return nil
 			}})
@@ -190,7 +204,7 @@ func (e *Env) uninstall(o UninstallOptions) UninstallResult {
 	}
 	r.Result = ResultUninstalled
 	if !o.Purge {
-		for _, d := range []string{ConfigDir, StateDir} {
+		for _, d := range []string{e.lay().ConfigDir, e.lay().StateDir} {
 			if exists(e.p(d)) {
 				r.Kept = append(r.Kept, d)
 			}
@@ -198,10 +212,6 @@ func (e *Env) uninstall(o UninstallOptions) UninstallResult {
 	}
 	return r
 }
-
-// tmuxUnitPattern matches only v3's units: "aurora3-tmux-" is not a prefix of
-// v2's "aurora-tmux-" names, nor the other way round.
-const tmuxUnitPattern = "aurora3-tmux-*"
 
 func removeIfExists(p string) error {
 	if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {

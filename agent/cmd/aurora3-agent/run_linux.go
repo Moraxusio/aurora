@@ -57,7 +57,7 @@ func run(cfgPath string) error {
 	if err := srv.AddEntryOp("session.proxy", term.ProxyInfoOp()); err != nil {
 		return err
 	}
-	u := &upgrade.Env{StateDir: cfg.StateDir, Version: Version, Arch: runtime.GOARCH, Gate: srv.TransferGate(), Launch: launchUpgrade}
+	u := &upgrade.Env{StateDir: cfg.StateDir, Version: Version, Arch: runtime.GOARCH, Gate: srv.TransferGate(), Launch: func(dir string) error { return launchUpgrade(cfg.Instance, dir) }}
 	for _, op := range u.Operations() {
 		if op.Stream != nil {
 			err = srv.AddEntryStream(op.Name, op.Stream)
@@ -111,7 +111,8 @@ func services(cfg *entry.Config, audit *entry.Audit, actions func() map[string][
 	me := &monitor.Env{Roots: mr, Audit: audit}
 	se := &systemd.Env{Actions: actions, Audit: audit}
 	ne := &netfwd.Env{}
-	te := &terminal.Env{StateDir: cfg.StateDir, Roots: tr, Audit: audit, Bundle: bundle.FS{},
+	lay, _ := entry.LayoutFor(cfg.Instance) // Validate has checked the name
+	te := &terminal.Env{StateDir: cfg.StateDir, Socket: lay.Socket, UnitPrefix: lay.TmuxPrefix, Roots: tr, Audit: audit, Bundle: bundle.FS{},
 		NoUnit: os.Getenv("INVOCATION_ID") == "", // not started by systemd: no transient units
 		Proxy:  px.SessionEnv}
 	return []service.Service{fe.Service(), ge.Service(), me.Service(), se.Service(), ne.Service(), px.Service(), te.Service()}, te, px

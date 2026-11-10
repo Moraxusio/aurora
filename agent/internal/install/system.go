@@ -22,7 +22,10 @@ import (
 )
 
 // Systemd is the real System: systemctl and systemd-analyze.
-type Systemd struct{}
+type Systemd struct {
+	// Socket is the instance's tmux socket; empty is the default instance's.
+	Socket string
+}
 
 func run(timeout time.Duration, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -108,9 +111,16 @@ func tmuxBins(stateDir string) []string {
 // terminalSocket is the terminal service's tmux socket (terminal.DefaultSocket).
 const terminalSocket = "aurora3"
 
-func (Systemd) TmuxSessions(stateDir string) ([]string, error) {
+func (s Systemd) socket() string {
+	if s.Socket != "" {
+		return s.Socket
+	}
+	return terminalSocket
+}
+
+func (s Systemd) TmuxSessions(stateDir string) ([]string, error) {
 	for _, b := range tmuxBins(stateDir) {
-		out, err := run(10*time.Second, b, "-L", terminalSocket, "list-sessions", "-F", "#{session_name}")
+		out, err := run(10*time.Second, b, "-L", s.socket(), "list-sessions", "-F", "#{session_name}")
 		if err != nil {
 			continue // no server, or a mismatched client: try the next binary
 		}
@@ -125,9 +135,9 @@ func (Systemd) TmuxSessions(stateDir string) ([]string, error) {
 	return nil, nil
 }
 
-func (Systemd) KillTmux(stateDir string) error {
+func (s Systemd) KillTmux(stateDir string) error {
 	for _, b := range tmuxBins(stateDir) {
-		_, _ = run(10*time.Second, b, "-L", terminalSocket, "kill-server")
+		_, _ = run(10*time.Second, b, "-L", s.socket(), "kill-server")
 	}
 	return nil
 }

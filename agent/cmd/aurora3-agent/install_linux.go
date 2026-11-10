@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"aurora3/internal/entry"
 	"aurora3/internal/install"
 	"aurora3/internal/update"
 )
@@ -24,6 +25,7 @@ func installCmd(args []string) int {
 	name := fs.String("name", "", "服务器名称（仅新安装）")
 	user := fs.String("user", "", "其主目录作为第一个文件根目录（仅新安装）")
 	probe := fs.Bool("probe", false, "只探测，不做改动")
+	instance := fs.String("instance", "", instanceHelp)
 	policyFile := fs.String("policy", "", "签名撤回清单")
 	policySig := fs.String("policy-signature", "", "撤回清单签名")
 	_ = fs.Parse(args)
@@ -47,7 +49,7 @@ func installCmd(args []string) int {
 		}
 		policy = &p
 	}
-	r := install.Run(env(), install.Options{SHA256: *sum, Name: *name, User: *user, ProbeOnly: *probe, Policy: policy})
+	r := install.Run(env(*instance), install.Options{SHA256: *sum, Name: *name, User: *user, ProbeOnly: *probe, Policy: policy})
 	return install.ExitCode(r)
 }
 
@@ -59,31 +61,41 @@ func uninstallCmd(args []string) int {
 	probe := fs.Bool("probe", false, "只列出会话和已安装的内容，不做改动")
 	force := fs.Bool("force", false, "有终端会话时也卸载（会结束它们）")
 	purge := fs.Bool("purge", false, "同时删除配置、证书、令牌和状态（彻底清除）")
+	instance := fs.String("instance", "", instanceHelp)
 	_ = fs.Parse(args)
 	detach()
 	if !*probe && os.Geteuid() != 0 {
 		install.Emit(os.Stdout, install.Result{Result: install.ResultRefused, Message: "卸载需要 root 权限"})
 		return 1
 	}
-	return install.UninstallExitCode(install.Uninstall(env(), install.UninstallOptions{Probe: *probe, Force: *force, Purge: *purge}))
+	return install.UninstallExitCode(install.Uninstall(env(*instance), install.UninstallOptions{Probe: *probe, Force: *force, Purge: *purge}))
 }
 
 // directInfoCmd: aurora3-agent direct-info. Prints the installed agent's
 // direct-link parameters, token included (D-4); root only, as agent.json is.
-func directInfoCmd([]string) int {
+func directInfoCmd(args []string) int {
+	fs := flag.NewFlagSet("direct-info", flag.ExitOnError)
+	instance := fs.String("instance", "", instanceHelp)
+	_ = fs.Parse(args)
 	if os.Geteuid() != 0 {
 		install.Emit(os.Stdout, install.Result{Result: install.ResultRefused, Message: "读取直连参数需要 root 权限"})
 		return 1
 	}
-	return install.ExitCode(install.DirectInfo(env()))
+	return install.ExitCode(install.DirectInfo(env(*instance)))
 }
 
-func env() *install.Env {
+const instanceHelp = "实例名（同一台服务器上的多个 agent，每个客户端一个；不填是默认实例）"
+
+func env(instance string) *install.Env {
+	socket := ""
+	if l, err := entry.LayoutFor(instance); err == nil {
+		socket = l.Socket // an invalid name is refused by the install package
+	}
 	self, err := os.Executable()
 	if err != nil {
 		self = os.Args[0]
 	}
-	return &install.Env{Root: "/", Sys: install.Systemd{}, Dial: install.DialAgent, Self: self, Version: Version,
+	return &install.Env{Root: "/", Instance: instance, Sys: install.Systemd{Socket: socket}, Dial: install.DialAgent, Self: self, Version: Version,
 		Roots: install.DefaultRoots, Out: os.Stdout}
 }
 

@@ -23,7 +23,10 @@ const (
 // Config lives in /etc/aurora3/agent.json. It holds the direct token, so it is
 // written with 0600 permissions.
 type Config struct {
-	Name   string `json:"name"`
+	// Instance names this agent when several run on one server (D-101); empty
+	// is the default instance. It decides the tmux socket and unit names.
+	Instance string `json:"instance,omitempty"`
+	Name     string `json:"name"`
 	Listen string `json:"listen"` // direct TLS listener, default ":17710"
 	Token  string `json:"token"`  // direct client token
 	// PublicAddrs are extra host:port values clients should try (NAT, port
@@ -71,8 +74,12 @@ func (c *Config) Validate() error {
 	if c.Listen == "" {
 		c.Listen = DefaultListen
 	}
+	if err := ValidInstance(c.Instance); err != nil {
+		return err
+	}
 	if c.StateDir == "" {
-		c.StateDir = DefaultStateDir
+		l, _ := LayoutFor(c.Instance)
+		c.StateDir = l.StateDir
 	}
 	if c.UploadMaxBytes <= 0 {
 		c.UploadMaxBytes = 64 << 30

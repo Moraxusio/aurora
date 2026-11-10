@@ -362,3 +362,40 @@ func TestKillEndsProcessesThatIgnoreHangup(t *testing.T) {
 		t.Fatalf("pid %s survived the kill", pid)
 	}
 }
+
+// D-101: two instances (two tmux sockets) on one machine never see or kill each
+// other's sessions, even when the session names are the same.
+func TestInstancesHaveSeparateSessions(t *testing.T) {
+	a := newEnv(t)
+	b := newEnv(t)
+	ctx := context.Background()
+	for _, e := range []*Env{a, b} {
+		if _, err := e.sessionCreate(ctx, json.RawMessage(`{"name":"same"}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := a.sessionCreate(ctx, json.RawMessage(`{"name":"only-a"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if rows := a.Sessions(ctx); len(rows) != 2 {
+		t.Fatalf("a: %+v", rows)
+	}
+	if rows := b.Sessions(ctx); len(rows) != 1 || rows[0].Name != "same" {
+		t.Fatalf("b sees a's sessions: %+v", rows)
+	}
+	_, _, _ = a.tmux(ctx, "kill-server")
+	if rows := b.Sessions(ctx); len(rows) != 1 {
+		t.Fatalf("killing a's server changed b: %+v", rows)
+	}
+}
+
+func TestUnitNamesFollowThePrefix(t *testing.T) {
+	e := &Env{}
+	if got := e.fmtUnit(); !strings.HasPrefix(got, "aurora3-tmux-") {
+		t.Fatal(got)
+	}
+	e.UnitPrefix = "aurora3-alice-tmux-"
+	if got := e.fmtUnit(); !strings.HasPrefix(got, "aurora3-alice-tmux-") {
+		t.Fatal(got)
+	}
+}

@@ -39,3 +39,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/branding/aurora3-256.png
+    # Android only: the signed agent, copied here by tools/package-android.ps1
+    # (not committed) and unpacked at first start. Desktop builds from a clean
+    # checkout carry only the placeholders.
+    - assets/agent/
+    - assets/agent/amd64/

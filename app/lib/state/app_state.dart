@@ -4,8 +4,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:aurora_install/aurora_install.dart';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
@@ -13,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../features/proxy/proxy_model.dart';
+import 'android_agent.dart';
 import 'profile_access.dart';
 import 'upgrade_model.dart';
 
@@ -21,6 +20,7 @@ import 'upgrade_model.dart';
 String agentDir() {
   final env = Platform.environment['AURORA3_AGENT_DIR'];
   if (env != null && env.isNotEmpty) return env;
+  if (Platform.isAndroid && androidAgentDir != null) return androidAgentDir!;
   final exe = File(Platform.resolvedExecutable).parent.path;
   return '$exe${Platform.pathSeparator}agent';
 }
@@ -60,6 +60,7 @@ class AppState extends ChangeNotifier implements ProfileAccess {
         final r = await const MethodChannel('dev.aurora3/keystore').invokeMapMethod<String, Object?>('init');
         registeredSealer = AndroidSealer(Uint8List.fromList((r!['key']! as List).cast<int>()));
         path ??= '${r['dir']}/profile.bin';
+        await unpackAgentAssets('${r['dir']}/agent');
       }
       storePath = path ?? defaultProfilePath();
       _store = await ProfileStore.open(storePath!, platformSealer());

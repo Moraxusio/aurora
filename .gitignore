@@ -19,3 +19,8 @@
 /app/**/.flutter-plugins-dependencies
 /app/**/*.iml
 /app/**/.idea/
+
+/app/assets/agent/*.json
+/app/assets/agent/*.sig
+/app/assets/agent/amd64/*
+!/app/assets/agent/amd64/.gitkeep

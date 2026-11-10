@@ -35,9 +35,14 @@ class SealerUnavailable implements Exception {
   String toString() => message;
 }
 
+/// Set at start by platforms whose keystore is reached asynchronously
+/// (Android: the app fetches the Keystore-wrapped data key first).
+Sealer? registeredSealer;
+
 /// The sealer for this platform. Throws [SealerUnavailable] where the
 /// keystore is missing or not supported yet; callers then refuse to save.
 Sealer platformSealer() {
   if (Platform.isWindows) return DpapiSealer();
+  if (Platform.isAndroid && registeredSealer != null) return registeredSealer!;
   throw SealerUnavailable('此平台（${Platform.operatingSystem}）还不支持安全保存凭据，未保存任何内容');
 }

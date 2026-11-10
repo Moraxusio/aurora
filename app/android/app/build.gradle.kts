@@ -29,11 +29,23 @@ android {
         versionName = flutter.versionName
     }
 
+    // The release keystore stays outside the repository; its location and
+    // passwords come from the environment (see tools/package-android.ps1).
+    val ksPath = System.getenv("AURORA_ANDROID_KEYSTORE")
+    signingConfigs {
+        if (ksPath != null) {
+            create("release") {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("AURORA_ANDROID_STORE_PASS")
+                keyAlias = System.getenv("AURORA_ANDROID_KEY_ALIAS") ?: "aurora3"
+                keyPassword = System.getenv("AURORA_ANDROID_STORE_PASS")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (ksPath != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 }

@@ -4,11 +4,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:aurora_install/aurora_install.dart';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../features/proxy/proxy_model.dart';
 import 'profile_access.dart';
@@ -54,6 +56,11 @@ class AppState extends ChangeNotifier implements ProfileAccess {
   /// Opens the profile at [path] (tests), or the default location.
   Future<void> initAt(String? path) async {
     try {
+      if (Platform.isAndroid && registeredSealer == null) {
+        final r = await const MethodChannel('dev.aurora3/keystore').invokeMapMethod<String, Object?>('init');
+        registeredSealer = AndroidSealer(Uint8List.fromList((r!['key']! as List).cast<int>()));
+        path ??= '${r['dir']}/profile.bin';
+      }
       storePath = path ?? defaultProfilePath();
       _store = await ProfileStore.open(storePath!, platformSealer());
     } on ProfileUnreadable catch (e) {

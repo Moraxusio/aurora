@@ -306,3 +306,9 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 
 这些问题促成了 D-77。
 
+
+### 3.5.0 Android APK (2026-11-10)
+
+- Android 凭据存储：`MainActivity.kt` 在 Android Keystore 里放一个不可导出的 AES-256-GCM 包装密钥，32 字节数据密钥随机生成，只以被包装的形式存在 `files/profile.key`；Dart 侧 `AndroidSealer`（AES-256-GCM，AAD 为用途串）用它加密配置文件。无法解包的密钥文件会报错，不会被覆盖。`aurora_profile` 新增 4 项测试通过（1 MiB 往返、nonce 不重复、篡改/错误密钥/错误用途被拒、短密钥被拒）。
+- 构建：JDK 17、Android SDK 36、NDK 28 装在独立目录；`flutter build apk --release --split-per-abi`，三个 ABI（arm64-v8a、armeabi-v7a、x86_64），minSdk 24，APK Signature Scheme v2 验签通过，发布 keystore 在仓库外（`AURORA_ANDROID_KEYSTORE`、`AURORA_ANDROID_STORE_PASS`），未提供时回落 debug 签名。APK 内未检出本机路径、用户名或测试服务器地址。
+- 未验证：没有在真机或模拟器上运行过；Android 上的 Keystore 流程、触摸交互、SSH 安装与直连、终端与文件功能均未验收；未做 v3 签名方案。agent 安装包不随 APK 分发，Android 端只作为客户端。

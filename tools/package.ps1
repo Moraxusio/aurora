@@ -84,6 +84,8 @@ Copy-Item (Join-Path $repo 'app\build\windows\x64\runner\Release\*') $dir -Recur
 # 4. Licences: every third-party component in the folder.
 & powershell -NoProfile -File (Join-Path $PSScriptRoot 'licenses.ps1') -Out "$dir\LICENSES.txt"
 if ($LASTEXITCODE) { throw 'licenses' }
+# Aurora's own licence (Apache-2.0 asks for the text and the NOTICE with every copy).
+Copy-Item (Join-Path $repo 'LICENSE'), (Join-Path $repo 'NOTICE') $dir
 
 # 5. README.
 $m = Get-Content "$dir\agent\amd64\manifest.json" -Raw | ConvertFrom-Json
@@ -100,16 +102,18 @@ Aurora $Version (Windows)
   只有当前 Windows 用户能打开。
 
 本次更新（$Version）：
-- 一个客户端对应一个 agent：每个新添加的服务器会在远程主机上安装自己独立的 agent
-  实例（独立的程序副本、systemd 服务、配置、状态目录、端口和 tmux 会话）。同一台
-  服务器上的多个客户端各用各的 agent，互不影响；卸载只清理自己那一份。
-- 新的 agent 带 --instance 参数；默认实例（无名称）的路径和端口不变，已有的服务器
-  条目和已安装的 agent 照常使用，无需迁移。
-- 限制：各 agent 实例仍以 root 运行，这是进程与目录层面的隔离，不是系统账户级别的隔离；
-  拿到某个客户端的令牌就等于拿到该服务器的 root。
-- Windows 与 Android 使用同一个版本号，本版本同时发布 Windows 压缩包和 Android APK。
-- 上一版的多格式编辑器（图片、PDF、Markdown、CSV）、项目工作区、托盘常驻沿用。
-- 要使用独立实例，服务器上的 agent 需要是本版本；客户端会在安装时一并安装。
+- 全局搜索（Ctrl+Shift+F）：在当前项目的文件夹里搜索文字，支持大小写、全字、正则和
+  包含/排除筛选，点结果跳到对应行列。
+- 快速打开（Ctrl+P）：按文件名模糊查找，“名称:行号”直接跳到那一行。
+- 编辑器：左右拆分（Ctrl+\）；设置页（主题、字号、自动换行、缩进空格数）；
+  Alt+Z 切换换行，Ctrl+G 转到行。文件在服务器上被修改时会提示；有未保存的修改时
+  不会自动覆盖。
+- 修正：以前保存会把 Windows 换行（CRLF）的文件改成 LF，现在保持原有换行符。
+- Git：储藏（stash）、标签、远程仓库、分支的合并/变基/重命名/删除/设置上游、
+  拣选、撤销、重置；冲突文件可以逐块合并；逐行追溯（blame）。推送标签和强制推送
+  请在终端里做。
+- Windows 与 Android 使用同一个版本号；以上改动都在客户端，已有 agent 不需要升级。
+- 上一版的“一个客户端一个 agent 实例”、多格式查看、项目工作区、托盘常驻沿用。
 代理功能：
 - 在“代理”页添加 Clash 订阅 URL，或粘贴节点链接；选用节点后，新建终端时勾选
   “这个会话走代理”。git 的 HTTP/HTTPS 远程操作跟随代理服务开关。
@@ -131,7 +135,7 @@ Aurora $Version (Windows)
   版本 $($m.version)，SHA-256 $($m.sha256)
   由发布密钥 $($m.key_id) 签名（agent\amd64\manifest.sig）。
 
-第三方组件及许可证见 LICENSES.txt。
+本程序使用 Apache License 2.0（见 LICENSE 和 NOTICE）。第三方组件及许可证见 LICENSES.txt。
 "@ | Set-Content -Encoding utf8 "$dir\README.txt"
 
 # 6. Zip and hash.

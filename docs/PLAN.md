@@ -352,3 +352,10 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
   - Windows ZIP：24,909,181 字节，SHA-256 `981a6cbcce6ce4925e8d0491861d50cb8a83830449cbccd66b2392b7a6a86c7b`，29 个文件与目录逐字节一致，exe 版本 3.8.0；agent SHA-256 `2e9177dfad434fb84baef81492ab1968afb85e509535beb493e443d6e0087eed`，发布密钥 `87828dfb18459372` 验签通过。
   - APK SHA-256：arm64-v8a `67cd75903622e72eaa0e9714df83af928cca21f084089bff456a33cb0e32446d`；armeabi-v7a `6a2480f8eea25209cebc85762da3355191b99f421814b7c11299e7ee8439181d`；x86_64 `9994f841658163d5eeceefd5a7bd34fd316e325ea6c49f368d190adc195cf728`。证书与之前相同（`db59a41d…1554882`），包内 agent 与 Windows 包逐字节一致，未检出本机路径、用户名、测试服务器地址。
   - APK 里还没有带 Aurora 自己的 LICENSE 文本（仓库和 Release 页有）；篡改拒绝测试未在本次重打后重复；Android 仍未在真机或模拟器上运行。
+
+### 未发布：界面重做（2026-11-12）
+
+- 见 DESIGN D-103。只改客户端：`theme/ide_theme.dart`（设计令牌与 Material 主题）、`kernel/shell.dart`（岛式布局、标题栏、活动栏、标签、欢迎页、状态栏、服务器下拉、空首页、手机布局）、`kernel/widgets.dart`（列表行、分组标题、空状态、菜单、提示条，新增浮层选择器与键帽）、`kernel/palette.dart` 和 `features/search/quick_open.dart`（新选择器）。
+- 测试：`flutter analyze` 无问题；`app` 全量 135 项通过（20 项跳过，其中 5 项是只在设置 `AURORA_SHOTS` 时运行的截图测试），`aurora_profile` 38 项通过。
+- 截图：用 `ui_shots_test.dart` 渲染了 14 张（宽屏深/浅色的欢迎页、文件树、编辑器、命令面板、服务器下拉；中等宽度和侧栏浮层；手机；没有服务器的首页），逐张看过。修正了截图里发现的问题：键帽单边粗边框在 Flutter 里不能配圆角（改用阴影做底边）、主题的文字样式丢了字体、欢迎页副标题在系统名为空时多出一个分隔点、手机底部导航文字挤在一起（改为只显示选中项的文字）。
+- 未验证：没有在真实 Windows 窗口和 Android 设备上看过（截图是测试环境渲染的，字体用的是本机 Windows 字体）；各功能面板内部没有逐个重新设计。尚未打包、发布。

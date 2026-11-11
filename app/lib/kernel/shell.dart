@@ -1,11 +1,13 @@
-// The window: the IDE layout (docs/DESIGN.md D-79).
+// The window: the IDE layout (docs/DESIGN.md D-79, D-103).
 //
-//   wide    activity bar | side bar | editor tabs + content
-//   medium  activity bar (icons) | side bar as a drawer | editor tabs + content
+//   wide    title bar / rail | side bar island | editor island / status bar
+//   medium  title bar / rail | editor island (side bar floats over it) / status bar
 //   narrow  one pane at a time: the side bar, or the editor; bottom bar
 //
-// Widths are decided from the window, not the device, so a resized desktop
-// window and a tablet in portrait both end up in the layout that fits.
+// The rail, title bar and status bar sit on the window frame; the side bar
+// and the editor are islands on it (rounded, a gap between them). Widths are
+// decided from the window, not the device, so a resized desktop window and a
+// tablet in portrait both end up in the layout that fits.
 import 'dart:async';
 
 import 'package:aurora_wire/aurora_wire.dart';
@@ -175,7 +177,7 @@ class _ShellState extends State<Shell> {
         Command(id: 'app.settings', title: '设置（主题、字号、自动换行）', group: '设置', icon: Icons.settings_outlined, run: () => ws.openTab(settingsTab(app))),
         Command(id: 'tab.next', title: '下一个标签', group: '视图', shortcut: 'Ctrl+Tab', enabled: () => ws.visibleTabs.length > 1, run: () => ws.next(1)),
         Command(id: 'tab.prev', title: '上一个标签', group: '视图', shortcut: 'Ctrl+Shift+Tab', enabled: () => ws.visibleTabs.length > 1, run: () => ws.next(-1)),
-        Command(id: 'side.toggle', title: '显示或隐藏侧栏', group: '视图', shortcut: 'Ctrl+B', run: () => setState(() => _sideOpen = !_sideOpen)),
+        Command(id: 'side.toggle', title: '显示或隐藏侧栏', group: '视图', icon: Icons.view_sidebar_outlined, shortcut: 'Ctrl+B', run: _toggleSide),
         Command(id: 'server.overview', title: '服务器概览与设置', group: '服务器', icon: Icons.info_outline, run: () => ws.openTab(overviewTab(ws, widget.features))),
         Command(id: 'server.reconnect', title: '重新连接', group: '服务器', icon: Icons.sync, run: () => app.connect(ws.serverId)),
       ]);
@@ -190,10 +192,15 @@ class _ShellState extends State<Shell> {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => AddServerPage(app: app)));
   }
 
+  void _toggleSide() => setState(() => _sideOpen = !_sideOpen);
+
   bool _usable(Workspace ws, String id) {
     final f = widget.features.byId(id);
     return f != null && ws.stateOf(f) == FeatureState.available;
   }
+
+  /// Quick open when the server offers search, else the command palette.
+  void _find(Workspace ws) => _usable(ws, 'search') ? showQuickOpen(ws, context: context) : showPalette(context, _commands(ws));
 
   /// Shows [f]'s side bar. [open]: never close it when it is already in
   /// front (a shortcut such as Ctrl+Shift+F only ever opens).
@@ -232,7 +239,7 @@ class _ShellState extends State<Shell> {
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true): () => showPalette(context, _commands(ws)),
-        const SingleActivator(LogicalKeyboardKey.keyB, control: true): () => setState(() => _sideOpen = !_sideOpen),
+        const SingleActivator(LogicalKeyboardKey.keyB, control: true): _toggleSide,
         if (ws != null)
           const SingleActivator(LogicalKeyboardKey.keyW, control: true): () {
             final t = ws.active;
@@ -250,7 +257,7 @@ class _ShellState extends State<Shell> {
       child: Focus(
         autofocus: true,
         child: Scaffold(
-          backgroundColor: ide.editor,
+          backgroundColor: ide.frame,
           body: SafeArea(
             child: ws == null
                 ? _EmptyShell(app: app, onAdd: _addServer)
@@ -262,115 +269,314 @@ class _ShellState extends State<Shell> {
   }
 
   Widget _layout(BuildContext context, Workspace ws, int mode, List<Command> cmds, Ide ide) {
+    final narrow = mode == 0;
+    final wide = mode == 2;
+    final gap = narrow ? 0.0 : Space.gap;
     final side = _SideBar(ws: ws, features: widget.features, feature: _feature, onPickFeature: (f) => _pick(ws, f));
     final editor = IndexedStack(index: _spaces.values.toList().indexOf(ws), children: [
       for (final space in _spaces.values)
         TickerMode(key: ObjectKey(space), enabled: identical(space, ws),
           child: ExcludeFocus(excluding: !identical(space, ws), child: ListenableBuilder(listenable: space,
-            builder: (_, _) => _EditorArea(ws: space, features: widget.features, onAdd: _addServer)))),
+            builder: (_, _) => _EditorArea(ws: space, features: widget.features, onAdd: _addServer,
+              onPalette: () => showPalette(context, _commands(space)), onFind: () => _find(space))))),
     ]);
-    final activity = _ActivityBar(
-      ws: ws,
-      features: widget.features,
-      current: _sideOpen ? _featureId : null,
-      vertical: true,
-      onPick: (f) => _pick(ws, f),
-      onServers: () => setState(() => _serversOpen = !_serversOpen),
-      onPalette: () => showPalette(context, cmds),
-      onOverview: () => ws.openTab(overviewTab(ws, widget.features)),
-    );
+    void servers() => setState(() => _serversOpen = !_serversOpen);
     final status = _StatusBar(ws: ws, app: app, onTapConn: () => app.connect(ws.serverId));
-    Widget servers() => _ServerSwitcher(app: app, onClose: () => setState(() => _serversOpen = false), onAdd: _addServer);
-
-    final narrow = mode == 0;
     final showEditor = !narrow || (ws.compactEditor && ws.visibleTabs.isNotEmpty);
-    final wide = mode == 2;
-    return Column(
+    final sideShown = _sideOpen && wide;
+
+    final body = Column(
       children: [
         AgentUpgradeNotice(app: app, id: ws.serverId),
-        if (narrow) _PhoneTop(ws: ws, showEditor: showEditor,
-          onBack: () => setState(() => ws.compactEditor = false),
-          onServers: () => setState(() => _serversOpen = !_serversOpen)),
+        if (narrow)
+          _PhoneTop(ws: ws, showEditor: showEditor, onBack: () => setState(() => ws.compactEditor = false), onServers: servers)
+        else
+          _TitleBar(
+            ws: ws,
+            searchable: _usable(ws, 'search'),
+            sideOpen: _sideOpen,
+            onServers: servers,
+            onFind: () => _find(ws),
+            onPalette: () => showPalette(context, cmds),
+            onToggleSide: _toggleSide,
+          ),
         Expanded(
           key: const ValueKey('main-content'),
           child: Row(
             children: [
-              if (!narrow) activity,
-              if (_sideOpen && wide) ...[
-                SizedBox(width: _sideWidth, child: side),
-                _Splitter(onDrag: (dx) => setState(() => _sideWidth = (_sideWidth + dx).clamp(220, 520))),
+              if (!narrow)
+                _ActivityBar(
+                  ws: ws,
+                  features: widget.features,
+                  current: _sideOpen ? _featureId : null,
+                  vertical: true,
+                  onPick: (f) => _pick(ws, f),
+                  onServers: servers,
+                  onPalette: () => showPalette(context, cmds),
+                  onOverview: () => ws.openTab(overviewTab(ws, widget.features)),
+                ),
+              if (sideShown) ...[
+                SizedBox(width: _sideWidth, child: _Island(child: side)),
+                _Splitter(width: gap, onDrag: (dx) => setState(() => _sideWidth = (_sideWidth + dx).clamp(220, 560))),
               ],
               Expanded(
                 key: const ValueKey('editor-slot'),
-                child: Stack(
-                  children: [
-                    // Keep this subtree at the same keyed position for every
-                    // width/server. A narrow side bar must not unmount dirty
-                    // editors or disconnect terminal streams.
-                    Positioned.fill(key: const ValueKey('editor-fill'),
-                      child: ExcludeFocus(excluding: !showEditor, child: Offstage(offstage: !showEditor,
-                        child: TickerMode(enabled: showEditor, child: editor)))),
-                    if (narrow && !showEditor) Positioned.fill(child: side),
-                    // medium: the side bar floats over the editor
-                    if (_sideOpen && mode == 1) ...[
-                      Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(() => _sideOpen = false),
-                          child: Container(color: Colors.black26),
-                        ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 320,
-                        child: Material(elevation: 10, color: ide.sideBar, child: side),
-                      ),
-                    ],
-                    if (_serversOpen)
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: narrow ? MediaQuery.sizeOf(context).width : 300,
-                        child: Material(elevation: 10, color: ide.sideBar, child: servers()),
-                      ),
-                  ],
+                child: Padding(
+                  padding: EdgeInsets.only(right: gap),
+                  child: _Island(
+                    flat: narrow,
+                    child: Stack(
+                      children: [
+                        // Keep this subtree at the same keyed position for every
+                        // width/server. A narrow side bar must not unmount dirty
+                        // editors or disconnect terminal streams.
+                        Positioned.fill(key: const ValueKey('editor-fill'),
+                          child: ExcludeFocus(excluding: !showEditor, child: Offstage(offstage: !showEditor,
+                            child: TickerMode(enabled: showEditor, child: editor)))),
+                        if (narrow && !showEditor) Positioned.fill(child: side),
+                        // medium: the side bar floats over the editor
+                        if (_sideOpen && mode == 1) ...[
+                          Positioned.fill(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => setState(() => _sideOpen = false),
+                              child: ColoredBox(color: Colors.black.withValues(alpha: ide.isDark ? 0.35 : 0.12)),
+                            ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: 320,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(color: ide.sideBar, border: Border(right: BorderSide(color: ide.border)), boxShadow: ide.float),
+                              child: side,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
         ),
         if (narrow && !showEditor) _ActivityBar(ws: ws, features: widget.features, current: _featureId, vertical: false,
-          onPick: (f) => _pick(ws, f), onServers: () => setState(() => _serversOpen = !_serversOpen),
+          onPick: (f) => _pick(ws, f), onServers: servers,
           onPalette: () => showPalette(context, cmds), onOverview: () => ws.openTab(overviewTab(ws, widget.features))),
         status,
       ],
     );
+    final width = MediaQuery.sizeOf(context).width;
+    return Stack(children: [
+      Positioned.fill(child: body),
+      if (_serversOpen) ...[
+        Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _serversOpen = false))),
+        Positioned(
+          left: narrow ? Space.m : 52,
+          top: narrow ? 52 : 38,
+          width: narrow ? width - Space.m * 2 : 340,
+          child: _ServerSwitcher(app: app, onClose: () => setState(() => _serversOpen = false), onAdd: _addServer),
+        ),
+      ],
+    ]);
   }
 }
 
-class _Splitter extends StatelessWidget {
-  final void Function(double dx) onDrag;
-  const _Splitter({required this.onDrag});
+/// A rounded panel on the window frame; [flat] (phones) fills the space.
+class _Island extends StatelessWidget {
+  final Widget child;
+  final bool flat;
+  const _Island({required this.child, this.flat = false});
+
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: ide.editor,
+        borderRadius: BorderRadius.circular(flat ? 0 : Radii.island),
+        border: flat ? null : Border.all(color: ide.border),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// The gap between the side bar and the editor; drag it to resize. A line
+/// shows on hover so the handle can be found.
+class _Splitter extends StatefulWidget {
+  final double width;
+  final void Function(double dx) onDrag;
+  const _Splitter({required this.width, required this.onDrag});
+  @override
+  State<_Splitter> createState() => _SplitterState();
+}
+
+class _SplitterState extends State<_Splitter> {
+  bool _hover = false, _drag = false;
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final on = _hover || _drag;
     return MouseRegion(
       cursor: SystemMouseCursors.resizeColumn,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (d) => onDrag(d.delta.dx),
-        child: Container(
-          width: 5,
-          color: ide.border.withValues(alpha: 0.0),
-          child: Center(child: Container(width: 1, color: ide.border)),
+        onHorizontalDragStart: (_) => setState(() => _drag = true),
+        onHorizontalDragEnd: (_) => setState(() => _drag = false),
+        onHorizontalDragUpdate: (d) => widget.onDrag(d.delta.dx),
+        child: SizedBox(
+          width: widget.width,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: 2,
+              margin: const EdgeInsets.symmetric(vertical: Space.xxl),
+              decoration: BoxDecoration(color: on ? ide.accent.withValues(alpha: 0.7) : Colors.transparent, borderRadius: BorderRadius.circular(1)),
+            ),
+          ),
         ),
       ),
     );
   }
 }
+
+// ---- title bar ----
+
+/// The top of the window: the server (and project) in front, the find box in
+/// the middle, layout buttons on the right.
+class _TitleBar extends StatelessWidget {
+  final Workspace ws;
+  final bool searchable, sideOpen;
+  final VoidCallback onServers, onFind, onPalette, onToggleSide;
+  const _TitleBar({
+    required this.ws,
+    required this.searchable,
+    required this.sideOpen,
+    required this.onServers,
+    required this.onFind,
+    required this.onPalette,
+    required this.onToggleSide,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final project = ws.project;
+    final canSplit = ws.visibleTabs.length > 1 || ws.split;
+    return SizedBox(
+      height: 40,
+      child: Row(children: [
+        SizedBox(
+          width: 48,
+          child: Center(child: Image.asset('assets/branding/aurora3-256.png', width: 18, height: 18, semanticLabel: 'Aurora 3')),
+        ),
+        Tooltip(
+          message: '切换服务器',
+          child: InkWell(
+            onTap: onServers,
+            borderRadius: BorderRadius.circular(Radii.m),
+            child: Container(
+              height: 28,
+              padding: const EdgeInsets.symmetric(horizontal: Space.m),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                StatusDot(connColor(ide, ws.status.state), size: 7),
+                const SizedBox(width: Space.m),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(ws.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ide.text)),
+                ),
+                if (project != null) ...[
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('/', style: TextStyle(color: ide.textFaint, fontSize: 13))),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: ide.textDim)),
+                  ),
+                ],
+                const SizedBox(width: 2),
+                Icon(Icons.expand_more_rounded, size: 16, color: ide.textFaint),
+              ]),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.l),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: _FindBox(searchable: searchable, onTap: onFind),
+              ),
+            ),
+          ),
+        ),
+        IconBtn(sideOpen ? Icons.view_sidebar : Icons.view_sidebar_outlined, '显示或隐藏侧栏（Ctrl+B）', onToggleSide),
+        IconBtn(Icons.vertical_split_outlined, ws.split ? '取消拆分（Ctrl+\\）' : '向右拆分编辑器（Ctrl+\\）', canSplit ? ws.splitActive : null,
+          color: ws.split ? ide.accent : null),
+        IconBtn(Icons.keyboard_command_key, '命令面板（Ctrl+Shift+P）', onPalette),
+        const SizedBox(width: Space.s),
+      ]),
+    );
+  }
+}
+
+/// The box in the middle of the title bar: a button that looks like a search
+/// field and opens quick open (or the palette).
+class _FindBox extends StatefulWidget {
+  final bool searchable;
+  final VoidCallback onTap;
+  const _FindBox({required this.searchable, required this.onTap});
+  @override
+  State<_FindBox> createState() => _FindBoxState();
+}
+
+class _FindBoxState extends State<_FindBox> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: 28,
+          padding: const EdgeInsets.only(left: Space.m + 2, right: Space.s),
+          decoration: BoxDecoration(
+            color: _hover ? ide.hover : ide.editor,
+            borderRadius: BorderRadius.circular(Radii.m),
+            border: Border.all(color: _hover ? ide.borderStrong : ide.border),
+          ),
+          child: Row(children: [
+            Icon(Icons.search_rounded, size: 15, color: ide.textFaint),
+            const SizedBox(width: Space.m),
+            Expanded(
+              child: Text(widget.searchable ? '搜索文件、输入命令' : '输入命令',
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: ide.textFaint)),
+            ),
+            KeyCaps(widget.searchable ? 'Ctrl+P' : 'Ctrl+Shift+P'),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// The colour of a connection state.
+Color connColor(Ide ide, ConnState s) => switch (s) {
+  ConnState.connected => ide.ok,
+  ConnState.failed => ide.error,
+  ConnState.waiting || ConnState.connecting => ide.warn,
+  ConnState.idle => ide.textFaint,
+};
 
 // ---- activity bar ----
 
@@ -396,31 +602,47 @@ class _ActivityBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final touch = InputMode.isTouch(context);
-    final box = touch ? 52.0 : 44.0;
-    Widget item(IconData icon, String tip, {bool on = false, bool dim = false, VoidCallback? tap, Widget? badge}) => Tooltip(
+    Widget rail(IconData icon, String tip, {bool on = false, bool dim = false, VoidCallback? tap}) => Tooltip(
       message: tip,
       preferBelow: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: InkWell(
+          onTap: tap,
+          hoverColor: on ? Colors.transparent : ide.hover,
+          borderRadius: BorderRadius.circular(Radii.l),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            width: touch ? 44 : 36,
+            height: touch ? 44 : 36,
+            decoration: BoxDecoration(color: on ? ide.accentSoft : null, borderRadius: BorderRadius.circular(Radii.l)),
+            child: Icon(icon, size: 20, color: on ? ide.accent : (dim ? ide.textFaint.withValues(alpha: 0.6) : ide.textDim)),
+          ),
+        ),
+      ),
+    );
+    Widget tab(IconData icon, String label, String tip, {bool on = false, bool dim = false, VoidCallback? tap}) => Tooltip(
+      message: tip,
       child: InkWell(
         onTap: tap,
-        hoverColor: ide.hover,
         child: SizedBox(
-          width: vertical ? 48 : null,
-          height: vertical ? box : 52,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              if (on)
-                Positioned(
-                  left: vertical ? 0 : null,
-                  top: vertical ? 6 : null,
-                  bottom: vertical ? 6 : 0,
-                  right: vertical ? null : 8,
-                  child: Container(width: vertical ? 2 : null, height: vertical ? null : 2, color: ide.accent),
-                ),
-              Icon(icon, size: 22, color: on ? ide.text : (dim ? ide.textDim.withValues(alpha: 0.45) : ide.textDim)),
-              ?badge,
-            ],
-          ),
+          height: 58,
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: 52,
+              height: 28,
+              decoration: BoxDecoration(color: on ? ide.accentSoft : null, borderRadius: BorderRadius.circular(14)),
+              child: Icon(icon, size: 20, color: on ? ide.accent : (dim ? ide.textFaint : ide.textDim)),
+            ),
+            const SizedBox(height: 3),
+            AnimatedOpacity(
+              opacity: on ? 1 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: Text(label, maxLines: 1, softWrap: false, overflow: TextOverflow.visible,
+                style: TextStyle(fontSize: 10.5, color: ide.text, fontWeight: FontWeight.w600)),
+            ),
+          ]),
         ),
       ),
     );
@@ -430,81 +652,56 @@ class _ActivityBar extends StatelessWidget {
           builder: (_) {
             final st = ws.link == null ? FeatureState.available : ws.stateOf(f);
             final usable = st == FeatureState.available || st == FeatureState.loading;
-            return item(f.icon, usable ? f.title : '${f.title}（${_stateText(st)}）', on: current == f.id, dim: !usable, tap: () => onPick(f));
+            final tip = usable ? f.title : '${f.title}（${_stateText(st)}）';
+            return vertical
+                ? rail(f.icon, tip, on: current == f.id, dim: !usable, tap: () => onPick(f))
+                : tab(f.icon, f.title, tip, on: current == f.id, dim: !usable, tap: () => onPick(f));
           },
         ),
     ];
-    final tail = [
-      item(Icons.keyboard_command_key, '命令面板（Ctrl+Shift+P）', tap: onPalette),
-      item(Icons.dns_outlined, '服务器', tap: onServers),
-      item(Icons.tune, '服务器概览', tap: onOverview),
-      item(Icons.settings_outlined, '设置', tap: () => ws.openTab(settingsTab(ws.app))),
-    ];
     if (vertical) {
-      return Container(
+      return SizedBox(
         width: 48,
-        decoration: BoxDecoration(
-          color: ide.activityBar,
-          border: Border(right: BorderSide(color: ide.border)),
-        ),
-        child: Column(children: [...feats, const Spacer(), ...tail]),
+        child: Column(children: [
+          Expanded(child: SingleChildScrollView(child: Column(children: feats))),
+          rail(Icons.tune_rounded, '服务器概览', tap: onOverview),
+          rail(Icons.settings_outlined, '设置', tap: () => ws.openTab(settingsTab(ws.app))),
+          const SizedBox(height: Space.xs),
+        ]),
       );
     }
     // bottom bar: feature icons share the width; the rest sit in a menu
     return Container(
-      decoration: BoxDecoration(
-        color: ide.activityBar,
-        border: Border(top: BorderSide(color: ide.border)),
-      ),
+      decoration: BoxDecoration(color: ide.frame, border: Border(top: BorderSide(color: ide.border))),
       child: Row(
         children: [
           for (final f in feats) Expanded(child: f),
-          Expanded(child: item(Icons.more_horiz, '更多', tap: () => _more(context, tail))),
+          Expanded(child: tab(Icons.more_horiz_rounded, '更多', '更多', tap: () => _more(context))),
         ],
       ),
     );
   }
 
-  void _more(BuildContext context, List<Widget> tail) {
+  void _more(BuildContext context) {
+    void go(BuildContext c, VoidCallback f) {
+      Navigator.pop(c);
+      f();
+    }
+
     showModalBottomSheet<void>(
       context: context,
       builder: (c) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.keyboard_command_key),
-              title: const Text('命令面板'),
-              onTap: () {
-                Navigator.pop(c);
-                onPalette();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.dns_outlined),
-              title: const Text('服务器'),
-              onTap: () {
-                Navigator.pop(c);
-                onServers();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.tune),
-              title: const Text('服务器概览'),
-              onTap: () {
-                Navigator.pop(c);
-                onOverview();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('设置'),
-              onTap: () {
-                Navigator.pop(c);
-                ws.openTab(settingsTab(ws.app));
-              },
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: Space.m),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(leading: const Icon(Icons.keyboard_command_key), title: const Text('命令面板'), onTap: () => go(c, onPalette)),
+              ListTile(leading: const Icon(Icons.dns_outlined), title: const Text('服务器'), onTap: () => go(c, onServers)),
+              ListTile(leading: const Icon(Icons.tune_rounded), title: const Text('服务器概览'), onTap: () => go(c, onOverview)),
+              ListTile(leading: const Icon(Icons.settings_outlined), title: const Text('设置'), onTap: () => go(c, () => ws.openTab(settingsTab(ws.app)))),
+            ],
+          ),
         ),
       ),
     );
@@ -577,7 +774,7 @@ class _SideBarState extends State<_SideBar> {
     Widget one(Feature f) {
       if (ws.link == null) return NotConnected(ws: ws);
       final st = ws.stateOf(f);
-      if (st == FeatureState.loading) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
+      if (st == FeatureState.loading) return const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)));
       if (st != FeatureState.available) return _Unavailable(ws: ws, feature: f, state: st);
       final v = _views.putIfAbsent(f, () => f.sideBar(context, ws));
       if (v == null) return EmptyHint(icon: f.icon, text: '${f.title}在编辑区里打开', actionLabel: '打开', onAction: () => f.open(ws));
@@ -601,19 +798,19 @@ class _SideBarState extends State<_SideBar> {
           const SizedBox.shrink(),
     ];
     final index = order.indexWhere((f) => f.id == feature.id).clamp(0, order.length - 1);
-    return Container(
+    return ColoredBox(
       color: ide.sideBar,
       child: Column(
         children: [
           Container(
-            height: 34,
-            padding: const EdgeInsets.only(left: 12, right: 4),
+            height: 40,
+            padding: const EdgeInsets.only(left: Space.l + 2, right: Space.s),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
-                    title.toUpperCase(),
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: ide.textDim, letterSpacing: 0.6),
+                    title,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ide.text),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -674,8 +871,8 @@ class _Unavailable extends StatelessWidget {
 class _EditorArea extends StatefulWidget {
   final Workspace ws;
   final Features features;
-  final VoidCallback onAdd;
-  const _EditorArea({required this.ws, required this.features, required this.onAdd});
+  final VoidCallback onAdd, onPalette, onFind;
+  const _EditorArea({required this.ws, required this.features, required this.onAdd, required this.onPalette, required this.onFind});
 
   @override
   State<_EditorArea> createState() => _EditorAreaState();
@@ -701,7 +898,7 @@ class _EditorAreaState extends State<_EditorArea> {
     final left = shown.any((t) => t.id == ws.activeId) ? ws.activeId : null;
     final right = split ? ws.sideId : null;
     return LayoutBuilder(builder: (context, box) {
-      final strip = InputMode.isTouch(context) ? 44.0 : 34.0;
+      final strip = _TabStrip.heightOf(context);
       final half = split ? (box.maxWidth - 1) / 2 : box.maxWidth;
       // Every tab stays built, in one Stack, at the same place in the tree;
       // splitting only moves it. A terminal keeps its stream and an editor its
@@ -736,17 +933,18 @@ class _EditorAreaState extends State<_EditorArea> {
         );
       }
 
-      return Container(
+      return ColoredBox(
         color: ide.editor,
         child: Stack(children: [
-          if (left == null && right == null) Positioned.fill(child: _Welcome(ws: ws, features: features)),
+          if (left == null && right == null)
+            Positioned.fill(child: _Welcome(ws: ws, features: features, onPalette: widget.onPalette, onFind: widget.onFind)),
           if (shown.isNotEmpty)
             Positioned(
               left: 0,
               top: 0,
               height: strip,
               width: half,
-              child: _TabStrip(ws: ws, right: false, focused: split && !ws.sideFocused),
+              child: _TabStrip(ws: ws, right: false, focused: !split || !ws.sideFocused),
             ),
           if (split) ...[
             Positioned(left: half + 1, top: 0, height: strip, width: half, child: _TabStrip(ws: ws, right: true, focused: ws.sideFocused)),
@@ -765,50 +963,57 @@ class _TabStrip extends StatelessWidget {
   final Workspace ws;
   final bool right;
 
-  /// This side has the focus (only drawn when split).
+  /// This side has the focus: its current tab is drawn as the active one.
   final bool focused;
-  const _TabStrip({required this.ws, this.right = false, this.focused = false});
+  const _TabStrip({required this.ws, this.right = false, this.focused = true});
+
+  static double heightOf(BuildContext context) => InputMode.isTouch(context) ? 46 : 38;
 
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
-    final touch = InputMode.isTouch(context);
     final split = ws.split;
     final tabs = !split ? ws.visibleTabs : right ? ws.visibleTabs.where((t) => t.id == ws.sideId).toList() : ws.visibleTabs.where((t) => t.id != ws.sideId).toList();
     final current = right ? ws.sideId : ws.activeId;
     return Container(
-      height: touch ? 44 : 34,
-      decoration: BoxDecoration(
-        color: ide.tabBar,
-        border: Border(bottom: BorderSide(color: focused ? ide.accent.withValues(alpha: 0.6) : ide.border)),
-      ),
+      height: heightOf(context),
+      decoration: BoxDecoration(color: ide.tabBar, border: Border(bottom: BorderSide(color: ide.border))),
       child: Row(children: [
         Expanded(
           child: ListView(
             scrollDirection: Axis.horizontal,
-            children: [for (final t in tabs) _TabButton(ws: ws, tab: t, active: t.id == current, right: right)],
+            padding: const EdgeInsets.symmetric(horizontal: Space.xs + 1, vertical: 5),
+            children: [
+              for (final t in tabs) _TabButton(ws: ws, tab: t, active: t.id == current, focused: focused, right: right),
+            ],
           ),
         ),
-        if (right)
-          IconBtn(Icons.close_fullscreen, '取消拆分（Ctrl+\\）', ws.unsplit)
-        else if (!split && ws.visibleTabs.length > 1 && MediaQuery.sizeOf(context).width >= _narrow)
-          IconBtn(Icons.vertical_split_outlined, '向右拆分（Ctrl+\\）', ws.splitActive),
+        if (right) ...[IconBtn(Icons.close_fullscreen_rounded, '取消拆分（Ctrl+\\）', ws.unsplit), const SizedBox(width: Space.xs)],
       ]),
     );
   }
 }
 
-class _TabButton extends StatelessWidget {
+class _TabButton extends StatefulWidget {
   final Workspace ws;
   final EditorTab tab;
-  final bool active;
-  final bool right;
-  const _TabButton({required this.ws, required this.tab, required this.active, this.right = false});
+  final bool active, focused, right;
+  const _TabButton({required this.ws, required this.tab, required this.active, required this.focused, this.right = false});
+
+  @override
+  State<_TabButton> createState() => _TabButtonState();
+}
+
+class _TabButtonState extends State<_TabButton> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
+    final ws = widget.ws, tab = widget.tab, active = widget.active, right = widget.right;
     final ide = Ide.of(context);
     final touch = InputMode.isTouch(context);
+    final strong = active && widget.focused;
+    final bg = strong ? ide.tabActive : (active || _hover ? ide.hover : null);
     return ContextArea(
       items: () => [
         MenuItem('关闭', () => ws.closeTab(tab.id), icon: Icons.close, hint: 'Ctrl+W'),
@@ -834,61 +1039,56 @@ class _TabButton extends StatelessWidget {
         onPointerDown: (e) {
           if (e.buttons == kMiddleMouseButton) ws.closeTab(tab.id);
         },
-        child: Tooltip(
-          message: tab.tooltip ?? tab.title,
-          waitDuration: const Duration(milliseconds: 700),
-          child: InkWell(
-            onTap: () {
-              ws.focusSide(right);
-              ws.activate(tab.id);
-            },
-            hoverColor: active ? Colors.transparent : ide.hover,
-            child: Container(
-              constraints: BoxConstraints(minWidth: touch ? 110 : 100, maxWidth: 220),
-              padding: const EdgeInsets.only(left: 12, right: 4),
-              decoration: BoxDecoration(
-                color: active ? ide.tabActive : null,
-                border: Border(
-                  top: BorderSide(color: active ? ide.accent : Colors.transparent, width: 2),
-                  right: BorderSide(color: ide.border),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(tab.icon, size: 15, color: tab.iconColor ?? (active ? ide.text : ide.textDim)),
-                  const SizedBox(width: 7),
-                  Flexible(
-                    child: Text(
-                      tab.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: active ? ide.text : ide.textDim),
-                    ),
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hover = true),
+          onExit: (_) => setState(() => _hover = false),
+          child: Tooltip(
+            message: tab.tooltip ?? tab.title,
+            waitDuration: const Duration(milliseconds: 800),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1.5),
+              child: GestureDetector(
+                onTap: () {
+                  ws.focusSide(right);
+                  ws.activate(tab.id);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  constraints: BoxConstraints(minWidth: touch ? 96 : 72, maxWidth: 240),
+                  padding: const EdgeInsets.only(left: Space.m + 2, right: Space.xs),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(Radii.m),
+                    border: strong && !ide.isDark ? Border.all(color: ide.border) : null,
                   ),
-                  const SizedBox(width: 4),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: tab.dirty,
-                    builder: (_, dirty, _) => SizedBox(
-                      width: touch ? 36 : 22,
-                      height: touch ? 36 : 22,
-                      child: InkResponse(
-                        onTap: () => ws.closeTab(tab.id),
-                        radius: 12,
-                        hoverColor: ide.hover,
-                        child: Center(
-                          child: dirty
-                              ? Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(color: ide.text, shape: BoxShape.circle),
-                                )
-                              : Icon(Icons.close, size: 14, color: ide.textDim),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(tab.icon, size: 15, color: tab.iconColor ?? (strong ? ide.accent : ide.textDim)),
+                      const SizedBox(width: Space.s + 1),
+                      Flexible(
+                        child: Text(
+                          tab.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12.5, color: active ? ide.text : ide.textDim, fontWeight: strong ? FontWeight.w500 : FontWeight.w400),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: Space.xs),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: tab.dirty,
+                        builder: (_, dirty, _) {
+                          final showClose = touch || active || _hover;
+                          return SizedBox(
+                            width: touch ? 32 : 20,
+                            height: touch ? 32 : 20,
+                            child: _CloseOrDot(dirty: dirty, showClose: showClose, onClose: () => ws.closeTab(tab.id)),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -898,11 +1098,53 @@ class _TabButton extends StatelessWidget {
   }
 }
 
-/// What the editor area shows with no tab open.
+/// A tab's close button. Unsaved, it is a dot that turns into the button
+/// under the mouse, as in VS Code.
+class _CloseOrDot extends StatefulWidget {
+  final bool dirty, showClose;
+  final VoidCallback onClose;
+  const _CloseOrDot({required this.dirty, required this.showClose, required this.onClose});
+  @override
+  State<_CloseOrDot> createState() => _CloseOrDotState();
+}
+
+class _CloseOrDotState extends State<_CloseOrDot> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final dot = widget.dirty && !_hover;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: InkResponse(
+        onTap: widget.onClose,
+        radius: 11,
+        containedInkWell: true,
+        highlightShape: BoxShape.rectangle,
+        borderRadius: BorderRadius.circular(Radii.s),
+        hoverColor: ide.hover,
+        child: Center(
+          child: dot
+              ? Container(width: 8, height: 8, decoration: BoxDecoration(color: ide.textDim, shape: BoxShape.circle))
+              : AnimatedOpacity(
+                  opacity: widget.showClose || _hover ? 1 : 0,
+                  duration: const Duration(milliseconds: 100),
+                  child: Icon(Icons.close_rounded, size: 14, color: _hover ? ide.text : ide.textDim),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What the editor area shows with no tab open: the server, what can be
+/// started, and the keys worth knowing.
 class _Welcome extends StatelessWidget {
   final Workspace ws;
   final Features features;
-  const _Welcome({required this.ws, required this.features});
+  final VoidCallback onPalette, onFind;
+  const _Welcome({required this.ws, required this.features, required this.onPalette, required this.onFind});
 
   /// The first session if there is one, else a new one.
   Future<void> _openTerminal(BuildContext context) async {
@@ -921,49 +1163,152 @@ class _Welcome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
-    Future<void> openTerminal() => _openTerminal(context);
-    Widget action(IconData i, String t, VoidCallback f) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: InkWell(
-        onTap: f,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          child: Row(
+    final connected = ws.link != null;
+    bool usable(String id) {
+      final f = features.byId(id);
+      return f != null && ws.stateOf(f) == FeatureState.available;
+    }
+
+    final st = ws.status;
+    final subtitle = connected
+        ? [ws.link!.server.os, 'agent ${ws.link!.server.version}', ?st.addr].where((s) => s.isNotEmpty).join(' · ')
+        : switch (st.state) {
+            ConnState.connecting => '正在连接…',
+            ConnState.waiting => '${st.retryIn?.inSeconds ?? 0} 秒后重试',
+            ConnState.failed => st.failure?.message ?? '连接失败',
+            _ => '未连接',
+          };
+    final actions = <_Action>[
+      if (connected) ...[
+        if (usable('terminal')) _Action(Icons.terminal_rounded, '打开终端', '继续上次的会话，或新建一个', () => _openTerminal(context)),
+        if (usable('search')) _Action(Icons.search_rounded, '快速打开文件', '按文件名模糊查找', onFind, keys: 'Ctrl+P'),
+        if (usable('search')) _Action(Icons.manage_search_rounded, '全局搜索', '在项目文件夹里搜文字', () => ws.focusSearch.value++, keys: 'Ctrl+Shift+F'),
+        if (usable('monitor')) _Action(Icons.monitor_heart_outlined, '查看监控', 'CPU、内存、磁盘与网络', () => ws.openTab(monitorTab(ws))),
+      ] else
+        _Action(Icons.sync_rounded, '连接', '连接到这台服务器', () => ws.app.connect(ws.serverId)),
+      _Action(Icons.tune_rounded, '概览与设置', '服务器信息、服务开关', () => ws.openTab(overviewTab(ws, features))),
+      _Action(Icons.keyboard_command_key, '命令面板', '所有命令都在这里', onPalette, keys: 'Ctrl+Shift+P'),
+    ];
+    Widget label(String s) => Padding(
+      padding: const EdgeInsets.only(bottom: Space.m + 2, left: 2),
+      child: Text(s, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ide.textFaint, letterSpacing: 0.3)),
+    );
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Space.xxl + 8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(i, size: 16, color: ide.accent),
-              const SizedBox(width: 10),
-              Text(t, style: TextStyle(color: ide.accent)),
+              Row(children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(color: ide.sideBar, borderRadius: BorderRadius.circular(14), border: Border.all(color: ide.border)),
+                  child: Image.asset('assets/branding/aurora3-256.png', semanticLabel: 'Aurora 3'),
+                ),
+                const SizedBox(width: Space.xl),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(ws.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 4),
+                    Row(children: [
+                      StatusDot(connColor(ide, st.state), size: 7),
+                      const SizedBox(width: Space.s + 1),
+                      Flexible(child: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: ide.textDim, fontSize: 12.5))),
+                    ]),
+                  ]),
+                ),
+              ]),
+              const SizedBox(height: Space.xxl + 8),
+              label('开始'),
+              LayoutBuilder(builder: (context, box) {
+                final two = box.maxWidth >= 460;
+                final w = two ? (box.maxWidth - Space.m) / 2 : box.maxWidth;
+                return Wrap(spacing: Space.m, runSpacing: Space.m, children: [
+                  for (final a in actions) SizedBox(width: w, child: _ActionCard(a)),
+                ]);
+              }),
+              if (!InputMode.isTouch(context)) ...[
+                const SizedBox(height: Space.xxl + 4),
+                label('常用快捷键'),
+                for (final (what, keys) in const [
+                  ('切换侧栏', 'Ctrl+B'),
+                  ('向右拆分编辑器', 'Ctrl+\\'),
+                  ('下一个标签', 'Ctrl+Tab'),
+                  ('关闭标签', 'Ctrl+W'),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+                    child: Row(children: [
+                      Expanded(child: Text(what, style: TextStyle(color: ide.textDim, fontSize: 12.5))),
+                      KeyCaps(keys),
+                    ]),
+                  ),
+              ],
             ],
           ),
         ),
       ),
     );
-    final connected = ws.link != null;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Image.asset('assets/branding/aurora3-256.png', width: 52, height: 52, semanticLabel: 'Aurora 3'),
-            const SizedBox(height: 12),
-            Text(ws.name, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text(connected ? '${ws.link!.server.os} · agent ${ws.link!.server.version}' : '未连接', style: TextStyle(color: ide.textDim)),
-            const SizedBox(height: 18),
-            if (connected) ...[
-              if (ws.stateOf(features.byId('terminal')!) == FeatureState.available) action(Icons.terminal, '打开终端', openTerminal),
-              if (ws.stateOf(features.byId('monitor')!) == FeatureState.available)
-                action(Icons.monitor_heart_outlined, '查看监控', () => ws.openTab(monitorTab(ws))),
-            ] else
-              action(Icons.sync, '连接', () => ws.app.connect(ws.serverId)),
-            action(Icons.tune, '概览与设置', () => ws.openTab(overviewTab(ws, features))),
-            const SizedBox(height: 18),
-            Text('Ctrl+Shift+P 打开命令面板', style: TextStyle(color: ide.textDim, fontSize: 12)),
-          ],
+  }
+}
+
+class _Action {
+  final IconData icon;
+  final String title, detail;
+  final VoidCallback run;
+  final String? keys;
+  const _Action(this.icon, this.title, this.detail, this.run, {this.keys});
+}
+
+class _ActionCard extends StatefulWidget {
+  final _Action a;
+  const _ActionCard(this.a);
+  @override
+  State<_ActionCard> createState() => _ActionCardState();
+}
+
+class _ActionCardState extends State<_ActionCard> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final a = widget.a;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: a.run,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.all(Space.l),
+          decoration: BoxDecoration(
+            color: _hover ? ide.hover : ide.editor,
+            borderRadius: BorderRadius.circular(Radii.l + 2),
+            border: Border.all(color: _hover ? ide.borderStrong : ide.border),
+          ),
+          child: Row(children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(color: ide.accentSoft, borderRadius: BorderRadius.circular(Radii.l)),
+              child: Icon(a.icon, size: 18, color: ide.accent),
+            ),
+            const SizedBox(width: Space.l),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: ide.text)),
+                const SizedBox(height: 2),
+                Text(a.detail, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: ide.textFaint)),
+              ]),
+            ),
+            if (a.keys != null && !InputMode.isTouch(context)) ...[const SizedBox(width: Space.s), KeyCaps(a.keys!)],
+          ]),
         ),
       ),
     );
@@ -982,46 +1327,53 @@ class _StatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final st = ws.status;
-    final (color, text) = switch (st.state) {
-      ConnState.connected => (ide.ok, '${ws.name}  ·  ${st.addr ?? ''}'),
-      ConnState.connecting => (ide.warn, '${ws.name}  ·  正在连接…'),
-      ConnState.waiting => (ide.warn, '${ws.name}  ·  ${st.retryIn?.inSeconds ?? 0} 秒后重试'),
-      ConnState.failed => (ide.error, '${ws.name}  ·  ${st.failure?.message ?? '连接失败'}'),
-      ConnState.idle => (ide.textDim, '${ws.name}  ·  未连接'),
+    final text = switch (st.state) {
+      ConnState.connected => st.addr ?? '已连接',
+      ConnState.connecting => '正在连接…',
+      ConnState.waiting => '${st.retryIn?.inSeconds ?? 0} 秒后重试',
+      ConnState.failed => st.failure?.message ?? '连接失败',
+      ConnState.idle => '未连接',
     };
+    final style = TextStyle(color: ide.statusText, fontSize: 12);
     return Container(
-      height: InputMode.isTouch(context) ? 32 : 24,
-      decoration: BoxDecoration(
-        color: ide.statusBar,
-        border: Border(top: BorderSide(color: ide.border)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: InputMode.isTouch(context) ? 32 : 26,
+      color: ide.statusBar,
+      padding: const EdgeInsets.symmetric(horizontal: Space.s),
       child: Row(
         children: [
-          InkWell(
-            onTap: onTapConn,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                StatusDot(color),
-                const SizedBox(width: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: Text(
-                    text,
-                    style: TextStyle(color: ide.statusText, fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+          Tooltip(
+            message: st.state == ConnState.connected ? '已连接；点击重新连接' : '点击连接',
+            child: InkWell(
+              onTap: onTapConn,
+              borderRadius: BorderRadius.circular(Radii.s),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Space.s, vertical: 3),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    StatusDot(connColor(ide, st.state), size: 7),
+                    const SizedBox(width: Space.s + 1),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 460),
+                      child: Text('${ws.name}  ·  $text', style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           const Spacer(),
           if (ws.active != null)
             ValueListenableBuilder<String>(
               valueListenable: ws.active!.status,
-              builder: (_, v, _) => v.isEmpty ? const SizedBox.shrink() : Text(v, style: TextStyle(color: ide.statusText, fontSize: 12)),
+              builder: (_, v, _) => v.isEmpty
+                  ? const SizedBox.shrink()
+                  : Padding(padding: const EdgeInsets.symmetric(horizontal: Space.s), child: Text(v, style: style, maxLines: 1)),
+            ),
+          if (ws.link != null && MediaQuery.sizeOf(context).width >= _narrow)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.s),
+              child: Text('agent ${ws.link!.server.version}', style: style.copyWith(color: ide.textFaint)),
             ),
         ],
       ),
@@ -1042,26 +1394,35 @@ class _PhoneTop extends StatelessWidget {
     final ide = Ide.of(context);
     final t = ws.active;
     return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: ide.tabBar,
-        border: Border(bottom: BorderSide(color: ide.border)),
-      ),
+      height: 52,
+      color: ide.frame,
+      padding: const EdgeInsets.symmetric(horizontal: Space.xs),
       child: Row(
         children: [
-          if (showEditor) IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back)) else const SizedBox(width: 12),
+          if (showEditor) IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded)) else const SizedBox(width: Space.l),
           Expanded(
-            child: Text(
-              showEditor && t != null ? t.title : ws.name,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: showEditor && t != null
+                ? Text(t.title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ide.text), maxLines: 1, overflow: TextOverflow.ellipsis)
+                : InkWell(
+                    onTap: onServers,
+                    borderRadius: BorderRadius.circular(Radii.m),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: Space.s),
+                      child: Row(children: [
+                        StatusDot(connColor(ide, ws.status.state), size: 8),
+                        const SizedBox(width: Space.m + 2),
+                        Flexible(
+                          child: Text(ws.name, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ide.text), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                        Icon(Icons.expand_more_rounded, size: 20, color: ide.textDim),
+                      ]),
+                    ),
+                  ),
           ),
           if (showEditor && ws.visibleTabs.length > 1)
             PopupMenuButton<String>(
               tooltip: '切换标签',
-              icon: Badge(label: Text('${ws.visibleTabs.length}'), child: const Icon(Icons.tab)),
+              icon: Badge(label: Text('${ws.visibleTabs.length}'), child: const Icon(Icons.layers_outlined)),
               onSelected: ws.activate,
               itemBuilder: (_) => [
                 for (final x in ws.visibleTabs)
@@ -1069,22 +1430,22 @@ class _PhoneTop extends StatelessWidget {
                     value: x.id,
                     child: Row(
                       children: [
-                        Icon(x.icon, size: 16),
-                        const SizedBox(width: 8),
+                        Icon(x.icon, size: 16, color: x.id == ws.activeId ? ide.accent : ide.textDim),
+                        const SizedBox(width: Space.m),
                         Flexible(child: Text(x.title, overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                   ),
               ],
             ),
-          if (showEditor && t != null) IconButton(onPressed: () => ws.closeTab(t.id), icon: const Icon(Icons.close)),
-          if (!showEditor) IconButton(onPressed: onServers, icon: const Icon(Icons.dns_outlined)),
+          if (showEditor && t != null) IconButton(onPressed: () => ws.closeTab(t.id), icon: const Icon(Icons.close_rounded)),
         ],
       ),
     );
   }
 }
 
+/// The server list that drops down from the title bar.
 class _ServerSwitcher extends StatelessWidget {
   final AppState app;
   final VoidCallback onClose, onAdd;
@@ -1094,59 +1455,59 @@ class _ServerSwitcher extends StatelessWidget {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final p = app.profile;
-    return Material(
-      color: ide.sideBar,
-      child: Column(
-        children: [
-          Container(
-            height: 34,
-            padding: const EdgeInsets.only(left: 12, right: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '服务器',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: ide.textDim, letterSpacing: 0.6),
-                  ),
-                ),
-                IconBtn(Icons.add, '添加服务器', () {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 440),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: ide.surface,
+        borderRadius: BorderRadius.circular(Radii.dialog),
+        border: Border.all(color: ide.borderStrong.withValues(alpha: 0.7)),
+        boxShadow: ide.float,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Space.l + 2, Space.l, Space.l + 2, Space.s),
+              child: Text('服务器', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ide.textFaint, letterSpacing: 0.3)),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: Space.xs),
+                children: [
+                  for (final s in p.servers)
+                    TreeRow(
+                      selected: s.id == p.selected,
+                      leading: StatusDot(connColor(ide, app.status(s.id).state), size: 7),
+                      label: s.name,
+                      detail: s.ssh?.host,
+                      trailing: s.id == p.selected ? Icon(Icons.check_rounded, size: 16, color: ide.accent) : null,
+                      onTap: () {
+                        app.select(s.id);
+                        onClose();
+                      },
+                    ),
+                ],
+              ),
+            ),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Space.xs),
+              child: TreeRow(
+                leading: Icon(Icons.add_rounded, size: 16, color: ide.textDim),
+                label: '添加服务器…',
+                onTap: () {
                   onClose();
                   onAdd();
-                }),
-                IconBtn(Icons.close, '关闭', onClose),
-              ],
+                },
+              ),
             ),
-          ),
-          const Divider(),
-          Expanded(
-            child: ListView(
-              children: [
-                for (final s in p.servers)
-                  Builder(
-                    builder: (_) {
-                      final st = app.status(s.id).state;
-                      final color = switch (st) {
-                        ConnState.connected => ide.ok,
-                        ConnState.failed => ide.error,
-                        ConnState.waiting || ConnState.connecting => ide.warn,
-                        _ => ide.textDim,
-                      };
-                      return TreeRow(
-                        selected: s.id == p.selected,
-                        leading: StatusDot(color),
-                        label: s.name,
-                        detail: s.ssh?.host,
-                        onTap: () {
-                          app.select(s.id);
-                          onClose();
-                        },
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1160,22 +1521,47 @@ class _EmptyShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
+    Widget step(String n, String t) => Padding(
+      padding: const EdgeInsets.only(bottom: Space.m),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 20,
+          height: 20,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: ide.accentSoft, shape: BoxShape.circle),
+          child: Text(n, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: ide.accent)),
+        ),
+        const SizedBox(width: Space.m + 2),
+        Expanded(child: Text(t, style: TextStyle(color: ide.textDim, fontSize: 13, height: 1.5))),
+      ]),
+    );
     return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Space.xxl),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 460),
+          padding: const EdgeInsets.all(Space.xxl + 4),
+          decoration: BoxDecoration(
+            color: ide.editor,
+            borderRadius: BorderRadius.circular(Radii.island + 4),
+            border: Border.all(color: ide.border),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Image.asset('assets/branding/aurora3-256.png', width: 52, height: 52, semanticLabel: 'Aurora 3'),
-              const SizedBox(height: 16),
-              Text('还没有服务器', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text('填写 Linux 服务器的 SSH 地址和账号，Aurora 会通过 SSH 安装 agent，之后直接连接。', style: TextStyle(color: ide.textDim)),
-              const SizedBox(height: 20),
-              FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add, size: 18), label: const Text('添加服务器')),
+              Image.asset('assets/branding/aurora3-256.png', width: 48, height: 48, semanticLabel: 'Aurora 3'),
+              const SizedBox(height: Space.xl + 2),
+              Text('欢迎使用 Aurora', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: Space.s),
+              Text('还没有服务器。连上一台 Linux 服务器，就能在这里编辑文件、开终端、管理 git 和服务。',
+                style: TextStyle(color: ide.textDim, height: 1.55)),
+              const SizedBox(height: Space.xxl),
+              step('1', '填写服务器的 SSH 地址和账号'),
+              step('2', 'Aurora 通过 SSH 在服务器上安装 agent'),
+              step('3', '之后直接加密连接 agent'),
+              const SizedBox(height: Space.l),
+              FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 18), label: const Text('添加服务器')),
             ],
           ),
         ),

@@ -1,13 +1,44 @@
-// The client's look: an IDE's, flat and dense (docs/DESIGN.md D-79). Colours
-// live in [Ide], a ThemeExtension, so every widget reads one palette; the
-// Material theme is built from the same values.
+// The client's look (docs/DESIGN.md D-79, D-103). The window is a frame with
+// islands on it: the side bar and the editor are rounded panels with a gap
+// between them, the activity rail, title bar and status bar sit on the frame
+// itself and have no borders. One accent colour carries every action and
+// selection; all other colour is left to file icons, diffs and the terminal.
+//
+// Colours live in [Ide], a ThemeExtension, so every widget reads one palette;
+// the Material theme is built from the same values. Sizes come from [Space]
+// and [Radii] so panels, rows and menus line up on one grid.
 import 'package:flutter/material.dart';
 
+/// The 4 px spacing grid.
+abstract final class Space {
+  static const double xs = 4, s = 6, m = 8, l = 12, xl = 16, xxl = 24;
+
+  /// The gap around and between islands.
+  static const double gap = 6;
+}
+
+abstract final class Radii {
+  static const double s = 4, m = 6, l = 8, island = 10, dialog = 12;
+}
+
 class Ide extends ThemeExtension<Ide> {
-  final Color editor, sideBar, activityBar, panel, tabBar, tabActive, border, text, textDim, accent, selection, hover;
+  /// The window behind the islands; the rail, title bar and status bar.
+  final Color frame;
+  final Color editor, sideBar, activityBar, panel, tabBar, tabActive;
+
+  /// Lines inside an island, and the stronger line of a control.
+  final Color border, borderStrong;
+  final Color text, textDim, textFaint;
+  final Color accent, accentSoft, onAccent;
+  final Color selection, hover;
+
+  /// Menus, dialogs, the palette: anything that floats.
+  final Color surface;
+  final Color input, shadow;
   final Color statusBar, statusText, error, warn, ok, addBg, delBg, addText, delText;
 
   const Ide({
+    required this.frame,
     required this.editor,
     required this.sideBar,
     required this.activityBar,
@@ -15,11 +46,18 @@ class Ide extends ThemeExtension<Ide> {
     required this.tabBar,
     required this.tabActive,
     required this.border,
+    required this.borderStrong,
     required this.text,
     required this.textDim,
+    required this.textFaint,
     required this.accent,
+    required this.accentSoft,
+    required this.onAccent,
     required this.selection,
     required this.hover,
+    required this.surface,
+    required this.input,
+    required this.shadow,
     required this.statusBar,
     required this.statusText,
     required this.error,
@@ -32,64 +70,127 @@ class Ide extends ThemeExtension<Ide> {
   });
 
   static const dark = Ide(
-    editor: Color(0xFF1E1F22),
-    sideBar: Color(0xFF2B2D30),
-    activityBar: Color(0xFF2B2D30),
-    panel: Color(0xFF1E1F22),
-    tabBar: Color(0xFF2B2D30),
-    tabActive: Color(0xFF1E1F22),
-    border: Color(0xFF393B40),
-    text: Color(0xFFDFE1E5),
-    textDim: Color(0xFF9DA0A8),
-    accent: Color(0xFF548AF7),
-    selection: Color(0xFF2E436E),
-    hover: Color(0xFF393B40),
-    statusBar: Color(0xFF2B2D30),
-    statusText: Color(0xFF9DA0A8),
-    error: Color(0xFFF75464),
-    warn: Color(0xFFF2C55C),
-    ok: Color(0xFF5FB865),
-    addBg: Color(0xFF1F3A2A),
-    delBg: Color(0xFF4A2327),
-    addText: Color(0xFF8FD694),
-    delText: Color(0xFFF59AA2),
+    frame: Color(0xFF111214),
+    editor: Color(0xFF1B1C1F),
+    sideBar: Color(0xFF1B1C1F),
+    activityBar: Color(0xFF111214),
+    panel: Color(0xFF1B1C1F),
+    tabBar: Color(0xFF1B1C1F),
+    tabActive: Color(0xFF2B2D32),
+    border: Color(0xFF2A2C30),
+    borderStrong: Color(0xFF3A3D44),
+    text: Color(0xFFE4E6EA),
+    textDim: Color(0xFF9399A3),
+    textFaint: Color(0xFF656B75),
+    accent: Color(0xFF6E8EFB),
+    accentSoft: Color(0x2E6E8EFB),
+    onAccent: Color(0xFFFFFFFF),
+    selection: Color(0xFF27345A),
+    hover: Color(0xFF26282C),
+    surface: Color(0xFF222428),
+    input: Color(0xFF141517),
+    shadow: Color(0x99000000),
+    statusBar: Color(0xFF111214),
+    statusText: Color(0xFF9399A3),
+    error: Color(0xFFF2616F),
+    warn: Color(0xFFE7B04B),
+    ok: Color(0xFF52C48A),
+    addBg: Color(0xFF1B3327),
+    delBg: Color(0xFF3C2127),
+    addText: Color(0xFF84D9A6),
+    delText: Color(0xFFF59CA4),
   );
 
   static const light = Ide(
+    frame: Color(0xFFE9EBEF),
     editor: Color(0xFFFFFFFF),
-    sideBar: Color(0xFFF7F8FA),
-    activityBar: Color(0xFFF2F3F5),
+    sideBar: Color(0xFFFCFCFD),
+    activityBar: Color(0xFFE9EBEF),
     panel: Color(0xFFFFFFFF),
-    tabBar: Color(0xFFF7F8FA),
-    tabActive: Color(0xFFFFFFFF),
-    border: Color(0xFFD3D5DB),
-    text: Color(0xFF1E1F22),
-    textDim: Color(0xFF6C707E),
-    accent: Color(0xFF3574F0),
-    selection: Color(0xFFD4E2FF),
-    hover: Color(0xFFE6E8EC),
-    statusBar: Color(0xFFF2F3F5),
-    statusText: Color(0xFF6C707E),
-    error: Color(0xFFDB3B4B),
-    warn: Color(0xFFA46704),
-    ok: Color(0xFF208A3C),
-    addBg: Color(0xFFE3F5E6),
-    delBg: Color(0xFFFCE3E5),
-    addText: Color(0xFF1B6E32),
-    delText: Color(0xFFB02A37),
+    tabBar: Color(0xFFFFFFFF),
+    tabActive: Color(0xFFECEEF2),
+    border: Color(0xFFE7E9ED),
+    borderStrong: Color(0xFFD2D5DB),
+    text: Color(0xFF1D2025),
+    textDim: Color(0xFF5F6670),
+    textFaint: Color(0xFF969CA6),
+    accent: Color(0xFF3A62E3),
+    accentSoft: Color(0x243A62E3),
+    onAccent: Color(0xFFFFFFFF),
+    selection: Color(0xFFDDE6FD),
+    hover: Color(0xFFF0F2F5),
+    surface: Color(0xFFFFFFFF),
+    input: Color(0xFFF5F6F8),
+    shadow: Color(0x2E101828),
+    statusBar: Color(0xFFE9EBEF),
+    statusText: Color(0xFF5F6670),
+    error: Color(0xFFD43447),
+    warn: Color(0xFFA66A00),
+    ok: Color(0xFF1D8A50),
+    addBg: Color(0xFFE2F4E8),
+    delBg: Color(0xFFFCE4E6),
+    addText: Color(0xFF17673A),
+    delText: Color(0xFFB0283A),
   );
 
   static Ide of(BuildContext context) => Theme.of(context).extension<Ide>()!;
+
+  bool get isDark => editor.computeLuminance() < 0.2;
+
+  /// The interface font: Segoe UI Variable on Windows 11, Segoe UI before it;
+  /// Chinese falls back to YaHei UI, other platforms to their own sans.
+  static const ui = 'Segoe UI Variable Text';
+  static const uiFallback = ['Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', 'Roboto'];
 
   /// Monospace for code, terminal and logs; Chinese falls back to the UI font.
   static const mono = 'Cascadia Mono';
   static const monoFallback = ['Consolas', 'Microsoft YaHei UI', 'Noto Sans Mono CJK SC'];
 
+  /// The soft shadow of anything that floats over the islands.
+  List<BoxShadow> get float => [
+        BoxShadow(color: shadow, blurRadius: 28, offset: const Offset(0, 10)),
+        BoxShadow(color: shadow.withValues(alpha: shadow.a * 0.5), blurRadius: 4, offset: const Offset(0, 1)),
+      ];
+
   @override
   Ide copyWith() => this;
 
   @override
-  Ide lerp(ThemeExtension<Ide>? other, double t) => t < 0.5 ? this : (other as Ide? ?? this);
+  Ide lerp(ThemeExtension<Ide>? other, double t) {
+    if (other is! Ide) return this;
+    Color l(Color a, Color b) => Color.lerp(a, b, t)!;
+    return Ide(
+      frame: l(frame, other.frame),
+      editor: l(editor, other.editor),
+      sideBar: l(sideBar, other.sideBar),
+      activityBar: l(activityBar, other.activityBar),
+      panel: l(panel, other.panel),
+      tabBar: l(tabBar, other.tabBar),
+      tabActive: l(tabActive, other.tabActive),
+      border: l(border, other.border),
+      borderStrong: l(borderStrong, other.borderStrong),
+      text: l(text, other.text),
+      textDim: l(textDim, other.textDim),
+      textFaint: l(textFaint, other.textFaint),
+      accent: l(accent, other.accent),
+      accentSoft: l(accentSoft, other.accentSoft),
+      onAccent: l(onAccent, other.onAccent),
+      selection: l(selection, other.selection),
+      hover: l(hover, other.hover),
+      surface: l(surface, other.surface),
+      input: l(input, other.input),
+      shadow: l(shadow, other.shadow),
+      statusBar: l(statusBar, other.statusBar),
+      statusText: l(statusText, other.statusText),
+      error: l(error, other.error),
+      warn: l(warn, other.warn),
+      ok: l(ok, other.ok),
+      addBg: l(addBg, other.addBg),
+      delBg: l(delBg, other.delBg),
+      addText: l(addText, other.addText),
+      delText: l(delText, other.delText),
+    );
+  }
 }
 
 ThemeData buildTheme(Brightness b) {
@@ -97,174 +198,257 @@ ThemeData buildTheme(Brightness b) {
   final scheme = ColorScheme(
     brightness: b,
     primary: c.accent,
-    onPrimary: Colors.white,
+    onPrimary: c.onAccent,
     secondary: c.accent,
-    onSecondary: Colors.white,
+    onSecondary: c.onAccent,
     error: c.error,
     onError: Colors.white,
     surface: c.sideBar,
     onSurface: c.text,
     onSurfaceVariant: c.textDim,
-    outline: c.border,
+    outline: c.borderStrong,
     outlineVariant: c.border,
     surfaceContainerLowest: c.editor,
     surfaceContainerLow: c.sideBar,
-    surfaceContainer: c.sideBar,
-    surfaceContainerHigh: c.tabBar,
+    surfaceContainer: c.surface,
+    surfaceContainerHigh: c.surface,
     surfaceContainerHighest: c.hover,
     primaryContainer: c.selection,
     onPrimaryContainer: c.text,
+    secondaryContainer: c.accentSoft,
+    onSecondaryContainer: c.text,
     errorContainer: c.delBg,
     onErrorContainer: c.delText,
     tertiaryContainer: c.addBg,
     onTertiaryContainer: c.addText,
     inverseSurface: c.text,
     onInverseSurface: c.editor,
+    shadow: c.shadow,
   );
-  const r4 = BorderRadius.all(Radius.circular(4));
+  const rs = BorderRadius.all(Radius.circular(Radii.s));
+  const rm = BorderRadius.all(Radius.circular(Radii.m));
+  const rl = BorderRadius.all(Radius.circular(Radii.l));
   final base = ThemeData(
     useMaterial3: true,
     brightness: b,
     colorScheme: scheme,
-    scaffoldBackgroundColor: c.editor,
+    scaffoldBackgroundColor: c.frame,
     canvasColor: c.sideBar,
-    fontFamily: 'Microsoft YaHei UI',
-    fontFamilyFallback: const ['Segoe UI', 'Noto Sans CJK SC'],
+    fontFamily: Ide.ui,
+    fontFamilyFallback: Ide.uiFallback,
     visualDensity: VisualDensity.compact,
     splashFactory: NoSplash.splashFactory,
     hoverColor: c.hover,
+    focusColor: c.accentSoft,
     highlightColor: Colors.transparent,
     dividerColor: c.border,
     dividerTheme: DividerThemeData(color: c.border, space: 1, thickness: 1),
     extensions: [c],
   );
+  final muted = TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.textDim);
   return base.copyWith(
     textTheme: base.textTheme
         .copyWith(
-          bodyLarge: const TextStyle(fontSize: 14),
-          bodyMedium: const TextStyle(fontSize: 13),
-          bodySmall: const TextStyle(fontSize: 12),
+          bodyLarge: const TextStyle(fontSize: 14, height: 1.45),
+          bodyMedium: const TextStyle(fontSize: 13, height: 1.4),
+          bodySmall: const TextStyle(fontSize: 12, height: 1.35),
           labelLarge: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
           labelMedium: const TextStyle(fontSize: 12),
-          labelSmall: const TextStyle(fontSize: 11),
+          labelSmall: const TextStyle(fontSize: 11, letterSpacing: 0.2),
           titleSmall: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           titleMedium: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          titleLarge: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          titleLarge: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.2),
+          headlineSmall: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600, letterSpacing: -0.3),
         )
-        .apply(bodyColor: c.text, displayColor: c.text),
+        .apply(bodyColor: c.text, displayColor: c.text, fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback),
+    iconTheme: IconThemeData(color: c.textDim, size: 18),
     tooltipTheme: TooltipThemeData(
-      waitDuration: const Duration(milliseconds: 500),
-      decoration: BoxDecoration(color: c.tabBar, border: Border.all(color: c.border), borderRadius: r4),
-      textStyle: TextStyle(color: c.text, fontSize: 12),
+      waitDuration: const Duration(milliseconds: 450),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.borderStrong), borderRadius: rm, boxShadow: c.float),
+      textStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 12),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: c.sideBar,
+      color: c.surface,
       surfaceTintColor: Colors.transparent,
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: r4, side: BorderSide(color: c.border)),
-      textStyle: TextStyle(color: c.text, fontSize: 13),
+      shadowColor: c.shadow,
+      elevation: 10,
+      menuPadding: const EdgeInsets.symmetric(vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: rl, side: BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
+      textStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 13),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: c.sideBar,
+      backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
-      elevation: 8,
-      shape: RoundedRectangleBorder(borderRadius: const BorderRadius.all(Radius.circular(6)), side: BorderSide(color: c.border)),
-      titleTextStyle: TextStyle(color: c.text, fontSize: 15, fontWeight: FontWeight.w600, fontFamily: 'Microsoft YaHei UI'),
+      shadowColor: c.shadow,
+      elevation: 16,
+      barrierColor: Colors.black.withValues(alpha: c.isDark ? 0.5 : 0.28),
+      shape: RoundedRectangleBorder(borderRadius: const BorderRadius.all(Radius.circular(Radii.dialog)), side: BorderSide(color: c.borderStrong.withValues(alpha: 0.6))),
+      titleTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 16, fontWeight: FontWeight.w600),
+      contentTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.textDim, fontSize: 13, height: 1.5),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: c.surface,
+      surfaceTintColor: Colors.transparent,
+      showDragHandle: true,
+      dragHandleColor: c.borderStrong,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: c.tabBar,
-      contentTextStyle: TextStyle(color: c.text, fontSize: 13),
+      backgroundColor: c.surface,
+      contentTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 13),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: r4, side: BorderSide(color: c.border)),
+      elevation: 10,
+      shape: RoundedRectangleBorder(borderRadius: rl, side: BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
     ),
     inputDecorationTheme: InputDecorationTheme(
       isDense: true,
       filled: true,
-      fillColor: c.editor,
+      fillColor: c.input,
+      hoverColor: Colors.transparent,
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      border: OutlineInputBorder(borderRadius: r4, borderSide: BorderSide(color: c.border)),
-      enabledBorder: OutlineInputBorder(borderRadius: r4, borderSide: BorderSide(color: c.border)),
-      focusedBorder: OutlineInputBorder(borderRadius: r4, borderSide: BorderSide(color: c.accent)),
-      errorBorder: OutlineInputBorder(borderRadius: r4, borderSide: BorderSide(color: c.error)),
-      focusedErrorBorder: OutlineInputBorder(borderRadius: r4, borderSide: BorderSide(color: c.error)),
-      labelStyle: TextStyle(color: c.textDim, fontSize: 13),
-      helperStyle: TextStyle(color: c.textDim, fontSize: 11),
-      hintStyle: TextStyle(color: c.textDim, fontSize: 13),
+      border: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.border)),
+      enabledBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.border)),
+      focusedBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.accent, width: 1.4)),
+      errorBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.error)),
+      focusedErrorBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.error, width: 1.4)),
+      disabledBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.border.withValues(alpha: 0.5))),
+      labelStyle: muted.copyWith(fontSize: 13),
+      floatingLabelStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.accent, fontSize: 13),
+      helperStyle: muted.copyWith(fontSize: 11.5),
+      hintStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.textFaint, fontSize: 13),
+      prefixIconColor: c.textDim,
+      suffixIconColor: c.textDim,
     ),
+    textSelectionTheme: TextSelectionThemeData(cursorColor: c.accent, selectionColor: c.selection, selectionHandleColor: c.accent),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: c.accent,
-        foregroundColor: Colors.white,
+        foregroundColor: c.onAccent,
+        disabledBackgroundColor: c.hover,
+        disabledForegroundColor: c.textFaint,
         minimumSize: const Size(64, 32),
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        shape: const RoundedRectangleBorder(borderRadius: r4),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        shape: const RoundedRectangleBorder(borderRadius: rm),
+        elevation: 0,
+        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13, fontWeight: FontWeight.w500),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: c.surface,
+        foregroundColor: c.text,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        minimumSize: const Size(64, 32),
+        shape: RoundedRectangleBorder(borderRadius: rm, side: BorderSide(color: c.borderStrong)),
+        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: c.text,
-        side: BorderSide(color: c.border),
+        side: BorderSide(color: c.borderStrong),
         minimumSize: const Size(64, 32),
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        shape: const RoundedRectangleBorder(borderRadius: r4),
-        textStyle: const TextStyle(fontSize: 13),
+        shape: const RoundedRectangleBorder(borderRadius: rm),
+        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: c.accent,
         minimumSize: const Size(48, 32),
-        shape: const RoundedRectangleBorder(borderRadius: r4),
-        textStyle: const TextStyle(fontSize: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        shape: const RoundedRectangleBorder(borderRadius: rm),
+        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13, fontWeight: FontWeight.w500),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
-      style: IconButton.styleFrom(foregroundColor: c.textDim, shape: const RoundedRectangleBorder(borderRadius: r4)),
+      style: IconButton.styleFrom(foregroundColor: c.textDim, hoverColor: c.hover, shape: const RoundedRectangleBorder(borderRadius: rm)),
     ),
     checkboxTheme: CheckboxThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
-      side: BorderSide(color: c.textDim, width: 1.2),
+      shape: const RoundedRectangleBorder(borderRadius: rs),
+      side: BorderSide(color: c.textFaint, width: 1.3),
+      fillColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : Colors.transparent),
+      checkColor: WidgetStateProperty.all(c.onAccent),
     ),
+    radioTheme: RadioThemeData(fillColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : c.textFaint)),
     switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : c.textDim),
-      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : c.border),
-      trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.onAccent : c.textDim),
+      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : c.hover),
+      trackOutlineColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.transparent : c.borderStrong),
     ),
+    sliderTheme: SliderThemeData(activeTrackColor: c.accent, inactiveTrackColor: c.border, thumbColor: c.accent, overlayColor: c.accentSoft, trackHeight: 3),
     scrollbarTheme: ScrollbarThemeData(
-      thumbColor: WidgetStateProperty.all(c.textDim.withValues(alpha: 0.35)),
-      radius: const Radius.circular(3),
-      thickness: WidgetStateProperty.all(8),
+      thumbColor: WidgetStateProperty.resolveWith((s) => c.textDim.withValues(alpha: s.contains(WidgetState.dragged) ? 0.55 : (s.contains(WidgetState.hovered) ? 0.42 : 0.26))),
+      radius: const Radius.circular(4),
+      thickness: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.hovered) || s.contains(WidgetState.dragged) ? 8 : 6),
+      crossAxisMargin: 2,
+      mainAxisMargin: 2,
     ),
-    progressIndicatorTheme: ProgressIndicatorThemeData(color: c.accent, linearTrackColor: c.border),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: c.accent, linearTrackColor: c.border, circularTrackColor: Colors.transparent),
     listTileTheme: ListTileThemeData(
       dense: true,
       iconColor: c.textDim,
       textColor: c.text,
       selectedColor: c.text,
       selectedTileColor: c.selection,
-      shape: const RoundedRectangleBorder(),
+      shape: const RoundedRectangleBorder(borderRadius: rm),
     ),
     cardTheme: CardThemeData(
-      color: c.sideBar,
+      color: c.editor,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: const BorderRadius.all(Radius.circular(6)), side: BorderSide(color: c.border)),
+      shape: RoundedRectangleBorder(borderRadius: rl, side: BorderSide(color: c.border)),
     ),
+    chipTheme: ChipThemeData(
+      backgroundColor: c.input,
+      selectedColor: c.accentSoft,
+      side: BorderSide(color: c.border),
+      shape: const RoundedRectangleBorder(borderRadius: rm),
+      labelStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+    ),
+    badgeTheme: BadgeThemeData(backgroundColor: c.accent, textColor: c.onAccent, smallSize: 7),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: SegmentedButton.styleFrom(
-        side: BorderSide(color: c.border),
-        shape: const RoundedRectangleBorder(borderRadius: r4),
-        textStyle: const TextStyle(fontSize: 13),
+        side: BorderSide(color: c.borderStrong),
+        selectedBackgroundColor: c.accentSoft,
+        selectedForegroundColor: c.text,
+        foregroundColor: c.textDim,
+        shape: const RoundedRectangleBorder(borderRadius: rm),
+        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13),
       ),
+    ),
+    tabBarTheme: TabBarThemeData(
+      labelColor: c.text,
+      unselectedLabelColor: c.textDim,
+      indicatorColor: c.accent,
+      dividerColor: c.border,
+      labelStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13, fontWeight: FontWeight.w500),
+      unselectedLabelStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13),
     ),
     menuTheme: MenuThemeData(
       style: MenuStyle(
-        backgroundColor: WidgetStateProperty.all(c.sideBar),
+        backgroundColor: WidgetStateProperty.all(c.surface),
         surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
-        side: WidgetStateProperty.all(BorderSide(color: c.border)),
+        shadowColor: WidgetStateProperty.all(c.shadow),
+        elevation: WidgetStateProperty.all(10),
+        padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
+        shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: rl)),
+        side: WidgetStateProperty.all(BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
       ),
     ),
+    dropdownMenuTheme: DropdownMenuThemeData(
+      menuStyle: MenuStyle(
+        backgroundColor: WidgetStateProperty.all(c.surface),
+        surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
+        shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: rl)),
+        side: WidgetStateProperty.all(BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(backgroundColor: c.frame, indicatorColor: c.accentSoft, surfaceTintColor: Colors.transparent),
   );
 }

@@ -23,13 +23,17 @@ class Toast {
     final narrow = w < 600;
     final side = narrow ? 12.0 : (w - 480) / 2;
     m.showSnackBar(SnackBar(
-      margin: EdgeInsets.fromLTRB(side, 0, side, narrow ? 100 : 36),
+      margin: EdgeInsets.fromLTRB(side, 0, side, narrow ? 100 : 40),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       duration: Duration(seconds: error ? 8 : 3),
-      content: Row(children: [
-        Icon(error ? Icons.error_outline : Icons.check_circle_outline, size: 18, color: error ? Colors.redAccent : Colors.greenAccent),
-        const SizedBox(width: 10),
-        Expanded(child: SelectableText(msg)),
-      ]),
+      content: Builder(builder: (context) {
+        final ide = Ide.of(context);
+        return Row(children: [
+          Icon(error ? Icons.error_rounded : Icons.check_circle_rounded, size: 18, color: error ? ide.error : ide.ok),
+          const SizedBox(width: 10),
+          Expanded(child: SelectableText(msg, style: TextStyle(color: ide.text, fontSize: 13))),
+        ]);
+      }),
     ));
   }
 }
@@ -69,11 +73,12 @@ Future<void> showMenuAt(BuildContext context, Offset at, List<MenuItem> items) a
             value: i,
             enabled: items[i].onTap != null,
             height: InputMode.isTouch(context) ? 44 : 30,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Row(children: [
               SizedBox(width: 22, child: items[i].icon == null ? null : Icon(items[i].icon, size: 16, color: items[i].danger ? ide.error : ide.textDim)),
               const SizedBox(width: 6),
-              Expanded(child: Text(items[i].label, style: TextStyle(color: items[i].danger ? ide.error : null))),
-              if (items[i].hint != null) Text(items[i].hint!, style: TextStyle(color: ide.textDim, fontSize: 11)),
+              Expanded(child: Text(items[i].label, style: TextStyle(fontSize: 13, color: items[i].danger ? ide.error : ide.text))),
+              if (items[i].hint != null) ...[const SizedBox(width: 16), Text(items[i].hint!, style: TextStyle(color: ide.textFaint, fontSize: 11.5))],
             ]),
           ),
     ],
@@ -141,8 +146,8 @@ class TreeRow extends StatelessWidget {
     );
     Widget row = Container(
       constraints: BoxConstraints(minHeight: InputMode.row(context) + (subtitle == null ? 0 : 14)),
-      color: selected ? ide.selection : null,
-      padding: EdgeInsets.only(left: 8.0 + depth * 14, right: 6, top: subtitle == null ? 0 : 3, bottom: subtitle == null ? 0 : 3),
+      decoration: selected ? BoxDecoration(color: ide.selection, borderRadius: BorderRadius.circular(Radii.m)) : null,
+      padding: EdgeInsets.only(left: 6.0 + depth * 14, right: 4, top: subtitle == null ? 0 : 3, bottom: subtitle == null ? 0 : 3),
       child: Row(children: [
         if (leading != null) ...[SizedBox(width: 18, child: Center(child: leading)), const SizedBox(width: 6)],
         Expanded(
@@ -157,7 +162,16 @@ class TreeRow extends StatelessWidget {
         ?trailing,
       ]),
     );
-    row = InkWell(onTap: onTap, onDoubleTap: onDoubleTap, hoverColor: selected ? Colors.transparent : ide.hover, child: row);
+    row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Space.xs),
+      child: InkWell(
+        onTap: onTap,
+        onDoubleTap: onDoubleTap,
+        borderRadius: BorderRadius.circular(Radii.m),
+        hoverColor: selected ? Colors.transparent : ide.hover,
+        child: row,
+      ),
+    );
     if (menu != null) row = ContextArea(items: menu!, child: row);
     return row;
   }
@@ -184,11 +198,11 @@ class IconBtn extends StatelessWidget {
         hoverColor: ide.hover,
         containedInkWell: true,
         highlightShape: BoxShape.rectangle,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(Radii.m),
         child: SizedBox(
           width: box,
           height: box,
-          child: Icon(icon, size: size, color: onPressed == null ? ide.textDim.withValues(alpha: 0.4) : (color ?? ide.textDim)),
+          child: Icon(icon, size: size, color: onPressed == null ? ide.textFaint.withValues(alpha: 0.6) : (color ?? ide.textDim)),
         ),
       ),
     );
@@ -206,19 +220,27 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
-    return InkWell(
-      onTap: onTap,
-      hoverColor: ide.hover,
-      child: Container(
-        height: InputMode.isTouch(context) ? 44 : 26,
-        padding: const EdgeInsets.only(left: 6),
-        color: ide.tabBar,
-        child: Row(children: [
-          if (expanded != null) Icon(expanded! ? Icons.expand_more : Icons.chevron_right, size: 16, color: ide.textDim),
-          const SizedBox(width: 2),
-          Expanded(child: Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ide.textDim, letterSpacing: 0.3), maxLines: 1, overflow: TextOverflow.ellipsis)),
-          ...actions,
-        ]),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.xs, 2, Space.xs, 0),
+      child: InkWell(
+        onTap: onTap,
+        hoverColor: onTap == null ? Colors.transparent : ide.hover,
+        borderRadius: BorderRadius.circular(Radii.m),
+        child: Container(
+          height: InputMode.isTouch(context) ? 44 : 28,
+          padding: EdgeInsets.only(left: expanded == null ? 8 : 2),
+          child: Row(children: [
+            if (expanded != null)
+              AnimatedRotation(
+                turns: expanded! ? 0.25 : 0,
+                duration: const Duration(milliseconds: 120),
+                child: Icon(Icons.chevron_right_rounded, size: 16, color: ide.textFaint),
+              ),
+            const SizedBox(width: 3),
+            Expanded(child: Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ide.textDim, letterSpacing: 0.2), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ...actions,
+          ]),
+        ),
       ),
     );
   }
@@ -237,18 +259,158 @@ class EmptyHint extends StatelessWidget {
     final ide = Ide.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 30, color: ide.textDim),
-          const SizedBox(height: 10),
-          Text(text, textAlign: TextAlign.center, style: TextStyle(color: ide.textDim)),
-          if (actionLabel != null) ...[
-            const SizedBox(height: 12),
-            OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
-          ],
-        ]),
+        padding: const EdgeInsets.all(Space.xxl),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 300),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: ide.hover, borderRadius: BorderRadius.circular(Radii.island)),
+              child: Icon(icon, size: 22, color: ide.textDim),
+            ),
+            const SizedBox(height: Space.l),
+            Text(text, textAlign: TextAlign.center, style: TextStyle(color: ide.textDim, fontSize: 12.5, height: 1.5)),
+            if (actionLabel != null) ...[
+              const SizedBox(height: Space.l),
+              OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+            ],
+          ]),
+        ),
       ),
     );
+  }
+}
+
+/// Opens a floating picker (the command palette, quick open) near the top of
+/// the window.
+Future<T?> showPicker<T>(BuildContext context, {required WidgetBuilder builder, double maxWidth = 620, double maxHeight = 460}) {
+  final dark = Ide.of(context).isDark;
+  return showDialog<T>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: dark ? 0.38 : 0.14),
+    builder: (c) {
+      final ide = Ide.of(c);
+      return Align(
+        alignment: const Alignment(0, -0.62),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Space.xl),
+          child: Container(
+            constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: ide.surface,
+              borderRadius: BorderRadius.circular(Radii.dialog),
+              border: Border.all(color: ide.borderStrong.withValues(alpha: 0.7)),
+              boxShadow: ide.float,
+            ),
+            child: Material(type: MaterialType.transparency, child: builder(c)),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// The search line at the top of a picker: no box, a larger font.
+class PickerField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final String hint;
+  final IconData icon;
+  final ValueChanged<String>? onSubmitted;
+  const PickerField({super.key, required this.controller, required this.hint, required this.icon, this.focusNode, this.onSubmitted});
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    const none = InputBorder.none;
+    return SizedBox(
+      height: 50,
+      child: Row(children: [
+        const SizedBox(width: Space.xl),
+        Icon(icon, size: 18, color: ide.textDim),
+        const SizedBox(width: Space.l),
+        Expanded(
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            autofocus: true,
+            style: TextStyle(fontSize: 14.5, color: ide.text),
+            decoration: InputDecoration(hintText: hint, filled: false, isCollapsed: true, border: none, enabledBorder: none, focusedBorder: none),
+            onSubmitted: onSubmitted,
+          ),
+        ),
+        const SizedBox(width: Space.xl),
+      ]),
+    );
+  }
+}
+
+/// One row of a picker, [height] high; the chosen one is highlighted.
+class PickerRow extends StatelessWidget {
+  static const double height = 34;
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget child;
+  const PickerRow({super.key, required this.selected, required this.onTap, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Space.s),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Radii.m),
+        child: Container(
+          height: height,
+          padding: const EdgeInsets.symmetric(horizontal: Space.m + 2),
+          decoration: selected ? BoxDecoration(color: ide.selection, borderRadius: BorderRadius.circular(Radii.m)) : null,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Keeps row [index] of a list of [PickerRow]s in view.
+void revealPickerRow(ScrollController c, int index, {double pad = Space.s}) {
+  if (!c.hasClients) return;
+  final p = c.position;
+  final top = pad + index * PickerRow.height;
+  if (top < p.pixels) {
+    c.jumpTo((top - pad).clamp(0, p.maxScrollExtent));
+  } else if (top + PickerRow.height > p.pixels + p.viewportDimension) {
+    c.jumpTo((top + PickerRow.height + pad - p.viewportDimension).clamp(0, p.maxScrollExtent));
+  }
+}
+
+/// A keyboard shortcut drawn as key caps: "Ctrl+Shift+P".
+class KeyCaps extends StatelessWidget {
+  final String keys;
+  const KeyCaps(this.keys, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (final k in keys.split('+'))
+        Container(
+          margin: const EdgeInsets.only(left: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          constraints: const BoxConstraints(minWidth: 18),
+          height: 18,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: ide.input,
+            borderRadius: BorderRadius.circular(Radii.s),
+            border: Border.all(color: ide.border),
+            boxShadow: [BoxShadow(color: ide.borderStrong, offset: const Offset(0, 1))],
+          ),
+          child: Text(k, style: TextStyle(fontSize: 10.5, color: ide.textDim, height: 1.1, fontWeight: FontWeight.w500)),
+        ),
+    ]);
   }
 }
 
@@ -269,7 +431,7 @@ Future<bool> confirmDialog(BuildContext context, {required String title, String?
       title: Text(title),
       content: body == null ? null : ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: Text(body)),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c, false), child: Text('取消', style: TextStyle(color: ide.textDim))),
+        TextButton(onPressed: () => Navigator.pop(c, false), child: Text('取消', style: TextStyle(color: ide.text))),
         FilledButton(
           style: danger ? FilledButton.styleFrom(backgroundColor: ide.error) : null,
           onPressed: () => Navigator.pop(c, true),
@@ -291,7 +453,7 @@ Future<String?> askText(BuildContext context, {required String title, String ini
       title: Text(title),
       content: SizedBox(width: 380, child: TextField(controller: c, autofocus: true, obscureText: obscure, decoration: InputDecoration(hintText: hint), onSubmitted: (v) => Navigator.pop(ctx, v.trim()))),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: Text('取消', style: TextStyle(color: ide.textDim))),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text('取消', style: TextStyle(color: ide.text))),
         FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: Text(ok)),
       ],
     ),

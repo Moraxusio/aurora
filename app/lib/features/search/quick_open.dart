@@ -56,19 +56,7 @@ Future<void> showQuickOpen(Workspace ws, {BuildContext? context}) async {
   if (ctx == null || ws.link == null) return;
   final folders = await searchFolders(ws);
   if (!ctx.mounted) return;
-  final chosen = await showDialog<(QuickOpenItem, int?)>(
-    context: ctx,
-    barrierColor: Colors.black38,
-    builder: (c) => Align(
-      alignment: const Alignment(0, -0.6),
-      child: Material(
-        color: Ide.of(c).sideBar,
-        elevation: 12,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6), side: BorderSide(color: Ide.of(c).border)),
-        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620, maxHeight: 440), child: QuickOpen(ws: ws, folders: folders)),
-      ),
-    ),
-  );
+  final chosen = await showPicker<(QuickOpenItem, int?)>(ctx, maxWidth: 640, builder: (_) => QuickOpen(ws: ws, folders: folders));
   if (chosen == null) return;
   openFileAt(ws, root: chosen.$1.folder.root, path: chosen.$1.path, line: chosen.$2);
 }
@@ -83,6 +71,7 @@ class QuickOpen extends StatefulWidget {
 
 class _QuickOpenState extends State<QuickOpen> {
   final _text = TextEditingController();
+  final _scroll = ScrollController();
   List<QuickOpenItem> _items = [];
   int _index = 0;
   bool _loading = true;
@@ -104,6 +93,7 @@ class _QuickOpenState extends State<QuickOpen> {
   void dispose() {
     _debounce?.cancel();
     _text.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -132,57 +122,59 @@ class _QuickOpenState extends State<QuickOpen> {
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
-    void move(int d) => setState(() => _index = _items.isEmpty ? 0 : (_index + d) % _items.length);
+    void move(int d) {
+      if (_items.isEmpty) return;
+      setState(() => _index = (_index + d + _items.length) % _items.length);
+      WidgetsBinding.instance.addPostFrameCallback((_) => revealPickerRow(_scroll, _index));
+    }
+
+    Widget note(String s) => Padding(padding: const EdgeInsets.all(Space.xxl), child: Text(s, style: TextStyle(color: ide.textDim)));
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      Padding(
-        padding: const EdgeInsets.all(8),
-        child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.arrowDown): () => move(1),
-            const SingleActivator(LogicalKeyboardKey.arrowUp): () => move(-1),
-            const SingleActivator(LogicalKeyboardKey.escape): () => Navigator.pop(context),
-          },
-          child: TextField(
-            controller: _text,
-            autofocus: true,
-            style: const TextStyle(fontSize: 14),
-            decoration: const InputDecoration(hintText: '输入文件名，加 :行号 跳到那一行', prefixIcon: Icon(Icons.search, size: 18)),
-            onSubmitted: (_) => _pick(_index),
-          ),
+      CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.arrowDown): () => move(1),
+          const SingleActivator(LogicalKeyboardKey.arrowUp): () => move(-1),
+          const SingleActivator(LogicalKeyboardKey.escape): () => Navigator.pop(context),
+        },
+        child: PickerField(
+          controller: _text,
+          icon: Icons.search_rounded,
+          hint: '输入文件名，加 :行号 跳到那一行',
+          onSubmitted: (_) => _pick(_index),
         ),
       ),
-      const Divider(),
+      Stack(children: [
+        const Divider(),
+        if (_loading) const LinearProgressIndicator(minHeight: 1.5, backgroundColor: Colors.transparent),
+      ]),
       Flexible(
-        child: _loading
-            ? const Padding(padding: EdgeInsets.all(20), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+        child: _loading && _items.isEmpty
+            ? const SizedBox(height: Space.xxl)
             : widget.folders.isEmpty
-                ? Padding(padding: const EdgeInsets.all(20), child: Text('没有可以搜索的文件夹', style: TextStyle(color: ide.textDim)))
+                ? note('没有可以搜索的文件夹')
                 : _items.isEmpty
-                    ? Padding(padding: const EdgeInsets.all(20), child: Text('没有匹配的文件', style: TextStyle(color: ide.textDim)))
+                    ? note('没有匹配的文件')
                     : ListView.builder(
+                        controller: _scroll,
                         shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: Space.s),
+                        itemExtent: PickerRow.height,
                         itemCount: _items.length,
                         itemBuilder: (_, i) {
                           final it = _items[i];
                           final name = it.path.split('/').last;
                           final dir = displayPath(it.folder, it.path.substring(0, it.path.length - name.length));
-                          return InkWell(
+                          final (icon, color) = fileGlyph(name, ide);
+                          return PickerRow(
+                            selected: i == _index,
                             onTap: () => _pick(i),
-                            child: Container(
-                              height: 32,
-                              color: i == _index ? ide.selection : null,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              child: Row(children: [
-                                Builder(builder: (_) {
-                                  final (icon, color) = fileGlyph(name, ide);
-                                  return Icon(icon, size: 15, color: color);
-                                }),
-                                const SizedBox(width: 8),
-                                Text(name),
-                                const SizedBox(width: 10),
-                                Expanded(child: Text(dir, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: ide.textDim, fontSize: 12))),
-                              ]),
-                            ),
+                            child: Row(children: [
+                              Icon(icon, size: 16, color: color),
+                              const SizedBox(width: Space.m + 2),
+                              Text(name, style: TextStyle(fontSize: 13, color: ide.text)),
+                              const SizedBox(width: Space.m + 2),
+                              Expanded(child: Text(dir, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: ide.textFaint, fontSize: 12))),
+                            ]),
                           );
                         },
                       ),

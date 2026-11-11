@@ -6,26 +6,11 @@ import 'package:flutter/services.dart';
 
 import '../theme/ide_theme.dart';
 import 'feature.dart';
+import 'widgets.dart';
 
 /// Opens the palette over [context]; runs the chosen command.
 Future<void> showPalette(BuildContext context, List<Command> commands) async {
-  final ide = Ide.of(context);
-  final chosen = await showDialog<Command>(
-    context: context,
-    barrierColor: Colors.black38,
-    builder: (c) => Align(
-      alignment: const Alignment(0, -0.6),
-      child: Material(
-        color: ide.sideBar,
-        elevation: 12,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6), side: BorderSide(color: ide.border)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 420),
-          child: _Palette(commands: commands),
-        ),
-      ),
-    ),
-  );
+  final chosen = await showPicker<Command>(context, maxWidth: 600, builder: (_) => _Palette(commands: commands));
   if (chosen != null) await chosen.run();
 }
 
@@ -39,6 +24,7 @@ class _Palette extends StatefulWidget {
 class _PaletteState extends State<_Palette> {
   final _text = TextEditingController();
   final _focus = FocusNode();
+  final _scroll = ScrollController();
   int _index = 0;
 
   @override
@@ -51,6 +37,7 @@ class _PaletteState extends State<_Palette> {
   void dispose() {
     _text.dispose();
     _focus.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -79,54 +66,56 @@ class _PaletteState extends State<_Palette> {
     return [for (final s in scored) s.$2];
   }
 
+  void _move(int d, int n) {
+    if (n == 0) return;
+    setState(() => _index = (_index + d + n) % n);
+    WidgetsBinding.instance.addPostFrameCallback((_) => revealPickerRow(_scroll, _index));
+  }
+
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final shown = _shown;
     if (_index >= shown.length) _index = shown.isEmpty ? 0 : shown.length - 1;
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      Padding(
-        padding: const EdgeInsets.all(8),
-        child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.arrowDown): () => setState(() => _index = shown.isEmpty ? 0 : (_index + 1) % shown.length),
-            const SingleActivator(LogicalKeyboardKey.arrowUp): () => setState(() => _index = shown.isEmpty ? 0 : (_index - 1 + shown.length) % shown.length),
-            const SingleActivator(LogicalKeyboardKey.escape): () => Navigator.pop(context),
+      CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.arrowDown): () => _move(1, shown.length),
+          const SingleActivator(LogicalKeyboardKey.arrowUp): () => _move(-1, shown.length),
+          const SingleActivator(LogicalKeyboardKey.escape): () => Navigator.pop(context),
+        },
+        child: PickerField(
+          controller: _text,
+          focusNode: _focus,
+          icon: Icons.keyboard_command_key,
+          hint: '输入命令…',
+          onSubmitted: (_) {
+            if (shown.isNotEmpty) Navigator.pop(context, shown[_index]);
           },
-          child: TextField(
-            controller: _text,
-            focusNode: _focus,
-            autofocus: true,
-            style: const TextStyle(fontSize: 14),
-            decoration: const InputDecoration(hintText: '输入命令…', prefixIcon: Icon(Icons.keyboard_command_key, size: 18)),
-            onSubmitted: (_) {
-              if (shown.isNotEmpty) Navigator.pop(context, shown[_index]);
-            },
-          ),
         ),
       ),
       const Divider(),
       Flexible(
         child: shown.isEmpty
-            ? Padding(padding: const EdgeInsets.all(20), child: Text('没有匹配的命令', style: TextStyle(color: ide.textDim)))
+            ? Padding(padding: const EdgeInsets.all(Space.xxl), child: Text('没有匹配的命令', style: TextStyle(color: ide.textDim)))
             : ListView.builder(
+                controller: _scroll,
                 shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(vertical: Space.s),
+                itemExtent: PickerRow.height,
                 itemCount: shown.length,
                 itemBuilder: (_, i) {
                   final c = shown[i];
-                  return InkWell(
+                  return PickerRow(
+                    selected: i == _index,
                     onTap: () => Navigator.pop(context, c),
-                    child: Container(
-                      height: 32,
-                      color: i == _index ? ide.selection : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Row(children: [
-                        SizedBox(width: 24, child: c.icon == null ? null : Icon(c.icon, size: 15, color: ide.textDim)),
-                        Text('${c.group}：', style: TextStyle(color: ide.textDim)),
-                        Expanded(child: Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                        if (c.shortcut != null) Text(c.shortcut!, style: TextStyle(color: ide.textDim, fontSize: 11)),
-                      ]),
-                    ),
+                    child: Row(children: [
+                      SizedBox(width: 26, child: Icon(c.icon ?? Icons.chevron_right_rounded, size: 16, color: i == _index ? ide.text : ide.textDim)),
+                      Expanded(child: Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: ide.text))),
+                      const SizedBox(width: Space.m),
+                      Text(c.group, style: TextStyle(fontSize: 12, color: ide.textFaint)),
+                      if (c.shortcut != null) ...[const SizedBox(width: Space.m), KeyCaps(c.shortcut!)],
+                    ]),
                   );
                 },
               ),

@@ -24,13 +24,22 @@ $BuildNumber = [int]$p[0] * 10000 + [int]$p[1] * 100 + [int]$p[2]
 if (-not $AgentDir) { $AgentDir = Join-Path $Out "Aurora-$Version\agent" }
 $repo = Split-Path -Parent $PSScriptRoot
 $dest = Join-Path $repo 'app\assets\agent'
+# Apache-2.0 asks for the licence text and the NOTICE with every copy; the
+# third-party list comes from the Windows package of the same version.
+$legal = Join-Path $repo 'app\assets\legal'
+$windowsDir = Join-Path $Out "Aurora-$Version"
+if (-not (Test-Path (Join-Path $windowsDir 'LICENSES.txt'))) { throw "no LICENSES.txt in $windowsDir; build the Windows package of this version first" }
 if (-not (Test-Path (Join-Path $AgentDir 'amd64\manifest.sig'))) { throw "no signed agent in $AgentDir" }
 $agentVersion = (Get-Content (Join-Path $AgentDir 'amd64\manifest.json') -Raw | ConvertFrom-Json).version
 if ($agentVersion -ne $Version) { throw "the agent in ${AgentDir} is ${agentVersion}, not ${Version}; build the Windows package of this version first" }
-function Clear-Agent { Get-ChildItem $dest -Recurse -File | Where-Object { $_.Name -ne '.gitkeep' } | Remove-Item -Force }
+function Clear-Agent {
+  Get-ChildItem $dest -Recurse -File | Where-Object { $_.Name -ne '.gitkeep' } | Remove-Item -Force
+  Get-ChildItem $legal -File | Where-Object { $_.Name -ne '.gitkeep' } | Remove-Item -Force
+}
 Clear-Agent
 Copy-Item (Join-Path $AgentDir 'policy.json'), (Join-Path $AgentDir 'policy.sig') $dest
 Copy-Item (Join-Path $AgentDir 'amd64\*') (Join-Path $dest 'amd64')
+Copy-Item (Join-Path $repo 'LICENSE'), (Join-Path $repo 'NOTICE'), (Join-Path $windowsDir 'LICENSES.txt') $legal
 try {
   Push-Location (Join-Path $repo 'app')
   & flutter build apk --release --split-per-abi --build-name $Version --build-number $BuildNumber

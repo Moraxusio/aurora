@@ -24,3 +24,5 @@
 /app/assets/agent/*.sig
 /app/assets/agent/amd64/*
 !/app/assets/agent/amd64/.gitkeep
+/app/assets/legal/*
+!/app/assets/legal/.gitkeep

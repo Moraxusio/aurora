@@ -46,3 +46,6 @@ flutter:
     # checkout carry only the placeholders.
     - assets/agent/
     - assets/agent/amd64/
+    # Android only: LICENSE, NOTICE and the third-party list, copied here by
+    # tools/package-android.ps1 (not committed); Windows ships them as files.
+    - assets/legal/

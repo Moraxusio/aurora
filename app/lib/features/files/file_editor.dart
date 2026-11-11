@@ -80,7 +80,7 @@ import 'file_viewers.dart';
 
 /// The tab for [path] under [root]. The editor's state is reached through a
 /// key so closing the tab can ask about unsaved changes.
-EditorTab fileEditorTab(Workspace ws, {required String root, required String path, int? line}) {
+EditorTab fileEditorTab(Workspace ws, {required String root, required String path, int? line, int col = 1}) {
   path = WorkspacePath.normalize(path);
   final id = 'file:$root:$path';
   final title = path.split('/').last;
@@ -97,21 +97,32 @@ EditorTab fileEditorTab(Workspace ws, {required String root, required String pat
     return EditorTab(id: id, title: title, icon: icon, tooltip: path, builder: (_) => view, file: file);
   }
   final key = GlobalKey<FileEditorState>();
-  final view = FileEditor(key: key, ws: ws, root: root, path: path, line: line);
+  final view = FileEditor(key: key, ws: ws, root: root, path: path, line: line, col: col);
   final tab = EditorTab(id: id, title: title, icon: Icons.description_outlined, tooltip: path, builder: (_) => view, file: file);
   tab.confirmClose = () async {
     final st = key.currentState;
     if (st == null || !st.dirty) return true;
     return st.askDiscard();
   };
+  tab.reveal = (line, col) => key.currentState?.reveal(line, col);
   return tab;
+}
+
+/// Opens [root]:[path] and, for a text file, puts the cursor on [line] and
+/// [col] (1-based). Works whether or not the file is already open.
+void openFileAt(Workspace ws, {required String root, required String path, int? line, int col = 1}) {
+  final t = fileEditorTab(ws, root: root, path: path, line: line, col: col);
+  final existing = ws.tab(t.id);
+  ws.openTab(t);
+  if (existing != null && line != null) existing.reveal?.call(line, col);
 }
 class FileEditor extends StatefulWidget {
   final Workspace ws;
   final String root;
   final String path;
   final int? line;
-  const FileEditor({super.key, required this.ws, required this.root, required this.path, this.line});
+  final int col;
+  const FileEditor({super.key, required this.ws, required this.root, required this.path, this.line, this.col = 1});
 
   @override
   State<FileEditor> createState() => FileEditorState();
@@ -119,8 +130,18 @@ class FileEditor extends StatefulWidget {
 
 enum _Phase { loading, ready, refused, failed }
 
+/// The line break a file uses: CRLF when its first line ends with one. Saving
+/// writes the same one back, so opening and saving a Windows-style file does
+/// not change every line.
+TextLineBreak lineBreakOf(String text) {
+  final n = text.indexOf('\n');
+  if (n > 0 && text.codeUnitAt(n - 1) == 0x0d) return TextLineBreak.crlf;
+  if (n < 0 && text.contains('\r')) return TextLineBreak.cr;
+  return TextLineBreak.lf;
+}
+
 class FileEditorState extends State<FileEditor> {
-  final _controller = CodeLineEditingController();
+  late CodeLineEditingController _controller;
   _Phase _phase = _Phase.loading;
   String _message = '';
   String? _etag;
@@ -132,22 +153,146 @@ class FileEditorState extends State<FileEditor> {
 
   bool get dirty => _phase == _Phase.ready && !_readOnly && _controller.text != _saved;
 
+  int? _pendingLine;
+  int _pendingCol = 1;
+
+  /// Puts the cursor at 1-based [line] and [col] and scrolls to it. Before
+  /// the text has loaded the position is kept and applied when it arrives.
+  void reveal(int line, int col) {
+    if (_phase != _Phase.ready) {
+      _pendingLine = line;
+      _pendingCol = col;
+      return;
+    }
+    if (!mounted || _controller.codeLines.isEmpty) return;
+    final i = (line - 1).clamp(0, _controller.codeLines.length - 1);
+    final text = _controller.codeLines[i].text;
+    final o = (col - 1).clamp(0, text.length);
+    _controller.selection = CodeLineSelection.collapsed(index: i, offset: o);
+    _controller.makeCursorCenterIfInvisible();
+  }
+
   /// The editor's text (tests).
   @visibleForTesting
   String get text => _controller.text;
 
+  /// The cursor as (0-based line, 0-based column) (tests).
+  @visibleForTesting
+  (int, int) get cursor => (_controller.selection.extentIndex, _controller.selection.extentOffset);
+
   @visibleForTesting
   set text(String v) => _controller.text = v;
+
+  /// Word wrap for this file (Alt+Z); null follows the setting.
+  bool? _wrap;
+
+  void toggleWrap() => setState(() => _wrap = !(_wrap ?? _settings.wordWrap));
+
+  /// Ctrl+G: asks for "line" or "line:column" and goes there.
+  Future<void> goToLine() async {
+    if (_phase != _Phase.ready) return;
+    final n = _controller.codeLines.length;
+    final cur = _controller.selection.extentIndex + 1;
+    final v = await askText(context, title: '转到行（1–$n）', initial: '$cur', hint: '行号，或 行:列', ok: '转到');
+    if (v == null) return;
+    final m = RegExp(r'^\s*(\d+)\s*(?::\s*(\d+))?\s*$').firstMatch(v);
+    if (m == null) return widget.ws.toast('请输入行号，例如 120 或 120:8', error: true);
+    reveal(int.parse(m.group(1)!), int.tryParse(m.group(2) ?? '') ?? 1);
+  }
+
+  /// The file mixes line breaks: saving makes them all [_lineBreak]. Said in
+  /// the status bar, so it is not a silent change.
+  bool _mixedBreaks = false;
+  TextLineBreak _lineBreak = TextLineBreak.lf;
+  int _indent = 4;
+
+  EditorSettings get _settings => widget.ws.app.profile.editor;
+
+  /// Replaces the controller when the line break or indent differ: both are
+  /// fixed when a controller is made. Only before the text is loaded, so no
+  /// undo history or unsaved text is lost.
+  void _useLineBreak(TextLineBreak b) {
+    final indent = _settings.tabSize;
+    if (b == _lineBreak && indent == _indent) return;
+    _lineBreak = b;
+    _indent = indent;
+    _controller.removeListener(_onChanged);
+    _controller.dispose();
+    _controller = CodeLineEditingController(options: CodeLineOptions(lineBreak: b, indentSize: indent));
+    _controller.addListener(_onChanged);
+  }
+
+  void Function()? _unwatch;
+
+  /// The file changed on the server after it was opened here, and the editor
+  /// has unsaved text, so it was not reloaded: the banner offers the choice.
+  /// "deleted": the file is gone.
+  String? _outside;
+  bool _checking = false;
+
+  /// A notice from fs.watch: compare the file's etag with the one loaded. A
+  /// save from this editor changes the etag too, but it updates [_etag] first.
+  Future<void> _checkOutside() async {
+    if (_phase != _Phase.ready || _saving || _checking || !mounted) return;
+    final link = widget.ws.link;
+    if (link == null) return;
+    _checking = true;
+    try {
+      final st = (await link.call('fs.stat', {'root': widget.root, 'path': widget.path}) as Map).cast<String, dynamic>();
+      final etag = st['etag'] as String?;
+      if (!mounted || _saving || etag == null || etag == _etag) return;
+      if (!dirty) {
+        // nothing to lose: show what is on the server now
+        await _reload(note: '${widget.path.split('/').last} 在服务器上被修改，已重新载入');
+      } else {
+        setState(() => _outside = 'changed');
+      }
+    } on OpError catch (e) {
+      if (mounted && e.code == codeNotFound) setState(() => _outside = 'deleted');
+    } finally {
+      _checking = false;
+    }
+  }
+
+  /// Loads the file again, keeping the cursor line.
+  Future<void> _reload({String? note}) async {
+    final line = _controller.selection.extentIndex + 1;
+    _pendingLine = line;
+    _pendingCol = 1;
+    setState(() {
+      _outside = null;
+      _phase = _Phase.loading;
+    });
+    await _load();
+    if (note != null && _phase == _Phase.ready) widget.ws.toast(note);
+  }
 
   @override
   void initState() {
     super.initState();
+    _indent = _settings.tabSize;
+    _controller = CodeLineEditingController(options: CodeLineOptions(indentSize: _indent));
     _controller.addListener(_onChanged);
+    _unwatch = widget.ws.watch.watch(widget.root, widget.path, _checkOutside);
+    _shownSettings = _settingsKey;
+    widget.ws.app.addListener(_onSettings);
     _load();
+  }
+
+  String _shownSettings = '';
+  String get _settingsKey => '${_settings.fontSize}/${_settings.wordWrap}';
+
+  /// Font size and word wrap apply to open editors at once. (A new indent
+  /// size applies to files opened after the change.)
+  void _onSettings() {
+    final k = _settingsKey;
+    if (k != _shownSettings && mounted) setState(() => _shownSettings = k);
   }
 
   @override
   void dispose() {
+    widget.ws.app.removeListener(_onSettings);
+    _unwatch?.call();
     _controller.removeListener(_onChanged);
     _controller.dispose();
     super.dispose();
@@ -158,7 +303,9 @@ class FileEditorState extends State<FileEditor> {
     if (t != null) {
       t.dirty.value = dirty;
       final sel = _controller.selection;
-      t.status.value = 'Ln ${sel.extentIndex + 1}, Col ${sel.extentOffset + 1}${_langName == null ? '' : '   $_langName'}${_readOnly ? '   只读' : ''}';
+      final eol = switch (_lineBreak) { TextLineBreak.crlf => 'CRLF', TextLineBreak.cr => 'CR', _ => 'LF' };
+      t.status.value = 'Ln ${sel.extentIndex + 1}, Col ${sel.extentOffset + 1}   空格: $_indent   $eol${_mixedBreaks ? '（混合，保存时统一）' : ''}'
+          '${_langName == null ? '' : '   $_langName'}${_readOnly ? '   只读' : ''}';
     }
   }
 
@@ -188,17 +335,22 @@ class FileEditorState extends State<FileEditor> {
       }
       final text = r['content'] as String? ?? '';
       _etag = r['etag'] as String?;
-      _saved = text;
+      _useLineBreak(lineBreakOf(text));
+      _mixedBreaks = _lineBreak == TextLineBreak.crlf ? RegExp(r'(?<!\r)\n').hasMatch(text) : text.contains('\r');
       _controller.text = text;
+      // what the controller gives back for this text: the "unsaved" check
+      // compares like with like (a file that ends without a newline, or mixes
+      // line breaks, is not dirty the moment it opens)
+      _saved = _controller.text;
       _controller.clearHistory();
       _langName = languageFor(widget.path)?.name;
       setState(() => _phase = _Phase.ready);
       _onChanged();
-      final line = widget.line;
+      final line = _pendingLine ?? widget.line;
+      final col = _pendingLine != null ? _pendingCol : widget.col;
+      _pendingLine = null;
       if (line != null && line > 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _controller.selection = CodeLineSelection.collapsed(index: (line - 1).clamp(0, _controller.codeLines.length - 1), offset: 0);
-        });
+        WidgetsBinding.instance.addPostFrameCallback((_) => reveal(line, col));
       }
     } on OpError catch (e) {
       if (mounted) {
@@ -318,7 +470,7 @@ class FileEditorState extends State<FileEditor> {
     final style = CodeEditorStyle(
       fontFamily: Ide.mono,
       fontFamilyFallback: Ide.monoFallback,
-      fontSize: 13.5,
+      fontSize: _settings.fontSize,
       fontHeight: 1.45,
       textColor: ide.text,
       backgroundColor: ide.editor,
@@ -357,6 +509,42 @@ class FileEditorState extends State<FileEditor> {
           alignment: Alignment.centerLeft,
           child: Text(_saving ? '正在保存…' : '只读', style: TextStyle(color: ide.textDim, fontSize: 12)),
         ),
+      if (_outside != null)
+        Container(
+          key: const ValueKey('outside'),
+          color: ide.warn.withValues(alpha: 0.14),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          child: Row(children: [
+            Icon(Icons.warning_amber, size: 15, color: ide.warn),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _outside == 'deleted' ? '这个文件已在服务器上被删除或移走。编辑器里的内容还在。' : '这个文件在服务器上被别的程序修改了，你这里还有未保存的修改。',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+            if (_outside == 'changed')
+              TextButton(
+                onPressed: () async {
+                  if (await confirmDialog(context, title: '放弃你的修改？', body: '载入服务器上的新内容，你未保存的修改会丢失。', ok: '放弃并重新载入', danger: true)) {
+                    await _reload();
+                  }
+                },
+                child: const Text('重新载入'),
+              ),
+            if (_outside == 'deleted')
+              TextButton(
+                onPressed: () async {
+                  // no etag: the agent writes the file as a new one
+                  _etag = null;
+                  setState(() => _outside = null);
+                  await save();
+                },
+                child: const Text('重新创建'),
+              ),
+            if (_outside == 'changed') TextButton(onPressed: () => setState(() => _outside = null), child: const Text('保留我的修改')),
+          ]),
+        ),
       // Keys: without them the Column matches this new child to the editor's
       // slot and rebuilds the editor (scroll position, cursor and focus lost).
       if (_preview && pk != PreviewKind.none)
@@ -374,12 +562,14 @@ class FileEditorState extends State<FileEditor> {
           child: CallbackShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.keyS, control: true): save,
+            const SingleActivator(LogicalKeyboardKey.keyG, control: true): goToLine,
+            const SingleActivator(LogicalKeyboardKey.keyZ, alt: true): toggleWrap,
           },
           child: CodeEditor(
             controller: _controller,
             style: style,
             readOnly: _readOnly,
-            wordWrap: false,
+            wordWrap: _wrap ?? _settings.wordWrap,
             autofocus: true,
             findBuilder: (context, controller, readOnly) => _FindPanel(controller: controller, readOnly: readOnly),
             indicatorBuilder: (context, editingController, chunkController, notifier) => Row(children: [

@@ -33,14 +33,31 @@ class _AuroraAppState extends State<AuroraApp> {
   void initState() {
     super.initState();
     DesktopLifecycle.start();
+    widget.app.addListener(_onApp);
   }
 
   @override
   void dispose() {
+    widget.app.removeListener(_onApp);
     DesktopLifecycle.stop();
     _features.dispose();
     _input.dispose();
     super.dispose();
+  }
+
+  ThemeMode get _themeMode => switch (widget.app.ready ? widget.app.profile.editor.theme : 'system') {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      };
+
+  late ThemeMode _theme = _themeMode;
+
+  // The theme follows the settings page. The app notifies on every connection
+  // change; only a different theme rebuilds the MaterialApp.
+  void _onApp() {
+    final t = _themeMode;
+    if (t != _theme && mounted) setState(() => _theme = t);
   }
 
   @override
@@ -56,7 +73,7 @@ class _AuroraAppState extends State<AuroraApp> {
         scaffoldMessengerKey: Toast.key,
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),
-        themeMode: ThemeMode.system,
+        themeMode: _theme,
         builder: (context, child) => ValueListenableBuilder<bool>(valueListenable: DesktopLifecycle.visible,
           child: InputMode.scope(mode: _input, child: child!),
           builder: (_, visible, child) => ExcludeFocus(excluding: !visible,

@@ -28,6 +28,10 @@ class EditorTab {
   /// Asked before the tab closes; false keeps it open.
   Future<bool> Function()? confirmClose;
 
+  /// Moves the cursor to a 1-based line and column (a search result, Ctrl+G).
+  /// Set by editors; the tab may already be open when it is called.
+  void Function(int line, int col)? reveal;
+
   EditorTab({required this.id, required this.title, required this.icon, required this.builder, this.iconColor, this.tooltip, this.file});
 
   void dispose() {

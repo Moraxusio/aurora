@@ -14,10 +14,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../features/monitor/monitor_view.dart';
+import '../features/search/quick_open.dart';
 import '../features/terminal/terminal_feature.dart' show createSession, openSession;
 import '../state/app_state.dart';
 import '../theme/ide_theme.dart';
 import '../ui/add_server.dart';
+import '../ui/settings_page.dart';
 import '../ui/upgrade_agent.dart';
 import 'desktop_lifecycle.dart';
 import 'editor_tab.dart';
@@ -131,7 +133,14 @@ class _ShellState extends State<Shell> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && app.status(id).state == ConnState.idle) unawaited(app.connect(id));
       });
-      return Workspace(app, id);
+      final ws = Workspace(app, id);
+      // Ctrl+Shift+F or the palette: bring the search view to the front; it
+      // takes the focus itself once it is built.
+      ws.focusSearch.addListener(() {
+        final f = widget.features.byId('search');
+        if (mounted && f != null && app.selected == id) _pick(ws, f, open: true);
+      });
+      return ws;
     });
   }
 
@@ -152,8 +161,18 @@ class _ShellState extends State<Shell> {
           icon: Icons.close,
           shortcut: 'Ctrl+W',
           enabled: () => ws.active != null,
-          run: () => ws.closeTab(ws.activeId!),
+          run: () => ws.closeTab(ws.active!.id),
         ),
+        Command(
+          id: 'editor.split',
+          title: '向右拆分编辑器 / 取消拆分',
+          group: '视图',
+          icon: Icons.vertical_split_outlined,
+          shortcut: 'Ctrl+\\',
+          enabled: () => ws.visibleTabs.length > 1 || ws.split,
+          run: ws.splitActive,
+        ),
+        Command(id: 'app.settings', title: '设置（主题、字号、自动换行）', group: '设置', icon: Icons.settings_outlined, run: () => ws.openTab(settingsTab(app))),
         Command(id: 'tab.next', title: '下一个标签', group: '视图', shortcut: 'Ctrl+Tab', enabled: () => ws.visibleTabs.length > 1, run: () => ws.next(1)),
         Command(id: 'tab.prev', title: '上一个标签', group: '视图', shortcut: 'Ctrl+Shift+Tab', enabled: () => ws.visibleTabs.length > 1, run: () => ws.next(-1)),
         Command(id: 'side.toggle', title: '显示或隐藏侧栏', group: '视图', shortcut: 'Ctrl+B', run: () => setState(() => _sideOpen = !_sideOpen)),
@@ -171,7 +190,14 @@ class _ShellState extends State<Shell> {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => AddServerPage(app: app)));
   }
 
-  void _pick(Workspace ws, Feature f) {
+  bool _usable(Workspace ws, String id) {
+    final f = widget.features.byId(id);
+    return f != null && ws.stateOf(f) == FeatureState.available;
+  }
+
+  /// Shows [f]'s side bar. [open]: never close it when it is already in
+  /// front (a shortcut such as Ctrl+Shift+F only ever opens).
+  void _pick(Workspace ws, Feature f, {bool open = false}) {
     final st = ws.stateOf(f);
     if (st != FeatureState.available && ws.link != null) {
       // not usable: the side bar explains and offers the fix
@@ -186,7 +212,7 @@ class _ShellState extends State<Shell> {
       return;
     }
     setState(() {
-      if (_featureId == f.id && _sideOpen && MediaQuery.sizeOf(context).width >= _wide) {
+      if (!open && _featureId == f.id && _sideOpen && MediaQuery.sizeOf(context).width >= _wide) {
         _sideOpen = false;
       } else {
         _featureId = f.id;
@@ -209,8 +235,15 @@ class _ShellState extends State<Shell> {
         const SingleActivator(LogicalKeyboardKey.keyB, control: true): () => setState(() => _sideOpen = !_sideOpen),
         if (ws != null)
           const SingleActivator(LogicalKeyboardKey.keyW, control: true): () {
-            if (ws.activeId != null) ws.closeTab(ws.activeId!);
+            final t = ws.active;
+            if (t != null) ws.closeTab(t.id);
           },
+        if (ws != null && MediaQuery.sizeOf(context).width >= _narrow)
+          const SingleActivator(LogicalKeyboardKey.backslash, control: true): ws.splitActive,
+        if (ws != null && _usable(ws, 'search'))
+          const SingleActivator(LogicalKeyboardKey.keyP, control: true): () => showQuickOpen(ws, context: context),
+        if (ws != null && _usable(ws, 'search'))
+          const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => ws.focusSearch.value++,
         if (ws != null) const SingleActivator(LogicalKeyboardKey.tab, control: true): () => ws.next(1),
         if (ws != null) const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true): () => ws.next(-1),
       },
@@ -404,7 +437,8 @@ class _ActivityBar extends StatelessWidget {
     final tail = [
       item(Icons.keyboard_command_key, '命令面板（Ctrl+Shift+P）', tap: onPalette),
       item(Icons.dns_outlined, '服务器', tap: onServers),
-      item(Icons.tune, '概览与设置', tap: onOverview),
+      item(Icons.tune, '服务器概览', tap: onOverview),
+      item(Icons.settings_outlined, '设置', tap: () => ws.openTab(settingsTab(ws.app))),
     ];
     if (vertical) {
       return Container(
@@ -456,10 +490,18 @@ class _ActivityBar extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.tune),
-              title: const Text('概览与设置'),
+              title: const Text('服务器概览'),
               onTap: () {
                 Navigator.pop(c);
                 onOverview();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('设置'),
+              onTap: () {
+                Navigator.pop(c);
+                ws.openTab(settingsTab(ws.app));
               },
             ),
           ],
@@ -655,56 +697,103 @@ class _EditorAreaState extends State<_EditorArea> {
     _bodies.removeWhere((tab, _) => !ws.tabs.contains(tab));
     final ide = Ide.of(context);
     final shown = ws.visibleTabs;
-    final active = ws.activeId;
-    return Column(
-      children: [
-        if (shown.isNotEmpty) _TabStrip(ws: ws),
-        Expanded(
-          child: Container(
-            color: ide.editor,
-            // every tab stays built; only the active one is shown, so a terminal
-            // keeps its screen and an editor its unsaved text
-            child: IndexedStack(
-              index: shown.any((t) => t.id == active) ? ws.tabs.indexWhere((t) => t.id == active) + 1 : 0,
-              children: [
-                _Welcome(ws: ws, features: features),
-                for (final t in ws.tabs)
-                  TickerMode(
-                    key: ObjectKey(t),
-                    enabled: t.id == active && shown.contains(t),
-                    child: KeyedSubtree(
-                      key: ValueKey(t.id),
-                      child: ExcludeFocus(excluding: t.id != active || !shown.contains(t),
-                        child: RepaintBoundary(child: _bodies.putIfAbsent(t, () => Builder(builder: t.builder)))),
-                    ),
+    final split = ws.split && MediaQuery.sizeOf(context).width >= _narrow;
+    final left = shown.any((t) => t.id == ws.activeId) ? ws.activeId : null;
+    final right = split ? ws.sideId : null;
+    return LayoutBuilder(builder: (context, box) {
+      final strip = InputMode.isTouch(context) ? 44.0 : 34.0;
+      final half = split ? (box.maxWidth - 1) / 2 : box.maxWidth;
+      // Every tab stays built, in one Stack, at the same place in the tree;
+      // splitting only moves it. A terminal keeps its stream and an editor its
+      // unsaved text and undo, whichever side shows it.
+      Widget body(EditorTab t) {
+        final onLeft = t.id == left, onRight = t.id == right;
+        final on = onLeft || onRight;
+        return Positioned(
+          key: ObjectKey(t),
+          left: onRight ? half + 1 : 0,
+          top: shown.isEmpty ? 0 : strip,
+          width: on ? half : box.maxWidth,
+          bottom: 0,
+          child: Offstage(
+            offstage: !on,
+            child: TickerMode(
+              enabled: on,
+              child: KeyedSubtree(
+                key: ValueKey(t.id),
+                child: ExcludeFocus(
+                  excluding: !on,
+                  child: Listener(
+                    // a click in a pane gives that side the focus (Ctrl+W, Ctrl+Tab)
+                    behavior: HitTestBehavior.translucent,
+                    onPointerDown: (_) => ws.focusSide(onRight),
+                    child: RepaintBoundary(child: _bodies.putIfAbsent(t, () => Builder(builder: t.builder))),
                   ),
-              ],
+                ),
+              ),
             ),
           ),
-        ),
-      ],
-    );
+        );
+      }
+
+      return Container(
+        color: ide.editor,
+        child: Stack(children: [
+          if (left == null && right == null) Positioned.fill(child: _Welcome(ws: ws, features: features)),
+          if (shown.isNotEmpty)
+            Positioned(
+              left: 0,
+              top: 0,
+              height: strip,
+              width: half,
+              child: _TabStrip(ws: ws, right: false, focused: split && !ws.sideFocused),
+            ),
+          if (split) ...[
+            Positioned(left: half + 1, top: 0, height: strip, width: half, child: _TabStrip(ws: ws, right: true, focused: ws.sideFocused)),
+            Positioned(left: half, top: 0, bottom: 0, width: 1, child: ColoredBox(color: ide.border)),
+          ],
+          for (final t in ws.tabs) body(t),
+        ]),
+      );
+    });
   }
 }
 
+/// The tabs of one side. Split, the left strip lists every tab but the right
+/// side's, and the right strip only its own: one tab is never on both.
 class _TabStrip extends StatelessWidget {
   final Workspace ws;
-  const _TabStrip({required this.ws});
+  final bool right;
+
+  /// This side has the focus (only drawn when split).
+  final bool focused;
+  const _TabStrip({required this.ws, this.right = false, this.focused = false});
 
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final touch = InputMode.isTouch(context);
+    final split = ws.split;
+    final tabs = !split ? ws.visibleTabs : right ? ws.visibleTabs.where((t) => t.id == ws.sideId).toList() : ws.visibleTabs.where((t) => t.id != ws.sideId).toList();
+    final current = right ? ws.sideId : ws.activeId;
     return Container(
       height: touch ? 44 : 34,
       decoration: BoxDecoration(
         color: ide.tabBar,
-        border: Border(bottom: BorderSide(color: ide.border)),
+        border: Border(bottom: BorderSide(color: focused ? ide.accent.withValues(alpha: 0.6) : ide.border)),
       ),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [for (final t in ws.visibleTabs) _TabButton(ws: ws, tab: t, active: t.id == ws.activeId)],
-      ),
+      child: Row(children: [
+        Expanded(
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [for (final t in tabs) _TabButton(ws: ws, tab: t, active: t.id == current, right: right)],
+          ),
+        ),
+        if (right)
+          IconBtn(Icons.close_fullscreen, '取消拆分（Ctrl+\\）', ws.unsplit)
+        else if (!split && ws.visibleTabs.length > 1 && MediaQuery.sizeOf(context).width >= _narrow)
+          IconBtn(Icons.vertical_split_outlined, '向右拆分（Ctrl+\\）', ws.splitActive),
+      ]),
     );
   }
 }
@@ -713,7 +802,8 @@ class _TabButton extends StatelessWidget {
   final Workspace ws;
   final EditorTab tab;
   final bool active;
-  const _TabButton({required this.ws, required this.tab, required this.active});
+  final bool right;
+  const _TabButton({required this.ws, required this.tab, required this.active, this.right = false});
 
   @override
   Widget build(BuildContext context) {
@@ -722,6 +812,12 @@ class _TabButton extends StatelessWidget {
     return ContextArea(
       items: () => [
         MenuItem('关闭', () => ws.closeTab(tab.id), icon: Icons.close, hint: 'Ctrl+W'),
+        if (!right && !ws.split && ws.visibleTabs.length > 1)
+          MenuItem('向右拆分', () {
+            ws.activate(tab.id);
+            ws.splitActive();
+          }, icon: Icons.vertical_split_outlined, hint: 'Ctrl+\\'),
+        if (right) MenuItem('移回左侧', ws.unsplit, icon: Icons.close_fullscreen),
         MenuItem('关闭其它', () async {
           for (final o in ws.visibleTabs.where((x) => x.id != tab.id).toList()) {
             if (!await ws.closeTab(o.id)) break;
@@ -742,7 +838,10 @@ class _TabButton extends StatelessWidget {
           message: tab.tooltip ?? tab.title,
           waitDuration: const Duration(milliseconds: 700),
           child: InkWell(
-            onTap: () => ws.activate(tab.id),
+            onTap: () {
+              ws.focusSide(right);
+              ws.activate(tab.id);
+            },
             hoverColor: active ? Colors.transparent : ide.hover,
             child: Container(
               constraints: BoxConstraints(minWidth: touch ? 110 : 100, maxWidth: 220),

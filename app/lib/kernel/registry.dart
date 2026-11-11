@@ -6,6 +6,7 @@ import '../features/git/git_feature.dart';
 import '../features/monitor/monitor_view.dart';
 import '../features/net/net_feature.dart';
 import '../features/proxy/proxy_feature.dart';
+import '../features/search/search_feature.dart';
 import '../features/systemd/systemd_feature.dart';
 import '../features/terminal/terminal_feature.dart';
 import 'feature.dart';
@@ -21,6 +22,7 @@ class Features {
     all = [
       const TerminalFeature(),
       FilesFeature(this.transfers),
+      const SearchFeature(),
       const GitFeature(),
       const MonitorFeature(),
       const SystemdFeature(),

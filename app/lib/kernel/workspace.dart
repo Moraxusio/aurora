@@ -12,6 +12,7 @@ import '../state/app_state.dart';
 import '../features/files/transfers.dart';
 import 'editor_tab.dart';
 import 'feature.dart';
+import 'file_watch.dart';
 import 'widgets.dart';
 
 class Workspace extends ChangeNotifier {
@@ -60,6 +61,12 @@ class Workspace extends ChangeNotifier {
   /// Narrow layouts show either the side bar or the editor area.
   bool compactEditor = false;
 
+  /// Raised by Ctrl+Shift+F: the search view puts the cursor in its query.
+  final ValueNotifier<int> focusSearch = ValueNotifier(0);
+
+  /// Notices of files changed on the server, for open editors.
+  late final FileWatch watch = FileWatch(() => link);
+
   Workspace(this.app, this.serverId) {
     final e = entry;
     _projectId = e?.workspace(e.selectedWorkspace)?.id;
@@ -79,10 +86,13 @@ class Workspace extends ChangeNotifier {
     if (_projectId != selected) {
       if (_restored.contains(projectKey)) _activeByProject[projectKey] = activeId;
       _projectId = selected;
+      sideId = null; // a split is a view of one project's tabs
+      sideFocused = false;
       activeId = _activeByProject[projectKey];
       if (!visibleTabs.any((t) => t.id == activeId)) activeId = visibleTabs.firstOrNull?.id;
     }
     viewRevision++;
+    watch.relink();
     final l = link;
     if (l != null && !identical(l, _servicesFor)) {
       _servicesFor = l;
@@ -156,9 +166,11 @@ class Workspace extends ChangeNotifier {
 
   // ---- tabs ----
 
+  /// The tab the user is working in (the focused side when split).
   EditorTab? get active {
+    final id = focusedId;
     for (final t in tabs) {
-      if (t.id == activeId) return t;
+      if (t.id == id) return t;
     }
     return null;
   }
@@ -181,8 +193,7 @@ class Workspace extends ChangeNotifier {
     }
     tabs.add(t);
     if (t.file != null) t.projects.add(projectKey);
-    activeId = t.id;
-    _activeByProject[projectKey] = activeId;
+    _show(t.id);
     compactEditor = true;
     rememberFiles();
     notifyListeners();
@@ -192,10 +203,80 @@ class Workspace extends ChangeNotifier {
     final t = tab(id);
     if (t == null) return;
     if (t.file != null) t.projects.add(projectKey);
-    activeId = id;
-    _activeByProject[projectKey] = activeId;
+    _show(id);
     compactEditor = true;
     rememberFiles();
+    notifyListeners();
+  }
+
+  /// Puts [id] in front on the side that has the focus. A tab already shown on
+  /// the other side moves the focus there instead of being shown twice.
+  void _show(String id) {
+    if (split) {
+      if (id == sideId) {
+        sideFocused = true;
+        return;
+      }
+      if (id == activeId) {
+        sideFocused = false;
+        return;
+      }
+      if (sideFocused) {
+        sideId = id;
+        return;
+      }
+    }
+    activeId = id;
+    _activeByProject[projectKey] = activeId;
+  }
+
+  // ---- split editor ----
+  //
+  // The editor area can show two tabs side by side. A tab's widget lives once
+  // (an editor holds unsaved text and undo history, a terminal its stream), so
+  // the two sides never show the same tab: the right side shows [sideId], the
+  // left side the active tab among the others.
+
+  /// The tab on the right side, or null when the editor is not split.
+  String? sideId;
+
+  /// Which side has the focus for Ctrl+W, Ctrl+Tab and the status bar.
+  bool sideFocused = false;
+
+  bool get split => sideId != null && visibleTabs.any((t) => t.id == sideId);
+
+  /// The tab the user is working in: the right one when that side has focus.
+  String? get focusedId => split && sideFocused ? sideId : activeId;
+
+  /// Ctrl+\: moves the active tab to the right side (or back when it is there).
+  void splitActive() {
+    final id = focusedId;
+    if (id == null) return;
+    if (split && id == sideId) return unsplit();
+    final others = visibleTabs.where((t) => t.id != id).toList();
+    if (others.isEmpty) return toast('再打开一个标签才能拆分');
+    // the left side shows the tab that was before it, the right side this one
+    final i = visibleTabs.indexWhere((t) => t.id == id);
+    sideId = id;
+    sideFocused = true;
+    activeId = visibleTabs.where((t) => t.id != id).elementAt((i - 1).clamp(0, others.length - 1)).id;
+    _activeByProject[projectKey] = activeId;
+    notifyListeners();
+  }
+
+  void unsplit() {
+    if (sideId == null) return;
+    final back = sideId;
+    sideId = null;
+    sideFocused = false;
+    if (back != null && tab(back) != null) activeId = back;
+    _activeByProject[projectKey] = activeId;
+    notifyListeners();
+  }
+
+  void focusSide(bool right) {
+    if (sideFocused == right) return;
+    sideFocused = right && split;
     notifyListeners();
   }
 
@@ -219,9 +300,23 @@ class Workspace extends ChangeNotifier {
       t.dispose();
     }
     final remaining = _tabsFor(key);
-    final next = remaining.isEmpty ? null : remaining[i.clamp(0, remaining.length - 1)].id;
+    if (sideId == id && key == projectKey) {
+      // the right side's tab closed: the editor is one pane again
+      sideId = null;
+      sideFocused = false;
+    }
+    final left = remaining.where((x) => x.id != sideId).toList();
+    final next = left.isEmpty ? null : left[i.clamp(0, left.length - 1)].id;
     if (_activeByProject[key] == id) _activeByProject[key] = next;
-    if (activeId == id && key == projectKey) activeId = next;
+    if (activeId == id && key == projectKey) {
+      activeId = next;
+      // nothing left for the left side: the right one takes it over
+      if (next == null && sideId != null) {
+        activeId = sideId;
+        sideId = null;
+        sideFocused = false;
+      }
+    }
     _rememberFilesFor(key, removed: t.file);
     notifyListeners();
     return true;
@@ -234,7 +329,11 @@ class Workspace extends ChangeNotifier {
     if (gone.isEmpty) return;
     for (final t in gone) {
       tabs.remove(t);
-      if (activeId == t.id) activeId = visibleTabs.firstOrNull?.id;
+      if (sideId == t.id) {
+        sideId = null;
+        sideFocused = false;
+      }
+      if (activeId == t.id) activeId = visibleTabs.where((x) => x.id != sideId).firstOrNull?.id;
       if (t.file != null) {
         for (final key in t.projects) {
           final view = _viewForKey(key);
@@ -249,10 +348,13 @@ class Workspace extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ctrl+Tab: the next tab on the side that has the focus (the other side's
+  /// tab is skipped, it cannot be shown twice).
   void next(int step) {
-    final shown = visibleTabs;
+    final other = split ? (sideFocused ? activeId : sideId) : null;
+    final shown = visibleTabs.where((t) => t.id != other).toList();
     if (shown.length < 2) return;
-    final i = shown.indexWhere((t) => t.id == activeId);
+    final i = shown.indexWhere((t) => t.id == focusedId);
     activate(shown[((i < 0 ? 0 : i) + step) % shown.length].id);
   }
 
@@ -476,6 +578,8 @@ class Workspace extends ChangeNotifier {
       t.dispose();
     }
     filesRevision.dispose();
+    focusSearch.dispose();
+    watch.dispose();
     super.dispose();
   }
 }

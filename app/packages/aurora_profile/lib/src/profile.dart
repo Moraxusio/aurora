@@ -17,16 +17,22 @@ class Profile {
   /// belong to the user, not to a server; each server remembers which node it uses.
   List<ProxySource> proxySources;
 
-  Profile({List<ServerEntry>? servers, this.selected, List<KnownHost>? knownHosts, List<ProxySource>? proxySources})
+  /// The user's editor and appearance choices; they belong to this client,
+  /// not to a server.
+  EditorSettings editor;
+
+  Profile({List<ServerEntry>? servers, this.selected, List<KnownHost>? knownHosts, List<ProxySource>? proxySources, EditorSettings? editor})
       : servers = servers ?? [],
         knownHosts = knownHosts ?? [],
-        proxySources = proxySources ?? [];
+        proxySources = proxySources ?? [],
+        editor = editor ?? EditorSettings();
 
   factory Profile.fromJson(Map<String, dynamic> j) => Profile(
         servers: [for (final s in (j['servers'] as List? ?? const [])) ServerEntry.fromJson(_map(s))],
         selected: j['selected'] as String?,
         knownHosts: [for (final k in (j['known_hosts'] as List? ?? const [])) KnownHost.fromJson(_map(k))],
         proxySources: [for (final s in (j['proxy_sources'] as List? ?? const [])) ProxySource.fromJson(_map(s))],
+        editor: j['editor'] == null ? null : EditorSettings.fromJson(_map(j['editor'])),
       );
 
   Map<String, dynamic> toJson() => {
@@ -34,6 +40,7 @@ class Profile {
         'selected': ?selected,
         if (knownHosts.isNotEmpty) 'known_hosts': [for (final k in knownHosts) k.toJson()],
         if (proxySources.isNotEmpty) 'proxy_sources': [for (final s in proxySources) s.toJson()],
+        if (!editor.isDefault) 'editor': editor.toJson(),
       };
 
   ProxySource? proxySource(String id) {
@@ -398,6 +405,39 @@ class DirectParams {
         'token': token,
         'good_addr': ?goodAddr,
       };
+}
+
+/// Editor and appearance choices (the settings page). Values outside the
+/// allowed range are clamped on read, so a hand-edited or older profile can
+/// never make the editor unusable.
+class EditorSettings {
+  /// 'system' | 'light' | 'dark'.
+  String theme;
+  double fontSize;
+  bool wordWrap;
+  /// Spaces that Tab inserts (the editor indents with spaces only).
+  int tabSize;
+
+  EditorSettings({this.theme = 'system', this.fontSize = 13.5, this.wordWrap = false, this.tabSize = 4});
+
+  static const themes = ['system', 'light', 'dark'];
+  static const minFont = 9.0, maxFont = 28.0;
+
+  factory EditorSettings.fromJson(Map<String, dynamic> j) {
+    final t = j['theme'] as String?;
+    final f = (j['font_size'] as num?)?.toDouble() ?? 13.5;
+    final ts = (j['tab_size'] as num?)?.toInt() ?? 4;
+    return EditorSettings(
+      theme: themes.contains(t) ? t! : 'system',
+      fontSize: f.isFinite ? f.clamp(minFont, maxFont).toDouble() : 13.5,
+      wordWrap: j['word_wrap'] == true,
+      tabSize: const [2, 4, 8].contains(ts) ? ts : 4,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'theme': theme, 'font_size': fontSize, 'word_wrap': wordWrap, 'tab_size': tabSize};
+
+  bool get isDefault => theme == 'system' && fontSize == 13.5 && !wordWrap && tabSize == 4;
 }
 
 /// A host key the user confirmed on first SSH contact (D-2).

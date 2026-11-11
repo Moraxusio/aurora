@@ -7,6 +7,7 @@ import 'kernel/registry.dart';
 import 'kernel/shell.dart';
 import 'kernel/widgets.dart';
 import 'kernel/desktop_lifecycle.dart';
+import 'kernel/window_frame.dart';
 import 'state/app_state.dart';
 import 'theme/ide_theme.dart';
 import 'ui/add_server.dart';
@@ -75,7 +76,7 @@ class _AuroraAppState extends State<AuroraApp> {
         darkTheme: buildTheme(Brightness.dark),
         themeMode: _theme,
         builder: (context, child) => ValueListenableBuilder<bool>(valueListenable: DesktopLifecycle.visible,
-          child: InputMode.scope(mode: _input, child: child!),
+          child: InputMode.scope(mode: _input, child: WindowChrome(child: child!)),
           builder: (_, visible, child) => ExcludeFocus(excluding: !visible,
             child: Offstage(offstage: !visible, child: TickerMode(enabled: visible, child: child!)))),
         home: Home(app: widget.app, features: _features),
@@ -106,7 +107,9 @@ class _StoreProblem extends StatelessWidget {
   const _StoreProblem({required this.app});
   @override
   Widget build(BuildContext context) => Scaffold(
-        body: Center(
+        body: Column(children: [
+          const WindowDragArea(child: SizedBox(height: WindowFrame.height, width: double.infinity)),
+          Expanded(child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: Card(
@@ -134,7 +137,8 @@ class _StoreProblem extends StatelessWidget {
               ),
             ),
           ),
-        ),
+          )),
+        ]),
       );
 }
 

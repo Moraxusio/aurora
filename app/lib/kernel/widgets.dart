@@ -414,6 +414,191 @@ class KeyCaps extends StatelessWidget {
   }
 }
 
+/// A page of settings-style panels (the overview, the settings page): a
+/// title, then [children] up to [maxWidth] wide.
+class FormPage extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final List<Widget> children;
+  final double maxWidth;
+  const FormPage({super.key, required this.title, this.subtitle, this.leading, required this.children, this.maxWidth = 760});
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: ListView(padding: const EdgeInsets.fromLTRB(Space.xxl, Space.xxl + 4, Space.xxl, Space.xxl * 2), children: [
+          Row(children: [
+            if (leading != null) ...[leading!, const SizedBox(width: Space.l + 2)],
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: Theme.of(context).textTheme.headlineSmall),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 3),
+                  Text(subtitle!, style: TextStyle(color: ide.textDim, fontSize: 12.5)),
+                ],
+              ]),
+            ),
+          ]),
+          const SizedBox(height: Space.xl),
+          ...children,
+        ]),
+      ),
+    );
+  }
+}
+
+/// A titled group of [FormRow]s in one rounded panel.
+class FormSection extends StatelessWidget {
+  final String title;
+  final String? note;
+  final List<Widget> children;
+  final bool danger;
+  const FormSection({super.key, required this.title, this.note, required this.children, this.danger = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final rows = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      if (i > 0) rows.add(Divider(height: 1, indent: Space.l + 2, endIndent: Space.l + 2, color: ide.border));
+      rows.add(children[i]);
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.xl),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: Space.m),
+          child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: danger ? ide.error : ide.text)),
+        ),
+        if (note != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: Space.m + 2, right: Space.xl),
+            child: Text(note!, style: TextStyle(fontSize: 12, color: ide.textFaint, height: 1.5)),
+          ),
+        Container(
+          width: double.infinity,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: ide.sideBar,
+            borderRadius: BorderRadius.circular(Radii.island),
+            border: Border.all(color: danger ? ide.error.withValues(alpha: 0.35) : ide.border),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
+        ),
+      ]),
+    );
+  }
+}
+
+/// One row of a [FormSection]: a title, an optional line under it, and a
+/// control (or a value) on the right.
+class FormRow extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Color? subtitleColor;
+  final Widget? trailing;
+  final IconData? icon;
+  final VoidCallback? onTap;
+
+  /// The value is text that can be selected (a fingerprint, an address).
+  final String? value;
+  const FormRow({super.key, required this.title, this.subtitle, this.subtitleColor, this.trailing, this.icon, this.onTap, this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    Widget row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Space.l + 2, vertical: Space.m + 3),
+      child: Row(children: [
+        if (icon != null) ...[Icon(icon, size: 17, color: ide.textDim), const SizedBox(width: Space.l)],
+        Expanded(
+          flex: value == null ? 1 : 0,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: value == null ? 0 : 120),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: TextStyle(fontSize: 13, color: value == null ? ide.text : ide.textDim)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle!, style: TextStyle(fontSize: 12, color: subtitleColor ?? ide.textFaint, height: 1.4)),
+              ],
+            ]),
+          ),
+        ),
+        if (value != null) ...[
+          const SizedBox(width: Space.xl),
+          Expanded(child: SelectableText(value!, textAlign: TextAlign.right, style: TextStyle(fontSize: 12.5, color: ide.text))),
+        ],
+        if (trailing != null) ...[const SizedBox(width: Space.l), trailing!],
+      ]),
+    );
+    if (onTap != null) row = InkWell(onTap: onTap, child: row);
+    return row;
+  }
+}
+
+/// A switch sized for dense rows.
+class SmallSwitch extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final Key? switchKey;
+  const SmallSwitch({super.key, required this.value, required this.onChanged, this.switchKey});
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 24,
+        child: FittedBox(fit: BoxFit.contain, child: Switch(key: switchKey, value: value, onChanged: onChanged)),
+      );
+}
+
+enum Tone { info, ok, warn, error }
+
+/// A tinted banner: an icon, a title, and an optional body or action.
+class Notice extends StatelessWidget {
+  final Tone tone;
+  final String title;
+  final String? body;
+  final Widget? action;
+  final IconData? icon;
+  const Notice({super.key, required this.tone, required this.title, this.body, this.action, this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final (color, glyph) = switch (tone) {
+      Tone.info => (ide.accent, Icons.info_outline_rounded),
+      Tone.ok => (ide.ok, Icons.check_circle_outline_rounded),
+      Tone.warn => (ide.warn, Icons.warning_amber_rounded),
+      Tone.error => (ide.error, Icons.error_outline_rounded),
+    };
+    return Container(
+      padding: const EdgeInsets.all(Space.l),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: ide.isDark ? 0.1 : 0.07),
+        borderRadius: BorderRadius.circular(Radii.l + 2),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(padding: const EdgeInsets.only(top: 1), child: Icon(icon ?? glyph, size: 18, color: color)),
+        const SizedBox(width: Space.m + 2),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ide.text)),
+            if (body != null && body!.isNotEmpty) ...[
+              const SizedBox(height: 3),
+              SelectableText(body!, style: TextStyle(fontSize: 12.5, color: ide.textDim, height: 1.5)),
+            ],
+          ]),
+        ),
+        if (action != null) ...[const SizedBox(width: Space.m), action!],
+      ]),
+    );
+  }
+}
+
 /// A dot in the state's colour.
 class StatusDot extends StatelessWidget {
   final Color color;

@@ -169,87 +169,127 @@ class _OverviewViewState extends State<OverviewView> {
     final s = e.ssh, d = e.direct;
     final kh = s == null ? null : ws.app.profile.knownHost(s.host, s.port);
     final info = ws.link?.server;
-    Widget kv(String k, String v) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(width: 96, child: Text(k, style: TextStyle(color: ide.textDim))),
-            Expanded(child: SelectableText(v)),
-          ]),
-        );
-    Widget section(String t) => Padding(padding: const EdgeInsets.only(top: 22, bottom: 8), child: Text(t, style: Theme.of(context).textTheme.titleSmall));
-    return Align(
-      alignment: Alignment.topLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: ListView(padding: const EdgeInsets.all(24), children: [
-          Text(e.name, style: Theme.of(context).textTheme.titleLarge),
-          section('连接'),
-          kv('SSH', s == null ? '—' : '${s.user}@${s.host}:${s.port}'),
-          kv('主机密钥', kh == null ? '—' : '${kh.type} ${kh.fingerprint}'),
-          kv('直连地址', d == null ? '—' : d.addrs.join('  ')),
-          kv('证书指纹', d?.pin ?? '—'),
-          kv('agent 实例', _instance.isEmpty ? '默认（共用名称）' : '$_instance（这个客户端独用的 agent，与其它客户端互不影响）'),
-          if (info != null) ...[kv('系统', info.os), kv('主机名', info.host), kv('agent 版本', info.version)],
-          if(info!=null) Align(alignment:Alignment.centerLeft,child:TextButton.icon(onPressed:()=>showAgentUpgrade(context,ws.app,ws.serverId),icon:const Icon(Icons.system_update_alt),label:const Text('检查并升级 agent'))),
-          kv('保存的密码', s == null ? '—' : ([if ((s.password ?? '').isNotEmpty) 'SSH 密码', if ((s.privateKey ?? '').isNotEmpty) '私钥', if ((s.sudoPassword ?? '').isNotEmpty) 'sudo 密码'].join('、')).ifEmpty('无')),
-          section('服务'),
-          Text('服务开关是功能选择，不是安全边界：持有直连令牌就能取得 root 权限。每次改动都写入服务器的审计日志。', style: TextStyle(color: ide.textDim, fontSize: 12)),
-          const SizedBox(height: 8),
-          if (ws.link == null)
-            Text('连接后显示。', style: TextStyle(color: ide.textDim))
-          else if (ws.servicesError != null)
-            Text(ws.servicesError!, style: TextStyle(color: ide.error))
-          else
-            for (final svc in ws.services) _serviceRow(ide, svc),
-          section('服务器'),
-          Wrap(spacing: 10, runSpacing: 10, children: [
-            OutlinedButton.icon(
-              onPressed: _busy
-                  ? null
-                  : () async {
-                      await Navigator.push(context, MaterialPageRoute(builder: (_) => AddServerPage(app: ws.app, existing: e)));
-                      if (mounted) unawaited(ws.app.connect(e.id));
-                    },
-              icon: const Icon(Icons.sync, size: 16),
-              label: const Text('重新安装或配对'),
+    final saved = s == null
+        ? '—'
+        : ([if ((s.password ?? '').isNotEmpty) 'SSH 密码', if ((s.privateKey ?? '').isNotEmpty) '私钥', if ((s.sudoPassword ?? '').isNotEmpty) 'sudo 密码'].join('、')).ifEmpty('无');
+    final st = ws.status;
+    final subtitle = info == null
+        ? (st.addr ?? '未连接')
+        : [info.os, if (info.host.isNotEmpty) info.host, 'agent ${info.version}'].where((x) => x.isNotEmpty).join(' · ');
+    return FormPage(
+      title: e.name,
+      subtitle: subtitle,
+      leading: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(color: ide.accentSoft, borderRadius: BorderRadius.circular(Radii.island + 2)),
+        child: Icon(Icons.dns_rounded, size: 22, color: ide.accent),
+      ),
+      children: [
+        FormSection(title: '连接', children: [
+          FormRow(title: 'SSH', value: s == null ? '—' : '${s.user}@${s.host}:${s.port}'),
+          FormRow(title: '主机密钥', value: kh == null ? '—' : '${kh.type} ${kh.fingerprint}'),
+          FormRow(title: '直连地址', value: d == null ? '—' : d.addrs.join('  ')),
+          FormRow(title: '证书指纹', value: d?.pin ?? '—'),
+          FormRow(
+            title: 'agent 实例',
+            value: _instance.isEmpty ? '默认（共用名称）' : _instance,
+            subtitle: _instance.isEmpty ? null : '这个客户端独用的 agent，与其它客户端互不影响',
+          ),
+          FormRow(title: '保存的密码', value: saved),
+        ]),
+        if (info != null)
+          FormSection(title: 'agent', children: [
+            FormRow(title: '系统', value: info.os.ifEmpty('—')),
+            FormRow(title: '主机名', value: info.host.ifEmpty('—')),
+            FormRow(
+              title: 'agent 版本',
+              value: info.version,
+              trailing: TextButton.icon(
+                onPressed: () => showAgentUpgrade(context, ws.app, ws.serverId),
+                icon: const Icon(Icons.system_update_alt_rounded, size: 16),
+                label: const Text('检查并升级'),
+              ),
             ),
-            TextButton.icon(onPressed: _busy ? null : _remove, icon: const Icon(Icons.remove_circle_outline, size: 16), label: const Text('从列表中删除')),
           ]),
-          section('危险操作'),
-          Wrap(spacing: 10, runSpacing: 10, children: [
-            OutlinedButton.icon(
+        FormSection(
+          title: '服务',
+          note: '服务开关是功能选择，不是安全边界：持有直连令牌就能取得 root 权限。每次改动都写入服务器的审计日志。',
+          children: [
+            if (ws.link == null)
+              const FormRow(title: '连接后显示')
+            else if (ws.servicesError != null)
+              FormRow(title: '读取失败', subtitle: ws.servicesError!, subtitleColor: ide.error)
+            else
+              for (final svc in ws.services) _serviceRow(ide, svc),
+          ],
+        ),
+        FormSection(title: '服务器', children: [
+          FormRow(
+            icon: Icons.sync_rounded,
+            title: '重新安装或配对',
+            subtitle: '通过 SSH 重新安装 agent，或在令牌、证书变化后重新配对',
+            trailing: Icon(Icons.chevron_right_rounded, size: 18, color: ide.textFaint),
+            onTap: _busy
+                ? null
+                : () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => AddServerPage(app: ws.app, existing: e)));
+                    if (mounted) unawaited(ws.app.connect(e.id));
+                  },
+          ),
+          FormRow(
+            icon: Icons.remove_circle_outline_rounded,
+            title: '从列表中删除',
+            subtitle: '只删除本机保存的登录信息，服务器上的 agent 不受影响',
+            trailing: Icon(Icons.chevron_right_rounded, size: 18, color: ide.textFaint),
+            onTap: _busy ? null : _remove,
+          ),
+        ]),
+        FormSection(title: '危险操作', danger: true, children: [
+          FormRow(
+            title: '卸载 agent',
+            subtitle: '停止 agent，删除程序和 systemd 单元；配置和身份保留',
+            onTap: _busy ? null : () => _uninstall(purge: false),
+            trailing: OutlinedButton(
               style: OutlinedButton.styleFrom(foregroundColor: ide.error, side: BorderSide(color: ide.error.withValues(alpha: 0.6))),
               onPressed: _busy ? null : () => _uninstall(purge: false),
-              icon: const Icon(Icons.delete_outline, size: 16),
-              label: const Text('卸载 agent'),
+              child: const Text('卸载'),
             ),
-            FilledButton.icon(
+          ),
+          FormRow(
+            title: '彻底清除',
+            subtitle: '同时删除证书、令牌、审计日志和状态目录，之后要重新配对',
+            trailing: FilledButton(
               style: FilledButton.styleFrom(backgroundColor: ide.error),
               onPressed: _busy ? null : () => _uninstall(purge: true),
-              icon: const Icon(Icons.delete_forever, size: 16),
-              label: const Text('彻底清除（删除证书和令牌）'),
+              child: const Text('彻底清除'),
             ),
-          ]),
-          if (_note != null) ...[const SizedBox(height: 14), SelectableText(_note!)],
+          ),
         ]),
-      ),
+        if (_note != null)
+          Padding(
+            padding: const EdgeInsets.only(top: Space.l),
+            child: Row(children: [
+              if (_busy) ...[const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)), const SizedBox(width: Space.m + 2)],
+              Expanded(child: SelectableText(_note!, style: TextStyle(color: ide.textDim, fontSize: 12.5))),
+            ]),
+          ),
+      ],
     );
   }
 
   Widget _serviceRow(Ide ide, Map<String, dynamic> svc) {
     final id = svc['id'] as String;
     final unavailable = svc['available'] == false;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(_names[id] ?? id, style: const TextStyle(fontWeight: FontWeight.w500)),
-            Text(unavailable ? '不可用：${svc['reason'] ?? ''}' : (_about[id] ?? ''), style: TextStyle(color: unavailable ? ide.warn : ide.textDim, fontSize: 12)),
-          ]),
-        ),
-        Switch(key: ValueKey('service-switch-$id'), value: svc['enabled'] == true, onChanged: _switching.contains(id) ? null : (v) => _switch(id, v)),
-      ]),
+    return FormRow(
+      title: _names[id] ?? id,
+      subtitle: unavailable ? '不可用：${svc['reason'] ?? ''}' : (_about[id] ?? ''),
+      subtitleColor: unavailable ? ide.warn : null,
+      trailing: SmallSwitch(
+        switchKey: ValueKey('service-switch-$id'),
+        value: svc['enabled'] == true,
+        onChanged: _switching.contains(id) ? null : (v) => _switch(id, v),
+      ),
     );
   }
 }

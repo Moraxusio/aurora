@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../kernel/editor_tab.dart';
 import '../../kernel/feature.dart';
+import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import '../systemd/systemd_feature.dart' show systemLogTab;
@@ -54,6 +55,7 @@ class _MonitorTabState extends State<MonitorTab> {
   List<int>? _prevCpu;
   double? _cpu;
   final List<double> _history = [];
+  final List<double> _memHistory = [];
   List<Map<String, dynamic>> _procs = [];
   String? _error;
 
@@ -84,6 +86,12 @@ class _MonitorTabState extends State<MonitorTab> {
         if (_history.length > 60) _history.removeAt(0);
       }
       _prevCpu = cpu;
+      final mem = (m['memory'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final total = (mem['MemTotal'] as num? ?? 0).toDouble(), avail = (mem['MemAvailable'] as num? ?? 0).toDouble();
+      if (total > 0) {
+        _memHistory.add(100 * (total - avail) / total);
+        if (_memHistory.length > 60) _memHistory.removeAt(0);
+      }
       if (!mounted) return;
       setState(() {
         _m = m;
@@ -100,97 +108,106 @@ class _MonitorTabState extends State<MonitorTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) return Center(child: Text(_error!));
+    final ide = Ide.of(context);
+    if (_error != null) return EmptyHint(icon: Icons.error_outline_rounded, text: _error!);
     final m = _m;
-    if (m == null) return const Center(child: CircularProgressIndicator());
+    if (m == null) return const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)));
     final mem = (m['memory'] as Map).cast<String, dynamic>();
     final total = (mem['MemTotal'] as num? ?? 0).toDouble(), avail = (mem['MemAvailable'] as num? ?? 0).toDouble();
     final swapT = (mem['SwapTotal'] as num? ?? 0).toDouble(), swapF = (mem['SwapFree'] as num? ?? 0).toDouble();
     final load = [for (final x in m['load'] as List) (x as num).toDouble()];
-    final t = Theme.of(context).textTheme;
-    return ListView(padding: const EdgeInsets.all(20), children: [
-      Text('${m['host']} · ${m['os']} · 内核 ${m['kernel']} · 已运行 ${_dur((m['uptime'] as num).toDouble())}', style: t.bodySmall),
-      Text('${m['cpu_model']} × ${m['cpu_count']}', style: t.bodySmall),
-      const SizedBox(height: 12),
-      Wrap(spacing: 16, runSpacing: 16, children: [
-        _gauge('CPU', _cpu == null ? null : _cpu! / 100, _cpu == null ? '…' : '${_cpu!.toStringAsFixed(1)} %'),
-        _gauge('内存', total == 0 ? null : (total - avail) / total, '${_gb(total - avail)} / ${_gb(total)}'),
-        if (swapT > 0) _gauge('交换', (swapT - swapF) / swapT, '${_gb(swapT - swapF)} / ${_gb(swapT)}'),
-        _card('负载', '${load.map((x) => x.toStringAsFixed(2)).join('  ')}\n1 / 5 / 15 分钟'),
-      ]),
-      if (_history.length > 1) ...[
-        const SizedBox(height: 16),
-        Text('CPU，最近 ${_history.length * 2} 秒（0–100 %）', style: t.labelLarge),
-        const SizedBox(height: 4),
-        Container(
-          height: 64,
-          decoration: BoxDecoration(color: Ide.of(context).panel, border: Border.all(color: Ide.of(context).border), borderRadius: BorderRadius.circular(4)),
-          padding: const EdgeInsets.all(4),
-          child: CustomPaint(painter: _Spark(_history, Theme.of(context).colorScheme.primary), size: Size.infinite),
-        ),
-      ],
-      const SizedBox(height: 16),
-      Text('磁盘', style: t.titleMedium),
-      // Read-only images (WSL's kernel headers, snaps) are full by design and
-      // cannot fill up, so they are left out.
-      for (final d in (m['disks'] as List).cast<Map>().where((d) => d['ro'] != true))
-        ListTile(
-          dense: true,
-          title: Text('${d['mount']}  (${d['fstype']})'),
-          subtitle: LinearProgressIndicator(value: (d['total'] as num) == 0 ? 0 : (d['used'] as num) / (d['total'] as num)),
-          trailing: Text('${_gb((d['used'] as num).toDouble())} / ${_gb((d['total'] as num).toDouble())}'),
-        ),
-      const SizedBox(height: 16),
-      Text('进程（按 CPU 排序）', style: t.titleMedium),
-      DataTable(columnSpacing: 16, headingRowHeight: 30, dataRowMinHeight: 26, dataRowMaxHeight: 28, dividerThickness: 0.5, columns: const [
-        DataColumn(label: Text('PID'), numeric: true),
-        DataColumn(label: Text('用户')),
-        // Per process, 100 % is one core; the CPU card is all cores together.
-        DataColumn(label: Tooltip(message: '100 % 为一个核；上面的 CPU 卡片是全部核心合计', child: Text('CPU %（单核）')), numeric: true),
-        DataColumn(label: Text('内存'), numeric: true),
-        DataColumn(label: Text('命令')),
-      ], rows: [
-        for (final p in _procs)
-          DataRow(cells: [
-            DataCell(Text('${p['pid']}')),
-            DataCell(Text('${p['user']}')),
-            DataCell(Text((p['cpu'] as num).toStringAsFixed(1))),
-            DataCell(Text(_gb((p['rss'] as num).toDouble()))),
-            DataCell(ConstrainedBox(constraints: const BoxConstraints(maxWidth: 480), child: Text('${p['args']}', overflow: TextOverflow.ellipsis))),
+    final cores = (m['cpu_count'] as num? ?? 1).toInt().clamp(1, 1 << 12);
+    final memUsed = total == 0 ? null : (total - avail) / total;
+    // Read-only images (WSL's kernel headers, snaps) are full by design and
+    // cannot fill up, so they are left out.
+    final disks = (m['disks'] as List).cast<Map>().where((d) => d['ro'] != true).toList();
+    Widget chip(IconData i, String s) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(color: ide.hover, borderRadius: BorderRadius.circular(Radii.s)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(i, size: 13, color: ide.textFaint),
+            const SizedBox(width: 5),
+            Text(s, style: TextStyle(fontSize: 11.5, color: ide.textDim)),
           ]),
+        );
+    return ListView(padding: const EdgeInsets.fromLTRB(Space.xxl, Space.xl + 4, Space.xxl, Space.xxl), children: [
+      Text('${m['host']}', style: Theme.of(context).textTheme.headlineSmall),
+      const SizedBox(height: Space.m),
+      Wrap(spacing: Space.s, runSpacing: Space.s, children: [
+        chip(Icons.dns_outlined, '${m['os']}'),
+        chip(Icons.memory_rounded, '${m['cpu_model']} × $cores'),
+        chip(Icons.layers_outlined, '内核 ${m['kernel']}'),
+        chip(Icons.schedule_rounded, '已运行 ${_dur((m['uptime'] as num).toDouble())}'),
+      ]),
+      const SizedBox(height: Space.xl + 4),
+      LayoutBuilder(builder: (context, box) {
+        final cols = box.maxWidth >= 1000 ? 4 : (box.maxWidth >= 520 ? 2 : 1);
+        final w = (box.maxWidth - Space.l * (cols - 1)) / cols;
+        return Wrap(spacing: Space.l, runSpacing: Space.l, children: [
+          SizedBox(width: w, child: _Metric(
+            label: 'CPU',
+            value: _cpu == null ? '…' : _cpu!.toStringAsFixed(1),
+            unit: '%',
+            note: '$cores 个核心合计',
+            fraction: _cpu == null ? null : _cpu! / 100,
+            history: _history,
+          )),
+          SizedBox(width: w, child: _Metric(
+            label: '内存',
+            value: memUsed == null ? '—' : (memUsed * 100).toStringAsFixed(0),
+            unit: '%',
+            note: '${_gb(total - avail)} / ${_gb(total)}',
+            fraction: memUsed,
+            history: _memHistory,
+          )),
+          SizedBox(width: w, child: _Metric(
+            label: '负载',
+            value: load.isEmpty ? '—' : load.first.toStringAsFixed(2),
+            unit: '',
+            note: load.length < 3 ? '' : '5 分钟 ${load[1].toStringAsFixed(2)} · 15 分钟 ${load[2].toStringAsFixed(2)}',
+            fraction: load.isEmpty ? null : load.first / cores,
+          )),
+          SizedBox(width: w, child: _Metric(
+            label: '交换',
+            value: swapT <= 0 ? '—' : ((swapT - swapF) / swapT * 100).toStringAsFixed(0),
+            unit: swapT <= 0 ? '' : '%',
+            note: swapT <= 0 ? '没有交换空间' : '${_gb(swapT - swapF)} / ${_gb(swapT)}',
+            fraction: swapT <= 0 ? null : (swapT - swapF) / swapT,
+          )),
+        ]);
+      }),
+      const SizedBox(height: Space.xxl),
+      _heading('磁盘', '${disks.length} 个挂载点'),
+      _Panel(children: [
+        for (final (i, d) in disks.indexed)
+          _DiskRow(
+            mount: '${d['mount']}',
+            fs: '${d['fstype']}',
+            used: (d['used'] as num).toDouble(),
+            total: (d['total'] as num).toDouble(),
+            last: i == disks.length - 1,
+          ),
+      ]),
+      const SizedBox(height: Space.xxl),
+      _heading('进程', '按 CPU 排序 · 100 % 为一个核'),
+      _Panel(children: [
+        _ProcRow.header(),
+        for (final (i, p) in _procs.indexed) _ProcRow(p, last: i == _procs.length - 1),
       ]),
     ]);
   }
 
-  Widget _gauge(String label, double? v, String text) => SizedBox(
-        width: 200,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              LinearProgressIndicator(value: v, minHeight: 8),
-              const SizedBox(height: 8),
-              Text(text),
-            ]),
-          ),
-        ),
-      );
-
-  Widget _card(String label, String text) => SizedBox(
-        width: 200,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Text(text),
-            ]),
-          ),
-        ),
-      );
+  Widget _heading(String title, String note) {
+    final ide = Ide.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.m + 2, left: 2),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+        Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: ide.text)),
+        const SizedBox(width: Space.m),
+        Text(note, style: TextStyle(fontSize: 12, color: ide.textFaint)),
+      ]),
+    );
+  }
 
   static String _gb(double b) {
     if (b >= 1 << 30) return '${(b / (1 << 30)).toStringAsFixed(1)} GB';
@@ -204,35 +221,200 @@ class _MonitorTabState extends State<MonitorTab> {
   }
 }
 
+/// The colour of a load: calm, getting full, full.
+Color _level(Ide ide, double f) => f >= 0.9 ? ide.error : (f >= 0.7 ? ide.warn : ide.accent);
+
+/// A rounded panel with rows separated by thin lines.
+class _Panel extends StatelessWidget {
+  final List<Widget> children;
+  const _Panel({required this.children});
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(color: ide.sideBar, borderRadius: BorderRadius.circular(Radii.island), border: Border.all(color: ide.border)),
+      child: Column(children: children),
+    );
+  }
+}
+
+class _Metric extends StatelessWidget {
+  final String label, value, unit, note;
+  final double? fraction;
+  final List<double>? history;
+  const _Metric({required this.label, required this.value, required this.unit, required this.note, required this.fraction, this.history});
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final f = (fraction ?? 0).clamp(0.0, 1.0);
+    final color = _level(ide, f);
+    final h = history;
+    return Container(
+      height: 132,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(color: ide.sideBar, borderRadius: BorderRadius.circular(Radii.island), border: Border.all(color: ide.border)),
+      child: Stack(children: [
+        if (h != null && h.length > 1)
+          Positioned(left: 0, right: 0, bottom: 0, height: 56, child: CustomPaint(painter: _Spark(h, color))),
+        Padding(
+          padding: const EdgeInsets.all(Space.l + 2),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ide.textDim, letterSpacing: 0.2)),
+            const SizedBox(height: Space.s),
+            Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+              Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: ide.text, height: 1.1, letterSpacing: -0.5,
+                fontFeatures: const [FontFeature.tabularFigures()])),
+              if (unit.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 3), child: Text(unit, style: TextStyle(fontSize: 14, color: ide.textDim))),
+            ]),
+            const SizedBox(height: 2),
+            Text(note, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: ide.textFaint)),
+            const Spacer(),
+            if (h == null || h.length < 2)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(value: fraction == null ? 0 : f, minHeight: 5, color: color, backgroundColor: ide.hover),
+              ),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class _DiskRow extends StatelessWidget {
+  final String mount, fs;
+  final double used, total;
+  final bool last;
+  const _DiskRow({required this.mount, required this.fs, required this.used, required this.total, required this.last});
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final f = total == 0 ? 0.0 : (used / total).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Space.l + 2, vertical: Space.m + 2),
+      decoration: BoxDecoration(border: last ? null : Border(bottom: BorderSide(color: ide.border))),
+      child: Row(children: [
+        Icon(Icons.storage_rounded, size: 16, color: ide.textFaint),
+        const SizedBox(width: Space.m + 2),
+        SizedBox(
+          width: 200,
+          child: Text.rich(TextSpan(children: [
+            TextSpan(text: mount, style: TextStyle(color: ide.text, fontSize: 13)),
+            TextSpan(text: '  $fs', style: TextStyle(color: ide.textFaint, fontSize: 11.5)),
+          ]), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(value: f, minHeight: 5, color: _level(ide, f), backgroundColor: ide.hover),
+          ),
+        ),
+        const SizedBox(width: Space.l),
+        SizedBox(
+          width: 150,
+          child: Text('${_MonitorTabState._gb(used)} / ${_MonitorTabState._gb(total)}', textAlign: TextAlign.right,
+            style: TextStyle(fontSize: 12, color: ide.textDim, fontFeatures: const [FontFeature.tabularFigures()])),
+        ),
+        SizedBox(
+          width: 44,
+          child: Text('${(f * 100).toStringAsFixed(0)}%', textAlign: TextAlign.right,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: f >= 0.9 ? ide.error : ide.text)),
+        ),
+      ]),
+    );
+  }
+}
+
+class _ProcRow extends StatelessWidget {
+  final Map<String, dynamic>? p;
+  final bool last;
+  const _ProcRow(this.p, {this.last = false});
+  const _ProcRow.header() : p = null, last = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final p = this.p;
+    final head = p == null;
+    final style = TextStyle(
+      fontSize: head ? 11.5 : 12.5,
+      color: head ? ide.textFaint : ide.text,
+      fontWeight: head ? FontWeight.w600 : FontWeight.w400,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final mono = style.copyWith(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 12, color: ide.textDim);
+    final cpu = head ? 0.0 : (p['cpu'] as num).toDouble();
+    Widget cell(String s, double w) => SizedBox(width: w, child: Text(s, textAlign: TextAlign.right, style: style));
+    return Container(
+      height: head ? 32 : 30,
+      padding: const EdgeInsets.symmetric(horizontal: Space.l + 2),
+      decoration: BoxDecoration(
+        color: head ? ide.hover.withValues(alpha: 0.5) : null,
+        border: last ? null : Border(bottom: BorderSide(color: ide.border.withValues(alpha: head ? 1 : 0.6))),
+      ),
+      child: Row(children: [
+        cell(head ? 'PID' : '${p['pid']}', 64),
+        const SizedBox(width: Space.xl),
+        SizedBox(width: 90, child: Text(head ? '用户' : '${p['user']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: style.copyWith(color: head ? null : ide.textDim))),
+        SizedBox(
+          width: 110,
+          child: head
+              ? Text('CPU %', textAlign: TextAlign.right, style: style)
+              : Row(children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: FractionallySizedBox(
+                        widthFactor: (cpu / 100).clamp(0.02, 1.0),
+                        child: Container(height: 4, decoration: BoxDecoration(color: _level(ide, cpu / 100).withValues(alpha: 0.7), borderRadius: BorderRadius.circular(2))),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: Space.s),
+                  SizedBox(width: 40, child: Text(cpu.toStringAsFixed(1), textAlign: TextAlign.right, style: style)),
+                ]),
+        ),
+        cell(head ? '内存' : _MonitorTabState._gb((p['rss'] as num).toDouble()), 84),
+        const SizedBox(width: Space.xl + 4),
+        Expanded(child: Text(head ? '命令' : '${p['args']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: head ? style : mono)),
+      ]),
+    );
+  }
+}
+
 class _Spark extends CustomPainter {
   final List<double> v;
   final Color c;
   _Spark(this.v, this.c);
   @override
   void paint(Canvas canvas, Size s) {
-    // A dashed 50 % line, so an idle (flat, near zero) curve still reads as
-    // a measurement and not as the frame.
-    final guide = Paint()
-      ..color = c.withValues(alpha: 0.25)
-      ..strokeWidth = 1;
-    for (var x = 0.0; x < s.width; x += 8) {
-      canvas.drawLine(Offset(x, s.height / 2), Offset(x + 4, s.height / 2), guide);
-    }
     final line = Path(), fill = Path()..moveTo(0, s.height);
     for (var i = 0; i < v.length; i++) {
-      final x = s.width * i / (v.length - 1), y = s.height * (1 - v[i].clamp(0, 100) / 100);
+      // the top 10 % stays free so a full load does not touch the text
+      final x = s.width * i / (v.length - 1), y = s.height * (1 - 0.9 * v[i].clamp(0, 100) / 100);
       i == 0 ? line.moveTo(x, y) : line.lineTo(x, y);
       fill.lineTo(x, y);
     }
     fill
       ..lineTo(s.width, s.height)
       ..close();
-    canvas.drawPath(fill, Paint()..color = c.withValues(alpha: 0.15));
+    canvas.drawPath(
+        fill,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [c.withValues(alpha: 0.22), c.withValues(alpha: 0.02)],
+          ).createShader(Offset.zero & s));
     canvas.drawPath(
         line,
         Paint()
           ..color = c
           ..strokeWidth = 1.5
+          ..strokeJoin = StrokeJoin.round
           ..style = PaintingStyle.stroke);
   }
 

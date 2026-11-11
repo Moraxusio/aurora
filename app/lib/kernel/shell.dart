@@ -31,6 +31,7 @@ import 'overview.dart';
 import 'palette.dart';
 import 'registry.dart';
 import 'widgets.dart';
+import 'window_frame.dart';
 import 'workspace.dart';
 
 const double _wide = 900, _narrow = 600;
@@ -147,6 +148,10 @@ class _ShellState extends State<Shell> {
   }
 
   Feature get _feature => widget.features.byId(_featureId) ?? widget.features.all.first;
+
+  /// The workspace in front (tests).
+  @visibleForTesting
+  Workspace? get debugWorkspace => _ws;
 
   List<Command> _commands(Workspace? ws) {
     final out = <Command>[
@@ -470,8 +475,11 @@ class _TitleBar extends StatelessWidget {
     final project = ws.project;
     final canSplit = ws.visibleTabs.length > 1 || ws.split;
     return SizedBox(
-      height: 40,
-      child: Row(children: [
+      height: WindowFrame.height,
+      child: Stack(children: [
+        // the empty parts of the bar move the window
+        const Positioned.fill(child: WindowDragArea(child: SizedBox.expand())),
+        Row(children: [
         SizedBox(
           width: 48,
           child: Center(child: Image.asset('assets/branding/aurora3-256.png', width: 18, height: 18, semanticLabel: 'Aurora 3')),
@@ -520,6 +528,8 @@ class _TitleBar extends StatelessWidget {
           color: ws.split ? ide.accent : null),
         IconBtn(Icons.keyboard_command_key, '命令面板（Ctrl+Shift+P）', onPalette),
         const SizedBox(width: Space.s),
+        const WindowButtonsGap(),
+        ]),
       ]),
     );
   }
@@ -664,7 +674,7 @@ class _ActivityBar extends StatelessWidget {
         width: 48,
         child: Column(children: [
           Expanded(child: SingleChildScrollView(child: Column(children: feats))),
-          rail(Icons.tune_rounded, '服务器概览', tap: onOverview),
+          rail(Icons.tune_rounded, '概览与设置', tap: onOverview),
           rail(Icons.settings_outlined, '设置', tap: () => ws.openTab(settingsTab(ws.app))),
           const SizedBox(height: Space.xs),
         ]),
@@ -1396,8 +1406,9 @@ class _PhoneTop extends StatelessWidget {
     return Container(
       height: 52,
       color: ide.frame,
-      padding: const EdgeInsets.symmetric(horizontal: Space.xs),
-      child: Row(
+      padding: const EdgeInsets.only(left: Space.xs),
+      child: WindowDragArea(
+        child: Row(
         children: [
           if (showEditor) IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded)) else const SizedBox(width: Space.l),
           Expanded(
@@ -1439,7 +1450,9 @@ class _PhoneTop extends StatelessWidget {
               ],
             ),
           if (showEditor && t != null) IconButton(onPressed: () => ws.closeTab(t.id), icon: const Icon(Icons.close_rounded)),
+          const WindowButtonsGap(),
         ],
+      ),
       ),
     );
   }
@@ -1535,7 +1548,20 @@ class _EmptyShell extends StatelessWidget {
         Expanded(child: Text(t, style: TextStyle(color: ide.textDim, fontSize: 13, height: 1.5))),
       ]),
     );
-    return Center(
+    return Column(children: [
+      WindowDragArea(
+        child: SizedBox(
+          height: WindowFrame.height,
+          child: Row(children: [
+            SizedBox(
+              width: 48,
+              child: Center(child: Image.asset('assets/branding/aurora3-256.png', width: 18, height: 18, semanticLabel: 'Aurora 3')),
+            ),
+            Text('Aurora', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ide.textDim)),
+          ]),
+        ),
+      ),
+      Expanded(child: Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(Space.xxl),
         child: Container(
@@ -1566,6 +1592,7 @@ class _EmptyShell extends StatelessWidget {
           ),
         ),
       ),
-    );
+      )),
+    ]);
   }
 }

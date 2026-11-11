@@ -262,6 +262,17 @@ ThemeData buildTheme(Brightness b) {
         )
         .apply(bodyColor: c.text, displayColor: c.text, fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback),
     iconTheme: IconThemeData(color: c.textDim, size: 18),
+    appBarTheme: AppBarTheme(
+      backgroundColor: c.frame,
+      foregroundColor: c.text,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      toolbarHeight: 44,
+      titleSpacing: 4,
+      iconTheme: IconThemeData(color: c.textDim, size: 18),
+      titleTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 14, fontWeight: FontWeight.w600),
+    ),
     tooltipTheme: TooltipThemeData(
       waitDuration: const Duration(milliseconds: 450),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -376,8 +387,8 @@ ThemeData buildTheme(Brightness b) {
     radioTheme: RadioThemeData(fillColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : c.textFaint)),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.onAccent : c.textDim),
-      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : c.hover),
-      trackOutlineColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.transparent : c.borderStrong),
+      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : c.borderStrong),
+      trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
     ),
     sliderTheme: SliderThemeData(activeTrackColor: c.accent, inactiveTrackColor: c.border, thumbColor: c.accent, overlayColor: c.accentSoft, trackHeight: 3),
     scrollbarTheme: ScrollbarThemeData(

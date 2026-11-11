@@ -575,18 +575,30 @@ class _GitPanelState extends State<GitPanel> {
   }
 
   Widget _branchLine(Ide ide, GitStatus st) {
+    Widget pill(Widget child, {String? tip}) {
+      final w = Container(
+        margin: const EdgeInsets.only(left: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(color: ide.hover, borderRadius: BorderRadius.circular(Radii.s)),
+        child: DefaultTextStyle.merge(style: TextStyle(color: ide.textDim, fontSize: 11, fontWeight: FontWeight.w500), child: child),
+      );
+      return tip == null ? w : Tooltip(message: tip, child: w);
+    }
+
+    Widget count(IconData i, int n) => Row(mainAxisSize: MainAxisSize.min, children: [Icon(i, size: 11, color: ide.accent), const SizedBox(width: 2), Text('$n')]);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 8, 4),
+      padding: const EdgeInsets.fromLTRB(Space.l + 2, Space.s, Space.m, Space.xs),
       child: Row(children: [
-        Icon(Icons.fork_right, size: 14, color: ide.accent),
+        Icon(Icons.fork_right_rounded, size: 15, color: ide.accent),
         const SizedBox(width: 6),
-        Flexible(child: Text(st.detached ? '分离的 HEAD ${st.oid.length >= 7 ? st.oid.substring(0, 7) : st.oid}' : st.branch, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
+        Flexible(child: Text(st.detached ? '分离的 HEAD ${st.oid.length >= 7 ? st.oid.substring(0, 7) : st.oid}' : st.branch, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: ide.text))),
         if (st.upstream.isNotEmpty) ...[
-          const SizedBox(width: 8),
-          Text('${st.ahead > 0 ? '↑${st.ahead} ' : ''}${st.behind > 0 ? '↓${st.behind}' : ''}${st.ahead == 0 && st.behind == 0 ? '已同步' : ''}', style: TextStyle(color: ide.textDim, fontSize: 11)),
+          if (st.ahead > 0) pill(count(Icons.arrow_upward_rounded, st.ahead), tip: '领先 ${st.upstream} ${st.ahead} 个提交'),
+          if (st.behind > 0) pill(count(Icons.arrow_downward_rounded, st.behind), tip: '落后 ${st.upstream} ${st.behind} 个提交'),
+          if (st.ahead == 0 && st.behind == 0) pill(const Text('已同步'), tip: '与 ${st.upstream} 一致'),
         ] else if (!st.detached)
-          Text('  无上游', style: TextStyle(color: ide.textDim, fontSize: 11)),
-        if (st.stashes > 0) Text('   暂存区 ${st.stashes}', style: TextStyle(color: ide.textDim, fontSize: 11)),
+          pill(const Text('无上游')),
+        if (st.stashes > 0) pill(Text('储藏 ${st.stashes}'), tip: '${st.stashes} 个储藏（stash）'),
       ]),
     );
   }
@@ -717,7 +729,12 @@ class _GitPanelState extends State<GitPanel> {
           leading: Icon(b.current ? Icons.check : Icons.fork_right, size: 14, color: b.current ? ide.accent : ide.textDim),
           label: b.name,
           detail: b.subject,
-          trailing: b.ahead + b.behind > 0 ? Text('${b.ahead > 0 ? '↑${b.ahead}' : ''}${b.behind > 0 ? '↓${b.behind}' : ''}', style: TextStyle(color: ide.textDim, fontSize: 11)) : null,
+          trailing: b.ahead + b.behind > 0
+              ? Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (b.ahead > 0) ...[Icon(Icons.arrow_upward_rounded, size: 11, color: ide.textDim), Text('${b.ahead} ', style: TextStyle(color: ide.textDim, fontSize: 11))],
+                  if (b.behind > 0) ...[Icon(Icons.arrow_downward_rounded, size: 11, color: ide.textDim), Text('${b.behind}', style: TextStyle(color: ide.textDim, fontSize: 11))],
+                ])
+              : null,
           onDoubleTap: b.current ? null : () => _switchTo(b),
           onTap: b.current ? null : () => _switchTo(b),
           menu: () => [

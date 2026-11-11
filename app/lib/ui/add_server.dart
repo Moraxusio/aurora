@@ -7,7 +7,10 @@ import 'package:aurora_install/aurora_install.dart';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:flutter/material.dart';
 
+import '../kernel/widgets.dart';
+import '../kernel/window_frame.dart';
 import '../state/app_state.dart';
+import '../theme/ide_theme.dart';
 
 class AddServerPage extends StatefulWidget {
   final AppState app;
@@ -215,44 +218,39 @@ class _AddServerPageState extends State<AddServerPage> {
   Widget build(BuildContext context) {
     final title = widget.existing == null ? '添加服务器' : '重新安装或配对：${widget.existing!.name}';
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      backgroundColor: Ide.of(context).editor,
+      appBar: AppBar(
+        title: Text(title),
+        flexibleSpace: const WindowDragArea(child: SizedBox.expand()),
+        actions: const [WindowButtonsGap()],
+      ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: ListView(padding: const EdgeInsets.all(24), children: [
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: ListView(padding: const EdgeInsets.fromLTRB(Space.xxl, Space.l, Space.xxl, Space.xxl * 2), children: [
+            _header(),
+            const SizedBox(height: Space.xl + 4),
             // Installing needs the signed agent shipped with the app (D-3);
             // a development build has none next to it.
             if (widget.app.builds.isEmpty) ...[
-              Card(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: ListTile(
-                  leading: const Icon(Icons.warning_amber),
-                  title: const Text('无法安装：缺少内置的 agent'),
-                  subtitle: SelectableText(widget.app.buildsError ?? ''),
-                ),
-              ),
-              const SizedBox(height: 16),
+              Notice(tone: Tone.error, title: '无法安装：缺少内置的 agent', body: widget.app.buildsError ?? ''),
+              const SizedBox(height: Space.l),
             ],
             if (widget.app.testKey != null) ...[
-              Card(
-                color: Theme.of(context).colorScheme.tertiaryContainer,
-                child: ListTile(
-                  leading: const Icon(Icons.science_outlined),
-                  title: const Text('测试模式'),
-                  subtitle: Text('agent 的签名用测试密钥 ${widget.app.testKey} 校验，不是发布密钥（AURORA3_TRUST_KEY）'),
-                ),
+              Notice(
+                tone: Tone.warn,
+                icon: Icons.science_outlined,
+                title: '测试模式',
+                body: 'agent 的签名用测试密钥 ${widget.app.testKey} 校验，不是发布密钥（AURORA3_TRUST_KEY）',
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: Space.l),
             ],
             if (_phase != _Phase.done) _formView(),
             if (_phase == _Phase.done && _outcome != null) ..._doneView(),
-            if (_steps.isNotEmpty) ...[const SizedBox(height: 24), _progressView()],
+            if (_steps.isNotEmpty) ...[const SizedBox(height: Space.xl), _progressView()],
             if (_error != null) ...[
-              const SizedBox(height: 16),
-              Card(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: Padding(padding: const EdgeInsets.all(16), child: SelectableText(_error!)),
-              ),
+              const SizedBox(height: Space.l),
+              Notice(tone: Tone.error, title: '没有完成', body: _error!),
             ],
           ]),
         ),
@@ -260,105 +258,163 @@ class _AddServerPageState extends State<AddServerPage> {
     );
   }
 
+  Widget _header() {
+    final ide = Ide.of(context);
+    final fresh = widget.existing == null;
+    return Row(children: [
+      Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(color: ide.accentSoft, borderRadius: BorderRadius.circular(Radii.island + 2)),
+        child: Icon(fresh ? Icons.add_to_queue_rounded : Icons.sync_rounded, size: 22, color: ide.accent),
+      ),
+      const SizedBox(width: Space.l + 2),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(fresh ? '连接一台 Linux 服务器' : widget.existing!.name, style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 3),
+          Text('Aurora 用 SSH 登录一次，安装签名的 agent；之后都直接加密连接 agent，不再需要 SSH。',
+            style: TextStyle(color: ide.textDim, fontSize: 12.5, height: 1.5)),
+        ]),
+      ),
+    ]);
+  }
+
   /// The finished page leads with the result and the way out; the stage list
   /// stays below for reference.
   List<Widget> _doneView() => [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.check_circle, color: Colors.green),
-            title: Text(_outcome!.result == 'up_to_date' ? '服务器上已是最新版本，已保存直连参数' : '安装完成，版本 ${_outcome!.version ?? ''}'),
-            subtitle: const Text('之后的连接都走直连，不再需要 SSH。'),
-          ),
+        Notice(
+          tone: Tone.ok,
+          title: _outcome!.result == 'up_to_date' ? '服务器上已是最新版本，已保存直连参数' : '安装完成，版本 ${_outcome!.version ?? ''}',
+          body: '之后的连接都走直连，不再需要 SSH。',
         ),
-        const SizedBox(height: 16),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('完成')),
+        const SizedBox(height: Space.l),
+        Align(alignment: Alignment.centerRight, child: FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('完成'))),
       ];
 
   Widget _formView() {
+    final ide = Ide.of(context);
     final busy = _phase == _Phase.running;
-    InputDecoration d(String l, [String? h]) => InputDecoration(labelText: l, helperText: h, border: const OutlineInputBorder());
+    InputDecoration d(String l, [String? h]) => InputDecoration(labelText: l, helperText: h);
     String? req(String? v) => v == null || v.trim().isEmpty ? '必填' : null;
+    Widget label(String s) => Padding(
+          padding: const EdgeInsets.only(top: Space.xs, bottom: Space.m + 2),
+          child: Text(s, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ide.textFaint, letterSpacing: 0.3)),
+        );
     return Form(
       key: _form,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        TextFormField(controller: _name, enabled: !busy, decoration: d('名称', '可选，默认用地址')),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(flex: 3, child: TextFormField(controller: _host, enabled: !busy, decoration: d('SSH 地址'), validator: req)),
-          const SizedBox(width: 12),
-          Expanded(
-              child: TextFormField(
-                  controller: _port,
-                  enabled: !busy,
-                  decoration: d('端口'),
-                  validator: (v) {
-                    final n = int.tryParse(v ?? '');
-                    return n == null || n < 1 || n > 65535 ? '1–65535' : null;
-                  })),
+      child: Material(
+        color: ide.sideBar,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.island + 2), side: BorderSide(color: ide.border)),
+        child: Padding(
+        padding: const EdgeInsets.all(Space.xl + 2),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          label('服务器'),
+          TextFormField(controller: _name, enabled: !busy, decoration: d('名称', '可选，默认用地址')),
+          const SizedBox(height: Space.l),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(flex: 3, child: TextFormField(controller: _host, enabled: !busy, decoration: d('SSH 地址'), validator: req)),
+            const SizedBox(width: Space.l),
+            Expanded(
+                child: TextFormField(
+                    controller: _port,
+                    enabled: !busy,
+                    decoration: d('端口'),
+                    validator: (v) {
+                      final n = int.tryParse(v ?? '');
+                      return n == null || n < 1 || n > 65535 ? '1–65535' : null;
+                    })),
+          ]),
+          const SizedBox(height: Space.xl + 4),
+          label('登录'),
+          TextFormField(controller: _user, enabled: !busy, decoration: d('用户名'), validator: req),
+          const SizedBox(height: Space.l),
+          SegmentedButton<bool>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: false, label: Text('密码'), icon: Icon(Icons.password_rounded, size: 16)),
+              ButtonSegment(value: true, label: Text('私钥'), icon: Icon(Icons.key_rounded, size: 16)),
+            ],
+            selected: {_useKey},
+            onSelectionChanged: busy ? null : (s) => setState(() => _useKey = s.first),
+          ),
+          const SizedBox(height: Space.l),
+          if (!_useKey)
+            TextFormField(controller: _password, enabled: !busy, obscureText: true, decoration: d('密码'), validator: req)
+          else ...[
+            TextFormField(
+                controller: _key,
+                enabled: !busy,
+                maxLines: 5,
+                style: const TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 12),
+                decoration: d('私钥', '粘贴 OpenSSH 或 PEM 格式的私钥'),
+                validator: req),
+            const SizedBox(height: Space.l),
+            TextFormField(controller: _passphrase, enabled: !busy, obscureText: true, decoration: d('私钥密码', '私钥没有密码就留空')),
+          ],
+          const SizedBox(height: Space.l),
+          TextFormField(controller: _sudo, enabled: !busy, obscureText: true, decoration: d('sudo 密码', '用 root 登录，或 sudo 不要密码时留空')),
+          const SizedBox(height: Space.m),
+          CheckboxListTile(
+            value: _save,
+            onChanged: busy ? null : (v) => setState(() => _save = v ?? false),
+            title: Text('在本机加密保存这些密码', style: TextStyle(fontSize: 13, color: ide.text)),
+            subtitle: Text('用 Windows 的 DPAPI 加密，只有当前 Windows 用户能读。不保存的话，重新安装时要再输入。',
+              style: TextStyle(fontSize: 12, color: ide.textFaint, height: 1.45)),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: Space.l),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(minimumSize: const Size(140, 36)),
+              onPressed: busy || widget.app.builds.isEmpty ? null : _run,
+              icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download_rounded, size: 18),
+              label: Text(busy ? '正在安装…' : '安装并连接'),
+            ),
+          ),
         ]),
-        const SizedBox(height: 12),
-        TextFormField(controller: _user, enabled: !busy, decoration: d('用户名'), validator: req),
-        const SizedBox(height: 12),
-        SegmentedButton<bool>(
-          segments: const [ButtonSegment(value: false, label: Text('密码')), ButtonSegment(value: true, label: Text('私钥'))],
-          selected: {_useKey},
-          onSelectionChanged: busy ? null : (s) => setState(() => _useKey = s.first),
-        ),
-        const SizedBox(height: 12),
-        if (!_useKey)
-          TextFormField(controller: _password, enabled: !busy, obscureText: true, decoration: d('密码'), validator: req)
-        else ...[
-          TextFormField(
-              controller: _key,
-              enabled: !busy,
-              maxLines: 5,
-              style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
-              decoration: d('私钥', '粘贴 OpenSSH 或 PEM 格式的私钥'),
-              validator: req),
-          const SizedBox(height: 12),
-          TextFormField(controller: _passphrase, enabled: !busy, obscureText: true, decoration: d('私钥密码', '私钥没有密码就留空')),
-        ],
-        const SizedBox(height: 12),
-        TextFormField(controller: _sudo, enabled: !busy, obscureText: true, decoration: d('sudo 密码', '用 root 登录，或 sudo 不要密码时留空')),
-        const SizedBox(height: 8),
-        CheckboxListTile(
-          value: _save,
-          onChanged: busy ? null : (v) => setState(() => _save = v ?? false),
-          title: const Text('在本机加密保存这些密码'),
-          subtitle: const Text('用 Windows 的 DPAPI 加密，只有当前 Windows 用户能读。不保存的话，重新安装时要再输入。'),
-          controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: EdgeInsets.zero,
-        ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: busy || widget.app.builds.isEmpty ? null : _run,
-          icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download),
-          label: Text(busy ? '正在安装…' : '安装并连接'),
-        ),
-      ]),
+      ),
+      ),
     );
   }
 
   Widget _progressView() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(children: [
-          for (final s in _steps)
-            ListTile(
-              dense: true,
-              leading: switch (s.status) {
-                'ok' => const Icon(Icons.check, color: Colors.green),
-                'fail' => const Icon(Icons.close, color: Colors.red),
-                _ => const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-              },
-              title: Text(_labels[s.step] ?? s.step.name),
-              subtitle: s.step == InstallStep.upload && s.status == 'start' && _upload != null
-                  ? LinearProgressIndicator(value: _upload)
-                  : (s.message.isEmpty ? null : Text(s.message)),
-            ),
-        ]),
-      ),
+    final ide = Ide.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: Space.s),
+      decoration: BoxDecoration(color: ide.sideBar, borderRadius: BorderRadius.circular(Radii.island + 2), border: Border.all(color: ide.border)),
+      child: Column(children: [
+        for (final s in _steps)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.xl, vertical: Space.m),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: switch (s.status) {
+                  'ok' => Icon(Icons.check, size: 18, color: ide.ok),
+                  'fail' => Icon(Icons.close, size: 18, color: ide.error),
+                  _ => const Padding(padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2)),
+                },
+              ),
+              const SizedBox(width: Space.l),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(_labels[s.step] ?? s.step.name, style: TextStyle(fontSize: 13, color: ide.text)),
+                  if (s.step == InstallStep.upload && s.status == 'start' && _upload != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: Space.s),
+                      child: ClipRRect(borderRadius: BorderRadius.circular(2), child: LinearProgressIndicator(value: _upload, minHeight: 4)),
+                    )
+                  else if (s.message.isNotEmpty)
+                    Padding(padding: const EdgeInsets.only(top: 2), child: Text(s.message, style: TextStyle(fontSize: 12, color: s.status == 'fail' ? ide.error : ide.textFaint))),
+                ]),
+              ),
+            ]),
+          ),
+      ]),
     );
   }
 }

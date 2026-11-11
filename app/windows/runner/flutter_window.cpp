@@ -44,14 +44,43 @@ bool FlutterWindow::OnCreate() {
       flutter_controller_->engine()->messenger(), "aurora3/desktop",
       &flutter::StandardMethodCodec::GetInstance());
   desktop_channel_->SetMethodCallHandler([this](const auto& call, auto result) {
-    if (call.method_name() == "ready") {
-      Visibility(!hidden_ && !IsIconic(GetHandle()));
-      result->Success();
-    } else if (call.method_name() == "hide") {
+    const HWND hwnd = GetHandle();
+    const auto& name = call.method_name();
+    if (name == "ready") {
+      Visibility(!hidden_ && !IsIconic(hwnd));
+      // The window has no caption (win32_window.cpp): the app draws one.
+      result->Success(flutter::EncodableValue(flutter::EncodableMap{
+          {flutter::EncodableValue("frameless"), flutter::EncodableValue(true)},
+          {flutter::EncodableValue("maximized"), flutter::EncodableValue(IsZoomed(hwnd) != FALSE)},
+      }));
+    } else if (name == "hide") {
       HideToTray();
       result->Success();
-    } else if (call.method_name() == "restore") {
+    } else if (name == "restore") {
       Restore();
+      result->Success();
+    } else if (name == "startDrag") {
+      // The system's own move loop: snapping and Aero Shake work as with a caption.
+      ReleaseCapture();
+      SendMessage(hwnd, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, 0);
+      result->Success();
+    } else if (name == "startResize") {
+      const auto* edge = std::get_if<std::string>(call.arguments());
+      WPARAM side = WMSZ_TOP;
+      if (edge && *edge == "topLeft") side = WMSZ_TOPLEFT;
+      if (edge && *edge == "topRight") side = WMSZ_TOPRIGHT;
+      ReleaseCapture();
+      SendMessage(hwnd, WM_SYSCOMMAND, SC_SIZE | side, 0);
+      result->Success();
+    } else if (name == "minimize") {
+      ShowWindow(hwnd, SW_MINIMIZE);
+      result->Success();
+    } else if (name == "toggleMaximize") {
+      ShowWindow(hwnd, IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+      result->Success();
+    } else if (name == "close") {
+      // the same as the caption's close button: hide to the tray
+      PostMessage(hwnd, WM_CLOSE, 0, 0);
       result->Success();
     } else {
       result->NotImplemented();
@@ -113,7 +142,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     Destroy();
     return 0;
   }
-  if (message == WM_SIZE) Visibility(wparam != SIZE_MINIMIZED && !hidden_);
+  if (message == WM_SIZE) {
+    Visibility(wparam != SIZE_MINIMIZED && !hidden_);
+    if (desktop_channel_ && wparam != SIZE_MINIMIZED) {
+      desktop_channel_->InvokeMethod("maximized", std::make_unique<flutter::EncodableValue>(wparam == SIZE_MAXIMIZED));
+    }
+  }
   if (message == WM_ENDSESSION && wparam) {
     Destroy();
     return 0;

@@ -145,6 +145,8 @@ bool Win32Window::Create(const std::wstring& title,
   }
 
   UpdateTheme(window);
+  // Recompute the frame now that WM_NCCALCSIZE drops the caption.
+  SetWindowPos(window, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
   return OnCreate();
 }
@@ -179,6 +181,25 @@ Win32Window::MessageHandler(HWND hwnd,
                             WPARAM const wparam,
                             LPARAM const lparam) noexcept {
   switch (message) {
+    case WM_NCCALCSIZE:
+      // No caption: the client area reaches the top of the window, where the
+      // app draws its own title bar. The side and bottom frame stay, so the
+      // window keeps its shadow, resize borders and snapping. Maximized, the
+      // frame hangs off the screen on every side, the top included.
+      if (wparam) {
+        auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
+        const UINT dpi = GetDpiForWindow(hwnd);
+        const int pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+        const int fx = GetSystemMetricsForDpi(SM_CXFRAME, dpi) + pad;
+        const int fy = GetSystemMetricsForDpi(SM_CYFRAME, dpi) + pad;
+        params->rgrc[0].left += fx;
+        params->rgrc[0].right -= fx;
+        params->rgrc[0].bottom -= fy;
+        if (IsZoomed(hwnd)) params->rgrc[0].top += fy;
+        return 0;
+      }
+      break;
+
     case WM_DESTROY:
       window_handle_ = nullptr;
       Destroy();

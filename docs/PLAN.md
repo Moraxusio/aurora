@@ -358,4 +358,6 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 见 DESIGN D-103。只改客户端：`theme/ide_theme.dart`（设计令牌与 Material 主题）、`kernel/shell.dart`（岛式布局、标题栏、活动栏、标签、欢迎页、状态栏、服务器下拉、空首页、手机布局）、`kernel/widgets.dart`（列表行、分组标题、空状态、菜单、提示条，新增浮层选择器与键帽）、`kernel/palette.dart` 和 `features/search/quick_open.dart`（新选择器）。
 - 测试：`flutter analyze` 无问题；`app` 全量 135 项通过（20 项跳过，其中 5 项是只在设置 `AURORA_SHOTS` 时运行的截图测试），`aurora_profile` 38 项通过。
 - 截图：用 `ui_shots_test.dart` 渲染了 14 张（宽屏深/浅色的欢迎页、文件树、编辑器、命令面板、服务器下拉；中等宽度和侧栏浮层；手机；没有服务器的首页），逐张看过。修正了截图里发现的问题：键帽单边粗边框在 Flutter 里不能配圆角（改用阴影做底边）、主题的文字样式丢了字体、欢迎页副标题在系统名为空时多出一个分隔点、手机底部导航文字挤在一起（改为只显示选中项的文字）。
-- 未验证：没有在真实 Windows 窗口和 Android 设备上看过（截图是测试环境渲染的，字体用的是本机 Windows 字体）；各功能面板内部没有逐个重新设计。尚未打包、发布。
+- 第二轮：自绘标题栏（原生 `win32_window.cpp`、`flutter_window.cpp` 与 `kernel/window_frame.dart`），监控仪表盘，概览页、设置页、添加服务器页重做，共用 `FormPage`/`FormSection`/`FormRow`/`SmallSwitch`/`Notice`，git 分支行与储藏数的用词修正。截图测试改为给每个面板喂假数据并按无标题栏渲染，一次出 33 张（深浅色各自的欢迎页、编辑器、命令面板、服务器下拉、6 个侧栏面板、监控两帧、概览、设置；中等宽度、手机、空首页、添加服务器页），逐张看过。截图里发现并修正：窗口按钮的悬停提示在 Navigator 之外会报错（真实窗口也会），改用无障碍标签；添加服务器页的勾选行需要 Material 底；关闭状态的开关太淡。
+- 验证：`flutter analyze` 无问题；`app` 135 项通过（20 项跳过，其中 5 项是截图测试），`aurora_profile` 38 项通过；`flutter build windows --release` 编译通过（原生代码无错误）。
+- 未验证：没有在真实 Windows 窗口里试过自绘标题栏（拖动、双击最大化、顶边改变大小、贴边、多显示器不同 DPI、Windows 10 顶边），因为本机正在运行 3.8.0，单实例锁会把新启动的程序转到它；截图是测试环境渲染的；没在 Android 设备上看过。尚未打包、发布。

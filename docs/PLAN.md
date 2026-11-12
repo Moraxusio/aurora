@@ -366,3 +366,12 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
   - APK SHA-256：arm64-v8a `ea7b2c58870d5bbca920af6ee4c79d5ce9de0c79cee0efede5819d55fa860e12`；armeabi-v7a `b9a106927aaaa384dde3b09fc2e39a6c49a14c3504466ff53c57ce6d7b3e65c2`；x86_64 `842c5df7cb0101245f374b540c42aa1771b86ed712c96a5b08546ff988c8d3e7`。证书 SHA-256 与之前相同（`db59a41d…1554882`），三个 APK 里的 agent、清单、策略与 Windows 包逐字节一致，敏感字符串命中 0。
   - 构建经过：第一次在全新的 git worktree 里打 APK，`pdfium_dart` 的构建钩子要联网下载 pdfium，TLS 握手被断开，卡了 16 小时后失败；改在带缓存的主仓库里只跑 APK 步骤（同一提交、工作区干净），133 秒完成。Windows 包来自前一次构建。
   - 未重复：篡改拒绝测试；Android 仍未在真机或模拟器上运行。
+### 3.9.1 升级提示条修复（2026-11-12）
+
+- 问题：agent 有新版本时，窗口顶部的升级提示条在标题栏上方，被右上角的窗口按钮盖住。修复（ba205e）：把 AgentUpgradeNotice 移到标题栏下方（kernel/shell.dart）。
+- 测试：`flutter analyze` 无问题；`app` 135 项通过（20 项跳过），`aurora_profile` 38 项通过。
+- 打包（源提交 `bfbad75`，`-Version 3.9.1`，versionCode 31901/32901/34901）：在带缓存的主仓库里一次出 Windows 包和 3 个 APK。验证：敏感字符串命中 0；ZIP 30 个文件与文件夹逐个一致；agent 用发布密钥 `87828dfb18459372` 验签通过；APK 证书与之前相同，APK 里的 agent、清单、策略与 Windows 包逐字节一致；三个 APK 里的 LICENSE、NOTICE、LICENSES.txt 与源文件一致。
+  - Windows ZIP：24,954,475 字节，SHA-256 `bf9f9f3a4b04bc861159fd9267253e6e5c63ba1f4dc9575791bcfed98ee4c97b`。
+  - APK SHA-256：arm64-v8a `55c942fd5f36e8dfb08ccd880ce0573f1c0cf3d7f817c7df2e54d18219c6b317`；armeabi-v7a `c2e12342d10d0abe2b064d0220f99c8ae7fe0546ea21e9971cd9ad25f225ed46`；x86_64 `4a025223bed2813c12e9f53d79df82d1d895347173a3a1946523f64544a18479`。
+  - 发布后重新下载 5 个文件，与本地逐个比对，全部一致。（发布脚本自带的比对因缺少 `Get-FileHash` 而无效，是另外手工比对的。）
+- 未验证：升级提示条在测试里触发不了，修复后的样子没有看到过；自绘标题栏仍没在真实窗口里试过；Android 仍未在真机或模拟器上运行；篡改拒绝测试未重复。

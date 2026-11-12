@@ -292,7 +292,6 @@ class _ShellState extends State<Shell> {
 
     final body = Column(
       children: [
-        AgentUpgradeNotice(app: app, id: ws.serverId),
         if (narrow)
           _PhoneTop(ws: ws, showEditor: showEditor, onBack: () => setState(() => ws.compactEditor = false), onServers: servers)
         else
@@ -305,6 +304,8 @@ class _ShellState extends State<Shell> {
             onPalette: () => showPalette(context, cmds),
             onToggleSide: _toggleSide,
           ),
+        // Below the title bar: the window buttons cover the top-right 40 px.
+        AgentUpgradeNotice(app: app, id: ws.serverId),
         Expanded(
           key: const ValueKey('main-content'),
           child: Row(

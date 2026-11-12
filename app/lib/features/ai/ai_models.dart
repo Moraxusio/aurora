@@ -5,26 +5,32 @@ class AiSessionSummary {
   final String id;
   final String parentId;
   String title;
+  bool pinned;
   final String root;
   final String workdir;
   String agent;
   String model;
+  String preview;
   bool running;
   AiPermissionQuestion? pendingPermission;
   int messageCount;
+  int createdAt;
   int updatedAt;
 
   AiSessionSummary({
     required this.id,
     this.parentId = '',
     required this.title,
+    this.pinned = false,
     required this.root,
     required this.workdir,
     required this.agent,
     this.model = '',
+    this.preview = '',
     this.running = false,
     this.pendingPermission,
     this.messageCount = 0,
+    this.createdAt = 0,
     this.updatedAt = 0,
   });
 
@@ -32,17 +38,53 @@ class AiSessionSummary {
         id: j['id'] as String? ?? '',
         parentId: j['parent_id'] as String? ?? '',
         title: j['title'] as String? ?? '新会话',
+        pinned: j['pinned'] == true,
         root: j['root'] as String? ?? '',
         workdir: j['workdir'] as String? ?? '/',
         agent: j['agent'] as String? ?? 'build',
         model: j['model'] as String? ?? '',
+        preview: j['preview'] as String? ?? '',
         running: j['running'] == true,
         pendingPermission: j['pending_permission'] is Map
             ? AiPermissionQuestion.fromJson((j['pending_permission'] as Map).cast<String, dynamic>())
             : null,
         messageCount: (j['message_count'] as num?)?.toInt() ?? 0,
+        createdAt: (j['created_at'] as num?)?.toInt() ?? 0,
         updatedAt: (j['updated_at'] as num?)?.toInt() ?? 0,
       );
+}
+
+/// One hit of `ai.search`: a session whose title or text holds every word.
+class AiSearchHit {
+  final String sessionId;
+  final String title;
+  final String workdir;
+  final int updatedAt;
+  final String snippet;
+
+  const AiSearchHit({required this.sessionId, required this.title, required this.workdir, required this.updatedAt, required this.snippet});
+
+  factory AiSearchHit.fromJson(Map<String, dynamic> j) => AiSearchHit(
+        sessionId: j['session_id'] as String? ?? '',
+        title: j['title'] as String? ?? '',
+        workdir: j['workdir'] as String? ?? '/',
+        updatedAt: (j['updated_at'] as num?)?.toInt() ?? 0,
+        snippet: j['snippet'] as String? ?? '',
+      );
+}
+
+/// Which day-group a session belongs to in the history list.
+String aiDayGroup(int updatedMs, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final d = DateTime.fromMillisecondsSinceEpoch(updatedMs);
+  final today = DateTime(n.year, n.month, n.day);
+  final day = DateTime(d.year, d.month, d.day);
+  final diff = today.difference(day).inDays;
+  if (diff <= 0) return '今天';
+  if (diff == 1) return '昨天';
+  if (diff < 7) return '最近 7 天';
+  if (diff < 30) return '最近 30 天';
+  return '更早';
 }
 
 class AiTodoItem {

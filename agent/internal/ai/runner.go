@@ -189,6 +189,28 @@ func (e *Env) resolveWorkspace(rootID, workdir string) (Root, string, string, er
 	return *chosen, cleanWork, abs, nil
 }
 
+func sessionPreview(s *Session) string {
+	// The last thing said: the assistant's final text, else the user's last prompt.
+	for i := len(s.Messages) - 1; i >= 0; i-- {
+		m := s.Messages[i]
+		if m.Role != "assistant" && m.Role != "user" {
+			continue
+		}
+		for j := len(m.Parts) - 1; j >= 0; j-- {
+			p := m.Parts[j]
+			if p.Type == "text" && strings.TrimSpace(p.Text) != "" && !strings.HasPrefix(p.Text, "<system-reminder>") {
+				t := strings.Join(strings.Fields(p.Text), " ")
+				r := []rune(t)
+				if len(r) > 80 {
+					t = string(r[:80]) + "…"
+				}
+				return t
+			}
+		}
+	}
+	return ""
+}
+
 func (e *Env) ListSessions(includeChildren bool) []SessionSummary {
 	e.init()
 	e.mu.Lock()
@@ -204,20 +226,195 @@ func (e *Env) ListSessions(includeChildren bool) []SessionSummary {
 			ID:                s.ID,
 			ParentID:          s.ParentID,
 			Title:             s.Title,
+			Pinned:            s.Pinned,
 			Root:              s.Root,
 			Workdir:           s.Workdir,
 			Agent:             s.Agent,
 			Model:             s.Model,
+			Preview:           sessionPreview(s),
 			Running:           isRun,
 			PendingPermission: e.perms.PendingForSession(s.ID),
 			MessageCount:      len(s.Messages),
+			CreatedAt:         s.CreatedAt,
 			UpdatedAt:         s.UpdatedAt,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].Pinned != out[j].Pinned {
+			return out[i].Pinned
+		}
 		return out[i].UpdatedAt > out[j].UpdatedAt
 	})
 	return out
+}
+
+// UpdateSessionMeta renames and/or pins a session (nil leaves a field alone).
+func (e *Env) UpdateSessionMeta(id string, title *string, pinned *bool) (SessionSummary, error) {
+	e.init()
+	e.mu.Lock()
+	s, ok := e.sessions[id]
+	if !ok {
+		e.mu.Unlock()
+		return SessionSummary{}, fmt.Errorf("session not found: %s", id)
+	}
+	if title != nil {
+		t := strings.TrimSpace(*title)
+		if t == "" {
+			e.mu.Unlock()
+			return SessionSummary{}, errors.New("title must not be empty")
+		}
+		if r := []rune(t); len(r) > 120 {
+			t = string(r[:120])
+		}
+		s.Title = t
+	}
+	if pinned != nil {
+		s.Pinned = *pinned
+	}
+	// Renaming or pinning is not activity: UpdatedAt stays, so the list does not reorder.
+	_ = e.persistSessionLocked(s)
+	sum := SessionSummary{ID: s.ID, Title: s.Title, Pinned: s.Pinned, Root: s.Root, Workdir: s.Workdir, Agent: s.Agent, Model: s.Model, MessageCount: len(s.Messages), CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt}
+	e.mu.Unlock()
+	e.broadcast(StreamEvent{Type: "session.title", SessionID: id, Title: sum.Title})
+	return sum, nil
+}
+
+// SearchHit is one session found by SearchSessions.
+type SearchHit struct {
+	SessionID string `json:"session_id"`
+	Title     string `json:"title"`
+	Workdir   string `json:"workdir"`
+	UpdatedAt int64  `json:"updated_at"`
+	MessageID string `json:"message_id,omitempty"`
+	Snippet   string `json:"snippet,omitempty"`
+}
+
+// SearchSessions finds sessions whose title or conversation text contains every
+// word of query (case-insensitive). One hit per session, newest first.
+func (e *Env) SearchSessions(query string, limit int) []SearchHit {
+	e.init()
+	words := strings.Fields(strings.ToLower(query))
+	if len(words) == 0 {
+		return nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var hits []SearchHit
+	for _, s := range e.sessions {
+		if s.ParentID != "" {
+			continue
+		}
+		all := strings.ToLower(s.Title)
+		var texts []struct{ id, text string }
+		for _, m := range s.Messages {
+			for _, p := range m.Parts {
+				if (p.Type == "text" || p.Type == "compaction") && p.Text != "" && !strings.HasPrefix(p.Text, "<system-reminder>") {
+					all += "\n" + strings.ToLower(p.Text)
+					texts = append(texts, struct{ id, text string }{m.ID, p.Text})
+				}
+			}
+		}
+		matched := true
+		for _, w := range words {
+			if !strings.Contains(all, w) {
+				matched = false
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		hit := SearchHit{SessionID: s.ID, Title: s.Title, Workdir: s.Workdir, UpdatedAt: s.UpdatedAt}
+		for _, t := range texts {
+			low := strings.ToLower(t.text)
+			if idx := strings.Index(low, words[0]); idx >= 0 {
+				rs := []rune(t.text)
+				// idx is a byte offset into the lowered copy; recompute on runes to stay valid.
+				start := len([]rune(low[:idx])) - 24
+				if start < 0 {
+					start = 0
+				}
+				end := start + 90
+				if end > len(rs) {
+					end = len(rs)
+				}
+				if start > end {
+					start = end
+				}
+				hit.MessageID = t.id
+				hit.Snippet = strings.Join(strings.Fields(string(rs[start:end])), " ")
+				break
+			}
+		}
+		hits = append(hits, hit)
+	}
+	sort.Slice(hits, func(i, j int) bool { return hits[i].UpdatedAt > hits[j].UpdatedAt })
+	if len(hits) > limit {
+		hits = hits[:limit]
+	}
+	return hits
+}
+
+// ExportMarkdown renders a session as one readable Markdown document.
+func (e *Env) ExportMarkdown(id string) (string, string, error) {
+	sess, _, _, err := e.GetSession(id)
+	if err != nil {
+		return "", "", err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s\n\n", sess.Title)
+	fmt.Fprintf(&b, "- Workdir: `%s:%s`\n- Model: `%s`\n- Created: %s\n\n", sess.Root, sess.Workdir, sess.Model, time.UnixMilli(sess.CreatedAt).Format("2006-01-02 15:04"))
+	for _, m := range sess.Messages {
+		switch m.Role {
+		case "user":
+			for _, p := range m.Parts {
+				if p.Type == "text" && !strings.HasPrefix(p.Text, "<system-reminder>") {
+					b.WriteString("## 👤 User\n\n" + strings.TrimSpace(p.Text) + "\n\n")
+				}
+			}
+		case "assistant":
+			b.WriteString("## 🤖 Assistant\n\n")
+			results := map[string]Part{}
+			for _, p := range m.Parts {
+				if p.Type == "tool-result" {
+					results[p.ToolCallID] = p
+				}
+			}
+			for _, p := range m.Parts {
+				switch p.Type {
+				case "text":
+					b.WriteString(strings.TrimSpace(p.Text) + "\n\n")
+				case "tool-call":
+					fmt.Fprintf(&b, "<details><summary>🛠 %s</summary>\n\n```json\n%s\n```\n", p.ToolName, strings.TrimSpace(string(p.Input)))
+					if r, ok := results[p.ToolCallID]; ok {
+						out := r.Output
+						if len(out) > 4000 {
+							out = out[:4000] + "\n…[truncated]"
+						}
+						b.WriteString("\n```\n" + out + "\n```\n")
+					}
+					b.WriteString("\n</details>\n\n")
+				}
+			}
+			if m.Error != "" {
+				b.WriteString("> ⚠️ " + m.Error + "\n\n")
+			}
+		case "compaction":
+			if len(m.Parts) > 0 {
+				b.WriteString("## 📦 Checkpoint\n\n" + strings.TrimSpace(m.Parts[0].Text) + "\n\n")
+			}
+		}
+	}
+	name := strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`\/:*?"<>|`, r) || r < 32 {
+			return '_'
+		}
+		return r
+	}, sess.Title)
+	return name + ".md", b.String(), nil
 }
 
 func (e *Env) GetSession(id string) (Session, bool, *PermissionQuestion, error) {

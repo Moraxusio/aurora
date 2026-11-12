@@ -384,3 +384,9 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 打包与归档（源提交 `53f6f7c`，`-Version 3.10.0`，versionCode 32000/33000/35000，已归档至 `release3\Aurora-3.10.0` 供本地试用，尚未上传 GitHub）：
   - Windows ZIP：25,236,260 字节，SHA-256 `d8f26d6b4c38588415474e026007def023d7ea5b39aca098ed2f46e6f14ff194`，30 个文件与目录逐字节一致；内置 `aurora3-agent-3.10.0-linux-amd64` SHA-256 `48411f41b9f8a2cef1a54c898122d803e49382b83595436af8ed3eac3dcfe1df`，发布密钥 `87828dfb18459372` 验签及副本字节篡改拒绝测试均通过；`LICENSES.txt` 已收录 OpenCode MIT 许可证。
   - APK SHA-256：arm64-v8a `63a12e8da802e7cbc03e9a858cc6209dd6b2c81cd281d1ea8fc5c35dfad7a7a9`；armeabi-v7a `0ee8ab8fb1e51d85647617499f4212fe30d31e6f71e37058017fb30a7248deee`；x86_64 `fa345eb58cbd15d615d9fdf6b4406113adc5f4df127c9fef2a56886771152112`。证书与之前相同（`db59a41d…1554882`），三个 APK 内置 5 个 agent 文件及 3 个法律文件与 Windows 包逐字节一致，敏感字符串命中 0；v2 发布目录仍为 13 项。
+
+### 3.10.1 AI 体验打磨：联网搜索、统一历史、模型与思考强度（2026-11-13）
+
+- 见 DESIGN D-104 末段。agent：移植 OpenCode 的 `webfetch` 与 `websearch`（Exa MCP），所有智能体模式可用；历史新增 `pinned`/`preview`/`created_at` 与 `ai.update`、`ai.search`、`ai.export`；`ai.models` 在 Base URL 缺 `/v1` 时自动重试并给出明确提示。客户端：历史侧栏（置顶、按日分组、预览、全文搜索、重命名、复制为 Markdown）、输入框模型快速选择器与思考强度、联网搜索来源卡、Markdown 回复渲染。
+- 已验证：Go `internal/ai` 与 `internal/entry` 在 WSL 下通过（含新增 `web_test.go`：HTML 转 Markdown、Exa 解析 JSON 与 SSE、本地桩的搜索与抓取含重定向、二进制与危险 URL 拒绝、`/v1` 回退、置顶/重命名/搜索/导出）；`flutter analyze lib test` 0 问题；`app` 全量测试通过（142 项，20 项按设计跳过），其中 `ai_feature_test.dart` 7 项；`ui_shots_test.dart` 截图已核对侧栏与工作台。
+- 未验证：真实 `mcp.exa.ai` 在线搜索（测试用本地桩，服务器需能访问该地址或开启 `use_proxy`）；真实网页抓取；重命名菜单没有组件测试；真实窗口交互、Android 真机。新操作需要服务器上的 agent 升级到同版本，旧 agent 上搜索、置顶、重命名会失败。

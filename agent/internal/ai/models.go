@@ -366,11 +366,32 @@ func FetchModels(ctx context.Context, cfg ProviderConfig, proxyEnv func() map[st
 	for _, suf := range []string{"/chat/completions", "/messages", "/responses"} {
 		base = strings.TrimSuffix(base, suf)
 	}
-	endpoint := base
-	if !strings.HasSuffix(endpoint, "/models") {
-		endpoint += "/models"
-	}
+	base = strings.TrimSuffix(base, "/models")
 
+	// Gateways are often given without the /v1 suffix and then answer the
+	// models URL with their web page. Try the address as typed, then with /v1.
+	candidates := []string{base + "/models"}
+	if !strings.HasSuffix(base, "/v1") && !strings.Contains(base, "/v1/") {
+		candidates = append(candidates, base+"/v1/models")
+	}
+	var lastErr error
+	for _, endpoint := range candidates {
+		list, err := fetchModelsAt(cctx, cfg, proxyEnv, endpoint)
+		if err == nil {
+			return list, nil
+		}
+		lastErr = err
+		var he *HTTPStatusError
+		if errors.As(err, &he) && (he.Status == 401 || he.Status == 403) {
+			break // the key is the problem, not the address
+		}
+	}
+	return nil, lastErr
+}
+
+var errNotJSON = errors.New("接口返回的不是 JSON（像是网页）。请检查 Base URL：通常要以 /v1 结尾，且不要包含 /chat/completions")
+
+func fetchModelsAt(cctx context.Context, cfg ProviderConfig, proxyEnv func() map[string]string, endpoint string) ([]ModelInfo, error) {
 	httpReq, err := http.NewRequestWithContext(cctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -394,6 +415,10 @@ func FetchModels(ctx context.Context, cfg ProviderConfig, proxyEnv func() map[st
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return nil, &HTTPStatusError{Status: res.StatusCode, Body: string(body)}
+	}
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 || (trimmed[0] != '{' && trimmed[0] != '[') {
+		return nil, errNotJSON
 	}
 
 	var parsed struct {

@@ -151,6 +151,7 @@ type Session struct {
 	ID             string     `json:"id"`
 	ParentID       string     `json:"parent_id,omitempty"`
 	Title          string     `json:"title"`
+	Pinned         bool       `json:"pinned,omitempty"`
 	Root           string     `json:"root"`                    // Aurora root ID (e.g. "home")
 	Workdir        string     `json:"workdir"`                 // Root-relative path (e.g. "/project")
 	Agent          string     `json:"agent"`                   // "build" | "plan" | "explore" | "general"
@@ -170,13 +171,16 @@ type SessionSummary struct {
 	ID                string                `json:"id"`
 	ParentID          string                `json:"parent_id,omitempty"`
 	Title             string                `json:"title"`
+	Pinned            bool                  `json:"pinned,omitempty"`
 	Root              string                `json:"root"`
 	Workdir           string                `json:"workdir"`
 	Agent             string                `json:"agent"`
 	Model             string                `json:"model,omitempty"`
+	Preview           string                `json:"preview,omitempty"`
 	Running           bool                  `json:"running"`
 	PendingPermission *PermissionQuestion   `json:"pending_permission,omitempty"`
 	MessageCount      int                   `json:"message_count"`
+	CreatedAt         int64                 `json:"created_at,omitempty"`
 	UpdatedAt         int64                 `json:"updated_at"`
 }
 

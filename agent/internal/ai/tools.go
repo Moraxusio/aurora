@@ -246,19 +246,24 @@ Available subagents:
 		},
 	}
 
+	// OpenCode's webfetch + websearch (web.go) are offered in every mode.
+	web := []ToolDef{webFetchToolDef, webSearchToolDef}
 	switch agentMode {
 	case "explore":
-		return []ToolDef{readTool, globTool, grepTool, shellTool}
+		return append([]ToolDef{readTool, globTool, grepTool, shellTool}, web...)
 	case "plan":
-		out := []ToolDef{readTool, globTool, grepTool, shellTool, todoTool}
+		out := append([]ToolDef{readTool, globTool, grepTool, shellTool}, web...)
+		out = append(out, todoTool)
 		if depth == 0 {
 			out = append(out, subagentTool)
 		}
 		return out
 	case "general":
-		return []ToolDef{readTool, writeTool, editTool, globTool, grepTool, shellTool, todoTool}
+		out := append([]ToolDef{readTool, writeTool, editTool, globTool, grepTool, shellTool}, web...)
+		return append(out, todoTool)
 	default: // "build"
-		out := []ToolDef{readTool, writeTool, editTool, globTool, grepTool, shellTool, todoTool}
+		out := append([]ToolDef{readTool, writeTool, editTool, globTool, grepTool, shellTool}, web...)
+		out = append(out, todoTool)
 		if depth == 0 {
 			out = append(out, subagentTool)
 		}
@@ -370,6 +375,10 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 		res = execGrepTool(ctx, tc, rawInput)
 	case "shell":
 		res = execShellTool(ctx, tc, rawInput, checkPerm)
+	case "webfetch":
+		res = execWebFetch(ctx, tc, rawInput, checkPerm)
+	case "websearch":
+		res = execWebSearch(ctx, tc, rawInput, checkPerm)
 	case "todowrite":
 		res = execTodoWriteTool(tc, rawInput)
 	case "subagent":

@@ -8,11 +8,13 @@ import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../kernel/editor_tab.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
+import 'ai_model_picker.dart';
 import 'ai_models.dart';
 import 'ai_settings_dialog.dart';
 
@@ -960,6 +962,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                   output: resultMap[p.toolCallId]?.output ?? '',
                   isError: resultMap[p.toolCallId]?.isError ?? false,
                   running: false,
+                  metadata: resultMap[p.toolCallId]?.metadata ?? const {},
                 ),
               ),
           if (msg.error.isNotEmpty)
@@ -1019,6 +1022,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                 output: t.output,
                 isError: t.isError,
                 running: t.running,
+                metadata: t.metadata,
               ),
             ),
           if (_liveReasoning.isEmpty && _liveText.isEmpty && _liveTools.isEmpty && _liveCompaction.isEmpty && _running)
@@ -1190,9 +1194,10 @@ class _AiStudioViewState extends State<AiStudioView> {
                       onTap: () => setState(() => _permMode = _permMode == 'auto' ? 'ask' : 'auto'),
                     ),
                     const SizedBox(width: Space.s),
-                    // Model selector button
+                    // Model + thinking strength: one click opens the quick picker.
                     InkWell(
-                      onTap: () => showAiSettingsDialog(context, app: ws.app, ws: ws),
+                      key: const ValueKey('ai-model-btn'),
+                      onTap: () => showAiModelPicker(context, ws),
                       borderRadius: BorderRadius.circular(Radii.s + 2),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
@@ -1210,6 +1215,13 @@ class _AiStudioViewState extends State<AiStudioView> {
                                 style: TextStyle(fontSize: 11.5, color: prov == null || prov.model.isEmpty ? ide.warn : ide.textDim),
                               ),
                             ),
+                            if (prov != null && prov.reasoningEffort.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Icon(Icons.psychology_outlined, size: 13, color: ide.accent),
+                              const SizedBox(width: 2),
+                              Text(aiEffortLabel(prov.reasoningEffort), style: TextStyle(fontSize: 11.5, color: ide.accent)),
+                            ],
+                            Icon(Icons.expand_more_rounded, size: 14, color: ide.textFaint),
                           ],
                         ),
                       ),
@@ -1381,6 +1393,7 @@ class _ToolCallCard extends StatefulWidget {
   final String output;
   final bool isError;
   final bool running;
+  final Map<String, dynamic> metadata;
 
   const _ToolCallCard({
     required this.name,
@@ -1388,6 +1401,7 @@ class _ToolCallCard extends StatefulWidget {
     required this.output,
     required this.isError,
     required this.running,
+    this.metadata = const {},
   });
 
   @override
@@ -1396,6 +1410,14 @@ class _ToolCallCard extends StatefulWidget {
 
 class _ToolCallCardState extends State<_ToolCallCard> {
   bool _open = false;
+
+  /// The pages a websearch found, from the tool result's metadata.
+  List<({String title, String url})> get _sources => [
+        for (final s in (widget.metadata['sources'] as List? ?? const []))
+          if (s is Map && (s['url'] as String? ?? '').isNotEmpty) (title: (s['title'] as String?) ?? (s['url'] as String), url: s['url'] as String),
+      ];
+
+  String _host(String url) => Uri.tryParse(url)?.host ?? url;
 
   (IconData, String) _summary() {
     Map<String, dynamic> args = const {};
@@ -1407,6 +1429,7 @@ class _ToolCallCardState extends State<_ToolCallCard> {
         // ignore partial JSON
       }
     }
+    final found = _sources.length;
     return switch (widget.name) {
       'read' => (Icons.visibility_outlined, '读取 ${args['path'] ?? args['filePath'] ?? ''}'),
       'edit' => (Icons.edit_note_rounded, '编辑 ${args['path'] ?? args['filePath'] ?? ''}'),
@@ -1415,9 +1438,43 @@ class _ToolCallCardState extends State<_ToolCallCard> {
       'grep' => (Icons.search_rounded, '搜索内容 ${args['pattern'] ?? ''}'),
       'shell' => (Icons.terminal_rounded, '\$ ${args['command'] ?? ''}'),
       'todowrite' => (Icons.checklist_rounded, '更新任务清单'),
+      'websearch' => (Icons.travel_explore_rounded, '联网搜索「${args['query'] ?? ''}」${!widget.running && found > 0 ? ' · $found 个结果' : ''}'),
+      'webfetch' => (Icons.language_rounded, '抓取网页 ${args['url'] == null ? '' : _host('${args['url']}')}'),
       'subagent' => (Icons.account_tree_outlined, '子智能体 (${args['agent'] ?? 'explore'}): ${args['description'] ?? ''}'),
       _ => (Icons.extension_outlined, widget.name),
     };
+  }
+
+  Widget _sourceList(Ide ide) {
+    final list = _sources;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (var i = 0; i < list.length; i++)
+        InkWell(
+          key: ValueKey('ai-source-$i'),
+          onTap: () => copyText(list[i].url, what: '链接已复制（不会自动打开）'),
+          borderRadius: BorderRadius.circular(Radii.s),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                width: 18,
+                height: 18,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: ide.accentSoft, borderRadius: BorderRadius.circular(Radii.s)),
+                child: Text('${i + 1}', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: ide.accent)),
+              ),
+              const SizedBox(width: Space.m),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(list[i].title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: ide.text, fontWeight: FontWeight.w500)),
+                  Text(_host(list[i].url), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: ide.textFaint)),
+                ]),
+              ),
+              Icon(Icons.copy_rounded, size: 12, color: ide.textFaint),
+            ]),
+          ),
+        ),
+    ]);
   }
 
   @override
@@ -1477,7 +1534,12 @@ class _ToolCallCardState extends State<_ToolCallCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (widget.inputJson.isNotEmpty) ...[
+                  if (widget.name == 'websearch' && _sources.isNotEmpty) ...[
+                    Text('来源', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: ide.textFaint)),
+                    const SizedBox(height: 3),
+                    _sourceList(ide),
+                    const SizedBox(height: Space.s),
+                  ] else if (widget.inputJson.isNotEmpty) ...[
                     Text('参数', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: ide.textFaint)),
                     const SizedBox(height: 3),
                     SelectableText(widget.inputJson, style: TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 11.5, color: ide.textDim)),
@@ -1665,12 +1727,44 @@ class _MarkdownText extends StatelessWidget {
           else if (b.content.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
-              child: SelectableText(
-                b.content.trim(),
-                style: TextStyle(fontSize: 13.5, color: ide.text, height: 1.55),
+              child: MarkdownBody(
+                data: b.content.trim(),
+                selectable: true,
+                styleSheet: _chatMarkdownStyle(context, ide),
+                // Like the file preview: a chat reply never makes a request by itself.
+                imageBuilder: (uri, title, alt) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text('[图片未加载${alt == null || alt.isEmpty ? '' : '：$alt'}]', style: TextStyle(color: ide.textDim, fontStyle: FontStyle.italic)),
+                ),
+                onTapLink: (text, href, title) {
+                  if (href == null) return;
+                  copyText(href, what: '链接已复制（不会自动打开）');
+                },
               ),
             ),
       ],
+    );
+  }
+
+  MarkdownStyleSheet _chatMarkdownStyle(BuildContext context, Ide ide) {
+    final mono = TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 12.5, color: ide.text);
+    return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+      p: TextStyle(color: ide.text, fontSize: 13.5, height: 1.6),
+      h1: TextStyle(color: ide.text, fontSize: 18, fontWeight: FontWeight.w700, height: 1.5),
+      h2: TextStyle(color: ide.text, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
+      h3: TextStyle(color: ide.text, fontSize: 14.5, fontWeight: FontWeight.w600, height: 1.5),
+      h4: TextStyle(color: ide.text, fontSize: 13.5, fontWeight: FontWeight.w600, height: 1.5),
+      strong: TextStyle(color: ide.text, fontWeight: FontWeight.w700),
+      em: TextStyle(color: ide.text, fontStyle: FontStyle.italic),
+      listBullet: TextStyle(color: ide.textDim, fontSize: 13.5),
+      code: mono.copyWith(backgroundColor: ide.hover),
+      codeblockDecoration: BoxDecoration(color: ide.sideBar, borderRadius: BorderRadius.circular(Radii.m)),
+      blockquoteDecoration: BoxDecoration(color: ide.hover.withValues(alpha: 0.4), border: Border(left: BorderSide(color: ide.accent, width: 3))),
+      a: TextStyle(color: ide.accent),
+      tableBorder: TableBorder.all(color: ide.border),
+      tableHead: TextStyle(color: ide.text, fontWeight: FontWeight.w600, fontSize: 13),
+      tableBody: TextStyle(color: ide.text, fontSize: 13),
+      horizontalRuleDecoration: BoxDecoration(border: Border(top: BorderSide(color: ide.border))),
     );
   }
 

@@ -45,8 +45,55 @@ func (s svc) Operations() []service.Operation {
 		{Name: "ai.revert", Handle: s.opRevert},
 		{Name: "ai.compact", Handle: s.opCompact},
 		{Name: "ai.models", Handle: s.opModels},
+		{Name: "ai.update", Handle: s.opUpdate},
+		{Name: "ai.search", Handle: s.opSearch},
+		{Name: "ai.export", Handle: s.opExport},
 		{Name: "ai.stream", Stream: s.opStream},
 	}
+}
+
+func (s svc) opUpdate(_ context.Context, raw json.RawMessage) (any, error) {
+	var in struct {
+		ID     string  `json:"id"`
+		Title  *string `json:"title"`
+		Pinned *bool   `json:"pinned"`
+	}
+	if err := decodeArgs(raw, &in); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(in.ID) == "" {
+		return nil, wire.Errf(wire.CodeBadRequest, "缺少会话 ID")
+	}
+	sum, err := s.UpdateSessionMeta(in.ID, in.Title, in.Pinned)
+	if err != nil {
+		return nil, wire.Errf(wire.CodeNotFound, "%v", err)
+	}
+	return map[string]any{"session": sum}, nil
+}
+
+func (s svc) opSearch(_ context.Context, raw json.RawMessage) (any, error) {
+	var in struct {
+		Query string `json:"query"`
+		Limit int    `json:"limit"`
+	}
+	if err := decodeArgs(raw, &in); err != nil {
+		return nil, err
+	}
+	return map[string]any{"hits": s.SearchSessions(in.Query, in.Limit)}, nil
+}
+
+func (s svc) opExport(_ context.Context, raw json.RawMessage) (any, error) {
+	var in struct {
+		ID string `json:"id"`
+	}
+	if err := decodeArgs(raw, &in); err != nil {
+		return nil, err
+	}
+	name, md, err := s.ExportMarkdown(in.ID)
+	if err != nil {
+		return nil, wire.Errf(wire.CodeNotFound, "%v", err)
+	}
+	return map[string]any{"name": name, "markdown": md}, nil
 }
 
 func decodeArgs(raw json.RawMessage, v any) error {

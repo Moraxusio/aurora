@@ -425,26 +425,53 @@ class EditorSettings {
   /// Spaces that Tab inserts (the editor indents with spaces only).
   int tabSize;
 
-  EditorSettings({this.theme = 'system', this.fontSize = 13.5, this.wordWrap = false, this.tabSize = 4});
+  /// How the file tree orders a folder: 'name' | 'size' | 'mtime' | 'type'.
+  String fileSort;
+  bool fileSortDesc;
+  bool foldersFirst;
+
+  EditorSettings({
+    this.theme = 'system',
+    this.fontSize = 13.5,
+    this.wordWrap = false,
+    this.tabSize = 4,
+    this.fileSort = 'name',
+    this.fileSortDesc = false,
+    this.foldersFirst = true,
+  });
 
   static const themes = ['system', 'light', 'dark'];
+  static const fileSorts = ['name', 'size', 'mtime', 'type'];
   static const minFont = 9.0, maxFont = 28.0;
 
   factory EditorSettings.fromJson(Map<String, dynamic> j) {
     final t = j['theme'] as String?;
     final f = (j['font_size'] as num?)?.toDouble() ?? 13.5;
     final ts = (j['tab_size'] as num?)?.toInt() ?? 4;
+    final fs = j['file_sort'] is String ? j['file_sort'] as String : null;
     return EditorSettings(
       theme: themes.contains(t) ? t! : 'system',
       fontSize: f.isFinite ? f.clamp(minFont, maxFont).toDouble() : 13.5,
       wordWrap: j['word_wrap'] == true,
       tabSize: const [2, 4, 8].contains(ts) ? ts : 4,
+      fileSort: fileSorts.contains(fs) ? fs! : 'name',
+      fileSortDesc: j['file_sort_desc'] == true,
+      foldersFirst: j['folders_first'] != false,
     );
   }
 
-  Map<String, dynamic> toJson() => {'theme': theme, 'font_size': fontSize, 'word_wrap': wordWrap, 'tab_size': tabSize};
+  Map<String, dynamic> toJson() => {
+        'theme': theme,
+        'font_size': fontSize,
+        'word_wrap': wordWrap,
+        'tab_size': tabSize,
+        if (fileSort != 'name') 'file_sort': fileSort,
+        if (fileSortDesc) 'file_sort_desc': true,
+        if (!foldersFirst) 'folders_first': false,
+      };
 
-  bool get isDefault => theme == 'system' && fontSize == 13.5 && !wordWrap && tabSize == 4;
+  bool get isDefault =>
+      theme == 'system' && fontSize == 13.5 && !wordWrap && tabSize == 4 && fileSort == 'name' && !fileSortDesc && foldersFirst;
 }
 
 /// Client-side LLM Agent settings (D-104). Sealed at rest inside profile.bin;

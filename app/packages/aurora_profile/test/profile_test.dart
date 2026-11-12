@@ -33,6 +33,41 @@ Profile sample() {
 }
 
 void main() {
+  group('EditorSettings file sort', () {
+    test('defaults are omitted from json and isDefault', () {
+      final e = EditorSettings();
+      expect(e.fileSort, 'name');
+      expect(e.fileSortDesc, false);
+      expect(e.foldersFirst, true);
+      expect(e.isDefault, true);
+      final j = e.toJson();
+      expect(j.containsKey('file_sort'), false);
+      expect(j.containsKey('file_sort_desc'), false);
+      expect(j.containsKey('folders_first'), false);
+    });
+
+    test('round trip keeps non-default values', () {
+      final e = EditorSettings(fileSort: 'size', fileSortDesc: true, foldersFirst: false);
+      expect(e.isDefault, false);
+      final back = EditorSettings.fromJson(jsonDecode(jsonEncode(e.toJson())) as Map<String, dynamic>);
+      expect(back.fileSort, 'size');
+      expect(back.fileSortDesc, true);
+      expect(back.foldersFirst, false);
+      for (final s in EditorSettings.fileSorts) {
+        expect(EditorSettings.fromJson(EditorSettings(fileSort: s).toJson()).fileSort, s);
+      }
+    });
+
+    test('invalid or old json falls back to defaults', () {
+      expect(EditorSettings.fromJson({'file_sort': 'bogus'}).fileSort, 'name');
+      expect(EditorSettings.fromJson({'file_sort': 7}).fileSort, 'name');
+      final old = EditorSettings.fromJson({'theme': 'dark', 'font_size': 14, 'word_wrap': true, 'tab_size': 2});
+      expect(old.fileSort, 'name');
+      expect(old.foldersFirst, true);
+      expect(old.theme, 'dark');
+    });
+  });
+
   late Directory dir;
   late String path;
   setUp(() async {

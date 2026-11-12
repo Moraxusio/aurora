@@ -1,4 +1,4 @@
-// Viewers for files that are not text: an image and a PDF are read whole
+// Viewers for files that are not text: an image is read whole
 // over fs.download (with a size limit) and shown; video and audio are not
 // supported yet and say so instead of opening as garbage text.
 import 'dart:async';
@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
-import 'package:pdfrx/pdfrx.dart';
+
 
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
@@ -15,8 +15,12 @@ import 'download_action.dart';
 import 'file_kind.dart';
 import 'remote_bytes.dart';
 
+// The PDF reader has its own file (pdf_view.dart); it is exported here so the
+// file tab keeps one place to look for every viewer.
+export 'pdf_view.dart' show PdfFileViewer;
+
 const imageMaxBytes = 64 * 1024 * 1024;
-const pdfMaxBytes = 128 * 1024 * 1024;
+
 
 /// Loads [root]:[path] and hands the bytes to [builder]. Shows progress, and
 /// for a failure or an over-size file a message with a download button.
@@ -218,63 +222,6 @@ class _ImageBodyState extends State<_ImageBody> {
     final s = MediaQuery.sizeOf(context);
     final f = (s.width / w) < (s.height / h) ? s.width / w : s.height / h;
     return f.clamp(0.05, 16).toDouble();
-  }
-}
-
-// ------------------------------------------------------------------ pdf
-
-class PdfFileViewer extends StatelessWidget {
-  final Workspace ws;
-  final String root;
-  final String path;
-  const PdfFileViewer({super.key, required this.ws, required this.root, required this.path});
-
-  @override
-  Widget build(BuildContext context) => RemoteBytesView(
-        ws: ws,
-        root: root,
-        path: path,
-        maxBytes: pdfMaxBytes,
-        builder: (_, d) => _PdfBody(ws: ws, root: root, path: path, data: d),
-      );
-}
-
-class _PdfBody extends StatefulWidget {
-  final Workspace ws;
-  final String root;
-  final String path;
-  final RemoteBytes data;
-  const _PdfBody({required this.ws, required this.root, required this.path, required this.data});
-
-  @override
-  State<_PdfBody> createState() => _PdfBodyState();
-}
-
-class _PdfBodyState extends State<_PdfBody> {
-  final _controller = PdfViewerController();
-  int _pages = 0;
-
-  void _status(int? page) {
-    final t = widget.ws.tab('file:${widget.root}:${widget.path}');
-    t?.status.value = '${page ?? 1} / $_pages 页   ${formatSize(widget.data.size)}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ide = Ide.of(context);
-    return PdfViewer.data(
-      widget.data.bytes,
-      sourceName: 'file:${widget.root}:${widget.path}:${widget.data.etag ?? ''}',
-      controller: _controller,
-      params: PdfViewerParams(
-        backgroundColor: ide.editor,
-        onViewerReady: (doc, c) {
-          _pages = doc.pages.length;
-          _status(c.pageNumber);
-        },
-        onPageChanged: _status,
-      ),
-    );
   }
 }
 

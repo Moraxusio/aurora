@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 
 import '../state/app_state.dart';
 import '../features/files/transfers.dart';
+import '../features/files/file_ops.dart' show FileClipboard;
 import 'editor_tab.dart';
 import 'feature.dart';
 import 'file_watch.dart';
@@ -53,6 +54,10 @@ class Workspace extends ChangeNotifier {
   /// Raised when a file on the server changed because of something done here
   /// (a save): the file tree reloads what it shows.
   final ValueNotifier<int> filesRevision = ValueNotifier(0);
+
+  /// What the file tree's Copy or Cut remembered. Shared by every project page
+  /// of this server, so something copied in one project can be pasted in another.
+  final ValueNotifier<FileClipboard?> fileClipboard = ValueNotifier(null);
 
   /// The transfer list the file tree shows; set when the tree is built. The
   /// viewers download through it, so their transfers appear in the same list.
@@ -578,6 +583,7 @@ class Workspace extends ChangeNotifier {
       t.dispose();
     }
     filesRevision.dispose();
+    fileClipboard.dispose();
     focusSearch.dispose();
     watch.dispose();
     super.dispose();

@@ -10,18 +10,25 @@ class FileTreeRow extends StatelessWidget {
   final int depth;
   final bool folder, expanded, loading, selected, root, link;
   final String? location, detail;
+
+  /// Cut rows are drawn faint until they are pasted or the cut is cancelled.
+  final bool dimmed;
+
+  /// Replaces the path in the hover tooltip (size, time, permissions).
+  final String? tooltip;
   final VoidCallback onTap;
   final List<MenuItem> Function() menu;
   const FileTreeRow({super.key, required this.name, required this.path, required this.depth,
     required this.folder, required this.expanded, required this.loading, required this.selected,
-    required this.root, required this.link, this.location, this.detail, required this.onTap, required this.menu});
+    required this.root, required this.link, this.location, this.detail, this.dimmed = false, this.tooltip,
+    required this.onTap, required this.menu});
 
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final type = fileGlyph(name, ide);
     final height = InputMode.row(context) + (root ? 18 : 2);
-    return ContextArea(items: menu, child: Tooltip(message: location ?? path, waitDuration: const Duration(milliseconds: 700),
+    final row = ContextArea(items: menu, child: Tooltip(message: tooltip ?? location ?? path, waitDuration: const Duration(milliseconds: 700),
       child: InkWell(onTap: onTap, hoverColor: ide.hover,
         child: Container(height: height, margin: EdgeInsets.only(top: root ? 9 : 0),
           decoration: BoxDecoration(color: selected ? ide.selection : (root ? ide.tabBar.withValues(alpha: 0.7) : null),
@@ -44,12 +51,13 @@ class FileTreeRow extends StatelessWidget {
                   style: TextStyle(fontSize: 12.5, fontWeight: root ? FontWeight.w600 : FontWeight.w400, color: link ? ide.accent : ide.text)),
                 if (root && location != null) Text(location!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: ide.textDim)),
               ])),
-              if (detail != null) Padding(padding: const EdgeInsets.only(left: 8), child: Text(detail!, style: TextStyle(fontSize: 10.5, color: ide.textDim))),
+              if (detail != null) Padding(padding: const EdgeInsets.only(left: 8), child: Text(detail!, style: TextStyle(fontSize: 10.5, color: ide.textDim, fontFeatures: const [FontFeature.tabularFigures()]))),
             ])),
           ]),
         ),
       ),
     ));
+    return dimmed ? Opacity(opacity: 0.45, child: row) : row;
   }
 }
 

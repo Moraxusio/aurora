@@ -2,23 +2,39 @@
 // a click on a file opens it in an editor tab; every row has the same menu on
 // right-click and on long-press. Uploads ask before replacing a file that is
 // already there, and every transfer can be cancelled.
+//
+// Beyond browsing: Ctrl/Shift-click selects several rows; Copy, Cut and Paste
+// (Ctrl+C / Ctrl+X / Ctrl+V, or the menu) work on the server, inside a root or
+// across roots; F2 renames, Delete deletes; the sort button orders a folder by
+// name, size, time or type; "Calculate size" totals a folder (fs.du) and shows
+// the size of each folder under it; Properties shows everything about one item.
+// The logic lives in file_ops.dart so it is tested without widgets.
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
+import 'package:aurora_install/aurora_install.dart' show compareVersions, parseVersion;
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../kernel/feature.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'file_editor.dart';
+import 'file_info_dialog.dart';
+import 'file_ops.dart';
 import 'download_action.dart';
 import 'transfers.dart';
 import 'project_workspaces.dart';
 import 'file_tree_row.dart';
+
+/// Copying or moving between two roots needs an agent that understands
+/// `to_root`; an older one would ignore it and copy inside the source root.
+const crossRootAgent = '3.11.0';
 
 class FilesFeature extends Feature {
   final Transfers transfers;
@@ -64,10 +80,19 @@ class _Node {
   String? error;
   List<_Node>? children;
   int request = 0;
+
+  /// The measured size of a folder (null until "Calculate size"), the folder's
+  /// own mtime when it was measured, and whether a measurement is running.
+  DuInfo? du;
+  int duMtime = 0;
+  bool duBusy = false;
   _Node(this.root, this.path, this.name, this.entry, {this.location});
 
   bool get isDir => entry == null || entry!['type'] == 'dir' || entry!['target'] == 'dir';
   String child(String n) => path == '/' ? '/$n' : '$path/$n';
+  int get mtime => (entry?['mtime'] as num?)?.toInt() ?? 0;
+  int get fileSize => (entry?['size'] as num?)?.toInt() ?? 0;
+  String get key => '$root:$path';
 }
 
 class FileTree extends StatefulWidget {
@@ -129,17 +154,24 @@ class _FileTreePage extends StatefulWidget {
 
 class _FileTreePageState extends State<_FileTreePage> {
   final List<_Node> _roots = [];
-  _Node? _selected;
+  _Node? _selected; // the item the folder-level actions (new, upload) refer to
+  _Node? _anchor; // where Shift-click ranges start
+  Set<String> _picked = {}; // keys of every selected row
   bool _hidden = false;
   String? _error;
   bool _loadingRoots = true;
   Set<WorkspacePath> _expanded = {};
   String _folderShape = '';
   final _scroll = ScrollController();
+  final _focus = FocusNode(debugLabel: 'file-tree');
   int _generation = 0;
   bool _treeSet = false;
   Future<void>? _refreshing;
   bool _refreshAgain = false;
+  String? _busy; // a paste or delete in progress, shown in the footer
+  String _sort = 'name';
+  bool _desc = false;
+  bool _foldersFirst = true;
 
   Workspace get ws => widget.ws;
 
@@ -148,11 +180,13 @@ class _FileTreePageState extends State<_FileTreePage> {
     super.initState();
     widget.transfers.addListener(_tick);
     ws.filesRevision.addListener(_onFilesChanged);
+    ws.fileClipboard.addListener(_tick);
     ws.addListener(_onWorkspace);
     final view = ws.viewForProject(widget.projectId);
     _expanded = view.expanded.toSet();
     _treeSet = view.treeSet;
     _folderShape = _shape();
+    _syncSort();
     _loadRoots();
   }
 
@@ -160,8 +194,10 @@ class _FileTreePageState extends State<_FileTreePage> {
   void dispose() {
     widget.transfers.removeListener(_tick);
     ws.filesRevision.removeListener(_onFilesChanged);
+    ws.fileClipboard.removeListener(_tick);
     ws.removeListener(_onWorkspace);
     _scroll.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -177,10 +213,79 @@ class _FileTreePageState extends State<_FileTreePage> {
 
   String _shape() => ws.entry?.workspace(widget.projectId)?.folders.map((f) => '${f.root}:${f.path}').join('|') ?? '';
   void _onWorkspace() {
+    if (_syncSort() && mounted) setState(_resortAll);
     final shape = _shape();
     if (shape == _folderShape) return;
     _folderShape = shape;
     _loadRoots();
+  }
+
+  /// Reads the sort choice from the profile; true when it changed.
+  bool _syncSort() {
+    if (!ws.app.ready) return false;
+    final e = ws.app.profile.editor;
+    final changed = e.fileSort != _sort || e.fileSortDesc != _desc || e.foldersFirst != _foldersFirst;
+    _sort = e.fileSort;
+    _desc = e.fileSortDesc;
+    _foldersFirst = e.foldersFirst;
+    return changed;
+  }
+
+  // ---- sorting ----
+
+  SortItem _item(_Node n) => SortItem(n.name, n.isDir, n.isDir ? n.du?.bytes : n.fileSize, n.mtime);
+
+  void _sortNodes(List<_Node> list) =>
+      list.sort((a, b) => compareSort(_item(a), _item(b), sort: _sort, desc: _desc, foldersFirst: _foldersFirst));
+
+  void _resortAll() {
+    void walk(_Node n) {
+      final c = n.children;
+      if (c == null) return;
+      _sortNodes(c);
+      for (final x in c) {
+        walk(x);
+      }
+    }
+
+    for (final r in _roots) {
+      walk(r);
+    }
+  }
+
+  Future<void> _setSort({String? sort, bool? desc, bool? folders}) async {
+    if (!ws.app.ready) {
+      ws.toast('配置文件不可用，排序无法保存', error: true);
+      return;
+    }
+    try {
+      await ws.app.update((p) {
+        if (sort != null) p.editor.fileSort = sort;
+        if (desc != null) p.editor.fileSortDesc = desc;
+        if (folders != null) p.editor.foldersFirst = folders;
+      });
+    } on Object catch (e) {
+      ws.toast('保存排序方式失败：$e', error: true);
+      return;
+    }
+    if (mounted) {
+      _syncSort();
+      setState(_resortAll);
+    }
+  }
+
+  void _sortMenu(BuildContext ctx) {
+    final box = ctx.findRenderObject() as RenderBox;
+    final at = box.localToGlobal(Offset(0, box.size.height));
+    showMenuAt(ctx, at, [
+      for (final (k, label) in const [('name', '名称'), ('size', '大小'), ('mtime', '修改时间'), ('type', '类型')])
+        MenuItem(label, () => _setSort(sort: k), icon: _sort == k ? Icons.check : null, hint: k == 'size' ? '文件夹需先统计' : null),
+      const MenuItem.separator(),
+      MenuItem('升序', () => _setSort(desc: false), icon: !_desc ? Icons.check : null, hint: '小→大 旧→新 A→Z'),
+      MenuItem('降序', () => _setSort(desc: true), icon: _desc ? Icons.check : null),
+      const MenuItem.separator(),
+      MenuItem('文件夹排在前面', () => _setSort(folders: !_foldersFirst), icon: _foldersFirst ? Icons.check : null),
+    ]);
   }
 
   void _rememberExpansion() {
@@ -206,6 +311,8 @@ class _FileTreePageState extends State<_FileTreePage> {
           ..clear()
           ..addAll(nodes);
         _selected = null;
+        _anchor = null;
+        _picked = {};
         _loadingRoots = false;
         _error = null;
       });
@@ -240,24 +347,21 @@ class _FileTreePageState extends State<_FileTreePage> {
       final r = await link.call('fs.list', {'root': n.root, 'path': n.path, 'hidden': _hidden}) as Map;
       if (!mounted || generation != _generation || n.request != request || hidden != _hidden) return;
       final list = [for (final e in r['entries'] as List) (e as Map).cast<String, dynamic>()];
-      list.sort((a, b) {
-        final da = a['type'] == 'dir' || a['target'] == 'dir', db = b['type'] == 'dir' || b['target'] == 'dir';
-        if (da != db) return da ? -1 : 1;
-        return (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase());
-      });
       final shown = _hidden ? list : list.where((e) => !(e['name'] as String).startsWith('.')).toList();
       // A reload builds new nodes, but a folder the user had open stays open,
       // with what it already showed until it is loaded again: otherwise a
       // refresh would collapse the tree, and the walk in _refreshAll would stop
       // at the first collapsed folder and never reload the ones below it.
       final old = {for (final c in n.children ?? const <_Node>[]) c.name: c};
-      n.children = [
+      final nodes = <_Node>[
         for (final e in shown)
           () {
             final node = _Node(n.root, n.child(e['name'] as String), e['name'] as String, e);
             final was = old[node.name];
             if (was != null && was.isDir == node.isDir) {
               was.entry = e;
+              // a measured size is a snapshot: a changed folder (its own mtime moved) is no longer that size
+              if (was.du != null && was.duMtime != was.mtime) was.du = null;
               return was;
             } else if (node.isDir) {
               node.expanded = _expanded.contains(WorkspacePath(root: node.root, path: node.path));
@@ -265,14 +369,16 @@ class _FileTreePageState extends State<_FileTreePage> {
             return node;
           }()
       ];
+      _sortNodes(nodes);
+      n.children = nodes;
       if (_selected != null) {
         // keep the selection on the node that now stands for the same path
-        for (final c in n.children!) {
-          if (c.root == _selected!.root && c.path == _selected!.path) _selected = c;
+        for (final c in nodes) {
+          if (c.key == _selected!.key) _selected = c;
         }
       }
       if (restore) {
-        for (final c in n.children!.where((c) => c.isDir && c.expanded && c.children == null)) {
+        for (final c in nodes.where((c) => c.isDir && c.expanded && c.children == null)) {
           if (!mounted || generation != _generation) return;
           await _load(c);
         }
@@ -346,6 +452,78 @@ class _FileTreePageState extends State<_FileTreePage> {
     if (dir != null) await _load(dir);
   }
 
+  Iterable<_Node> _allNodes() sync* {
+    Iterable<_Node> walk(_Node n) sync* {
+      yield n;
+      for (final c in n.children ?? const <_Node>[]) {
+        yield* walk(c);
+      }
+    }
+
+    for (final r in _roots) {
+      yield* walk(r);
+    }
+  }
+
+  // ---- selection ----
+
+  void _selectOnly(_Node n) {
+    _selected = n;
+    _anchor = n;
+    _picked = {n.key};
+  }
+
+  /// The selected items that can be acted on (not a project folder's own
+  /// row), without any whose parent folder is selected too.
+  List<_Node> _selectedItems() {
+    final seen = <String>{};
+    final list = [for (final n in _allNodes()) if (n.entry != null && _picked.contains(n.key) && seen.add(n.key)) n];
+    return [
+      for (final n in list)
+        if (!list.any((o) => o.root == n.root && o.path != n.path && isSameOrInside(n.path, o.path))) n
+    ];
+  }
+
+  Iterable<_Node> _visibleNodes(_Node n) sync* {
+    yield n;
+    if (n.expanded) {
+      for (final c in n.children ?? const <_Node>[]) {
+        yield* _visibleNodes(c);
+      }
+    }
+  }
+
+  void _tap(_Node n) {
+    _focus.requestFocus();
+    final kb = HardwareKeyboard.instance;
+    final ctrl = kb.isControlPressed || kb.isMetaPressed;
+    if (kb.isShiftPressed && _anchor != null) {
+      final vis = [for (final r in _roots) ..._visibleNodes(r)];
+      final a = vis.indexWhere((x) => identical(x, _anchor)), b = vis.indexWhere((x) => identical(x, n));
+      if (a >= 0 && b >= 0) {
+        setState(() {
+          _picked = {for (var i = math.min(a, b); i <= math.max(a, b); i++) vis[i].key};
+          _selected = n;
+        });
+        return;
+      }
+    }
+    if (ctrl) {
+      setState(() {
+        if (_picked.contains(n.key)) {
+          _picked.remove(n.key);
+          if (identical(_selected, n)) _selected = _allNodes().where((x) => _picked.contains(x.key)).lastOrNull;
+        } else {
+          _picked.add(n.key);
+          _selected = n;
+        }
+        _anchor = n;
+      });
+      return;
+    }
+    _open(n);
+  }
+
   // ---- operations ----
 
   Future<void> _mkdir(_Node dir) async {
@@ -365,25 +543,66 @@ class _FileTreePageState extends State<_FileTreePage> {
     if (ok != null) ws.openTab(fileEditorTab(ws, root: dir.root, path: dir.child(name)));
   }
 
+  /// An open tab with unsaved text under [path]: renaming, moving or deleting
+  /// the file would leave that text with nowhere to be saved.
+  bool _hasUnsaved(String root, String path) =>
+      ws.tabs.any((t) => t.dirty.value && (t.id == 'file:$root:$path' || t.id.startsWith('file:$root:$path/')));
+
+  void _warnUnsaved() => ws.toast('这里有打开的文件还没保存，先保存或关闭它再操作', error: true);
+
   Future<void> _rename(_Node n) async {
+    if (n.entry == null) return;
+    if (_hasUnsaved(n.root, n.path)) return _warnUnsaved();
     final to = await askText(context, title: '重命名', initial: n.name);
     if (to == null || to.isEmpty || to == n.name) return;
-    final parent = n.path.substring(0, n.path.lastIndexOf('/'));
-    final dest = parent.isEmpty ? '/$to' : '$parent/$to';
-    await ws.guard(() => ws.link!.call('fs.rename', {'root': n.root, 'path': n.path, 'to': dest}));
-    ws.dropTabs((t) => t.id == 'file:${n.root}:${n.path}');
+    if (to.contains('/')) return ws.toast('名称里不能有 /', error: true);
+    final dest = joinPath(parentPath(n.path), to);
+    final wasOpen = !n.isDir && ws.tab('file:${n.root}:${n.path}') != null;
+    final ok = await ws.guard(() => ws.link!.call('fs.rename', {'root': n.root, 'path': n.path, 'to': dest}));
+    if (ok == null) return;
+    ws.dropTabs((t) => t.id == 'file:${n.root}:${n.path}' || t.id.startsWith('file:${n.root}:${n.path}/'));
+    if (wasOpen) ws.openTab(fileEditorTab(ws, root: n.root, path: dest)); // keep working on the renamed file
     await _reload(n);
+    if (mounted) setState(() => _picked.remove(n.key));
   }
 
-  Future<void> _delete(_Node n) async {
-    final dir = n.entry?['type'] == 'dir';
+  Future<void> _deleteItems(List<_Node> items) async {
+    if (items.isEmpty) return;
+    if (items.any((n) => _hasUnsaved(n.root, n.path))) return _warnUnsaved();
+    final dirs = items.any((n) => n.entry?['type'] == 'dir');
     final ok = await confirmDialog(context,
-        title: '删除 ${n.name}？', body: dir ? '文件夹和里面的所有内容都会被删除，不能恢复。' : '删除后不能恢复。', ok: '删除', danger: true);
-    if (!ok) return;
-    await ws.guard(() => ws.link!.call('fs.delete', {'root': n.root, 'path': n.path, 'recursive': dir}));
-    ws.dropTabs((t) => t.id == 'file:${n.root}:${n.path}' || t.id.startsWith('file:${n.root}:${n.path}/'));
-    if (identical(_selected, n)) _selected = null;
-    await _reload(n);
+        title: items.length == 1 ? '删除 ${items.first.name}？' : '删除这 ${items.length} 项？',
+        body: dirs ? '文件夹和里面的所有内容都会被删除，不能恢复。' : '删除后不能恢复。',
+        ok: '删除',
+        danger: true);
+    if (!ok || !mounted) return;
+    final errors = <String>[];
+    var done = 0;
+    setState(() => _busy = '正在删除…');
+    try {
+      for (var i = 0; i < items.length; i++) {
+        final n = items[i];
+        if (mounted) setState(() => _busy = '正在删除（${i + 1}/${items.length}）${n.name}');
+        try {
+          await ws.link!.call('fs.delete', {'root': n.root, 'path': n.path, 'recursive': n.entry?['type'] == 'dir'}, const Duration(minutes: 10));
+          ws.dropTabs((t) => t.id == 'file:${n.root}:${n.path}' || t.id.startsWith('file:${n.root}:${n.path}/'));
+          done++;
+        } on OpError catch (e) {
+          errors.add('${n.name}：${e.message}');
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = null;
+          _picked = {};
+          _selected = null;
+        });
+      }
+    }
+    if (errors.isNotEmpty) ws.toast('${errors.first}${errors.length > 1 ? '（另有 ${errors.length - 1} 项失败）' : ''}', error: true);
+    if (done > 0 && errors.isEmpty && items.length > 1) ws.toast('已删除 $done 项');
+    await _refreshAll();
   }
 
   Future<void> _upload(_Node dir) async {
@@ -435,7 +654,7 @@ class _FileTreePageState extends State<_FileTreePage> {
       downloadRemoteFile(ws, root: n.root, path: n.path, size: (n.entry?['size'] as num?)?.toInt() ?? 0);
 
   void _open(_Node n) {
-    setState(() => _selected = n);
+    setState(() => _selectOnly(n));
     if (n.isDir) {
       _expand(n, !n.expanded);
     } else {
@@ -443,9 +662,200 @@ class _FileTreePageState extends State<_FileTreePage> {
     }
   }
 
+  // ---- clipboard ----
+
+  void _copy({bool cut = false, List<_Node>? nodes}) {
+    final items = nodes ?? _selectedItems();
+    if (items.isEmpty) return;
+    if (cut && items.any((n) => _hasUnsaved(n.root, n.path))) return _warnUnsaved();
+    ws.fileClipboard.value = FileClipboard([for (final n in items) ClipItem(n.root, n.path, n.isDir)], cut: cut);
+    final what = items.length == 1 ? items.first.name : '${items.length} 项';
+    ws.toast(cut ? '已剪切 $what，到目标文件夹里选“粘贴”' : '已复制 $what，到目标文件夹里选“粘贴”');
+  }
+
+  bool _crossRootOk() {
+    final v = ws.link?.server.version ?? '';
+    if (parseVersion(v) == null) return true; // a development build is the newest
+    return (compareVersions(v, crossRootAgent) ?? -1) >= 0;
+  }
+
+  Future<ConflictChoice?> _askConflict(String name, bool isDir, {required bool more}) {
+    final ide = Ide.of(context);
+    var all = false;
+    return showDialog<ConflictChoice>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: Text('目标文件夹里已有「$name」'),
+          content: SizedBox(
+            width: 400,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(isDir ? '“替换”用这个文件夹整个换掉旧的，旧的要等新的完整复制好之后才删除；“保留两者”会给新的加上“副本”。' : '“替换”用这个文件换掉旧的；“保留两者”会给新的加上“副本”。'),
+              if (more)
+                CheckboxListTile(
+                  value: all,
+                  onChanged: (v) => set(() => all = v == true),
+                  title: const Text('对剩下的同名项都这样处理'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, ConflictChoice(Conflict.skip, all: all)), child: Text('跳过', style: TextStyle(color: ide.textDim))),
+            OutlinedButton(onPressed: () => Navigator.pop(c, ConflictChoice(Conflict.keepBoth, all: all)), child: const Text('保留两者')),
+            FilledButton(style: FilledButton.styleFrom(backgroundColor: ide.error), onPressed: () => Navigator.pop(c, ConflictChoice(Conflict.replace, all: all)), child: const Text('替换')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The folder Paste goes into for a row: the folder itself, or a file's folder.
+  _Node? _pasteTargetFor(_Node? n) => n == null ? _target : (n.isDir ? n : (_findParent(n) ?? _target));
+
+  Future<void> _paste([_Node? onto]) async {
+    final clip = ws.fileClipboard.value;
+    final dest = _pasteTargetFor(onto);
+    if (clip == null || dest == null) return;
+    await _runPaste(clip.items, clip.cut, dest);
+  }
+
+  Future<void> _duplicate(_Node n) async {
+    final parent = _findParent(n);
+    if (parent == null || n.entry == null) return;
+    await _runPaste([ClipItem(n.root, n.path, n.isDir)], false, parent);
+  }
+
+  Future<void> _runPaste(List<ClipItem> items, bool cut, _Node dest) async {
+    final link = ws.link;
+    if (link == null || _busy != null) return;
+    if (items.any((i) => i.root != dest.root) && !_crossRootOk()) {
+      ws.toast('在不同根目录之间复制或移动，需要服务器上的 agent 升级到 $crossRootAgent 或更高', error: true);
+      return;
+    }
+    if (cut && items.any((i) => _hasUnsaved(i.root, i.path))) return _warnUnsaved();
+    setState(() => _busy = '正在准备粘贴…');
+    PasteResult? res;
+    try {
+      // the real names in the destination, hidden ones included: a taken name is a conflict
+      final listing = await ws.guard(() => link.call('fs.list', {'root': dest.root, 'path': dest.path, 'hidden': true})) as Map?;
+      if (listing == null) return;
+      final existing = {for (final e in listing['entries'] as List) (e as Map)['name'] as String};
+      res = await pasteItems(
+        call: (op, args) => link.call(op, args, op == 'fs.copy' || op == 'fs.delete' ? const Duration(minutes: 30) : const Duration(seconds: 60)),
+        items: items,
+        cut: cut,
+        destRoot: dest.root,
+        destDir: dest.path,
+        existing: existing,
+        resolve: (name, isDir, {required more}) async => mounted ? _askConflict(name, isDir, more: more) : null,
+        onProgress: (i, total, name) {
+          if (mounted) setState(() => _busy = '${cut ? '正在移动' : '正在复制'}${total > 1 ? '（${i + 1}/$total）' : ''} $name');
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+    if (!mounted) return;
+    for (final m in res.moved) {
+      ws.dropTabs((t) => t.id == 'file:${m.root}:${m.path}' || t.id.startsWith('file:${m.root}:${m.path}/'));
+    }
+    if (cut && res.moved.isNotEmpty) {
+      // what was moved is gone from the old place: it cannot be pasted again
+      final left = [for (final i in items) if (!res.moved.any((m) => m.root == i.root && m.path == i.path)) i];
+      ws.fileClipboard.value = left.isEmpty ? null : FileClipboard(left, cut: true);
+    }
+    await _expand(dest, true);
+    await _refreshAll();
+    final verb = cut ? '移动' : '复制';
+    if (res.errors.isNotEmpty) {
+      ws.toast('${res.errors.first}${res.errors.length > 1 ? '（另有 ${res.errors.length - 1} 项失败）' : ''}', error: true);
+    } else if (res.done > 0) {
+      ws.toast('已$verb ${res.done} 项${res.skipped > 0 ? '，跳过 ${res.skipped} 项' : ''}');
+    } else if (res.skipped > 0 && !res.stopped) {
+      ws.toast(cut ? '这些项已经在这个文件夹里了' : '没有$verb任何项');
+    }
+  }
+
+  // ---- folder sizes ----
+
+  Future<DuResult> _du(_Node d) async {
+    final r = await ws.link!.call('fs.du', {'root': d.root, 'path': d.path, 'children': true, 'timeout_ms': 30000}, const Duration(seconds: 75)) as Map;
+    return parseDu(r.cast<String, dynamic>());
+  }
+
+  /// Stores a measurement on the folder and on each folder directly under it.
+  void _applyDu(_Node d, DuResult r) {
+    d.du = r.total;
+    d.duMtime = d.mtime;
+    for (final c in d.children ?? const <_Node>[]) {
+      final info = c.isDir ? r.children[c.name] : null;
+      if (info != null) {
+        c.du = info;
+        c.duMtime = c.mtime;
+      }
+    }
+    if (_sort == 'size') _resortAll();
+  }
+
+  Future<void> _measure(List<_Node> dirs) async {
+    for (final d in dirs) {
+      if (d.duBusy || !mounted) continue;
+      setState(() => d.duBusy = true);
+      try {
+        final r = await _du(d);
+        if (!mounted) return;
+        setState(() => _applyDu(d, r));
+        if (r.total.partial) ws.toast('「${d.name}」太大，统计超时，显示的是已统计到的部分', error: true);
+      } on OpError catch (e) {
+        ws.toast(e.message, error: true);
+      } finally {
+        if (mounted) setState(() => d.duBusy = false);
+      }
+    }
+  }
+
+  void _properties(_Node n) {
+    showFileInfo(
+      context,
+      root: n.root,
+      path: n.path,
+      entry: n.entry,
+      isDir: n.isDir,
+      du: n.du,
+      measure: n.isDir ? () => _du(n) : null,
+      onMeasured: (r) {
+        if (mounted) setState(() => _applyDu(n, r));
+      },
+    );
+  }
+
+  // ---- menu and keys ----
+
+  List<MenuItem> _multiMenu() {
+    final items = _selectedItems();
+    final dirs = items.where((n) => n.isDir).toList();
+    return [
+      MenuItem('复制 ${items.length} 项', () => _copy(), icon: Icons.content_copy_outlined, hint: 'Ctrl+C'),
+      MenuItem('剪切 ${items.length} 项', () => _copy(cut: true), icon: Icons.content_cut, hint: 'Ctrl+X'),
+      if (dirs.isNotEmpty) MenuItem('计算文件夹大小', () => _measure(dirs), icon: Icons.data_usage_rounded),
+      const MenuItem.separator(),
+      MenuItem('删除 ${items.length} 项…', () => _deleteItems(items), icon: Icons.delete_outline, danger: true, hint: 'Delete'),
+      const MenuItem.separator(),
+      MenuItem('取消选择', () => setState(() {
+            _picked = {};
+            _selected = null;
+          }), icon: Icons.deselect),
+    ];
+  }
+
   List<MenuItem> _menu(_Node n) {
+    if (_picked.length > 1 && _picked.contains(n.key) && _selectedItems().length > 1) return _multiMenu();
     final dir = n.isDir;
     final isRoot = n.entry == null;
+    final clip = ws.fileClipboard.value;
     return [
       if (dir) MenuItem('新建文件…', () => _newFile(n), icon: Icons.note_add_outlined),
       if (dir) MenuItem('新建文件夹…', () => _mkdir(n), icon: Icons.create_new_folder_outlined),
@@ -455,15 +865,51 @@ class _FileTreePageState extends State<_FileTreePage> {
       if (!dir) MenuItem('打开', () => _open(n), icon: Icons.edit_note),
       if (!dir) MenuItem('下载…', () => _download(n), icon: Icons.download),
       const MenuItem.separator(),
+      if (!isRoot) MenuItem('复制', () => _copy(nodes: [n]), icon: Icons.content_copy_outlined, hint: 'Ctrl+C'),
+      if (!isRoot) MenuItem('剪切', () => _copy(cut: true, nodes: [n]), icon: Icons.content_cut, hint: 'Ctrl+X'),
+      if (dir || clip != null)
+        MenuItem(dir ? '粘贴到这里' : '粘贴到同一文件夹', clip == null ? null : () => _paste(n), icon: Icons.content_paste, hint: 'Ctrl+V'),
+      if (!isRoot) MenuItem('创建副本', () => _duplicate(n), icon: Icons.file_copy_outlined),
+      const MenuItem.separator(),
       MenuItem('复制路径', () => copyText(n.path, what: '已复制路径'), icon: Icons.copy),
       if (dir) MenuItem('刷新', () => _load(n), icon: Icons.refresh),
+      if (dir) MenuItem(n.du == null ? '计算大小' : '重新计算大小', n.duBusy ? null : () => _measure([n]), icon: Icons.data_usage_rounded),
       if (isRoot && widget.projectId.isNotEmpty) MenuItem('从工作区移除文件夹', () => ws.removeFolder(WorkspacePath(root: n.root, path: n.path)), icon: Icons.folder_off_outlined),
+      MenuItem('属性…', () => _properties(n), icon: Icons.info_outline),
       if (!isRoot) ...[
         const MenuItem.separator(),
-        MenuItem('重命名…', () => _rename(n), icon: Icons.drive_file_rename_outline),
-        MenuItem('删除…', () => _delete(n), icon: Icons.delete_outline, danger: true),
+        MenuItem('重命名…', () => _rename(n), icon: Icons.drive_file_rename_outline, hint: 'F2'),
+        MenuItem('删除…', () => _deleteItems([n]), icon: Icons.delete_outline, danger: true, hint: 'Delete'),
       ],
     ];
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent || _busy != null) return KeyEventResult.ignored;
+    final kb = HardwareKeyboard.instance;
+    final ctrl = kb.isControlPressed || kb.isMetaPressed;
+    final k = e.logicalKey;
+    if (ctrl && k == LogicalKeyboardKey.keyC) {
+      _copy();
+    } else if (ctrl && k == LogicalKeyboardKey.keyX) {
+      _copy(cut: true);
+    } else if (ctrl && k == LogicalKeyboardKey.keyV) {
+      _paste();
+    } else if (k == LogicalKeyboardKey.f2) {
+      final items = _selectedItems();
+      if (items.length == 1) _rename(items.first);
+    } else if (k == LogicalKeyboardKey.delete) {
+      _deleteItems(_selectedItems());
+    } else if (k == LogicalKeyboardKey.escape) {
+      if (ws.fileClipboard.value != null) {
+        ws.fileClipboard.value = null;
+      } else {
+        setState(() => _picked = _selected == null ? {} : {_selected!.key});
+      }
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
   }
 
   // ---- build ----
@@ -483,6 +929,82 @@ class _FileTreePageState extends State<_FileTreePage> {
     }
   }
 
+  /// "12 KB", a folder's measured size, and the time when the list is sorted by it.
+  String? _detail(_Node n) {
+    if (n.entry == null) return null;
+    final parts = <String>[];
+    if (n.isDir) {
+      if (n.duBusy) {
+        parts.add('计算中…');
+      } else if (n.du != null) {
+        parts.add('${n.du!.partial ? '≥ ' : ''}${formatSize(n.du!.bytes)}');
+      }
+    } else {
+      parts.add(formatSize(n.fileSize));
+    }
+    if (_sort == 'mtime' && n.mtime > 0) parts.add(formatShortTime(n.mtime));
+    return parts.isEmpty ? null : parts.join('  ');
+  }
+
+  String _tooltip(_Node n) {
+    final e = n.entry;
+    if (e == null) return n.location ?? n.path;
+    final lines = [n.path];
+    if (!n.isDir) {
+      lines.add('大小 ${formatSize(n.fileSize)}（${n.fileSize} 字节）');
+    } else if (n.du != null) {
+      lines.add('大小 ${n.du!.partial ? '至少 ' : ''}${formatSize(n.du!.bytes)} · ${n.du!.files} 个文件');
+    }
+    if (n.mtime > 0) lines.add('修改 ${formatTime(n.mtime)}');
+    if (e['mode'] != null) lines.add('权限 ${e['mode']}${(e['owner'] as String? ?? '').isEmpty ? '' : '  ${e['owner']}:${e['group'] ?? ''}'}');
+    return lines.join('\n');
+  }
+
+  Widget _footer(Ide ide) {
+    final clip = ws.fileClipboard.value;
+    final sel = _selectedItems();
+    if (_busy == null && clip == null && sel.length < 2) return const SizedBox.shrink();
+    Widget content;
+    if (_busy != null) {
+      content = Row(children: [
+        const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.6)),
+        const SizedBox(width: 8),
+        Expanded(child: Text(_busy!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: ide.textDim))),
+      ]);
+    } else {
+      final parts = <String>[];
+      if (sel.length > 1) {
+        var total = 0, unknown = 0;
+        for (final n in sel) {
+          if (n.isDir) {
+            n.du == null ? unknown++ : total += n.du!.bytes;
+          } else {
+            total += n.fileSize;
+          }
+        }
+        parts.add('已选 ${sel.length} 项 · ${formatSize(total)}${unknown > 0 ? '（另有 $unknown 个文件夹未统计）' : ''}');
+      }
+      if (clip != null) parts.add('${clip.cut ? '已剪切' : '已复制'} ${clip.items.length} 项');
+      content = Row(children: [
+        Expanded(child: Text(parts.join('　'), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: ide.textDim, height: 1.35))),
+        if (clip != null) ...[
+          TextButton(
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 8)),
+            onPressed: () => _paste(),
+            child: const Text('粘贴', style: TextStyle(fontSize: 12)),
+          ),
+          IconBtn(Icons.close, '清除剪贴板', () => ws.fileClipboard.value = null, size: 14),
+        ],
+      ]);
+    }
+    return Container(
+      key: const ValueKey('file-footer'),
+      padding: const EdgeInsets.fromLTRB(10, 3, 4, 3),
+      decoration: BoxDecoration(color: ide.sideBar, border: Border(top: BorderSide(color: ide.border))),
+      child: content,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
@@ -490,6 +1012,7 @@ class _FileTreePageState extends State<_FileTreePage> {
     if (_loadingRoots) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
     final target = _target;
     final rows = [for (final r in _roots) ..._rows(r, 0)];
+    final clip = ws.fileClipboard.value;
     return Column(children: [
       Container(
         height: 30,
@@ -499,11 +1022,16 @@ class _FileTreePageState extends State<_FileTreePage> {
           IconBtn(Icons.note_add_outlined, '新建文件', target == null ? null : () => _newFile(target)),
           IconBtn(Icons.create_new_folder_outlined, '新建文件夹', target == null ? null : () => _mkdir(target)),
           IconBtn(Icons.upload_file, '上传', target == null ? null : () => _upload(target)),
+          if (clip != null) IconBtn(Icons.content_paste, '粘贴到选中的文件夹（Ctrl+V）', _busy != null ? null : () => _paste(), color: ide.accent),
           IconBtn(_hidden ? Icons.visibility : Icons.visibility_off_outlined, _hidden ? '隐藏以 . 开头的文件' : '显示隐藏文件', () {
             setState(() => _hidden = !_hidden);
             _refreshAll();
           }, color: _hidden ? ide.accent : null),
           const Spacer(),
+          IconBtn(Icons.data_usage_rounded, '计算选中文件夹的大小（同时显示它下面各文件夹的大小）',
+              target == null || target.duBusy ? null : () => _measure([target])),
+          Builder(builder: (ctx) => IconBtn(Icons.sort_rounded, '排序：${const {'name': '名称', 'size': '大小', 'mtime': '修改时间', 'type': '类型'}[_sort]}${_desc ? '（降序）' : ''}', () => _sortMenu(ctx),
+              color: _sort != 'name' || _desc ? ide.accent : null)),
           IconBtn(Icons.refresh, '刷新', _refreshAll),
         ]),
       ),
@@ -514,17 +1042,28 @@ class _FileTreePageState extends State<_FileTreePage> {
           ? EmptyHint(icon: Icons.folder_open_outlined, text: widget.projectId.isEmpty ? '服务器没有可用的根目录' : '工作区里还没有文件夹',
               actionLabel: widget.projectId.isEmpty ? '刷新' : '添加远程文件夹',
               onAction: widget.projectId.isEmpty ? _loadRoots : () => addProjectFolder(context, ws))
-          : ListView.builder(controller: _scroll, itemCount: rows.length, itemBuilder: (context, i) {
-            final row = rows[i], n = rows[i].node;
-            if (row.note != null) { return Padding(padding: EdgeInsets.only(left: 30 + row.depth * 18.0, top: 5, bottom: 5),
-              child: Text(row.note!, style: TextStyle(fontSize: 11, color: n.error == null ? ide.textDim : ide.error))); }
-            return FileTreeRow(key: ObjectKey(n), name: n.name, path: n.path, depth: row.depth,
-              folder: n.isDir, expanded: n.expanded, loading: n.loading, selected: identical(_selected, n),
-              root: n.entry == null, location: n.location, link: n.entry?['type'] == 'link',
-              detail: n.isDir ? null : formatSize((n.entry!['size'] as num?) ?? 0), onTap: () => _open(n),
-              menu: () { setState(() => _selected = n); return _menu(n); });
-          }),
+          : Focus(
+              focusNode: _focus,
+              onKeyEvent: _onKey,
+              child: ListView.builder(controller: _scroll, itemCount: rows.length, itemBuilder: (context, i) {
+                final row = rows[i], n = rows[i].node;
+                if (row.note != null) { return Padding(padding: EdgeInsets.only(left: 30 + row.depth * 18.0, top: 5, bottom: 5),
+                  child: Text(row.note!, style: TextStyle(fontSize: 11, color: n.error == null ? ide.textDim : ide.error))); }
+                return FileTreeRow(key: ObjectKey(n), name: n.name, path: n.path, depth: row.depth,
+                  folder: n.isDir, expanded: n.expanded, loading: n.loading, selected: _picked.contains(n.key),
+                  root: n.entry == null, location: n.location, link: n.entry?['type'] == 'link',
+                  dimmed: clip != null && clip.cut && clip.contains(n.root, n.path),
+                  tooltip: _tooltip(n), detail: _detail(n), onTap: () => _tap(n),
+                  menu: () {
+                    // right-click on a row inside a multi-selection keeps it; elsewhere it selects just that row
+                    _focus.requestFocus();
+                    if (!(_picked.length > 1 && _picked.contains(n.key))) setState(() => _selectOnly(n));
+                    return _menu(n);
+                  });
+              }),
+            ),
       ),
+      _footer(ide),
       if (widget.transfers.list.isNotEmpty) _TransferList(transfers: widget.transfers),
     ]);
   }

@@ -181,6 +181,7 @@ type fsArgs struct {
 	Root      string `json:"root"`
 	Path      string `json:"path"`
 	To        string `json:"to"`
+	ToRoot    string `json:"to_root"` // fs.copy: the destination root (default: the source's)
 	Hidden    bool   `json:"hidden"`
 	Recursive bool   `json:"recursive"`
 	Content   string `json:"content"`
@@ -518,45 +519,87 @@ func (s *Env) fsCopy(ctx context.Context, raw json.RawMessage) (any, error) {
 	if rel == "." || validName(to) != nil {
 		return nil, wire.Errf(wire.CodeBadRequest, "不能复制根目录或使用无效名称")
 	}
-	if to == rel || strings.HasPrefix(to+"/", rel+"/") {
+	// The destination may be in another root. When both roots are one
+	// directory a single handle serves both.
+	dstRoot := root
+	toID := a.ToRoot
+	if toID == "" {
+		toID = a.Root
+	} else {
+		// rootPath falls back to the first root for an unknown id; opening the
+		// root refuses it instead of copying somewhere unintended.
+		dr, err := s.openRoot(toID)
+		if err != nil {
+			return nil, err
+		}
+		defer dr.Close()
+		dstRoot = dr
+	}
+	srcAbs := filepath.Join(rootPath(s, a.Root), rel)
+	dstAbs := filepath.Join(rootPath(s, toID), to)
+	if dstAbs == srcAbs || strings.HasPrefix(dstAbs+"/", srcAbs+"/") {
 		return nil, wire.Errf(wire.CodeBadRequest, "不能复制到自身或其子目录中")
 	}
 	src, err := root.Lstat(rel)
 	if err != nil {
 		return nil, fsErr(err)
 	}
-	if _, err := root.Lstat(to); err == nil {
+	if _, err := dstRoot.Lstat(to); err == nil {
 		return nil, wire.Errf(wire.CodeConflict, "目标位置已存在同名文件或目录")
 	}
-	if pfi, err := root.Stat(path.Dir(to)); err != nil || !pfi.IsDir() {
+	if pfi, err := dstRoot.Stat(path.Dir(to)); err != nil || !pfi.IsDir() {
 		return nil, wire.Errf(wire.CodeNotFound, "目标目录不存在")
 	}
-	if err := copyTree(ctx, root, rel, to, src); err != nil {
-		_ = root.RemoveAll(to) // do not leave a half copy behind
+	if err := copyTree(ctx, root, dstRoot, rel, to, src, 0); err != nil {
+		_ = dstRoot.RemoveAll(to) // do not leave a half copy behind
 		return nil, fsErr(err)
 	}
-	s.Audit.Write("fs.copy", map[string]any{"root": a.Root, "from": rel, "to": to})
+	s.Audit.Write("fs.copy", map[string]any{"root": a.Root, "from": rel, "to_root": toID, "to": to})
 	return map[string]any{"path": "/" + to}, nil
 }
 
-// copyTree copies src (described by fi) to dst inside root. Symbolic links are
-// copied as links, not followed; special files are refused.
-func copyTree(ctx context.Context, root *os.Root, src, dst string, fi fs.FileInfo) error {
+const maxCopyDepth = 64
+
+// keepMeta gives the copy the source's owner (the agent is usually root and
+// would otherwise own every copy), permission bits and modification time.
+func keepMeta(dst *os.Root, name string, fi fs.FileInfo, link bool) {
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok && os.Geteuid() == 0 {
+		_ = dst.Lchown(name, int(st.Uid), int(st.Gid))
+	}
+	if link {
+		return
+	}
+	_ = dst.Chmod(name, fi.Mode().Perm())
+	_ = dst.Chtimes(name, fi.ModTime(), fi.ModTime())
+}
+
+// copyTree copies src (described by fi) from the root srcRoot to dst in dstRoot
+// (the same handle for a copy inside one root). Symbolic links are copied as
+// links, not followed; special files are refused.
+func copyTree(ctx context.Context, srcRoot, dstRoot *os.Root, src, dst string, fi fs.FileInfo, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if depth > maxCopyDepth {
+		return wire.Errf(wire.CodeBadRequest, "目录层级太深（超过 %d 层），可能含有循环链接", maxCopyDepth)
+	}
 	switch {
 	case fi.Mode()&fs.ModeSymlink != 0:
-		target, err := root.Readlink(src)
+		target, err := srcRoot.Readlink(src)
 		if err != nil {
 			return err
 		}
-		return root.Symlink(target, dst)
-	case fi.IsDir():
-		if err := root.Mkdir(dst, fi.Mode().Perm()); err != nil {
+		if err := dstRoot.Symlink(target, dst); err != nil {
 			return err
 		}
-		d, err := root.Open(src)
+		keepMeta(dstRoot, dst, fi, true)
+		return nil
+	case fi.IsDir():
+		// Owner-writable while filling, so a read-only source folder can be copied.
+		if err := dstRoot.Mkdir(dst, fi.Mode().Perm()|0o700); err != nil {
+			return err
+		}
+		d, err := srcRoot.Open(src)
 		if err != nil {
 			return err
 		}
@@ -566,22 +609,23 @@ func copyTree(ctx context.Context, root *os.Root, src, dst string, fi fs.FileInf
 			return err
 		}
 		for _, e := range entries {
-			child, err := root.Lstat(path.Join(src, e.Name()))
+			child, err := srcRoot.Lstat(path.Join(src, e.Name()))
 			if err != nil {
 				return err
 			}
-			if err := copyTree(ctx, root, path.Join(src, e.Name()), path.Join(dst, e.Name()), child); err != nil {
+			if err := copyTree(ctx, srcRoot, dstRoot, path.Join(src, e.Name()), path.Join(dst, e.Name()), child, depth+1); err != nil {
 				return err
 			}
 		}
+		keepMeta(dstRoot, dst, fi, false) // after the children: they change the folder's mtime
 		return nil
 	case fi.Mode().IsRegular():
-		in, err := root.Open(src)
+		in, err := srcRoot.Open(src)
 		if err != nil {
 			return err
 		}
 		defer in.Close()
-		out, err := root.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fi.Mode().Perm())
+		out, err := dstRoot.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fi.Mode().Perm()|0o200)
 		if err != nil {
 			return err
 		}
@@ -589,7 +633,11 @@ func copyTree(ctx context.Context, root *os.Root, src, dst string, fi fs.FileInf
 			out.Close()
 			return err
 		}
-		return out.Close()
+		if err := out.Close(); err != nil {
+			return err
+		}
+		keepMeta(dstRoot, dst, fi, false)
+		return nil
 	default:
 		return wire.Errf(wire.CodeBadRequest, "不能复制这种特殊文件")
 	}

@@ -353,11 +353,16 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
   - APK SHA-256：arm64-v8a `67cd75903622e72eaa0e9714df83af928cca21f084089bff456a33cb0e32446d`；armeabi-v7a `6a2480f8eea25209cebc85762da3355191b99f421814b7c11299e7ee8439181d`；x86_64 `9994f841658163d5eeceefd5a7bd34fd316e325ea6c49f368d190adc195cf728`。证书与之前相同（`db59a41d…1554882`），包内 agent 与 Windows 包逐字节一致，未检出本机路径、用户名、测试服务器地址。
   - APK 里还没有带 Aurora 自己的 LICENSE 文本（仓库和 Release 页有）；篡改拒绝测试未在本次重打后重复；Android 仍未在真机或模拟器上运行。
 
-### 未发布：界面重做（2026-11-12）
+### 3.9.0 界面重做（2026-11-12）
 
 - 见 DESIGN D-103。只改客户端：`theme/ide_theme.dart`（设计令牌与 Material 主题）、`kernel/shell.dart`（岛式布局、标题栏、活动栏、标签、欢迎页、状态栏、服务器下拉、空首页、手机布局）、`kernel/widgets.dart`（列表行、分组标题、空状态、菜单、提示条，新增浮层选择器与键帽）、`kernel/palette.dart` 和 `features/search/quick_open.dart`（新选择器）。
 - 测试：`flutter analyze` 无问题；`app` 全量 135 项通过（20 项跳过，其中 5 项是只在设置 `AURORA_SHOTS` 时运行的截图测试），`aurora_profile` 38 项通过。
 - 截图：用 `ui_shots_test.dart` 渲染了 14 张（宽屏深/浅色的欢迎页、文件树、编辑器、命令面板、服务器下拉；中等宽度和侧栏浮层；手机；没有服务器的首页），逐张看过。修正了截图里发现的问题：键帽单边粗边框在 Flutter 里不能配圆角（改用阴影做底边）、主题的文字样式丢了字体、欢迎页副标题在系统名为空时多出一个分隔点、手机底部导航文字挤在一起（改为只显示选中项的文字）。
 - 第二轮：自绘标题栏（原生 `win32_window.cpp`、`flutter_window.cpp` 与 `kernel/window_frame.dart`），监控仪表盘，概览页、设置页、添加服务器页重做，共用 `FormPage`/`FormSection`/`FormRow`/`SmallSwitch`/`Notice`，git 分支行与储藏数的用词修正。截图测试改为给每个面板喂假数据并按无标题栏渲染，一次出 33 张（深浅色各自的欢迎页、编辑器、命令面板、服务器下拉、6 个侧栏面板、监控两帧、概览、设置；中等宽度、手机、空首页、添加服务器页），逐张看过。截图里发现并修正：窗口按钮的悬停提示在 Navigator 之外会报错（真实窗口也会），改用无障碍标签；添加服务器页的勾选行需要 Material 底；关闭状态的开关太淡。
 - 验证：`flutter analyze` 无问题；`app` 135 项通过（20 项跳过，其中 5 项是截图测试），`aurora_profile` 38 项通过；`flutter build windows --release` 编译通过（原生代码无错误）。
-- 未验证：没有在真实 Windows 窗口里试过自绘标题栏（拖动、双击最大化、顶边改变大小、贴边、多显示器不同 DPI、Windows 10 顶边），因为本机正在运行 3.8.0，单实例锁会把新启动的程序转到它；截图是测试环境渲染的；没在 Android 设备上看过。尚未打包、发布。
+- 未验证：没有在真实 Windows 窗口里试过自绘标题栏（拖动、双击最大化、顶边改变大小、贴边、多显示器不同 DPI、Windows 10 顶边），因为本机正在运行 3.8.0，单实例锁会把新启动的程序转到它；截图是测试环境渲染的；没在 Android 设备上看过。
+- 打包（源提交 `4ef1173`，同一个 `-Version 3.9.0` 出 Windows 包和 3 个 APK，versionCode 31900/32900/34900）：Windows 文件夹带 `LICENSE`、`NOTICE`、`LICENSES.txt`；APK 里也带了这三个文件（`assets/flutter_assets/assets/legal/`，与源文件逐字节一致，三个 APK 都验过）。
+  - Windows ZIP：24,952,377 字节，SHA-256 `bda52deabf127aab69136e49cd1036f2433f67ba7a4cb069af4d20c0791966c3`；agent 用发布密钥 `87828dfb18459372` 验签通过。
+  - APK SHA-256：arm64-v8a `ea7b2c58870d5bbca920af6ee4c79d5ce9de0c79cee0efede5819d55fa860e12`；armeabi-v7a `b9a106927aaaa384dde3b09fc2e39a6c49a14c3504466ff53c57ce6d7b3e65c2`；x86_64 `842c5df7cb0101245f374b540c42aa1771b86ed712c96a5b08546ff988c8d3e7`。证书 SHA-256 与之前相同（`db59a41d…1554882`），三个 APK 里的 agent、清单、策略与 Windows 包逐字节一致，敏感字符串命中 0。
+  - 构建经过：第一次在全新的 git worktree 里打 APK，`pdfium_dart` 的构建钩子要联网下载 pdfium，TLS 握手被断开，卡了 16 小时后失败；改在带缓存的主仓库里只跑 APK 步骤（同一提交、工作区干净），133 秒完成。Windows 包来自前一次构建。
+  - 未重复：篡改拒绝测试；Android 仍未在真机或模拟器上运行。

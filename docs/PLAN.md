@@ -393,3 +393,13 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 打包与归档（源提交 `4acd381`，`-Version 3.10.1`，已归档至 `release3\Aurora-3.10.1`；2026-11-13 已发布为 GitHub Release `v3.10.1`（ZIP、sidecar、3 个 APK、`SHA256SUMS.txt` 共 6 个文件，重新下载后逐个与本地一致），同时删除了废弃的 `v3.5.0`、`v3.5.1` Release 与标签）：
   - Windows ZIP：25,312,615 字节，SHA-256 `de94baeba7c799aa04dd8d630d0953ab979f8ca6a96bea17dc6052eff781e8ca`，sidecar 一致，30 个文件与目录逐字节一致；文件/产品版本 3.10.1；内置 `aurora3-agent-3.10.1-linux-amd64` SHA-256 `3eced00a35d7c7704f77f0e6083f7f03f8ee11687afba5dd4196c04af9b91968`，发布密钥 `87828dfb18459372` 验签及副本字节篡改拒绝测试通过；敏感字符串命中 0，可疑文件 0，`LICENSES.txt` 已收录 OpenCode MIT。
   - APK SHA-256：arm64-v8a `df4c4220b77ab8207ea2ce582512f84fc3f267525a56b97d504328093e2e5761`；armeabi-v7a `bdc1babf991438243a91753e9c37717a2f7e6d414d98abcf4f06202fad42ce9f`；x86_64 `865d014e9afe3e011bed535ae3ea739b71ce104568e3e191f2add7add266fb61`。证书与之前相同（`db59a41d…1554882`），三个 APK 内置 5 个 agent 文件及 3 个法律文件与 Windows 包逐字节一致，敏感字符串命中 0；v2 发布目录仍为 13 项。
+
+### 3.11.0 文件管理器与 PDF 阅读器深度优化（2026-11-13）
+
+- 见 DESIGN D-105。文件管理器新增文件大小、权限/属主/修改时间提示、文件夹大小统计（`fs.du`）、名称/大小/修改时间/类型排序、升降序及文件夹优先设置；新增 Ctrl/Shift 多选、复制、剪切、粘贴、创建副本、F2 重命名、Delete 删除、属性对话框和键盘快捷键。粘贴支持同根目录 `fs.copy`/`fs.rename`、跨根目录 `to_root`，冲突时替换/保留两者/跳过并支持应用到全部；有未保存文件时拒绝破坏性移动。agent 的 `fs.copy` 新增 `to_root`，复制保留属主、权限、修改时间，保留符号链接并限制目录深度；新增 `copy_du_test.go`。
+- PDF 改为 PDFium 按需分块读取：小于 16 MiB 的 PDF 预加载后打开，大文件用 512 KiB range、并发合并与最近块缓存，按 etag 检测远端替换；阅读器新增目录、缩略图、页码跳转、缩放、全文搜索高亮、夜间模式、密码提示、文档链接跳转/外链复制和会话内阅读位置记忆。
+- 已验证：`flutter analyze lib test` 0 问题；`aurora_profile` 42 项通过；Go `internal/files` 在 WSL 下通过；文件管理器测试 11 项、文件逻辑测试 18 项、PDF range 测试 9 项、真实 PDFium 阅读器测试 8 项通过；app 全量测试 187 项通过（20 项按设计跳过），UI 截图与既有文件/PDF 测试通过。
+- 未验证：真实远程大 PDF 在高延迟网络下的翻页体验、加密 PDF 的真实密码文件、Windows 真实窗口操作、Android 真机；文件夹大小是手动快照，不会自动更新。
+- 打包与归档（源提交 `13848b9`，`-Version 3.11.0`，已归档至 `release3\Aurora-3.11.0`，尚未上传 GitHub）：
+  - Windows ZIP：25,446,238 字节，SHA-256 `dd38d2a3bd9bf267de28ee65e8e5db72cb173a1248e3232cf4c5746b05115c39`，sidecar 一致，30 个文件与目录逐字节一致；文件/产品版本 3.11.0；内置 agent SHA-256 `8aa930c5c7e011de048e17effc41a3dee4255794f3f2ec7f23f6e95daf014911`，签名验证及篡改拒绝通过；敏感字符串命中 0、可疑文件 0。
+  - APK SHA-256：arm64-v8a `f949e596c1486756614f5bb9e56ef4986929c1928177549f500be9d2bc61b406`；armeabi-v7a `6fe334a88b3424fe427a96e64eb82af2d29edc3a206230fa64e2f7a073f1a1aa`；x86_64 `0cb007f4ae4ad0bf557812b878636a210946f4d1bbdf8ada9416b7672b3383ab`。证书与之前相同，三个 APK 的 agent/法律文件逐字节核对通过，敏感字符串命中 0；v2 发布目录仍为 13 项。

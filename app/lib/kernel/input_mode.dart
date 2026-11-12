@@ -33,7 +33,9 @@ class InputMode extends ChangeNotifier {
   }
 
   /// Whether the current mode is touch; widgets that call this rebuild when it changes.
-  static bool isTouch(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_Scope>()!.touch;
+  static bool isTouch(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_Scope>()?.touch ??
+      (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
 
   /// Row height for lists and trees.
   static double row(BuildContext context) => isTouch(context) ? 44 : 28;

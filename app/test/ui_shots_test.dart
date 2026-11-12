@@ -53,6 +53,11 @@ class ShotLink extends FileTreeLink {
   ShotLink(this.features);
 
   @override
+  Future<OpStream> open(String op, [Object? args, Priority priority = Priority.interactive]) async {
+    throw OpError(codeUnsupported, 'stream stubbed in shots');
+  }
+
+  @override
   Future<Object?> call(String op, [Object? args, Duration timeout = const Duration(seconds: 60)]) async {
     final a = (args as Map?) ?? const {};
     switch (op) {
@@ -165,6 +170,85 @@ class ShotLink extends FileTreeLink {
         };
       case 'proxy.status':
         return {'active': false};
+      case 'ai.sessions':
+        return {
+          'sessions': [
+            {
+              'id': 'ses_shot1',
+              'title': '优化 Nginx 与修复 Redis 启动异常',
+              'root': 'home',
+              'workdir': '/project',
+              'agent': 'build',
+              'model': 'claude-sonnet-4-5',
+              'running': false,
+              'message_count': 4,
+              'updated_at': DateTime.now().millisecondsSinceEpoch,
+            },
+          ],
+        };
+      case 'ai.get':
+        return {
+          'running': false,
+          'session': {
+            'id': 'ses_shot1',
+            'title': '优化 Nginx 与修复 Redis 启动异常',
+            'root': 'home',
+            'workdir': '/project',
+            'agent': 'build',
+            'permission_mode': 'ask',
+            'model': 'claude-sonnet-4-5',
+            'protocol': 'anthropic-messages',
+            'todos': [
+              {'id': '1', 'content': '检查 redis-server.service 失败日志', 'status': 'completed', 'priority': 'high'},
+              {'id': '2', 'content': '修复配置并重载服务验证', 'status': 'completed', 'priority': 'high'},
+            ],
+            'total_usage': {'input_tokens': 4820, 'output_tokens': 610, 'cache_read_tokens': 3900, 'total_tokens': 5430},
+            'messages': [
+              {
+                'id': 'msg_u1',
+                'role': 'user',
+                'agent': 'build',
+                'parts': [
+                  {'type': 'text', 'text': '帮我检查为什么 redis-server.service 启动失败，并顺便看看项目入口代码。'},
+                ],
+                'created_at': DateTime.now().millisecondsSinceEpoch - 60000,
+              },
+              {
+                'id': 'msg_a1',
+                'role': 'assistant',
+                'agent': 'build',
+                'model': 'claude-sonnet-4-5',
+                'parts': [
+                  {'type': 'reasoning', 'text': '先查看 systemd 日志与项目目录结构，定位 Redis 绑定地址或目录权限问题。'},
+                  {
+                    'type': 'tool-call',
+                    'tool_call_id': 'call_1',
+                    'name': 'shell',
+                    'input': {'command': 'journalctl -u redis-server.service -n 20 --no-pager'},
+                  },
+                  {
+                    'type': 'tool-result',
+                    'tool_call_id': 'call_1',
+                    'name': 'shell',
+                    'output': 'Could not create server TCP listening socket 127.0.0.1:6379: bind: Address already in use',
+                  },
+                  {
+                    'type': 'text',
+                    'text': '已定位原因：端口 `6379` 已被手动启动的 `redis-server` 进程占用，清理旧进程后服务恢复正常。',
+                  },
+                ],
+                'snapshot': {
+                  'start': 'a1b2c3d',
+                  'end': 'e4f5g6h',
+                  'files': [
+                    {'file': 'config/redis.conf', 'additions': 2, 'deletions': 1, 'status': 'modified', 'patch': '@@ -12,1 +12,2 @@\n-supervised no\n+supervised systemd\n+maxmemory-policy allkeys-lru'},
+                  ],
+                },
+                'created_at': DateTime.now().millisecondsSinceEpoch - 30000,
+              },
+            ],
+          },
+        };
       case 'sys.metrics':
         _tick++;
         final base = 1000000 + _tick * 400;
@@ -315,10 +399,14 @@ void main() {
       await snap(t, '$tag-04-servers');
       await t.tapAt(const Offset(900, 600));
       await settle(t);
-      for (final id in ['terminal', 'search', 'git', 'systemd', 'net', 'proxy']) {
+      for (final id in ['terminal', 'search', 'git', 'ai', 'systemd', 'net', 'proxy']) {
         await rail(t, s.$1, id);
         await snap(t, '$tag-10-$id');
       }
+      await rail(t, s.$1, 'ai');
+      await t.tap(find.byKey(const ValueKey('ai-session-ses_shot1')).first);
+      await settle(t);
+      await snap(t, '$tag-15-ai-studio');
       final w = ws(t);
       w.openTab(monitorTab(w));
       await settle(t);

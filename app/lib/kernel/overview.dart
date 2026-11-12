@@ -45,6 +45,7 @@ class _OverviewViewState extends State<OverviewView> {
   static const _names = {
     'files': '文件',
     'git': 'Git',
+    'ai': 'AI 助手',
     'monitor': '监控与日志',
     'systemd': 'systemd 服务管理',
     'terminal': '终端',
@@ -54,6 +55,7 @@ class _OverviewViewState extends State<OverviewView> {
   static const _about = {
     'files': '浏览、编辑、上传、下载、改名、删除文件',
     'git': '查看仓库状态、提交历史和差异，暂存、提交、拉取、推送',
+    'ai': '兼容 OpenCode 协议的代码与服务器智能体，支持文件读写编辑、命令执行与快照回退',
     'monitor': 'CPU、内存、磁盘、进程，以及系统和服务的日志',
     'systemd': '查看服务状态，按授权名单启动、停止、重启服务',
     'terminal': 'tmux 终端会话，断线和 agent 重启后会话不丢',

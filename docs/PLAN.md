@@ -375,3 +375,9 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
   - APK SHA-256：arm64-v8a `55c942fd5f36e8dfb08ccd880ce0573f1c0cf3d7f817c7df2e54d18219c6b317`；armeabi-v7a `c2e12342d10d0abe2b064d0220f99c8ae7fe0546ea21e9971cd9ad25f225ed46`；x86_64 `4a025223bed2813c12e9f53d79df82d1d895347173a3a1946523f64544a18479`。
   - 发布后重新下载 5 个文件，与本地逐个比对，全部一致。（发布脚本自带的比对因缺少 `Get-FileHash` 而无效，是另外手工比对的。）
 - 未验证：升级提示条在测试里触发不了，修复后的样子没有看到过；自绘标题栏仍没在真实窗口里试过；Android 仍未在真机或模拟器上运行；篡改拒绝测试未重复。
+
+### 3.10.0 内置 LLM 编码与服务器智能体（OpenCode 引擎移植，2026-11-12）
+
+- 见 DESIGN D-104。agent 新增可开关服务 `ai`（`agent/internal/ai/`），移植 OpenCode（MIT，`anomalyco/opencode`）的三大流式协议（`openai-chat`、`anthropic-messages`、`openai-responses`）、OpenCode 请求头（`User-Agent: opencode/stable/1.4.0/opencode`、`HTTP-Referer`、`X-Title`、`x-opencode-client`、`x-opencode-session-id`、`x-session-affinity`）、系统提示词（`build`、`plan`、`explore`、`title`、`compaction` 检查点模板、模型身份与 `AGENTS.md`/`CLAUDE.md` 发现）、同名同 Schema 工具链（`read`、`write`、`edit`、`glob`、`grep`、`shell`、`todowrite`、`subagent`）、三级精确 `edit`（保留 UTF-8 BOM 与 CRLF/LF）、2000 行 / 50 KiB 输出截断落盘、影子 Git 树快照（`<StateDir>/ai/snapshots/`）与一键回退、`Ask`/`Auto` 权限审批与死循环拦截，以及复用服务器 `proxysvc` 代理出口（`px.GitEnv`）。客户端新增 `aurora_profile` 密封 `AiSettings`/`AiProvider`（API Key 仅保存在本机加密 `profile.bin`，按次经固定指纹 TLS 传至 agent 内存，服务器绝不落盘）、活动栏「AI 助手」与会话侧栏、`AiStudioView` 工作台标签页、模型与协议配置弹窗；`tools/licenses.ps1` 收录 `THIRD_PARTY_OPENCODE_LICENSE`（MIT），同时将 `package.ps1` 与 `package-android.ps1` 中的哈希计算改为原生 `[Security.Cryptography.SHA256]` 以免无 `PSModulePath` 时缺失 `Get-FileHash`。
+- 已验证：Go `aurora3-agent`（`linux/amd64`）构建通过，WSL Ubuntu 24.04 下 `internal/ai` 与 `internal/entry` 测试全部通过（三大协议 SSE 流与 OpenCode 请求头、三级 `edit` 与 CRLF/BOM 保留、50 KiB 截断落盘、运行循环改文件、影子 Git 一键回退恢复文件、会话落盘零 API Key 泄露）；`aurora_profile` 39 项单测通过；`flutter analyze lib test` 0 问题；`app` 全量 138 项测试通过（含新增 `ai_feature_test.dart` 3 项）；`ui_shots_test.dart` 深浅色宽屏/中屏/手机截图全部渲染核对通过（并修复工具卡片与代码块使用 `Ide.mono` 字体链）。
+- 未验证：真实外部网关 API Key 的在线多轮对话联调（自动化测试使用本地 SSE 桩）；真实 Windows 窗口交互与 Android 真机/模拟器运行。

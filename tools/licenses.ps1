@@ -57,6 +57,9 @@ foreach ($f in (Get-ChildItem (Join-Path $pdfiumDir 'licenses') -File | Sort-Obj
 # BoringSSL, compiled into aurora_tls.dll.
 Add-License 'BoringSSL 0.20261020.0 (in aurora_tls.dll)' (Join-Path $repo 'app\packages\aurora_tls\third_party\boringssl\LICENSE')
 
+# OpenCode (MIT), ported into agent/internal/ai for Aurora's built-in LLM agent service.
+Add-License 'OpenCode (ported in aurora3-agent internal/ai)' (Join-Path $repo 'agent\internal\ai\THIRD_PARTY_OPENCODE_LICENSE')
+
 # The agent: Go modules compiled into aurora3-agent, and the bundled tmux.
 Push-Location (Join-Path $repo 'agent')
 try {

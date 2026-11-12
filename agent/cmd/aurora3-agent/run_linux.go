@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"syscall"
 
+	"aurora3/internal/ai"
 	"aurora3/internal/bundle"
 	"aurora3/internal/entry"
 	"aurora3/internal/files"
@@ -100,22 +101,25 @@ func services(cfg *entry.Config, audit *entry.Audit, actions func() map[string][
 	gr := make([]git.Root, len(cfg.Roots))
 	mr := make([]monitor.Root, len(cfg.Roots))
 	tr := make([]terminal.Root, len(cfg.Roots))
+	ar := make([]ai.Root, len(cfg.Roots))
 	for i, r := range cfg.Roots {
 		fr[i] = files.Root{ID: r.ID, Label: r.Label, Path: r.Path}
 		gr[i] = git.Root{ID: r.ID, Label: r.Label, Path: r.Path}
 		mr[i] = monitor.Root{ID: r.ID, Label: r.Label, Path: r.Path}
 		tr[i] = terminal.Root{ID: r.ID, Path: r.Path}
+		ar[i] = ai.Root{ID: r.ID, Label: r.Label, Path: r.Path}
 	}
 	fe := &files.Env{Roots: fr, UploadMaxBytes: cfg.UploadMaxBytes, Audit: audit, Repos: git.Repos{Proxy: proxy}}
 	ge := &git.Env{Roots: gr, Audit: audit, Proxy: proxy}
 	me := &monitor.Env{Roots: mr, Audit: audit}
 	se := &systemd.Env{Actions: actions, Audit: audit}
 	ne := &netfwd.Env{}
+	ae := &ai.Env{StateDir: cfg.StateDir, Roots: ar, Audit: audit, Proxy: proxy}
 	lay, _ := entry.LayoutFor(cfg.Instance) // Validate has checked the name
 	te := &terminal.Env{StateDir: cfg.StateDir, Socket: lay.Socket, UnitPrefix: lay.TmuxPrefix, Roots: tr, Audit: audit, Bundle: bundle.FS{},
 		NoUnit: os.Getenv("INVOCATION_ID") == "", // not started by systemd: no transient units
 		Proxy:  px.SessionEnv}
-	return []service.Service{fe.Service(), ge.Service(), me.Service(), se.Service(), ne.Service(), px.Service(), te.Service()}, te, px
+	return []service.Service{fe.Service(), ge.Service(), me.Service(), se.Service(), ne.Service(), px.Service(), te.Service(), ae.Service()}, te, px
 }
 
 // proxyHost is what the proxy service needs from the entry: the switch, and a

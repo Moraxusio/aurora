@@ -3,6 +3,7 @@
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:flutter/material.dart';
 
+import '../features/ai/ai_settings_dialog.dart';
 import '../kernel/editor_tab.dart';
 import '../kernel/widgets.dart';
 import '../state/app_state.dart';
@@ -85,6 +86,19 @@ class SettingsPage extends StatelessWidget {
                   segments: const [ButtonSegment(value: 2, label: Text('2')), ButtonSegment(value: 4, label: Text('4')), ButtonSegment(value: 8, label: Text('8'))],
                   selected: {s.tabSize},
                   onSelectionChanged: (v) => _set((e) => e.tabSize = v.first),
+                ),
+              ),
+            ]),
+            FormSection(title: 'AI 智能体 (OpenCode 协议)', children: [
+              FormRow(
+                icon: Icons.auto_awesome_rounded,
+                title: '模型提供商与 API Key',
+                subtitle: app.ready && app.profile.ai.activeProvider != null
+                    ? '当前启用：${app.profile.ai.activeProvider!.name} · ${app.profile.ai.activeProvider!.model} (${app.profile.ai.activeProvider!.protocol})'
+                    : '未配置模型密钥（加密保存在本机，按次经固定指纹 TLS 传至服务器内存）',
+                trailing: OutlinedButton(
+                  onPressed: () => showAiSettingsDialog(context, app: app),
+                  child: const Text('管理密钥与协议'),
                 ),
               ),
             ]),

@@ -47,7 +47,8 @@ foreach ($l in $lock) {
         $got = -join ($sha.ComputeHash($z) | ForEach-Object { $_.ToString('x2') })
         $z.Close(); $gz.Close()
     } else {
-        $got = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+        $sha = [Security.Cryptography.SHA256]::Create()
+        $got = -join ($sha.ComputeHash([IO.File]::ReadAllBytes($file)) | ForEach-Object { $_.ToString('x2') })
     }
     if ($got -ne $want) { throw "bundle $name is $got, bundle.lock says $want" }
 }
@@ -102,11 +103,12 @@ Aurora $Version (Windows)
   只有当前 Windows 用户能打开。
 
 本次更新（$Version）：
-- 修复：agent 有新版本时顶部的升级提示条被右上角的窗口按钮盖住；现在提示条
-  显示在标题栏下方。
-- 其余与 3.9.0 相同（界面重做、自绘标题栏、监控仪表盘、Android 带许可证文件）。
-- 以上改动都在客户端，已有 agent 不需要升级。
-- 上一版的全局搜索、快速打开、拆分编辑器、git 功能沿用。
+- 新增内置 AI 智能体服务（ai，D-104）：移植 OpenCode 协议与工具引擎，原生兼容
+  OpenAI Chat、Anthropic Messages 与 OpenAI Responses 流式协议及 OpenCode 请求头。
+- 支持在远程工作区读写、三级精确编辑（保留 BOM 与 CRLF/LF）、搜索、执行命令、
+  子智能体协作、上下文检查点压缩，以及基于影子 Git 树的一键文件回退。
+- API Key 仅加密保存在本机 profile.bin，按次经固定指纹 TLS 传至服务器内存，绝不落盘。
+- 使用本功能需将服务器上的 aurora3-agent 升级至 $Version（连接后点击升级提示即可）。
 代理功能：
 - 在“代理”页添加 Clash 订阅 URL，或粘贴节点链接；选用节点后，新建终端时勾选
   “这个会话走代理”。git 的 HTTP/HTTPS 远程操作跟随代理服务开关。
@@ -133,7 +135,10 @@ Aurora $Version (Windows)
 
 # 6. Zip and hash.
 Compress-Archive -Path $dir -DestinationPath $zip
-$h = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+$shaZip = [Security.Cryptography.SHA256]::Create()
+$fsZip = [IO.File]::OpenRead($zip)
+$h = -join ($shaZip.ComputeHash($fsZip) | ForEach-Object { $_.ToString('x2') })
+$fsZip.Close()
 "$h  Aurora-$Version.zip" | Set-Content -Encoding ascii "$zip.sha256"
 Remove-Item $work -Recurse -Force
 Write-Output "folder: $dir"

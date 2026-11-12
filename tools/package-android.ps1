@@ -45,10 +45,15 @@ try {
   & flutter build apk --release --split-per-abi --build-name $Version --build-number $BuildNumber
   if ($LASTEXITCODE) { throw 'flutter build apk' }
   New-Item -ItemType Directory -Force $Out | Out-Null
+  $shaApk = [Security.Cryptography.SHA256]::Create()
   foreach ($a in 'arm64-v8a', 'armeabi-v7a', 'x86_64') {
     $n = "Aurora-$Version-android-$a.apk"
-    Copy-Item "build\app\outputs\flutter-apk\app-$a-release.apk" (Join-Path $Out $n) -Force
-    (Get-FileHash (Join-Path $Out $n) -Algorithm SHA256).Hash.ToLower() + '  ' + $n | Add-Content (Join-Path $Out 'SHA256SUMS.txt')
+    $apkOut = Join-Path $Out $n
+    Copy-Item "build\app\outputs\flutter-apk\app-$a-release.apk" $apkOut -Force
+    $fsApk = [IO.File]::OpenRead($apkOut)
+    $apkHash = -join ($shaApk.ComputeHash($fsApk) | ForEach-Object { $_.ToString('x2') })
+    $fsApk.Close()
+    "$apkHash  $n" | Add-Content (Join-Path $Out 'SHA256SUMS.txt')
   }
 } finally {
   Pop-Location

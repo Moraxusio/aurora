@@ -349,7 +349,43 @@ void main() {
       await store.close();
       await expectLater(ProfileStore.open(path, XorSealer(0x33, 'other-machine')), throwsA(isA<ProfileUnreadable>()));
     });
-  });}
+  });
+
+  group('AI settings (D-104)', () {
+    test('round-trips providers, OpenCode protocols, and seals API keys on disk', () async {
+      final store = await ProfileStore.open(path, XorSealer());
+      const secretKey = 'sk-opencode-secret-key-998877';
+      await store.update((p) {
+        final prov = AiProvider.create(
+          name: 'OpenCode Gateway',
+          protocol: 'anthropic-messages',
+          baseUrl: 'https://opencode.ai/zen/v1',
+          apiKey: secretKey,
+          model: 'claude-sonnet-4-5',
+          useProxy: true,
+        )..reasoningEffort = 'medium';
+        p.ai.providers.add(prov);
+        p.ai.selectedProviderId = prov.id;
+        p.ai.permissionMode = 'auto';
+      });
+      await store.close();
+
+      final raw = latin1.decode(File(path).readAsBytesSync(), allowInvalid: true);
+      expect(raw, isNot(contains(secretKey)));
+
+      final again = await ProfileStore.open(path, XorSealer());
+      final ai = again.get().ai;
+      expect(ai.permissionMode, 'auto');
+      expect(ai.activeProvider, isNotNull);
+      expect(ai.activeProvider!.name, 'OpenCode Gateway');
+      expect(ai.activeProvider!.protocol, 'anthropic-messages');
+      expect(ai.activeProvider!.apiKey, secretKey);
+      expect(ai.activeProvider!.useProxy, isTrue);
+      expect(ai.activeProvider!.toWireJson()['model'], 'claude-sonnet-4-5');
+      await again.close();
+    });
+  });
+}
 
 class _CountingSource extends ProxySource {
   static int copies = 0;

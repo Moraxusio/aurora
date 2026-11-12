@@ -1,5 +1,6 @@
 // The feature list, fixed at compile time like the agent's service list
 // (D-40). Order here is the order of the activity bar.
+import '../features/ai/ai_feature.dart';
 import '../features/files/files_feature.dart';
 import '../features/files/transfers.dart';
 import '../features/git/git_feature.dart';
@@ -24,6 +25,7 @@ class Features {
       FilesFeature(this.transfers),
       const SearchFeature(),
       const GitFeature(),
+      const AiFeature(),
       const MonitorFeature(),
       const SystemdFeature(),
       NetFeature(this.forwards),

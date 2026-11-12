@@ -21,11 +21,16 @@ class Profile {
   /// not to a server.
   EditorSettings editor;
 
-  Profile({List<ServerEntry>? servers, this.selected, List<KnownHost>? knownHosts, List<ProxySource>? proxySources, EditorSettings? editor})
+  /// LLM Agent providers, API keys, and default model/permission preferences (D-104).
+  /// Sealed with the profile so API keys never sit in plaintext or on remote servers.
+  AiSettings ai;
+
+  Profile({List<ServerEntry>? servers, this.selected, List<KnownHost>? knownHosts, List<ProxySource>? proxySources, EditorSettings? editor, AiSettings? ai})
       : servers = servers ?? [],
         knownHosts = knownHosts ?? [],
         proxySources = proxySources ?? [],
-        editor = editor ?? EditorSettings();
+        editor = editor ?? EditorSettings(),
+        ai = ai ?? AiSettings();
 
   factory Profile.fromJson(Map<String, dynamic> j) => Profile(
         servers: [for (final s in (j['servers'] as List? ?? const [])) ServerEntry.fromJson(_map(s))],
@@ -33,6 +38,7 @@ class Profile {
         knownHosts: [for (final k in (j['known_hosts'] as List? ?? const [])) KnownHost.fromJson(_map(k))],
         proxySources: [for (final s in (j['proxy_sources'] as List? ?? const [])) ProxySource.fromJson(_map(s))],
         editor: j['editor'] == null ? null : EditorSettings.fromJson(_map(j['editor'])),
+        ai: j['ai'] == null ? null : AiSettings.fromJson(_map(j['ai'])),
       );
 
   Map<String, dynamic> toJson() => {
@@ -41,6 +47,7 @@ class Profile {
         if (knownHosts.isNotEmpty) 'known_hosts': [for (final k in knownHosts) k.toJson()],
         if (proxySources.isNotEmpty) 'proxy_sources': [for (final s in proxySources) s.toJson()],
         if (!editor.isDefault) 'editor': editor.toJson(),
+        if (!ai.isDefault) 'ai': ai.toJson(),
       };
 
   ProxySource? proxySource(String id) {
@@ -438,6 +445,175 @@ class EditorSettings {
   Map<String, dynamic> toJson() => {'theme': theme, 'font_size': fontSize, 'word_wrap': wordWrap, 'tab_size': tabSize};
 
   bool get isDefault => theme == 'system' && fontSize == 13.5 && !wordWrap && tabSize == 4;
+}
+
+/// Client-side LLM Agent settings (D-104). Sealed at rest inside profile.bin;
+/// API keys are sent per call over pinned TLS and never persisted on servers.
+class AiSettings {
+  List<AiProvider> providers;
+  String? selectedProviderId;
+  /// 'ask' | 'auto'
+  String permissionMode;
+  /// 'build' | 'plan'
+  String defaultAgent;
+
+  AiSettings({
+    List<AiProvider>? providers,
+    this.selectedProviderId,
+    this.permissionMode = 'ask',
+    this.defaultAgent = 'build',
+  }) : providers = providers ?? [];
+
+  static const permissionModes = ['ask', 'auto'];
+  static const agentModes = ['build', 'plan'];
+
+  AiProvider? get activeProvider {
+    if (providers.isEmpty) return null;
+    for (final p in providers) {
+      if (p.id == selectedProviderId) return p;
+    }
+    return providers.first;
+  }
+
+  bool get isDefault =>
+      providers.isEmpty &&
+      selectedProviderId == null &&
+      permissionMode == 'ask' &&
+      defaultAgent == 'build';
+
+  factory AiSettings.fromJson(Map<String, dynamic> j) {
+    final pm = j['permission_mode'] as String?;
+    final da = j['default_agent'] as String?;
+    return AiSettings(
+      providers: [for (final p in (j['providers'] as List? ?? const [])) AiProvider.fromJson(_map(p))],
+      selectedProviderId: j['selected_provider_id'] as String?,
+      permissionMode: permissionModes.contains(pm) ? pm! : 'ask',
+      defaultAgent: agentModes.contains(da) ? da! : 'build',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (providers.isNotEmpty) 'providers': [for (final p in providers) p.toJson()],
+        'selected_provider_id': ?selectedProviderId,
+        if (permissionMode != 'ask') 'permission_mode': permissionMode,
+        if (defaultAgent != 'build') 'default_agent': defaultAgent,
+      };
+}
+
+/// One OpenCode-compatible LLM API endpoint & credential entry.
+class AiProvider {
+  final String id;
+  String name;
+  /// 'openai-chat' | 'anthropic-messages' | 'openai-responses'
+  String protocol;
+  String baseUrl;
+  String apiKey;
+  /// '' (auto) | 'bearer' | 'x-api-key'
+  String authMode;
+  String model;
+  /// Cached / user-listed models for quick switching
+  List<String> models;
+  /// '' | 'low' | 'medium' | 'high'
+  String reasoningEffort;
+  int contextWindow;
+  int maxTokens;
+  /// Route LLM & shell traffic on the server through its configured proxy node (proxysvc).
+  bool useProxy;
+  Map<String, String> headers;
+
+  AiProvider({
+    required this.id,
+    required this.name,
+    this.protocol = 'openai-chat',
+    this.baseUrl = 'https://api.openai.com/v1',
+    this.apiKey = '',
+    this.authMode = '',
+    this.model = '',
+    List<String>? models,
+    this.reasoningEffort = '',
+    this.contextWindow = 0,
+    this.maxTokens = 0,
+    this.useProxy = false,
+    Map<String, String>? headers,
+  })  : models = models ?? [],
+        headers = headers ?? {};
+
+  static const protocols = ['openai-chat', 'anthropic-messages', 'openai-responses'];
+
+  factory AiProvider.create({
+    required String name,
+    String protocol = 'openai-chat',
+    String baseUrl = 'https://api.openai.com/v1',
+    String apiKey = '',
+    String model = '',
+    bool useProxy = false,
+  }) =>
+      AiProvider(
+        id: newId(),
+        name: name,
+        protocol: protocol,
+        baseUrl: baseUrl,
+        apiKey: apiKey,
+        model: model,
+        useProxy: useProxy,
+      );
+
+  factory AiProvider.fromJson(Map<String, dynamic> j) {
+    final proto = j['protocol'] as String? ?? 'openai-chat';
+    final hdrs = <String, String>{};
+    if (j['headers'] is Map) {
+      for (final e in (j['headers'] as Map).entries) {
+        hdrs['${e.key}'] = '${e.value}';
+      }
+    }
+    return AiProvider(
+      id: j['id'] as String? ?? newId(),
+      name: j['name'] as String? ?? 'OpenCode API',
+      protocol: protocols.contains(proto) ? proto : 'openai-chat',
+      baseUrl: j['base_url'] as String? ?? '',
+      apiKey: j['api_key'] as String? ?? '',
+      authMode: j['auth_mode'] as String? ?? '',
+      model: j['model'] as String? ?? '',
+      models: [for (final m in (j['models'] as List? ?? const [])) '$m'],
+      reasoningEffort: j['reasoning_effort'] as String? ?? '',
+      contextWindow: (j['context_window'] as num?)?.toInt() ?? 0,
+      maxTokens: (j['max_tokens'] as num?)?.toInt() ?? 0,
+      useProxy: j['use_proxy'] == true,
+      headers: hdrs,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'protocol': protocol,
+        'base_url': baseUrl,
+        if (apiKey.isNotEmpty) 'api_key': apiKey,
+        if (authMode.isNotEmpty) 'auth_mode': authMode,
+        'model': model,
+        if (models.isNotEmpty) 'models': models,
+        if (reasoningEffort.isNotEmpty) 'reasoning_effort': reasoningEffort,
+        if (contextWindow > 0) 'context_window': contextWindow,
+        if (maxTokens > 0) 'max_tokens': maxTokens,
+        if (useProxy) 'use_proxy': true,
+        if (headers.isNotEmpty) 'headers': headers,
+      };
+
+  /// Wire payload passed to agent RPCs (`ai.run`, `ai.models`, `ai.compact`).
+  Map<String, dynamic> toWireJson({String? modelOverride}) => {
+        'id': id,
+        'name': name,
+        'protocol': protocol,
+        'base_url': baseUrl,
+        if (apiKey.isNotEmpty) 'api_key': apiKey,
+        if (authMode.isNotEmpty) 'auth_mode': authMode,
+        'model': (modelOverride != null && modelOverride.isNotEmpty) ? modelOverride : model,
+        if (reasoningEffort.isNotEmpty) 'reasoning_effort': reasoningEffort,
+        if (contextWindow > 0) 'context_window': contextWindow,
+        if (maxTokens > 0) 'max_tokens': maxTokens,
+        'use_proxy': useProxy,
+        if (headers.isNotEmpty) 'headers': headers,
+      };
 }
 
 /// A host key the user confirmed on first SSH contact (D-2).

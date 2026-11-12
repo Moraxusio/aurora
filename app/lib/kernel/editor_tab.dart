@@ -7,7 +7,7 @@ import 'package:aurora_profile/aurora_profile.dart';
 class EditorTab {
   /// Unique within a workspace, e.g. "term:main" or "file:home:/etc/hosts".
   final String id;
-  final String title;
+  String title;
   final IconData icon;
   final Color? iconColor;
 

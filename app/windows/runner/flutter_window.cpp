@@ -6,6 +6,7 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+#include "ai_input.h"
 
 namespace {
 constexpr UINT kTrayMessage = WM_APP + 40;
@@ -36,6 +37,9 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  input_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "aurora3/input", &flutter::StandardMethodCodec::GetInstance());
+  input_channel_->SetMethodCallHandler(HandleAiInput);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
   if (!instance_.MarkWindow(GetHandle())) return false;
   taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
@@ -103,6 +107,7 @@ void FlutterWindow::OnDestroy() {
   RemoveTray();
   if (GetHandle()) RemovePropW(GetHandle(), instance_.property().c_str());
   desktop_channel_ = nullptr;
+  input_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

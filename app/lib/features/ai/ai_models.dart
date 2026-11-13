@@ -1,5 +1,6 @@
 // Wire data models for the built-in OpenCode-compatible AI service (D-104).
 import 'dart:convert';
+import 'dart:typed_data';
 
 class AiSessionSummary {
   final String id;
@@ -189,6 +190,8 @@ class AiPart {
   final String output;
   final bool isError;
   final Map<String, dynamic> metadata;
+  final String attachmentId,mime,filename;
+  final int size;
 
   const AiPart({
     required this.type,
@@ -200,6 +203,7 @@ class AiPart {
     this.output = '',
     this.isError = false,
     this.metadata = const {},
+    this.attachmentId='',this.mime='',this.filename='',this.size=0,
   });
 
   factory AiPart.fromJson(Map<String, dynamic> j) {
@@ -220,6 +224,7 @@ class AiPart {
       output: j['output'] as String? ?? '',
       isError: j['is_error'] == true,
       metadata: j['metadata'] is Map ? (j['metadata'] as Map).cast<String, dynamic>() : const {},
+      attachmentId:j['attachment_id'] as String? ?? '',mime:j['mime'] as String? ?? '',filename:j['filename'] as String? ?? '',size:(j['size'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -404,12 +409,15 @@ class AiAttachment {
   final String label;
   final String path;
   final String content;
+  final Uint8List? bytes;
+  final String mime;
 
   const AiAttachment({
     required this.kind,
     required this.label,
     this.path = '',
     required this.content,
+    this.bytes,this.mime='text/plain',
   });
 
   Map<String, dynamic> toJson() => {

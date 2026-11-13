@@ -483,12 +483,14 @@ class AiSettings {
   String permissionMode;
   /// 'build' | 'plan'
   String defaultAgent;
+  double chatFontSize;
 
   AiSettings({
     List<AiProvider>? providers,
     this.selectedProviderId,
     this.permissionMode = 'ask',
     this.defaultAgent = 'build',
+    this.chatFontSize = 15,
   }) : providers = providers ?? [];
 
   static const permissionModes = ['ask', 'auto'];
@@ -506,7 +508,7 @@ class AiSettings {
       providers.isEmpty &&
       selectedProviderId == null &&
       permissionMode == 'ask' &&
-      defaultAgent == 'build';
+      defaultAgent == 'build' && chatFontSize == 15;
 
   factory AiSettings.fromJson(Map<String, dynamic> j) {
     final pm = j['permission_mode'] as String?;
@@ -516,6 +518,7 @@ class AiSettings {
       selectedProviderId: j['selected_provider_id'] as String?,
       permissionMode: permissionModes.contains(pm) ? pm! : 'ask',
       defaultAgent: agentModes.contains(da) ? da! : 'build',
+      chatFontSize: j['chat_font_size'] is num && (j['chat_font_size'] as num).isFinite ? (j['chat_font_size'] as num).toDouble().clamp(12,22) : 15,
     );
   }
 
@@ -524,6 +527,7 @@ class AiSettings {
         'selected_provider_id': ?selectedProviderId,
         if (permissionMode != 'ask') 'permission_mode': permissionMode,
         if (defaultAgent != 'build') 'default_agent': defaultAgent,
+        if (chatFontSize != 15) 'chat_font_size':chatFontSize,
       };
 }
 
@@ -669,12 +673,13 @@ class AiOAuthCredential {
   final String refresh;
   final int expires;
   final String accountId;
-  const AiOAuthCredential({required this.access, required this.refresh, required this.expires, this.accountId = ''});
+  final String transport;
+  const AiOAuthCredential({required this.access, required this.refresh, required this.expires, this.accountId = '', this.transport = 'client'});
   factory AiOAuthCredential.fromJson(Map<String, dynamic> j) => AiOAuthCredential(
     access: j['access'] as String? ?? '', refresh: j['refresh'] as String? ?? '',
-    expires: (j['expires'] as num?)?.toInt() ?? 0, accountId: j['account_id'] as String? ?? '',
+    expires: (j['expires'] as num?)?.toInt() ?? 0, accountId: j['account_id'] as String? ?? '', transport:j['transport'] == 'server' ? 'server' : 'client',
   );
-  Map<String, dynamic> toJson() => {'access':access, 'refresh':refresh, 'expires':expires, if (accountId.isNotEmpty) 'account_id':accountId};
+  Map<String, dynamic> toJson() => {'access':access, 'refresh':refresh, 'expires':expires, if (accountId.isNotEmpty) 'account_id':accountId, 'transport':transport};
   bool get needsRefresh => access.isEmpty || expires <= DateTime.now().millisecondsSinceEpoch + 90000;
 }
 

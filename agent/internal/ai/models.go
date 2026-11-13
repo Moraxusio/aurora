@@ -25,15 +25,16 @@ type ToolDef struct {
 
 // LLMRequest is the normalized protocol-independent model invocation.
 type LLMRequest struct {
-	SessionID   string
-	AffinityID  string // parent/root session ID for prompt-cache routing
-	Initiator   string // "user" | "agent"
-	Provider    ProviderConfig
-	System      []string
-	Messages    []Message
-	Tools       []ToolDef
-	MaxTokens   int
-	Temperature *float64
+	SessionID      string
+	AffinityID     string // parent/root session ID for prompt-cache routing
+	Initiator      string // "user" | "agent"
+	Provider       ProviderConfig
+	System         []string
+	Messages       []Message
+	Tools          []ToolDef
+	MaxTokens      int
+	Temperature    *float64
+	LoadAttachment func(Part) ([]byte, error)
 }
 
 // LLMDelta is emitted incrementally while streaming a model response.
@@ -303,6 +304,11 @@ var errSSEStreamDone = errors.New("sse stream done")
 
 // StreamLLM dispatches an LLMRequest through the selected OpenCode protocol with automatic retry on transient errors.
 func StreamLLM(ctx context.Context, req LLMRequest, proxyEnv func() map[string]string, onDelta func(LLMDelta)) (LLMResponse, error) {
+	var mediaErr error
+	req.Messages, mediaErr = materializeAttachments(req.Messages, req.LoadAttachment)
+	if mediaErr != nil {
+		return LLMResponse{}, mediaErr
+	}
 	var prepErr error
 	req.Provider, prepErr = prepareSubscription(req.Provider)
 	if prepErr != nil {

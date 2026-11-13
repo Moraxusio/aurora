@@ -47,7 +47,7 @@ powershell -File tools\package.ps1 -Version X.Y.Z -Key path\to\release.key
 
 ## AI 工作台
 
-内置可独立启停的 `ai` 服务，支持 API Key 网关与 OpenAI / ChatGPT 设备码订阅登录；工作台区分实际请求的提供商/模型、下一次选择、上下文估算与累计用量。使用方法、凭据边界和未验证范围见 [AI 使用说明](docs/AI.md)（设备码授权和上下文元数据需要客户端及 agent 3.12.0 以上）。
+内置可独立启停的 `ai` 服务，支持 API Key 网关与 OpenAI / ChatGPT 设备码订阅登录；工作台区分实际请求的提供商/模型、下一次选择、上下文估算与累计用量。3.13.0 增加本机授权/出口切换、图片及文件粘贴/选择、目录下拉浏览和对话阅读优化；原始文件附件需要客户端及 agent 3.13.0 以上。使用方法、凭据边界和未验证范围见 [AI 使用说明](docs/AI.md)。
 
 ## 状态
 

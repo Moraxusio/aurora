@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:aurora/features/ai/ai_auth.dart';
+import 'package:aurora/features/ai/ai_oauth_client.dart';
 import 'package:aurora/features/ai/ai_settings_dialog.dart';
 import 'package:aurora/features/ai/ai_studio_view.dart';
 import 'package:aurora/kernel/input_mode.dart';
@@ -19,7 +20,7 @@ AiProvider provider({String model = 'gpt-6.1-sol'}) => AiProvider(
   name: 'ChatGPT',
   authMode: 'chatgpt-device',
   model: model,
-  oauth: const AiOAuthCredential(access: 'old-access-fixture', refresh: 'old-refresh-fixture', expires: 1),
+  oauth: const AiOAuthCredential(access: 'old-access-fixture', refresh: 'old-refresh-fixture', expires: 1,transport:'server'),
 );
 
 class AuthLink extends FakeAiLink {
@@ -57,6 +58,14 @@ class AuthLink extends FakeAiLink {
     if (op == 'ai.run' && failRun) throw OpError(codeInternal, 'synthetic run failure');
     return super.call(op, args, timeout);
   }
+}
+
+class FixtureLocalAuth extends AiOAuthClient {
+  final AuthLink link;
+  FixtureLocalAuth(this.link);
+  @override Future<void> configureProxy() async {}
+  @override Future<Map<String,dynamic>> begin() async => (await link.call('ai.auth.begin',{'use_proxy':false}) as Map).cast<String,dynamic>();
+  @override Future<Map<String,dynamic>> poll(String device,String code) async => (await link.call('ai.auth.poll',{'device_auth_id':device,'user_code':code}) as Map).cast<String,dynamic>();
 }
 
 WorkspaceApp makeApp(AuthLink link, AiProvider p) => WorkspaceApp(
@@ -108,7 +117,7 @@ void main() {
           builder: (ctx) => Scaffold(
             body: TextButton(
               onPressed: () async {
-                onResult(await showAiDeviceLogin(ctx, link, useProxy: false));
+                onResult(await showAiDeviceLogin(ctx, link, useProxy: false,initialTransport:'server'));
               },
               child: const Text('login'),
             ),
@@ -188,7 +197,7 @@ void main() {
         home: Builder(
           builder: (ctx) => Scaffold(
             body: TextButton(
-              onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws),
+              onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws,localAuthFactory:()=>FixtureLocalAuth(link)),
               child: const Text('settings'),
             ),
           ),

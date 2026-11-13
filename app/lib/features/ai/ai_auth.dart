@@ -7,11 +7,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../state/app_state.dart';
+import 'ai_oauth_client.dart';
 
 final _refreshes = Expando<Map<String, Future<AiProvider>>>();
 
 /// Share refresh across workspaces on the same app, then persist before use.
-Future<AiProvider> prepareAiProvider(AppState app, Link link, AiProvider provider) async {
+Future<AiProvider> prepareAiProvider(
+  AppState app,
+  Link link,
+  AiProvider provider, {
+  AiOAuthClient Function()? localFactory,
+}) async {
   final p = AiProvider.fromJson(provider.toJson());
   if (!p.isSubscription) return p;
   if (p.oauth == null || p.oauth!.refresh.isEmpty) throw StateError('请先在 AI 设置中使用 OpenAI 设备码登录');
@@ -22,7 +28,7 @@ Future<AiProvider> prepareAiProvider(AppState app, Link link, AiProvider provide
     p.oauth = refreshed.oauth; // retain THIS caller's model and reasoning selection
     return p;
   }
-  final job = _refreshProvider(app, link, p);
+  final job = _refreshProvider(app, link, p, localFactory);
   pending[p.id] = job;
   try {
     return await job;
@@ -31,14 +37,33 @@ Future<AiProvider> prepareAiProvider(AppState app, Link link, AiProvider provide
   }
 }
 
-Future<AiProvider> _refreshProvider(AppState app, Link link, AiProvider p) async {
+Future<AiProvider> _refreshProvider(
+  AppState app,
+  Link link,
+  AiProvider p,
+  AiOAuthClient Function()? localFactory,
+) async {
   final previous = p.oauth!;
-  final res = await link.call('ai.auth.refresh', {
-    'refresh': previous.refresh,
-    'account_id': previous.accountId,
-    'use_proxy': p.useProxy,
-  }) as Map;
-  final credential = AiOAuthCredential.fromJson((res['credential'] as Map).cast<String, dynamic>());
+  late final AiOAuthCredential credential;
+  if (previous.transport == 'client') {
+    final local = (localFactory ?? AiOAuthClient.new)();
+    try {
+      await local.configureProxy();
+      credential = await local.refresh(previous);
+    } finally {
+      local.close();
+    }
+  } else {
+    final res = await link.call('ai.auth.refresh', {
+      'refresh': previous.refresh,
+      'account_id': previous.accountId,
+      'use_proxy': p.useProxy,
+    }) as Map;
+    credential = AiOAuthCredential.fromJson({
+      ...((res['credential'] as Map).cast<String, dynamic>()),
+      'transport': 'server',
+    });
+  }
   if (credential.access.isEmpty || credential.refresh.isEmpty || credential.needsRefresh) {
     throw StateError('OpenAI 刷新响应无效，请重新登录');
   }
@@ -56,17 +81,25 @@ Future<AiProvider> _refreshProvider(AppState app, Link link, AiProvider p) async
   return p;
 }
 
-Future<AiOAuthCredential?> showAiDeviceLogin(BuildContext context, Link link, {required bool useProxy}) =>
-    showDialog<AiOAuthCredential>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _DeviceLogin(link: link, useProxy: useProxy),
-    );
+Future<AiOAuthCredential?> showAiDeviceLogin(
+  BuildContext context,
+  Link? link, {
+  required bool useProxy,
+  String initialTransport = 'client',
+  AiOAuthClient Function()? localFactory,
+}) => showDialog<AiOAuthCredential>(
+  context: context,
+  barrierDismissible: false,
+  builder: (_) =>
+      _DeviceLogin(link: link, useProxy: useProxy, initialTransport: initialTransport, localFactory: localFactory),
+);
 
 class _DeviceLogin extends StatefulWidget {
-  final Link link;
+  final Link? link;
   final bool useProxy;
-  const _DeviceLogin({required this.link, required this.useProxy});
+  final String initialTransport;
+  final AiOAuthClient Function()? localFactory;
+  const _DeviceLogin({required this.link, required this.useProxy, required this.initialTransport, this.localFactory});
   @override
   State<_DeviceLogin> createState() => _DeviceLoginState();
 }
@@ -81,9 +114,13 @@ class _DeviceLoginState extends State<_DeviceLogin> {
   int _deadline = 0;
   int _interval = 8000;
   bool _polling = false;
+  late String _transport;
+  AiOAuthClient? _local;
+  int _generation = 0;
   @override
   void initState() {
     super.initState();
+    _transport = widget.initialTransport;
     unawaited(_begin());
   }
 
@@ -92,6 +129,7 @@ class _DeviceLoginState extends State<_DeviceLogin> {
     _finished = true;
     _timer?.cancel();
     _expiryTimer?.cancel();
+    _local?.close();
     super.dispose();
   }
 
@@ -99,12 +137,23 @@ class _DeviceLoginState extends State<_DeviceLogin> {
     _finished = true;
     _timer?.cancel();
     _expiryTimer?.cancel();
+    _local?.close();
   }
 
   Future<void> _begin() async {
+    final generation = ++_generation;
     try {
-      final r = await widget.link.call('ai.auth.begin', {'use_proxy': widget.useProxy}) as Map;
-      if (!mounted || _finished) return;
+      late final Map r;
+      if (_transport == 'client') {
+        final local = (widget.localFactory ?? AiOAuthClient.new)();
+        _local = local;
+        await local.configureProxy();
+        r = await local.begin();
+      } else {
+        if (widget.link == null) throw StateError('服务器未连接，请使用本机网络');
+        r = await widget.link!.call('ai.auth.begin', {'use_proxy': widget.useProxy}) as Map;
+      }
+      if (!mounted || _finished || generation != _generation) return;
       _deviceId = r['device_auth_id'] as String? ?? '';
       _deadline = (r['expires_at'] as num?)?.toInt() ?? 0;
       _interval = ((r['interval_ms'] as num?)?.toInt() ?? 8000).clamp(8000, 63000);
@@ -119,7 +168,7 @@ class _DeviceLoginState extends State<_DeviceLogin> {
       );
       _schedule();
     } on Object catch (e) {
-      _fail(e);
+      if (generation == _generation) _fail(e);
     }
   }
 
@@ -140,15 +189,21 @@ class _DeviceLoginState extends State<_DeviceLogin> {
       return;
     }
     _polling = true;
+    final generation = _generation;
     try {
-      final r = await widget.link.call('ai.auth.poll', {
-        'device_auth_id': _deviceId,
-        'user_code': _code,
-        'use_proxy': widget.useProxy,
-      }) as Map;
-      if (!mounted || _finished) return;
+      final r = _transport == 'client'
+          ? await _local!.poll(_deviceId, _code)
+          : await widget.link!.call('ai.auth.poll', {
+              'device_auth_id': _deviceId,
+              'user_code': _code,
+              'use_proxy': widget.useProxy,
+            }) as Map;
+      if (!mounted || _finished || generation != _generation) return;
       if (r['status'] == 'authorized') {
-        final c = AiOAuthCredential.fromJson((r['credential'] as Map).cast<String, dynamic>());
+        final c = AiOAuthCredential.fromJson({
+          ...((r['credential'] as Map).cast<String, dynamic>()),
+          'transport': _transport,
+        });
         if (c.access.isEmpty || c.refresh.isEmpty) throw StateError('授权响应缺少登录令牌');
         _cancel();
         Navigator.pop(context, c);
@@ -158,10 +213,22 @@ class _DeviceLoginState extends State<_DeviceLogin> {
         throw StateError('设备授权状态无效，请重新登录');
       }
     } on Object catch (e) {
-      _fail(e);
+      if (generation == _generation) _fail(e);
     } finally {
-      _polling = false;
+      if (generation == _generation) _polling = false;
     }
+  }
+
+  void _retry([String? transport]) {
+    _cancel();
+    setState(() {
+      _transport = transport ?? _transport;
+      _finished = false;
+      _polling = false;
+      _code = '';
+      _error = null;
+    });
+    unawaited(_begin());
   }
 
   void _fail(Object e) {
@@ -185,45 +252,72 @@ class _DeviceLoginState extends State<_DeviceLogin> {
       title: const Text('OpenAI / ChatGPT 设备码登录'),
       content: SizedBox(
         width: 430,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('请自行在浏览器打开官方地址并输入下方设备码。仅在你主动发起登录时授权，切勿把设备码交给他人。'),
-            const SizedBox(height: 12),
-            const SelectableText('https://auth.openai.com/codex/device'),
-            TextButton.icon(
-              onPressed: () => Clipboard.setData(const ClipboardData(text: 'https://auth.openai.com/codex/device')),
-              icon: const Icon(Icons.copy, size: 16),
-              label: const Text('复制官方登录地址'),
-            ),
-            if (_code.isNotEmpty) ...[
-              SelectableText(
-                _code,
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 3),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('请自行在浏览器打开官方地址并输入下方设备码。仅在你主动发起登录时授权，切勿把设备码交给他人。'),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: ValueKey('ai-auth-transport-$_transport'),
+                initialValue: _transport,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '授权网络出口'),
+                items: const [
+                  DropdownMenuItem(value: 'client', child: Text('本机网络 / 系统代理（推荐）')),
+                  DropdownMenuItem(value: 'server', child: Text('服务器网络 / 服务器代理出口')),
+                ],
+                onChanged: (v) {
+                  if (v != null && v != _transport) _retry(v);
+                },
               ),
+              const SizedBox(height: 12),
+              const SelectableText('https://auth.openai.com/codex/device'),
               TextButton.icon(
-                onPressed: () => Clipboard.setData(ClipboardData(text: _code)),
+                onPressed: () => Clipboard.setData(const ClipboardData(text: 'https://auth.openai.com/codex/device')),
                 icon: const Icon(Icons.copy, size: 16),
-                label: const Text('复制设备码'),
+                label: const Text('复制官方登录地址'),
+              ),
+              if (_code.isNotEmpty) ...[
+                SelectableText(
+                  _code,
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 3),
+                ),
+                TextButton.icon(
+                  onPressed: () => Clipboard.setData(ClipboardData(text: _code)),
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('复制设备码'),
+                ),
+              ],
+              if (_error != null)
+                Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))
+              else
+                Row(
+                  children: [
+                    const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(width: 10),
+                    Flexible(child: Text(_code.isEmpty ? '正在获取设备码…' : '等待浏览器授权，最长 15 分钟…')),
+                  ],
+                ),
+              const SizedBox(height: 12),
+              Text(
+                _transport == 'client'
+                    ? '授权及刷新直接从本机发出，不经过服务器；模型请求仍从服务器发出。令牌加密保存在本机。'
+                    : '授权及刷新经服务器出口，令牌仅加密保存在本机。获取设备码时的 403 通常需要检查出口网络，不能据此判断订阅资格。',
+                style: const TextStyle(fontSize: 12, height: 1.6),
               ),
             ],
-            if (_error != null)
-              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))
-            else
-              Row(
-                children: [
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                  const SizedBox(width: 10),
-                  Flexible(child: Text(_code.isEmpty ? '正在获取设备码…' : '等待浏览器授权，最长 15 分钟…')),
-                ],
-              ),
-            const SizedBox(height: 12),
-            const Text('授权和模型请求经当前服务器出口。刷新令牌仅加密保存在客户端；服务器不保存登录。需账号启用设备码登录并具有相应模型资格。', style: TextStyle(fontSize: 12)),
-          ],
+          ),
         ),
       ),
       actions: [
+        if (_error != null)
+          FilledButton.icon(
+            onPressed: () => _retry(),
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('重新获取设备码'),
+          ),
         TextButton(
           onPressed: () {
             _cancel();

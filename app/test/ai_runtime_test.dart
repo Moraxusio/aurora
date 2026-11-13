@@ -49,6 +49,7 @@ class EventStream implements OpStream {
 class RuntimeLink extends FakeAiLink {
   final events = EventStream();
   bool legacy = false;
+  bool longHistory = false;
   @override
   Future<OpStream> open(String op, [Object? args, Priority priority = Priority.interactive]) async => events;
   @override
@@ -59,6 +60,12 @@ class RuntimeLink extends FakeAiLink {
       session['runtime'] = _runtime;
       session['context'] = _context;
       (session['messages'] as List).last['runtime'] = _runtime;
+      if (longHistory) {
+        ((session['messages'] as List).first['parts'] as List).first['text'] = List.filled(
+          60,
+          '较长的历史记录，用于验证向上阅读时不会被新回复拉回底部。',
+        ).join('\n');
+      }
     }
     return result;
   }
@@ -129,8 +136,8 @@ void main() {
     await t.pumpWidget(
       RepaintBoundary(
         key: shotKey,
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: buildTheme(Brightness.dark),
           home: InputMode.scope(
             mode: input,
@@ -216,5 +223,64 @@ void main() {
     await pump(t, width: 390);
     expect(find.byKey(const ValueKey('ai-runtime-bar')), findsOneWidget);
     await snapshot(t, 'ai-runtime-mobile');
+  });
+  testWidgets('stream text is coalesced and reading history is not forcibly scrolled', (t) async {
+    link.longHistory = true;
+    await pump(t);
+    final list = t.widget<ListView>(find.byType(ListView).first);
+    expect(list.controller!.position.maxScrollExtent, greaterThan(200));
+    list.controller!.jumpTo(list.controller!.position.maxScrollExtent);
+    await t.pump();
+    link.events.emit({'type': 'text.delta', 'delta': 'batched '});
+    link.events.emit({'type': 'text.delta', 'delta': 'reply'});
+    await t.pump();
+    expect(find.text('batched reply', findRichText: true), findsNothing);
+    await t.pump(const Duration(milliseconds: 34));
+    // The buffers are flushed together, not rendered once for each token.
+    expect(find.text('batched reply', findRichText: true), findsWidgets);
+    list.controller!.jumpTo(0);
+    await t.pump();
+    expect(find.byKey(const ValueKey('ai-jump-latest')), findsOneWidget);
+    link.events.emit({'type': 'text.delta', 'delta': ' while reading history'});
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(list.controller!.offset, 0);
+    await t.tap(find.byKey(const ValueKey('ai-jump-latest')));
+    await t.pump();
+    // animateTo is started after layout; give its ticker a first frame before
+    // advancing past the animation, rather than measuring at its start time.
+    await t.pump(const Duration(milliseconds: 16));
+    await t.pump(const Duration(milliseconds: 200));
+    expect(list.controller!.offset, greaterThan(200));
+  });
+  testWidgets('mobile composer previews pasted image and file without uploading', (t) async {
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(const MethodChannel('aurora3/input'), (call) async {
+      if (call.method != 'readClipboard') return null;
+      return {
+        'files': [
+          {
+            'name': '一张较长文件名的示例截图.png',
+            'bytes': base64Decode(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJZkAAAAASUVORK5CYII=',
+            ),
+          },
+          {'name': 'README.md', 'bytes': Uint8List.fromList(utf8.encode('# 合成测试文件'))},
+        ],
+      };
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(const MethodChannel('aurora3/input'), null));
+    await pump(t, width: 390);
+    await t.tap(find.byKey(const ValueKey('ai-attach-menu')));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+    await t.tap(find.text('粘贴图片 / 文件 / 文本'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('示例截图.png'), findsOneWidget);
+    expect(find.textContaining('README.md'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    expect(link.rpcCalls.where((c) => c.$1 == 'ai.run' || c.$1 == 'ai.attach.upload'), isEmpty);
+    await snapshot(t, 'ai-attachments-mobile');
   });
 }

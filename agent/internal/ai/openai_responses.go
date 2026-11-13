@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 // streamOpenAIResponses ports OpenCode's open-responses protocol
@@ -24,6 +26,13 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 		case "user":
 			var content []map[string]any
 			for _, p := range msg.Parts {
+				if p.DataURL != "" {
+					if p.Type == "image" {
+						content = append(content, map[string]any{"type": "input_image", "image_url": p.DataURL})
+					} else {
+						content = append(content, map[string]any{"type": "input_file", "filename": p.Filename, "file_data": p.DataURL})
+					}
+				}
 				if p.Type == "text" && p.Text != "" {
 					content = append(content, map[string]any{
 						"type": "input_text",
@@ -154,12 +163,24 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 	if err != nil {
 		return LLMResponse{}, err
 	}
+	compressed := subscription && len(rawBody) > 512*1024
+	if compressed {
+		encoder, zerr := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithEncoderConcurrency(1))
+		if zerr != nil {
+			return LLMResponse{}, errors.New("无法压缩 ChatGPT 附件请求")
+		}
+		rawBody = encoder.EncodeAll(rawBody, nil)
+		encoder.Close()
+	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(rawBody))
 	if err != nil {
 		return LLMResponse{}, err
 	}
 	applyOpenCodeHeaders(httpReq.Header, req)
+	if compressed {
+		httpReq.Header.Set("Content-Encoding", "zstd")
+	}
 	if subscription {
 		applySubscriptionHeaders(httpReq.Header, req)
 	}

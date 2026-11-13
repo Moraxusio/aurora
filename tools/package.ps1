@@ -103,17 +103,21 @@ Aurora $Version (Windows)
   只有当前 Windows 用户能打开。
 
 本次更新（$Version）：
-- AI 页显示上下文估算占用/输入预算/百分比，累计用量另列；压缩、回退后重新估算。
-- 显示当步实际请求的提供商与模型、下一次选择；每条回答保留当时的提供商和模型。
-- 复用 OpenCode（MIT）的 OpenAI / ChatGPT 订阅 device 登录、token 交换/刷新和 Codex
-  HTTP SSE 路由。入口：AI 设置 -> 添加 OpenAI / ChatGPT 订阅（设备码）预设。
-- API Key 与 OAuth 令牌加密保存在本机 profile.bin；日常调用只发送 access，refresh
-  仅在专用刷新 RPC 中短暂经过服务器内存，不写入服务器会话、日志或广播事件。
-- 订阅固定使用官方 ChatGPT/Codex，禁止自定义 URL/headers 与重定向；模型列表为内置
-  建议，不是账号资格查询。登录/退出立即保存；长任务到期后需由客户端重新发送刷新。
-- 上下文数字为活动输入估算，不是全部会话累计 tokens，也不证明网关内部真实模型身份。
-- 已做本地 HTTP 授权桩、加密落盘、界面与 Go 测试；真实 ChatGPT 授权/对话、真实
-  Windows 窗口交互和 Android 真机尚未验证。未移植 OpenCode 的 WebSocket/zstd。
+- OpenAI / ChatGPT 设备码授权默认走本机网络/系统代理，可切换服务器出口并重试。
+  本机刷新不把 refresh 发给 agent；模型请求仍由服务器发出。获取设备码时的 403
+  不等于订阅无效，更换授权出口不保证解决所有上游限制。Windows PAC-only 暂不解析。
+- AI 输入框支持 Ctrl+V/菜单粘贴图片和复制的文件、本机选文件及服务器文件浏览。
+  支持 PNG/JPEG/GIF/WebP、PDF、UTF-8 文本/代码；单件 8 MiB、文本 256 KiB，
+  每条最多 8 件且合计 20 MiB。粘贴不上传，发送才分块上传；图片/PDF 需要模型支持。
+- 附件明文保留在服务器 AI 私有目录用于历史重放，库限额 512 MiB，不写工作目录；
+  删除会话保护共享引用。发送未成功或回退形成的孤儿附件尚无自动清理。
+- 新会话工作目录使用项目/根目录下拉和面包屑浏览，不再手输；已有会话目录固定。
+- 正文默认 15 px，支持持久化字号、复制回答、惰性历史及流式合帧，读历史不强制滚底，
+  中文组词时 Enter 不发送。上下文估算、累计用量、实际模型与下一次选择仍分开显示。
+- 继续复用 OpenCode（MIT）的设备码、Codex HTTP SSE 与协议实现；大 ChatGPT 请求
+  使用 zstd。尚未移植 WebSocket、browser callback 或 token-sharing。
+- 自动化测试与宽屏/手机组件截图通过；真实 ChatGPT 授权/对话、Windows 原生剪贴板
+  和 Android 真机尚未验证。令牌仍加密保存在本机，长任务到期需客户端下次调用刷新。
 - 使用本功能需将服务器上的 aurora3-agent 升级至 $Version（连接后点击升级提示即可）。
 代理功能：
 - 在“代理”页添加 Clash 订阅 URL，或粘贴节点链接；选用节点后，新建终端时勾选

@@ -52,6 +52,8 @@ func (s svc) Operations() []service.Operation {
 		{Name: "ai.search", Handle: s.opSearch},
 		{Name: "ai.export", Handle: s.opExport},
 		{Name: "ai.stream", Stream: s.opStream},
+		{Name: "ai.attach.upload", Stream: s.opAttachmentUpload},
+		{Name: "ai.attach.download", Stream: s.opAttachmentDownload},
 	}
 }
 

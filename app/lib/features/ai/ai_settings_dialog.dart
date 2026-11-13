@@ -9,6 +9,7 @@ import '../../kernel/workspace.dart';
 import '../../state/app_state.dart';
 import '../../theme/ide_theme.dart';
 import 'ai_auth.dart';
+import 'ai_oauth_client.dart';
 
 class _Preset {
   final String label;
@@ -29,17 +30,18 @@ const _presets = <_Preset>[
   _Preset('OpenCode Zen', 'OpenCode Zen', 'anthropic-messages', 'https://opencode.ai/zen/v1', 'claude-sonnet-4-5'),
 ];
 
-Future<void> showAiSettingsDialog(BuildContext context, {required AppState app, Workspace? ws}) {
+Future<void> showAiSettingsDialog(BuildContext context, {required AppState app, Workspace? ws,AiOAuthClient Function()? localAuthFactory}) {
   return showDialog<void>(
     context: context,
-    builder: (_) => AiSettingsDialog(app: app, ws: ws),
+    builder: (_) => AiSettingsDialog(app: app, ws: ws,localAuthFactory:localAuthFactory),
   );
 }
 
 class AiSettingsDialog extends StatefulWidget {
   final AppState app;
   final Workspace? ws;
-  const AiSettingsDialog({super.key, required this.app, this.ws});
+  final AiOAuthClient Function()? localAuthFactory;
+  const AiSettingsDialog({super.key, required this.app, this.ws,this.localAuthFactory});
 
   @override
   State<AiSettingsDialog> createState() => _AiSettingsDialogState();
@@ -202,11 +204,11 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
 
   Future<void> _login() async {
     final link = widget.ws?.link;
-    if (link == null || !widget.app.ready) { Toast.show('请先连接新版 agent 并解锁本机加密配置', error:true); return; }
+    if (!widget.app.ready) { Toast.show('请先解锁本机加密配置', error:true); return; }
     _saveCurrentToMemory();
     final current = _ai.providers.firstWhere((p) => p.id == _editingId);
     final baseline = widget.app.profile.ai.providers.where((p) => p.id == current.id).firstOrNull;
-    final c = await showAiDeviceLogin(context, link, useProxy:_useProxy);
+    final c = await showAiDeviceLogin(context, link, useProxy:_useProxy,localFactory:widget.localAuthFactory);
     if (!mounted || c == null || current.id != _editingId || !current.isSubscription) return;
     try {
       await widget.app.update((profile) {

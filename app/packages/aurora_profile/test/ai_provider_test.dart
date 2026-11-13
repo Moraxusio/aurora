@@ -23,6 +23,14 @@ AiProvider subscription() => AiProvider(
 );
 
 void main() {
+  test('chat font preference round trips, clamps and keeps old defaults',(){
+    expect(AiSettings().isDefault,isTrue);
+    expect(AiSettings().toJson().containsKey('chat_font_size'),isFalse);
+    expect(AiSettings.fromJson(AiSettings(chatFontSize:17).toJson()).chatFontSize,17);
+    expect(AiSettings.fromJson({'chat_font_size':999}).chatFontSize,22);
+    expect(AiSettings.fromJson({}).chatFontSize,15);
+    expect(AiOAuthCredential.fromJson({'access':'fixture','refresh':'fixture','expires':1}).transport,'client');
+  });
   test('subscription wire uses access only and refuses custom routing', () {
     final p = subscription();
     final wire = p.toWireJson();

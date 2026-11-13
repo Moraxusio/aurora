@@ -447,12 +447,23 @@ func (e *Env) DeleteSession(id string) error {
 		}
 	}
 	dir := e.sessionsDir()
+	attachmentCandidates := map[string]bool{}
 	for _, did := range toDelete {
+		if session := e.sessions[did]; session != nil {
+			for _, message := range session.Messages {
+				for _, part := range message.Parts {
+					if part.AttachmentID != "" {
+						attachmentCandidates[part.AttachmentID] = true
+					}
+				}
+			}
+		}
 		delete(e.sessions, did)
 		if dir != "" {
 			_ = os.Remove(filepath.Join(dir, did+".json"))
 		}
 	}
+	e.removeUnusedAttachmentsLocked(attachmentCandidates)
 	return nil
 }
 
@@ -558,6 +569,12 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	}
 
 	e.mu.Lock()
+	// Deletion uses the same lock: a shared reference must not disappear
+	// between validation and publishing this message/inbox entry.
+	if err := e.validateAttachments(in.Attachments); err != nil {
+		e.mu.Unlock()
+		return SessionSummary{}, err
+	}
 	var s *Session
 	if in.SessionID != "" {
 		s = e.sessions[in.SessionID]
@@ -578,9 +595,19 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 			return SessionSummary{}, err
 		}
 		now := time.Now().UnixMilli()
+		initialTitle := in.Text
+		if strings.TrimSpace(initialTitle) == "" && len(in.Attachments) > 0 {
+			label := in.Attachments[0].Label
+			if label == "" && in.Attachments[0].AttachmentID != "" {
+				if m, err := e.attachmentMeta(in.Attachments[0].AttachmentID); err == nil {
+					label = m.Name
+				}
+			}
+			initialTitle = "附件：" + label
+		}
 		s = &Session{
 			ID:             NewID("ses"),
-			Title:          fallbackTitle(in.Text),
+			Title:          fallbackTitle(initialTitle),
 			Root:           rt.ID,
 			Workdir:        cw,
 			Agent:          agentMode,
@@ -653,7 +680,7 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		SessionID: s.ID,
 		Role:      "user",
 		Agent:     agentMode,
-		Parts:     []Part{{Type: "text", ID: NewID("prt"), Text: formatUserContent(in.Text, in.Attachments)}},
+		Parts:     e.userParts(in.Text, in.Attachments),
 		CreatedAt: time.Now().UnixMilli(),
 	}
 	s.Messages = append(s.Messages, userMsg)
@@ -824,7 +851,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 					SessionID: s.ID,
 					Role:      "user",
 					Agent:     s.Agent,
-					Parts:     []Part{{Type: "text", ID: NewID("prt"), Text: formatUserContent(item.Text, item.Attachments)}},
+					Parts:     e.userParts(item.Text, item.Attachments),
 					CreatedAt: item.CreatedAt,
 				}
 				s.Messages = append(s.Messages, um)
@@ -896,13 +923,14 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		})
 
 		llmResp, llmErr := StreamLLM(ctx, LLMRequest{
-			SessionID:  sessionID,
-			AffinityID: sessSnap.ParentID,
-			Initiator:  initiator,
-			Provider:   prov,
-			System:     sysPrompts,
-			Messages:   activeMsgs,
-			Tools:      tools,
+			SessionID:      sessionID,
+			AffinityID:     sessSnap.ParentID,
+			Initiator:      initiator,
+			Provider:       prov,
+			System:         sysPrompts,
+			Messages:       activeMsgs,
+			Tools:          tools,
+			LoadAttachment: e.loadAttachment,
 		}, e.Proxy, func(d LLMDelta) {
 			switch d.Type {
 			case "text":
@@ -1281,7 +1309,7 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 		SessionID: sessionID,
 	})
 
-	compMsg, err := RunCompaction(ctx, &snap, prov, absWorkdir, overflow, e.Proxy, func(delta string) {
+	compMsg, err := RunCompaction(ctx, &snap, prov, absWorkdir, overflow, e.Proxy, e.loadAttachment, func(delta string) {
 		e.broadcast(StreamEvent{
 			Type:      "compaction.delta",
 			SessionID: sessionID,

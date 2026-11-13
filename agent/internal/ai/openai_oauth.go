@@ -75,6 +75,9 @@ func oauthRequest(ctx context.Context, proxy func() map[string]string, useProxy 
 }
 
 func oauthStatus(status int) error {
+	if status == 403 {
+		return errors.New("OpenAI 授权端点拒绝了服务器出口（HTTP 403）；请改用本机授权或更换服务器代理出口。获取设备码阶段尚不能判断订阅资格")
+	}
 	if status == 401 || status == 400 {
 		return errors.New("OpenAI 登录已失效或授权码过期，请重新使用设备码登录")
 	}

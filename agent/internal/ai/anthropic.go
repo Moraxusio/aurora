@@ -62,6 +62,14 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 		case "user":
 			var blocks []map[string]any
 			for _, p := range msg.Parts {
+				if p.DataURL != "" {
+					_, data, _ := strings.Cut(p.DataURL, ",")
+					typ := "document"
+					if p.Type == "image" {
+						typ = "image"
+					}
+					blocks = append(blocks, map[string]any{"type": typ, "source": map[string]any{"type": "base64", "media_type": p.Mime, "data": data}})
+				}
 				if p.Type == "text" && p.Text != "" {
 					blocks = append(blocks, map[string]any{
 						"type": "text",

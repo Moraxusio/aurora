@@ -18,6 +18,11 @@ import 'ai_model_picker.dart';
 import 'ai_auth.dart';
 import 'ai_models.dart';
 import 'ai_settings_dialog.dart';
+import 'ai_attachments.dart';
+import 'ai_path_picker.dart';
+import 'ai_attachment_tile.dart';
+
+class _AiPasteIntent extends Intent { const _AiPasteIntent(); }
 
 EditorTab aiStudioTab(Workspace ws, {String? sessionId, String title = 'AI 助手'}) {
   final tabId = sessionId == null ? 'ai:new' : 'ai:$sessionId';
@@ -68,6 +73,13 @@ class _AiStudioViewState extends State<AiStudioView> {
   AiPermissionQuestion? _pendingPerm;
 
   final List<AiAttachment> _attachments = [];
+  final Map<AiAttachment,(Link,Map<String,dynamic>)> _uploadedAttachments={};
+  bool _pasteBusy=false;
+  String? _attachmentNote;
+  bool _followTail=true;
+  Timer? _paintTimer;
+  double _chatFontSize=15;
+  final Map<AiMessage,(Ide,bool,double,Link?,Widget)> _messageCache={};
   final _inputCtl = TextEditingController();
   final _inputFocus = FocusNode();
   final _scrollCtl = ScrollController();
@@ -85,8 +97,10 @@ class _AiStudioViewState extends State<AiStudioView> {
     if (ws.app.ready) {
       _agentMode = ws.app.profile.ai.defaultAgent;
       _permMode = ws.app.profile.ai.permissionMode;
+      _chatFontSize = ws.app.profile.ai.chatFontSize;
     }
     ws.addListener(_onWorkspaceChanged);
+    _scrollCtl.addListener(_onScroll);
     ws.app.addListener(_onAppChanged);
     _initConnection();
   }
@@ -97,6 +111,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     ws.removeListener(_onWorkspaceChanged);
     ws.app.removeListener(_onAppChanged);
     _closeStream();
+    _paintTimer?.cancel();
     _inputCtl.dispose();
     _inputFocus.dispose();
     _scrollCtl.dispose();
@@ -104,7 +119,7 @@ class _AiStudioViewState extends State<AiStudioView> {
   }
 
   void _onAppChanged() {
-    if (mounted) setState(() {});
+    if (mounted) setState(() {if(ws.app.ready)_chatFontSize=ws.app.profile.ai.chatFontSize;});
   }
 
   void _onWorkspaceChanged() {
@@ -175,6 +190,7 @@ class _AiStudioViewState extends State<AiStudioView> {
           : null;
       setState(() {
         _session = sess;
+        _messageCache.clear();
         _running = running;
         _pendingPerm = pending;
         _root = sess.root;
@@ -234,6 +250,16 @@ class _AiStudioViewState extends State<AiStudioView> {
     if (type == 'ping') return;
     final sid = ev['session_id'] as String? ?? '';
     if (_sessionId == null || sid != _sessionId) return;
+
+    // Coalesce high-frequency text chunks; do not re-layout Markdown per token.
+    if(type=='text.delta'||type=='reasoning.delta'||type=='compaction.delta'){
+      final delta=ev['delta'] as String? ?? '';
+      if(type=='text.delta')_liveText+=delta;
+      if(type=='reasoning.delta')_liveReasoning+=delta;
+      if(type=='compaction.delta'){if(_liveCompaction=='正在压缩上下文摘要…')_liveCompaction='';_liveCompaction+=delta;}
+      _paintTimer??=Timer(const Duration(milliseconds:33),(){_paintTimer=null;if(mounted){setState((){});_scrollToBottom();}});
+      return;
+    }
 
     setState(() {
       if (ev['runtime'] is Map || ev['context'] is Map) {
@@ -403,11 +429,17 @@ class _AiStudioViewState extends State<AiStudioView> {
     _scrollToBottom();
   }
 
-  void _scrollToBottom() {
+  void _onScroll(){
+    if(!_scrollCtl.hasClients)return;
+    final near=_scrollCtl.position.maxScrollExtent-_scrollCtl.position.pixels<120;
+    if(near!=_followTail&&mounted)setState(()=>_followTail=near);
+  }
+
+  void _scrollToBottom({bool force=false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollCtl.hasClients) return;
       final pos = _scrollCtl.position;
-      if (pos.maxScrollExtent - pos.pixels < 260 || !_running) {
+      if (force || _followTail) {
         _scrollCtl.animateTo(
           pos.maxScrollExtent,
           duration: const Duration(milliseconds: 140),
@@ -436,26 +468,38 @@ class _AiStudioViewState extends State<AiStudioView> {
     if (text.isEmpty && _attachments.isEmpty) return;
 
     final sentAttachments = List<AiAttachment>.of(_attachments);
+    final sentRoot=_root, sentWorkdir=_workdir, sentAgent=_agentMode, sentPermission=_permMode;
     final inputBefore = _inputCtl.text;
-    setState(() => _sending = true);
+    setState(() { _sending = true; _followTail=true; });
 
     try {
       final prepared = await prepareAiProvider(ws.app, link, prov);
       if (!mounted || !identical(link, ws.link)) return;
       if (_activeProvider?.id != prov.id || _activeProvider?.model != prov.model) throw StateError('模型选择已变更，请确认后重新发送');
+      final attachments=<Map<String,dynamic>>[];
+      for(final a in sentAttachments){
+        if(a.bytes==null){attachments.add(a.toJson());continue;}
+        final cached=_uploadedAttachments[a];
+        if(cached!=null&&identical(cached.$1,link)){attachments.add(cached.$2);continue;}
+        final result=await uploadAiAttachment(link,a,active:()=>mounted&&identical(ws.link,link),progress:(p){if(mounted)setState(()=>_attachmentNote='正在上传 ${a.label} · ${(p*100).round()}%');});
+        _uploadedAttachments[a]=(link,result);
+        attachments.add(result);
+      }
+      if(!mounted||!identical(link,ws.link))return;
       final res = await link.call('ai.run', {
         if (_sessionId != null) 'session_id': _sessionId,
-        'root': _root,
-        'workdir': _workdir,
-        'agent': _agentMode,
-        'permission_mode': _permMode,
+        'root': sentRoot,
+        'workdir': sentWorkdir,
+        'agent': sentAgent,
+        'permission_mode': sentPermission,
         'text': text,
-        if (sentAttachments.isNotEmpty) 'attachments': [for (final a in sentAttachments) a.toJson()],
+        if (attachments.isNotEmpty) 'attachments': attachments,
         'provider': prepared.toWireJson(),
       }) as Map;
       if (!mounted) return;
       if (quickPrompt == null && _inputCtl.text == inputBefore) _inputCtl.clear();
       setState(() => _attachments.removeWhere(sentAttachments.contains));
+      for(final a in sentAttachments){_uploadedAttachments.remove(a);}
       final sum = AiSessionSummary.fromJson((res['session'] as Map).cast<String, dynamic>());
       final isNew = _sessionId == null;
       _sessionId = sum.id;
@@ -472,7 +516,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     } on Object catch (e) {
       ws.toast(e is StateError ? e.message : '发送失败，输入和附件已保留', error:true);
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) setState(() { _sending = false; _attachmentNote=null; });
     }
   }
 
@@ -550,60 +594,78 @@ class _AiStudioViewState extends State<AiStudioView> {
     final link = ws.link;
     final activeFile = ws.active?.file;
     if (link == null || activeFile == null) {
-      ws.toast('请先在编辑器中打开一个文件，或使用「附加路径…」');
+      ws.toast('请先在编辑器中打开一个文件，或使用「浏览服务器文件」');
       return;
     }
     try {
-      final res = await link.call('fs.read', {'root': activeFile.root, 'path': activeFile.path}) as Map;
-      final content = res['content'] as String? ?? '';
-      if (!mounted) return;
-      setState(() {
-        _attachments.add(AiAttachment(
-          kind: 'file',
-          label: activeFile.name,
-          path: activeFile.path,
-          content: content.length > 32000 ? '${content.substring(0, 32000)}\n...[truncated]' : content,
-        ));
-      });
-    } on OpError catch (e) {
-      ws.toast('读取文件失败：${e.message}', error: true);
+      _addAttachments([await readAiRemoteFile(link,activeFile.root,activeFile.path)]);
+    } on Object catch (e) {
+      _attachmentError(e);
     }
   }
 
   Future<void> _attachFileByPath() async {
     final link = ws.link;
     if (link == null) return;
-    final path = await askText(context, title: '附加服务器文件到上下文', initial: _workdir == '/' ? '/' : '$_workdir/', hint: '/path/to/file');
-    if (path == null || path.isEmpty) return;
+    final choice=await showAiPathPicker(context,link:link,roots:_roots,root:_root,path:_workdir,directory:false);
+    if (choice == null) return;
     try {
-      final res = await link.call('fs.read', {'root': _root, 'path': path}) as Map;
-      final content = res['content'] as String? ?? '';
-      if (!mounted) return;
-      final name = path.split('/').where((s) => s.isNotEmpty).lastOrNull ?? path;
-      setState(() {
-        _attachments.add(AiAttachment(
-          kind: 'file',
-          label: name,
-          path: path,
-          content: content.length > 32000 ? '${content.substring(0, 32000)}\n...[truncated]' : content,
-        ));
-      });
-    } on OpError catch (e) {
-      ws.toast('读取失败：${e.message}', error: true);
+      _addAttachments([await readAiRemoteFile(link,choice.root,choice.path)]);
+    } on Object catch (e) {
+      _attachmentError(e);
     }
   }
 
   Future<void> _pickWorkdir() async {
-    final next = await askText(
-      context,
-      title: '设置会话工作目录（相对于根目录 $_root）',
-      initial: _workdir,
-      hint: '例如 /projects/myapp 或 /',
-    );
-    if (next == null || next.isEmpty) return;
+    final link=ws.link;if(link==null)return;
+    final next=await showAiPathPicker(context,link:link,roots:_roots,root:_root,path:_workdir);
+    if (next == null || !mounted || !identical(link,ws.link)) return;
     setState(() {
-      _workdir = next.startsWith('/') ? next : '/$next';
+      _root=next.root;_workdir=next.path;
     });
+  }
+
+  void _attachmentError(Object e){if(mounted)ws.toast(e is StateError?e.message:e is OpError?e.message:e is PlatformException?e.message??'无法读取剪贴板':'附件读取失败，请重试',error:true);}
+  void _addAttachments(List<AiAttachment> list){
+    if(!mounted)return;
+    if(_attachments.length+list.length>8)throw StateError('每条消息最多 8 个附件');
+    final total=[..._attachments,...list].fold<int>(0,(n,a)=>n+(a.bytes?.length??utf8.encode(a.content).length));
+    if(total>aiAttachmentTotalLimit)throw StateError('每条消息附件总大小不能超过 20 MiB');
+    setState(()=>_attachments.addAll(list));
+  }
+  Future<void> _pickLocalFiles() async {try{_addAttachments(await pickAiLocalFiles());}on Object catch(e){_attachmentError(e);}}
+  Future<void> _paste() async {
+    if(_pasteBusy)return;_pasteBusy=true;
+    try{
+      final files=await readAiClipboardFiles();
+      if(!mounted)return;
+      if(files.isNotEmpty){_addAttachments(files);return;}
+      final text=await Clipboard.getData(Clipboard.kTextPlain);
+      if(!mounted||text?.text==null)return;
+      final value=_inputCtl.value;
+      final selection=value.selection.isValid?value.selection:TextSelection.collapsed(offset:value.text.length);
+      final inserted=text!.text!;
+      _inputCtl.value=TextEditingValue(text:value.text.replaceRange(selection.start,selection.end,inserted),selection:TextSelection.collapsed(offset:selection.start+inserted.length));
+    }on Object catch(e){_attachmentError(e);}finally{_pasteBusy=false;}
+  }
+  Future<void> _insertContent(KeyboardInsertedContent content) async {
+    try{
+      if(content.data!=null){_addAttachments([aiAttachmentFromBytes('keyboard.${content.mimeType.split('/').last}',content.data!)]);}
+      else{_addAttachments(await readAiContentUri(content.uri));}
+    }on Object catch(e){_attachmentError(e);}
+  }
+
+  Future<void> _setChatFontSize(double size) async {
+    if(!ws.app.ready){setState(()=>_chatFontSize=size);return;}
+    try{await ws.app.update((p)=>p.ai.chatFontSize=size);}on Object{if(mounted)ws.toast('对话字号保存失败',error:true);}
+  }
+  Widget _cachedMessageItem(Ide ide,AiMessage message){
+    final old=_messageCache[message];
+    if(old!=null&&identical(old.$1,ide)&&old.$2==_running&&old.$3==_chatFontSize&&identical(old.$4,ws.link))return old.$5;
+    final child=_buildMessageItem(ide,message);
+    if(_messageCache.length>=100)_messageCache.clear();
+    _messageCache[message]=(ide,_running,_chatFontSize,ws.link,child);
+    return child;
   }
 
   @override
@@ -626,7 +688,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     final messages = (_session?.messages ?? const <AiMessage>[]).where((m) => !m.isSystemReminder).toList();
     final todos = _session?.todos ?? const <AiTodoItem>[];
 
-    return Column(
+    return DefaultTextStyle.merge(style:const TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback),child:Column(
       children: [
         _buildTopBar(ide, prov),
         _buildRuntimeBar(ide, prov),
@@ -635,44 +697,43 @@ class _AiStudioViewState extends State<AiStudioView> {
         Expanded(
           child: messages.isEmpty && !_running
               ? _buildEmptyWelcome(ide, prov)
-              : ListView(
+              : ListView.builder(
                   controller: _scrollCtl,
                   padding: const EdgeInsets.fromLTRB(Space.xl, Space.l, Space.xl, Space.xl),
-                  children: [
-                    for (final msg in messages)
-                      Center(
+                  itemCount:messages.length+((_running||_liveReasoning.isNotEmpty||_liveText.isNotEmpty||_liveTools.isNotEmpty||_liveCompaction.isNotEmpty)?1:0)+(_pendingPerm!=null?1:0),
+                  itemBuilder:(context,index){
+                    if(index<messages.length){final msg=messages[index];return Center(
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 820),
-                          child: _buildMessageItem(ide, msg),
+                          constraints: const BoxConstraints(maxWidth: 900),
+                          child: RepaintBoundary(key:ValueKey(msg.id),child:_cachedMessageItem(ide, msg)),
                         ),
-                      ),
-                    if (_running || _liveReasoning.isNotEmpty || _liveText.isNotEmpty || _liveTools.isNotEmpty || _liveCompaction.isNotEmpty)
-                      Center(
+                      );}
+                    if(index==messages.length&&(_running||_liveReasoning.isNotEmpty||_liveText.isNotEmpty||_liveTools.isNotEmpty||_liveCompaction.isNotEmpty)){return Center(
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 820),
+                          constraints: const BoxConstraints(maxWidth: 900),
                           child: _buildLiveStep(ide),
                         ),
-                      ),
-                    if (_pendingPerm != null)
-                      Center(
+                      );}
+                    return Center(
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 820),
+                          constraints: const BoxConstraints(maxWidth: 900),
                           child: Padding(
                             padding: const EdgeInsets.only(top: Space.m),
                             child: _buildPermissionCard(ide, _pendingPerm!),
                           ),
                         ),
-                      ),
-                  ],
+                      );
+                  },
                 ),
         ),
+        if(!_followTail) TextButton.icon(key:const ValueKey('ai-jump-latest'),onPressed:(){setState(()=>_followTail=true);_scrollToBottom(force:true);},icon:const Icon(Icons.arrow_downward,size:16),label:const Text('回到最新消息')),
         _buildComposer(ide, prov),
       ],
-    );
+    ));
   }
 
   Widget _buildTopBar(Ide ide, AiProvider? prov) {
-    final canPickDir = _session == null || _session!.messages.isEmpty;
+    final canPickDir = !_sending&&(_session == null || _session!.messages.isEmpty);
 
     return Container(
       height: 36,
@@ -681,42 +742,18 @@ class _AiStudioViewState extends State<AiStudioView> {
       child: Row(
         children: [
           // Root & Workdir badge
-          Expanded(child:SingleChildScrollView(
-            scrollDirection:Axis.horizontal,
-            child:InkWell(
-            onTap: canPickDir ? _pickWorkdir : null,
-            borderRadius: BorderRadius.circular(Radii.s),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.folder_open_rounded, size: 14, color: ide.textDim),
-                  const SizedBox(width: 5),
-                  if (_roots.length > 1 && canPickDir)
-                    DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        isDense: true,
-                        value: _roots.any((r) => r['id'] == _root) ? _root : _roots.first['id'] as String,
-                        items: [
-                          for (final r in _roots)
-                            DropdownMenuItem(
-                              value: r['id'] as String,
-                              child: Text('${r['label'] ?? r['id']}', style: TextStyle(fontSize: 12, color: ide.text)),
-                            ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) setState(() => _root = v);
-                        },
-                      ),
-                    )
-                  else
-                    Text(_root.isEmpty ? '默认根目录' : _root, style: TextStyle(fontSize: 12, color: ide.textDim)),
-                  Text(' : $_workdir', style: TextStyle(fontSize: 12, color: ide.text, fontWeight: FontWeight.w500)),
-                ],
-              ),
-            ),
-          ))),
+          Expanded(child:PopupMenuButton<AiPathChoice>(
+            key:const ValueKey('ai-workdir-menu'),enabled:canPickDir,tooltip:canPickDir?'选择会话工作目录':'已有会话的目录固定；请新建会话选择其他目录',
+            onSelected:(choice){if(choice.root=='*browse*'){_pickWorkdir();}else{setState((){_root=choice.root;_workdir=choice.path;});}},
+            itemBuilder:(_)=>[
+              for(final folder in ws.project?.folders ?? const <WorkspacePath>[]) PopupMenuItem(value:AiPathChoice(folder.root,folder.path,folder.path),child:Text('项目：${folder.path}')),
+              for(final r in _roots) PopupMenuItem(value:AiPathChoice(r['id'] as String,'/','/'),child:Text('${r['label']??r['id']} /')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value:AiPathChoice('*browse*','',''),child:Row(children:[Icon(Icons.folder_open,size:18),SizedBox(width:8),Text('浏览服务器目录…')])),
+            ],
+            child:Padding(padding:const EdgeInsets.symmetric(horizontal:6,vertical:8),child:Row(children:[Icon(Icons.folder_open_rounded,size:16,color:ide.accent),const SizedBox(width:7),Expanded(child:Text('${_root.isEmpty?'默认根目录':_root} : $_workdir',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:13,color:ide.text,fontWeight:FontWeight.w500))),Icon(canPickDir?Icons.expand_more:Icons.lock_outline,size:15,color:ide.textDim)])),
+          )),
+          PopupMenuButton<double>(key:const ValueKey('ai-chat-font'),tooltip:'对话字号（保存在本机）',initialValue:_chatFontSize,onSelected:_setChatFontSize,itemBuilder:(_)=>const[PopupMenuItem(value:13.5,child:Text('紧凑 · 13.5')),PopupMenuItem(value:15.0,child:Text('标准 · 15')),PopupMenuItem(value:17.0,child:Text('舒适 · 17'))],icon:Icon(Icons.text_fields,size:17,color:ide.textDim)),
           if (_sessionId != null && (_session?.messages.isNotEmpty ?? false))
             IconBtn(Icons.compress_rounded, '压缩上下文 (/compact)', _running ? null : _compactManual, size: 15),
           IconBtn(
@@ -748,7 +785,7 @@ class _AiStudioViewState extends State<AiStudioView> {
         Text('下次调用：${prov == null ? '未配置' : '${prov.name} / ${prov.model}'}', key:const ValueKey('ai-next-model'), style:TextStyle(fontSize:11.5, color:ide.textDim)),
         const SizedBox(height:6),
         Wrap(spacing:16, runSpacing:4, crossAxisAlignment:WrapCrossAlignment.center, children:[
-          Tooltip(message:ctx == null ? '需新版 agent；累计用量不代表当前上下文。' : '活动上下文估算（包括系统提示、工具定义、回答与工具输出），不含尚未发送的输入。\n上次实际输入：${ctx.lastInput > 0 ? '${ctx.lastInput} tokens（已含缓存）' : '暂无 / 已压缩或回退'}\n上限来源：${ctx.limitSource == 'configured' ? '目录 / 手动配置' : '模型默认输入预算（可能与真实窗口不同）'}。\n压缩后重新估算；累计用量另列。', child:Text(contextText, key:const ValueKey('ai-context-usage'), style:TextStyle(fontSize:11.5, color:color))),
+          Tooltip(message:ctx == null ? '需新版 agent；累计用量不代表当前上下文。' : '活动上下文估算（包括系统提示、工具定义、回答与工具输出），不含尚未发送的输入。图片/PDF 使用粗略估值，不按 base64 长度计算。\n上次实际输入：${ctx.lastInput > 0 ? '${ctx.lastInput} tokens（已含缓存）' : '暂无 / 已压缩或回退'}\n上限来源：${ctx.limitSource == 'configured' ? '目录 / 手动配置' : '模型默认输入预算（可能与真实窗口不同）'}。\n压缩后重新估算；累计用量另列。', child:Text(contextText, key:const ValueKey('ai-context-usage'), style:TextStyle(fontSize:11.5, color:color))),
           if (usage != null && usage.totalTokens > 0)
             Tooltip(message:'累计输入 ${usage.inputTokens}（含缓存 ${usage.cacheReadTokens}）· 输出 ${usage.outputTokens}', child:Text('累计用量 ${_fmtTokens(usage.totalTokens)} tokens', key:const ValueKey('ai-total-usage'), style:TextStyle(fontSize:11, color:ide.textFaint))),
         ]),
@@ -954,7 +991,8 @@ class _AiStudioViewState extends State<AiStudioView> {
                       ],
                     ),
                     const SizedBox(height: Space.xs + 2),
-                    SelectableText(text, style: TextStyle(fontSize: 13.5, color: ide.text, height: 1.5)),
+                    if(text.isNotEmpty) SelectableText(text, style: TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback,fontSize:_chatFontSize,color:ide.text,height:1.65)),
+                    for(final part in msg.parts) if(part.attachmentId.isNotEmpty&&ws.link!=null) Padding(padding:const EdgeInsets.only(top:8),child:AiAttachmentTile(key:ValueKey(part.attachmentId),part:part,link:ws.link!)),
                   ],
                 ),
               ),
@@ -977,7 +1015,7 @@ class _AiStudioViewState extends State<AiStudioView> {
         children: [
           if (msg.role == 'assistant') Padding(
             padding:const EdgeInsets.only(bottom:Space.s),
-            child:Text(msg.runtime?.label ?? '未知提供商 / ${msg.model.isEmpty ? '未知模型' : msg.model}（旧记录）', style:TextStyle(fontSize:11, color:ide.textFaint)),
+            child:Row(children:[Expanded(child:Text(msg.runtime?.label ?? '未知提供商 / ${msg.model.isEmpty ? '未知模型' : msg.model}（旧记录）',style:TextStyle(fontSize:12,color:ide.textDim))),IconBtn(Icons.copy_outlined,'复制回答',()=>copyText(msg.parts.where((p)=>p.type=='text').map((p)=>p.text).join('\n\n'),what:'回答已复制'),size:15)]),
           ),
           for (final p in msg.parts)
             if (p.type == 'reasoning' && p.text.trim().isNotEmpty)
@@ -994,7 +1032,7 @@ class _AiStudioViewState extends State<AiStudioView> {
             else if (p.type == 'text' && p.text.trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: Space.s + 2),
-                child: _MarkdownText(text: p.text.trim()),
+                child: _MarkdownText(text: p.text.trim(),fontSize:_chatFontSize),
               )
             else if (p.type == 'tool-call')
               Padding(
@@ -1054,7 +1092,7 @@ class _AiStudioViewState extends State<AiStudioView> {
           if (_liveText.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: Space.s + 2),
-              child: _MarkdownText(text: _liveText),
+              child: _MarkdownText(text: _liveText,fontSize:_chatFontSize),
             ),
           for (final t in _liveTools)
             Padding(
@@ -1175,25 +1213,31 @@ class _AiStudioViewState extends State<AiStudioView> {
                 if (_attachments.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Space.s),
-                    child: Wrap(
+                    child:ConstrainedBox(constraints:const BoxConstraints(maxHeight:110),child:SingleChildScrollView(child:Wrap(
                       spacing: 6,
                       runSpacing: 6,
                       children: [
                         for (var i = 0; i < _attachments.length; i++)
                           InputChip(
                             visualDensity: VisualDensity.compact,
-                            avatar: const Icon(Icons.description_outlined, size: 14),
-                            label: Text(_attachments[i].label, style: const TextStyle(fontSize: 11.5)),
-                            onDeleted: () => setState(() => _attachments.removeAt(i)),
+                            avatar: _attachments[i].mime.startsWith('image/')&&_attachments[i].bytes!=null?ClipRRect(borderRadius:BorderRadius.circular(4),child:Image.memory(_attachments[i].bytes!,width:28,height:28,cacheWidth:64,fit:BoxFit.cover,errorBuilder:(_,_,_)=>const Icon(Icons.broken_image_outlined,size:16))):Icon(_attachments[i].mime=='application/pdf'?Icons.picture_as_pdf_outlined:Icons.description_outlined,size:16),
+                            label: ConstrainedBox(constraints:const BoxConstraints(maxWidth:200),child:Text('${_attachments[i].label}${_attachments[i].bytes!=null?' · ${(_attachments[i].bytes!.length/1024).toStringAsFixed(0)} KiB':''}',overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:12))),
+                            onDeleted: () => setState(() {_uploadedAttachments.remove(_attachments[i]);_attachments.removeAt(i);}),
                           ),
                       ],
-                    ),
+                    ))),
                   ),
-                Focus(
+                if(_attachments.isNotEmpty) Padding(padding:const EdgeInsets.only(bottom:8),child:Text('发送时上传并保存到服务器 AI 私有目录，供历史重放；图片/PDF 需模型支持。',maxLines:2,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:11.5,color:ide.textDim,height:1.5))),
+                if(_attachmentNote!=null) Padding(padding:const EdgeInsets.only(bottom:8),child:Text(_attachmentNote!,style:TextStyle(fontSize:12,color:ide.accent))),
+                Shortcuts(shortcuts:const{
+                  SingleActivator(LogicalKeyboardKey.keyV,control:true):_AiPasteIntent(),
+                  SingleActivator(LogicalKeyboardKey.keyV,meta:true):_AiPasteIntent(),
+                },child:Actions(actions:{_AiPasteIntent:CallbackAction<_AiPasteIntent>(onInvoke:(_){unawaited(_paste());return null;})},child:Focus(
                   onKeyEvent: (_, event) {
                     if (event is KeyDownEvent &&
                         event.logicalKey == LogicalKeyboardKey.enter &&
-                        !HardwareKeyboard.instance.isShiftPressed) {
+                        !HardwareKeyboard.instance.isShiftPressed &&
+                        !(_inputCtl.value.composing.isValid&&!_inputCtl.value.composing.isCollapsed)) {
                       _send();
                       return KeyEventResult.handled;
                     }
@@ -1204,8 +1248,13 @@ class _AiStudioViewState extends State<AiStudioView> {
                     controller: _inputCtl,
                     focusNode: _inputFocus,
                     minLines: 1,
-                    maxLines: 6,
-                    style: TextStyle(fontSize: 13.5, color: ide.text, height: 1.45),
+                    maxLines: MediaQuery.sizeOf(context).width<600?3:6,
+                    style: TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback,fontSize:15,color:ide.text,height:1.6),
+                    contentInsertionConfiguration:ContentInsertionConfiguration(allowedMimeTypes:const ['image/png','image/jpeg','image/gif','image/webp','application/pdf','text/plain'],onContentInserted:(c)=>unawaited(_insertContent(c))),
+                    contextMenuBuilder:(context,state)=>AdaptiveTextSelectionToolbar.buttonItems(anchors:state.contextMenuAnchors,buttonItems:[
+                      for(final item in state.contextMenuButtonItems) if(item.type!=ContextMenuButtonType.paste)item,
+                      ContextMenuButtonItem(label:'粘贴 / 图片 / 文件',onPressed:(){state.hideToolbar();unawaited(_paste());}),
+                    ]),
                     decoration: InputDecoration(
                       hintText: _running
                           ? '正在运行… 输入补充指令并回车可实时引导 (Steer)'
@@ -1217,7 +1266,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                       focusedBorder: InputBorder.none,
                     ),
                   ),
-                ),
+                ))),
                 const SizedBox(height: Space.s + 2),
                 Wrap(
                   spacing: Space.s,
@@ -1274,7 +1323,11 @@ class _AiStudioViewState extends State<AiStudioView> {
                     ),
                     if (activeFile != null)
                       IconBtn(Icons.attach_file_rounded, '附加当前打开文件 (${activeFile.name})', _attachActiveFile, size: 15),
-                    IconBtn(Icons.post_add_rounded, '按路径附加服务器文件…', _attachFileByPath, size: 15),
+                    PopupMenuButton<String>(key:const ValueKey('ai-attach-menu'),tooltip:'添加图片或文件',onSelected:(v){if(v=='local')_pickLocalFiles();if(v=='paste')_paste();if(v=='remote')_attachFileByPath();},itemBuilder:(_)=>const[
+                      PopupMenuItem(value:'local',child:Text('选择本机图片 / 文件…')),
+                      PopupMenuItem(value:'paste',child:Text('粘贴图片 / 文件 / 文本')),
+                      PopupMenuItem(value:'remote',child:Text('浏览服务器文件…')),
+                    ],icon:Icon(Icons.add_photo_alternate_outlined,size:19,color:ide.accent)),
                     if (_running) ...[
                       const SizedBox(width: 4),
                       Tooltip(
@@ -1711,7 +1764,8 @@ class _StepDiffCardState extends State<_StepDiffCard> {
 /// Lightweight structured Markdown & fenced-code-block renderer with 1-click copy.
 class _MarkdownText extends StatelessWidget {
   final String text;
-  const _MarkdownText({required this.text});
+  final double fontSize;
+  const _MarkdownText({required this.text,this.fontSize=15});
 
   @override
   Widget build(BuildContext context) {
@@ -1763,7 +1817,7 @@ class _MarkdownText extends StatelessWidget {
                     padding: const EdgeInsets.all(Space.m),
                     child: SelectableText(
                       b.content,
-                      style: TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 12.5, color: ide.text, height: 1.45),
+                      style: TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: fontSize-1, color: ide.text, height: 1.6),
                     ),
                   ),
                 ],
@@ -1792,23 +1846,24 @@ class _MarkdownText extends StatelessWidget {
   }
 
   MarkdownStyleSheet _chatMarkdownStyle(BuildContext context, Ide ide) {
-    final mono = TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 12.5, color: ide.text);
+    final body=TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback,color:ide.text,fontSize:fontSize,height:1.7);
+    final mono = TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: fontSize-1, color: ide.text,height:1.5);
     return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-      p: TextStyle(color: ide.text, fontSize: 13.5, height: 1.6),
+      p: body,
       h1: TextStyle(color: ide.text, fontSize: 18, fontWeight: FontWeight.w700, height: 1.5),
       h2: TextStyle(color: ide.text, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
       h3: TextStyle(color: ide.text, fontSize: 14.5, fontWeight: FontWeight.w600, height: 1.5),
       h4: TextStyle(color: ide.text, fontSize: 13.5, fontWeight: FontWeight.w600, height: 1.5),
       strong: TextStyle(color: ide.text, fontWeight: FontWeight.w700),
       em: TextStyle(color: ide.text, fontStyle: FontStyle.italic),
-      listBullet: TextStyle(color: ide.textDim, fontSize: 13.5),
+      listBullet: body.copyWith(color:ide.textDim),
       code: mono.copyWith(backgroundColor: ide.hover),
       codeblockDecoration: BoxDecoration(color: ide.sideBar, borderRadius: BorderRadius.circular(Radii.m)),
       blockquoteDecoration: BoxDecoration(color: ide.hover.withValues(alpha: 0.4), border: Border(left: BorderSide(color: ide.accent, width: 3))),
       a: TextStyle(color: ide.accent),
       tableBorder: TableBorder.all(color: ide.border),
       tableHead: TextStyle(color: ide.text, fontWeight: FontWeight.w600, fontSize: 13),
-      tableBody: TextStyle(color: ide.text, fontSize: 13),
+      tableBody: body.copyWith(fontSize:fontSize-1),
       horizontalRuleDecoration: BoxDecoration(border: Border(top: BorderSide(color: ide.border))),
     );
   }

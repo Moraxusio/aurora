@@ -215,6 +215,7 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | golang.org/x/crypto（Go） | 0.58.0 | BSD-3-Clause | 已有；VMess 用其中的 chacha20poly1305 与 sha3，Hysteria2 的 Salamander 混淆用 blake2b |
 | yaml（Dart，aurora_sub） | 3.1.4 | MIT | 读 Clash 配置的 `proxies:` 段 |
 | github.com/creack/pty（Go） | 1.1.24 | MIT | 终端，沿用 v2 |
+| github.com/klauspost/compress（Go） | 1.17.9 | BSD-3-Clause | 已有间接依赖改为直接使用；ChatGPT Responses 大请求的 zstd 压缩（D-107） |
 | golang.org/x/net、x/sys、x/crypto（Go） | 见 go.mod | BSD-3-Clause | — |
 
 开发依赖（`test`、`lints`、`flutter_lints`）不进入发布产物。hashicorp/yamux 和 dbus 是 MPL-2.0，属于文件级弱 copyleft：只要求修改过的该库文件本身开源，我们没有修改它们。ISC 与 MIT 等价。Dart 端的 yamux 是按协议自行编写的，没有复制 hashicorp/yamux 的代码。
@@ -419,3 +420,16 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 内置 linux/amd64 agent：13,578,402 字节，SHA-256 `7838f6871836e791cacc06235618e9b734e288ada0067889a7d1be9f36484b1f`，版本命令输出 3.12.0；Go 构建元数据 `vcs.revision=0dabbe2bb0dd766a5357fe383d222c629e4eaac4`、`vcs.modified=false`。正式发布公钥（key ID `87828dfb18459372`）验签通过；临时副本中的 agent 字节与 manifest 篡改被拒。签名策略验签、策略篡改拒绝、普通降级拒绝均通过。
 - Android APK：arm64-v8a（versionCode 33200）39,490,634 字节，SHA-256 `926bab560ecfcea31322ee64bcf12a72d198c68834b8fa96407b52d8d1e22e38`；armeabi-v7a（32200）34,901,458 字节，SHA-256 `48a0a98c51e2b86f3d14b59dbe3c55eed18f9895a4c24710aa8902bb2f0856a7`；x86_64（35200）41,718,756 字节，SHA-256 `8931c8af2bd760d51d3546209691b22b32769b605404f68c1b2b73065118ba81`。versionName 均为 3.12.0；apksigner、ABI 与版本检查通过，签名证书 SHA-256 与之前相同（`db59a41d…1554882`），三个 APK 的 5 个 agent 文件和 3 个法律文件逐字节与 Windows 包一致，Android SHA-256 清单通过。
 - Windows 与全部 APK 的敏感字符串扫描通过，未检出私钥、profile 或测试文件，OpenCode MIT 署名在许可证汇总中。v2 的 release 目录仍为 13 项，旧 3.11.0 ZIP 哈希未变；未更改正式服务器安装，也未启动真实客户端窗口。真实 ChatGPT 授权/订阅对话与 Android 真机仍未验证，发布说明明确保留这些边界。
+
+### AI 授权出口、粘贴附件与阅读体验（2026-11-13，未提交、未打包）
+
+- 见 D-107、`docs/AI.md`。针对获取设备码阶段的 403，新增默认本机 device/exchange/refresh、环境/系统代理与服务器出口下拉切换、按阶段解释的安全错误、重试/取消/超时及 generation 防迟到响应。OAuth 凭据保存授权出口，旧值缺失默认 client；本机刷新不经 agent，模型调用仍从服务器发出。保留 OpenCode MIT 署名，不宣称能绕过所有上游网络/账号限制。
+- 新增 Windows PNG/位图/复制文件粘贴、Android content URI/IME 图片、本机文件选择和服务器文件浏览；用户主动粘贴才读取，发送才上传，普通路径文本不自动打开。原始媒体经 `ai.attach.*` 分块流传输，会话只存引用，支持三协议多模态与历史重放；单件 8 MiB、文本 256 KiB、每条 8 件/20 MiB、私有附件库 512 MiB（包括元数据余量），SHA-256 及 0700/0600。删除会话保护共享引用及运行中 inbox；未关联/回退形成的孤儿附件无自动 GC。大 ChatGPT 请求使用已有 BSD zstd 依赖。
+- 工作目录使用项目/根目录下拉及面包屑浏览，已有会话目录固定；默认 15 px、字体回退/行距、13.5/15/17 本机持久化、复制回答、惰性消息及 widget 缓存、33 ms 流式合帧、历史阅读不强制滚底、中文 composing Enter 不发送。
+- 已验证：Go `internal/ai` 23 项顶层测试及 `internal/entry` 17 项在 WSL 直接执行通过；新增 >1 MiB 附件流、上传中断/错误帧不提交、三协议媒体结构、zstd、共享引用/活动 inbox 删除保护、条数/大小/库限额及读取校验测试。定向 `go vet`、linux/amd64 与 linux/arm64 agent 构建通过；`aurora_profile` 47 项通过；`flutter analyze lib test` 0 问题。最终源 Windows Release、Android arm64 Debug 编译通过，仅验编、不运行。最终 runtime/截图 6 项通过，宽屏、390 px 手机和手机双附件三张截图已读取核对，无布局溢出。首轮全量唯一失败是滚动测试未推进动画启动首帧，补齐测试时钟后定向及最终全量均通过：**Flutter 218 项通过、20 项按设计跳过、0 失败，退出码 0**；未过滤、跳过失败测试。
+- 隔离：只用合成令牌/文件和本地 HTTP 桩；未读取真实剪贴板、浏览器账号、SSH 私钥、订阅或节点凭据；未启动真实窗口或替换正式安装。3.12.0 ZIP 与三个 APK 哈希和发布记录一致，v2 release 仍为 13 项。没有改版本、提交、打包或发布。
+- 未验证：真实 OpenAI/ChatGPT 授权及多轮模型对话、真实 Windows 原生剪贴板和 Android 真机/输入法、Windows PAC-only 代理。附件需要本轮新版 agent；组件渲染及编译不替代实机验收。
+
+### 3.13.0 提交、打包与发布（2026-11-13）
+
+- 用户已授权提交代码、打包及发布；Windows 与 Android 统一使用 3.13.0。复用上节最终验收结果，从干净源码提交构建，不覆盖任何旧产物，不替换正式安装。产物签名、哈希、归档及远程发布回执在构建后补录。

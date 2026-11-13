@@ -51,12 +51,25 @@ func streamOpenAIChat(ctx context.Context, req LLMRequest, proxyEnv func() map[s
 		switch msg.Role {
 		case "user":
 			var texts []string
+			var media []map[string]any
 			for _, p := range msg.Parts {
+				if p.DataURL != "" {
+					if p.Type == "image" {
+						media = append(media, map[string]any{"type": "image_url", "image_url": map[string]any{"url": p.DataURL}})
+					} else {
+						media = append(media, map[string]any{"type": "file", "file": map[string]any{"filename": p.Filename, "file_data": p.DataURL}})
+					}
+				}
 				if p.Type == "text" && p.Text != "" {
 					texts = append(texts, p.Text)
 				}
 			}
-			if len(texts) > 0 {
+			if len(media) > 0 {
+				if len(texts) > 0 {
+					media = append([]map[string]any{{"type": "text", "text": strings.Join(texts, "\n\n")}}, media...)
+				}
+				messages = append(messages, map[string]any{"role": "user", "content": media})
+			} else if len(texts) > 0 {
 				messages = append(messages, map[string]any{
 					"role":    "user",
 					"content": strings.Join(texts, "\n\n"),

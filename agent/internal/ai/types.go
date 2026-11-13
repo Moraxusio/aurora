@@ -98,8 +98,13 @@ type StepSnapshot struct {
 
 // Part is one content block inside a Message.
 type Part struct {
-	Type string `json:"type"` // "text" | "reasoning" | "tool-call" | "tool-result" | "compaction"
-	ID   string `json:"id,omitempty"`
+	Type         string `json:"type"` // "text" | "reasoning" | "tool-call" | "tool-result" | "compaction"
+	ID           string `json:"id,omitempty"`
+	AttachmentID string `json:"attachment_id,omitempty"`
+	Mime         string `json:"mime,omitempty"`
+	Filename     string `json:"filename,omitempty"`
+	Size         int64  `json:"size,omitempty"`
+	DataURL      string `json:"-"` // request-time only; never persisted or broadcast
 
 	// Text / Reasoning / Compaction
 	Text      string `json:"text,omitempty"`
@@ -135,10 +140,11 @@ type Message struct {
 }
 
 type ContextAttachment struct {
-	Kind    string `json:"kind"` // "file" | "selection" | "git_diff" | "terminal" | "note"
-	Label   string `json:"label"`
-	Path    string `json:"path,omitempty"`
-	Content string `json:"content"`
+	Kind         string `json:"kind"` // "file" | "selection" | "git_diff" | "terminal" | "note"
+	Label        string `json:"label"`
+	Path         string `json:"path,omitempty"`
+	Content      string `json:"content"`
+	AttachmentID string `json:"attachment_id,omitempty"`
 }
 
 type InboxItem struct {

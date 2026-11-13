@@ -85,6 +85,24 @@ func EstimateMessagesTokens(msgs []Message) int {
 	for _, m := range msgs {
 		for _, p := range m.Parts {
 			total += EstimateTokens(p.Text) + EstimateTokens(p.Output) + EstimateTokens(string(p.Input))
+			if p.AttachmentID != "" {
+				if p.Type == "image" {
+					total += 1600
+				} else if p.Mime == "application/pdf" {
+					// PDF bytes are compressed media, not text tokens. A bounded
+					// heuristic avoids counting base64 or treating file size as usage.
+					n := int(p.Size / 8)
+					if n < 2000 {
+						n = 2000
+					}
+					if n > 64000 {
+						n = 64000
+					}
+					total += n
+				} else {
+					total += int((p.Size + 3) / 4)
+				}
+			}
 		}
 	}
 	return total
@@ -207,6 +225,9 @@ func renderMessagePlain(m Message) string {
 	switch m.Role {
 	case "user":
 		for _, p := range m.Parts {
+			if p.AttachmentID != "" {
+				lines = append(lines, fmt.Sprintf("[Attachment: %s (%s, %d bytes)]", p.Filename, p.Mime, p.Size))
+			}
 			if p.Type == "text" && p.Text != "" {
 				lines = append(lines, "[User]: "+p.Text)
 			}
@@ -277,7 +298,7 @@ func chooseKeepID(active []Message) string {
 }
 
 // RunCompaction summarizes the active conversation into a new compaction checkpoint Message.
-func RunCompaction(ctx context.Context, s *Session, cfg ProviderConfig, absWorkdir string, overflow bool, proxyEnv func() map[string]string, onDelta func(string)) (Message, error) {
+func RunCompaction(ctx context.Context, s *Session, cfg ProviderConfig, absWorkdir string, overflow bool, proxyEnv func() map[string]string, load func(Part) ([]byte, error), onDelta func(string)) (Message, error) {
 	active := BuildActiveHistory(s.Messages)
 	if len(active) == 0 {
 		return Message{}, fmt.Errorf("nothing to compact yet")
@@ -320,13 +341,14 @@ func RunCompaction(ctx context.Context, s *Session, cfg ProviderConfig, absWorkd
 
 	sys := BuildSystemPrompts(s.Agent, cfg, absWorkdir, nil)
 	resp, err := StreamLLM(ctx, LLMRequest{
-		SessionID:  s.ID,
-		AffinityID: s.ParentID,
-		Initiator:  "agent",
-		Provider:   cfg,
-		System:     sys,
-		Messages:   reqMessages,
-		MaxTokens:  8192,
+		SessionID:      s.ID,
+		AffinityID:     s.ParentID,
+		Initiator:      "agent",
+		Provider:       cfg,
+		System:         sys,
+		Messages:       reqMessages,
+		MaxTokens:      8192,
+		LoadAttachment: load,
 	}, proxyEnv, func(d LLMDelta) {
 		if d.Type == "text" && d.Text != "" && onDelta != nil {
 			onDelta(d.Text)

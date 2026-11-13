@@ -411,3 +411,11 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 已验证：Go `internal/ai` 17 项顶层测试（含本地 HTTP 授权桩、pending/interval、交换/刷新/JWT routing、重定向拒绝、标题/压缩、过期/流错误/断流、上下文压缩重算、凭据不落盘/不广播）和 `internal/entry` 17 项在 WSL 直接执行通过，严格保留退出码，未使用旧的 `| tail` 测试脚本；linux/amd64、linux/arm64 agent 构建与定向 `go vet` 通过。`aurora_profile` 46 项通过，含真实 AES-GCM 加密落盘/重开/篡改拒绝及 wire 不带 refresh。Flutter 全量 201 项通过、20 项按设计跳过；AI 定向 21 项，覆盖取消/到期/在途授权、并发刷新/失败保存/删除提供商、输入保留、实际与下一次模型分离、事件幂等、窄屏布局。
 - `flutter analyze lib test` 0 问题。无真实窗口截图：使用 Windows 字体在组件测试中渲染并检查 AI 宽屏/390 px 窄屏，输出到本机临时目录；不抢焦点、不读取真实账号或现有 profile。不更改 v2、正式 agent 安装及 release3 旧产物。
 - 未验证：真实 OpenAI/ChatGPT 账号的完整授权与多轮订阅对话、真实服务器代理出口、真实 Windows 窗口、Android 真机。仅 HTTP SSE 移植，未移植 OpenCode WebSocket/zstd/browser callback/token-sharing；长任务过期需客户端下次调用刷新，退出登录不会撤销账号端授权。尚未打包或发布新版本。
+
+### 3.12.0 编译、打包与本地归档（2026-11-13）
+
+- 用户已授权编译、打包、发布。源码提交 `0dabbe2bb0dd766a5357fe383d222c629e4eaac4`，Windows 与 Android 统一 `-Version 3.12.0`；已归档至 `release3\Aurora-3.12.0` 及同目录对应 ZIP、sidecar、三个 APK 和 Android SHA-256 清单，未覆盖任何旧产物。GitHub 发布及远程下载校验待下一步进行。
+- Windows ZIP：25,507,680 字节，SHA-256 `9661cca3da4138c358f96a5c9f5703d8eebd172088b17e94d37c13c4584fb49a`；sidecar 一致，ZIP 的 30 个文件与文件夹逐字节一致，归档后的文件夹和资产再次逐个比对一致；文件/产品版本 3.12.0。
+- 内置 linux/amd64 agent：13,578,402 字节，SHA-256 `7838f6871836e791cacc06235618e9b734e288ada0067889a7d1be9f36484b1f`，版本命令输出 3.12.0；Go 构建元数据 `vcs.revision=0dabbe2bb0dd766a5357fe383d222c629e4eaac4`、`vcs.modified=false`。正式发布公钥（key ID `87828dfb18459372`）验签通过；临时副本中的 agent 字节与 manifest 篡改被拒。签名策略验签、策略篡改拒绝、普通降级拒绝均通过。
+- Android APK：arm64-v8a（versionCode 33200）39,490,634 字节，SHA-256 `926bab560ecfcea31322ee64bcf12a72d198c68834b8fa96407b52d8d1e22e38`；armeabi-v7a（32200）34,901,458 字节，SHA-256 `48a0a98c51e2b86f3d14b59dbe3c55eed18f9895a4c24710aa8902bb2f0856a7`；x86_64（35200）41,718,756 字节，SHA-256 `8931c8af2bd760d51d3546209691b22b32769b605404f68c1b2b73065118ba81`。versionName 均为 3.12.0；apksigner、ABI 与版本检查通过，签名证书 SHA-256 与之前相同（`db59a41d…1554882`），三个 APK 的 5 个 agent 文件和 3 个法律文件逐字节与 Windows 包一致，Android SHA-256 清单通过。
+- Windows 与全部 APK 的敏感字符串扫描通过，未检出私钥、profile 或测试文件，OpenCode MIT 署名在许可证汇总中。v2 的 release 目录仍为 13 项，旧 3.11.0 ZIP 哈希未变；未更改正式服务器安装，也未启动真实客户端窗口。真实 ChatGPT 授权/订阅对话与 Android 真机仍未验证，发布说明明确保留这些边界。

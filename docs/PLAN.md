@@ -527,3 +527,11 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 用户验收 D-112 独立预览后明确授权快速打包发布。包含底部终端、右侧正文裁剪、保持归属的布局预设和异步焦点/会话保护；Windows、Android 与两类 agent 统一为 3.16.0，使用既有发布签名。不新增业务功能，不覆盖旧包或正在运行的安装。
 - 沿用刚完成且生产源码未改变的 Flutter 293 通过、20 个既有条件跳过、零分析问题结果，不重复长期/原生窗口测试。发布只检查必要的构建、版本、产品签名、Android 发行证书、包体与上传摘要，不再进行全量下载或真实服务联调。
 - 原 profile/API Key/OAuth 不迁移、不重置；发布授权仅用于本仓库，凭据不进入源码、发行包和发布说明，完成后清理临时授权。打包和发布结果完成后补记。
+
+### 3.16.0 已发布（2026-11-14）
+
+- 发布：https://github.com/Moraxusio/aurora/releases/tag/v3.16.0 。源码与版本标签均为 `095c94fb6a5fe209b55548d33a2adef0fd2206eb`，先从干净提交构建，再上传草稿；Windows ZIP、sidecar、三个 Android APK 和 `SHA256SUMS.txt` 共 6 个资产，大小及 GitHub 服务端 SHA-256 全部匹配后转为正式 Release。按用户要求不重复全量下载、原生窗口或真实服务联调。
+- Windows Release 构建 171.4 秒，Android 三 ABI Release 构建 79.7 秒；客户端与两类 agent 均为 3.16.0，沿用既有发布密钥和 Android 发行证书。包内产品签名、Windows/Android 版本及 ABI 检查通过，ZIP 的 33 个文件与目录一致，法律文件和 OpenCode MIT 署名保留。回归结果沿用发布前同一生产源码的 Flutter 293 通过、20 个既有条件跳过及完整分析零问题，没有将复用结果写成再次运行。
+- 本地归档为 `release3\Aurora-3.16.0` 及同目录 ZIP/校验文件、三个 APK 和 `Aurora-3.16.0-android.sha256`。ZIP 29,847,540 字节，SHA-256 `805d0bd2bab72f6bd47aed2a0c38260b807ce595de2ffe3738865e412fda91cd`。Linux agent SHA-256 `9d27f45408d1a703a66c4809dadddbd1b894d46941ea59ae3a5e5f3d079c82f7`；Windows 本地 agent `64b4e752efd71e50d82c75c3e1990cc073408e8f9be69708cc4b8ba6fbf17793`。
+- Android arm64-v8a（33600）：40,148,718 字节，SHA-256 `89f97e2658b51fed5f252edd84b8b672068b2d8fc9357a5cb5e83e0662adfdae`；armeabi-v7a（32600）：35,559,542 字节，`98c7634c08098f75f64907a0eb2883083c3029d8aba894605e745d51c20ea5ea`；x86_64（35600）：42,442,380 字节，`178105d9502a791461e9e3992c090c1449d7602394a96e3bc3e3e03a45b1966d`。证书 SHA-256 仍为 `db59a41d0511deaae35f6848e4088db20a8a9846635975635e79efa6f1554882`。
+- 旧 3.15.0 ZIP 与已验收工作台预览 AOT 哈希不变，v2 工作区干净、`release` 顶层仍为 13 项；不替换正在运行的客户端或服务器，不读取真实 profile 或迁移凭据。用户已验收独立 Windows 预览，长期原生拖放、多屏 DPI、触摸/可访问性、Android 真机及真实模型账号仍未完整验收，发布说明保留这些边界。

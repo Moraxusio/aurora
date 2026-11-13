@@ -471,4 +471,14 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 
 - 用户在上述开发验收后授权“打包发布”，Windows 与 Android 统一使用 3.14.0。包含 D-108 Windows 本地 agent、D-109 AI 长历史与活动体验、D-110 标签页工作台及后续回归修复；先提交源码，再从干净提交生成签名包，不覆盖任何旧版本或替换正在运行的客户端/服务器。
 - 自动化基线为上述 Flutter 258 通过、20 既有条件跳过、完整分析零问题、profile 49 项及 Go/本地 agent 沙箱回归。正式包另核对版本、发布公钥签名、篡改拒绝、ZIP/文件夹一致、Android 证书/ABI/内置文件、许可证与敏感模式；不能将组件测试或签名验收称作真实窗口/账号/设备验收。
-- 当前 GitHub 发布凭据未继承，上次一次性 DPAPI 授权已清理；上传与创建 Release 必须取得有效认证后继续。此条是发布准备记录，不表示已上传。
+- 发布准备时 GitHub 凭据未继承，上次一次性 DPAPI 授权已清理；用户随后提供了本次发布授权，按当前用户 DPAPI 加密暂存，仅在进程内解封用于推送与发布，不写入源码/包。此条保留为准备阶段记录，正式结果见下节。
+
+### 3.14.0 提交、签名打包与 GitHub 发布（2026-11-14）
+
+- 已发布：https://github.com/Moraxusio/aurora/releases/tag/v3.14.0 。源码提交与标签 `v3.14.0` 均为 `689047d903d5cf098c43f1f3ea11a1a3a1b7442c`，从干净提交构建，Windows 与 Android 统一 3.14.0。先上传草稿并核对全部资产的服务端摘要，再转为正式 Release；ZIP、sidecar、三个 APK、`SHA256SUMS.txt` 共 **6 个资产全部重新下载，SHA-256 与本地一致**。
+- 已归档至 `release3\Aurora-3.14.0` 及同目录 ZIP、sidecar、三个 APK 和 Android SHA-256 清单。Windows 文件/产品版本均为 3.14.0；ZIP 的 **33 个文件**与产物目录及归档逐文件一致。ZIP：29,811,272 字节，SHA-256 `cb6d0944d803357543931fa7b28cc2f0294abe5bd602a0c974b29c6e1de1caf4`。
+- Linux amd64 远程 agent：14,020,770 字节，SHA-256 `6d2c43f2a3fe111eac24ab28deaca922b3411d5360360e8c069cf2ee735f2750`；Windows amd64 本地 agent：9,629,696 字节，SHA-256 `32b72c5417ce67b360c3af73df0477166042f50bfaef40403d8b698e70a1dcb2`。二者版本 3.14.0、发布密钥 ID `87828dfb18459372`，分别使用 `aurora3-agent` / `aurora3-local-agent` 产品；Go 元数据均为上述源码提交且 `vcs.modified=false`。
+- 正式公钥验签、远程 agent/manifest 篡改拒绝、签名升级策略验签/篡改拒绝/普通降级拒绝通过。Windows 本地产品额外验证双向产品隔离、二进制/manifest 篡改拒绝，并用**包内正式签名本地 agent**再次完成 `LOCAL_AGENT_SIGNED_CLIENT_TLS_FILES_MODELS_CONPTY_EXIT_OK`；只访问隔离沙箱与本地 HTTP 桩，不打开真实 profile/客户端窗口。首次专用 Dart 验收的原生 hooks 构建超过 120 秒工具时限，延长时限后全部通过，未跳过校验。
+- Android APK：arm64-v8a（versionCode 33400）40,083,102 字节，SHA-256 `a2667a25b64bf9ac94a42aa35d11cd6d14ff8233831a6e51472a144438c0d05c`；armeabi-v7a（32400）35,477,542 字节，SHA-256 `ae37b6e18ee166b4aa2839ed49cb933f00562cf8301c803afe94fbb0ee0687fe`；x86_64（35400）42,311,228 字节，SHA-256 `086e14c03136328e2c7274b127416aa41c6ba786ad57f7401f97fca9ee1432cb`。versionName 均为 3.14.0；apksigner、版本/ABI 检查通过，证书 SHA-256 沿用 `db59a41d0511deaae35f6848e4088db20a8a9846635975635e79efa6f1554882`，三个 APK 的 5 个远程 agent 文件和 3 个法律文件均与 Windows 包逐字节一致。
+- 包内敏感字符串/可疑文件扫描通过，OpenCode MIT 署名完整，ZIP 与 Android 哈希清单通过；没有私钥、profile、测试夹具或 GitHub 凭据进入包。v2 工作区仍干净，`release` 顶层仍为 13 项；旧 3.13.0 ZIP SHA-256 仍为 `eac52677aaa4c7d5ceb793d86b87c2410e1d70b375e97e37c4e6c267aa53f493`。没有覆盖旧版本或替换正式安装。
+- 自动化验收基线与未验证边界沿用上节：Flutter 258 通过、20 既有条件跳过、完整分析零问题、profile 49 项及 Go/沙箱回归；发布准备时另复跑标签组件 9 项和完整分析通过。真实桌面拖放、多屏 DPI、触摸/可访问性实机、Android 真机、真实模型账号、PowerShell 5.1 回退等仍未验收，发布说明已明确列出。

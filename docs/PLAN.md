@@ -432,4 +432,9 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 
 ### 3.13.0 提交、打包与发布（2026-11-13）
 
-- 用户已授权提交代码、打包及发布；Windows 与 Android 统一使用 3.13.0。复用上节最终验收结果，从干净源码提交构建，不覆盖任何旧产物，不替换正式安装。产物签名、哈希、归档及远程发布回执在构建后补录。
+- 用户已授权提交代码、打包及发布；Windows 与 Android 统一使用 3.13.0。源码提交及标签 `v3.13.0` 均为 `d8d78e01debb283f508c2c111757c776cea3ba77`，从干净提交构建。已发布：https://github.com/Moraxusio/aurora/releases/tag/v3.13.0 。Windows ZIP、sidecar、三个 APK、`SHA256SUMS.txt` 共 6 个资产全部重新下载，SHA-256 与本地一致。
+- 已归档至 `release3\Aurora-3.13.0` 及同目录 ZIP、sidecar、三个 APK 和 Android SHA-256 清单；不覆盖旧产物，不替换正式安装。Windows 文件/产品版本均为 3.13.0；ZIP 的 30 个文件与产物目录逐字节一致，归档后再次核对一致。ZIP：25,750,178 字节，SHA-256 `eac52677aaa4c7d5ceb793d86b87c2410e1d70b375e97e37c4e6c267aa53f493`。
+- 内置 Linux amd64 agent：13,992,098 字节，SHA-256 `9058b31efe76b7743b9070147e30fb4bdcd03b3edff8f5da162ba8795ce66e9a`，签名密钥 ID `87828dfb18459372`。Go 构建元数据记录上述源码提交且 `vcs.modified=false`；正式公钥验签、agent/manifest 篡改拒绝、升级策略验签/篡改拒绝/普通降级拒绝通过。
+- Android APK：arm64-v8a（33300）39,807,090 字节，SHA-256 `c5a492dd0aac6c6da8b54685ac84b454e98f8060c9a4f8735109ccaa4c77a521`；armeabi-v7a（32300）35,185,146 字节，SHA-256 `a7ebe9b9e34b4969be0316a694fdd464832973769841f6ddc08b421e3258b193`；x86_64（35300）42,035,216 字节，SHA-256 `4e4d3917115415a32f907b0bd7abb45b0deb3530a9fb245b32cfa3402b369f1f`。versionName 均为 3.13.0；apksigner、版本/ABI 检查通过，证书 SHA-256 沿用 `db59a41d0511deaae35f6848e4088db20a8a9846635975635e79efa6f1554882`；三个 APK 的 5 个 agent 文件、3 个法律文件均与 Windows 包逐字节一致。
+- 敏感字符串及可疑文件扫描通过，OpenCode MIT 署名完整，APK/ZIP 哈希清单通过。v2 release 仍为 13 项，旧 3.12.0 ZIP 哈希不变。首次校验因旧脚本残留的 3.12.0 版本正则而停止，核对实际 3.13.0 元数据并修正验证器后全部通过，未重复构建或放宽校验。
+- 自动化验收沿用上节 218 项 Flutter 通过、20 项按设计跳过和 Go/配置测试；发布未启动真实窗口、未做真实账号授权或 Android 真机验收，发布说明明确这些边界。

@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 // Package files serves the "files" service: browsing, reading, writing and
 // transferring files inside the configured roots. The code in files.go is the

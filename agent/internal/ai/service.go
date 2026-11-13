@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 package ai
 
@@ -38,6 +38,7 @@ func (s svc) Operations() []service.Operation {
 	return []service.Operation{
 		{Name: "ai.sessions", Handle: s.opSessions},
 		{Name: "ai.get", Handle: s.opGet},
+		{Name: "ai.history", Stream: s.opHistory},
 		{Name: "ai.delete", Handle: s.opDelete},
 		{Name: "ai.run", Handle: s.opRun},
 		{Name: "ai.stop", Handle: s.opStop},
@@ -137,10 +138,19 @@ func (s svc) opGet(_ context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, wire.Errf(wire.CodeNotFound, "%v", err)
 	}
+	if pending == nil {
+		for _, activity := range s.activitiesFor(in.ID) {
+			if q := s.perms.PendingForSession(activity.SessionID); q != nil {
+				pending = q
+				break
+			}
+		}
+	}
 	return map[string]any{
 		"session":            sess,
 		"running":            running,
 		"pending_permission": pending,
+		"activities":         s.activitiesFor(in.ID),
 	}, nil
 }
 
@@ -280,12 +290,11 @@ func (s svc) opStream(ctx context.Context, st net.Conn, raw json.RawMessage) err
 		_ = st.SetWriteDeadline(time.Now().Add(30 * time.Second))
 		return wire.WriteJSON(st, v)
 	}
+	sub := s.subscribe()
+	defer s.unsubscribe(sub)
 	if err := send(wire.Response{OK: true}); err != nil {
 		return nil
 	}
-
-	sub := s.subscribe()
-	defer s.unsubscribe(sub)
 
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -328,11 +337,13 @@ func (s svc) opStream(ctx context.Context, st net.Conn, raw json.RawMessage) err
 			filterMu.RLock()
 			want := filterSession
 			filterMu.RUnlock()
-			if want != "" && ev.SessionID != "" && ev.SessionID != want {
+			if want != "" && ev.SessionID != "" && ev.SessionID != want && ev.RootSessionID != want {
 				continue
 			}
-			if send(ev) != nil {
-				return nil
+			if err := send(ev); err != nil {
+				if err != wire.ErrFrameTooLarge || send(StreamEvent{Type: "sync.required", SessionID: ev.SessionID, RootSessionID: ev.RootSessionID}) != nil {
+					return nil
+				}
 			}
 		}
 	}

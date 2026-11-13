@@ -2,13 +2,25 @@ import 'dart:async';
 
 import 'package:aurora/kernel/editor_tab.dart';
 import 'package:aurora/kernel/workspace.dart';
+import 'package:aurora/kernel/tab_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:aurora_wire/aurora_wire.dart';
 
 import 'support/workspace_fixture.dart';
 
 EditorTab fileTab(String path) => EditorTab(id: 'file:home:$path', title: path, icon: Icons.description,
   file: ref(path), builder: (_) => const SizedBox());
+
+class _SlowServices extends FileTreeLink {
+  final ready = Completer<Object?>();
+  @override Future<Object?> call(String op, [Object? args, Duration timeout = const Duration(seconds: 60)]) => op == 'agent.services' ? ready.future : super.call(op, args, timeout);
+}
+class _ReconnectApp extends WorkspaceApp {
+  Link? current;
+  _ReconnectApp(this.current);
+  @override Link? link(String id) => current;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -167,5 +179,118 @@ void main() {
     await ws.flushViews();
     expect(app.data.servers.single.workspace('a')!.view.files, isEmpty);
     expect(app.data.servers.single.workspace('b')!.view.files, [ref('/other/new.txt')]);
+  });
+
+  test('concurrent close asks once and settles both callers without disposal races', () async {
+    final current = fileTab('/project/close.dart');
+    final consent = Completer<bool>();
+    var asks = 0;
+    current.confirmClose = () { asks++; return consent.future; };
+    ws.openTab(current);
+    final one = ws.closeTab(current.id), two = ws.closeTab(current.id);
+    consent.complete(true);
+    expect(await one, isTrue);
+    expect(await two, isTrue);
+    expect(asks, 1);
+    expect(ws.tabs, isEmpty);
+  });
+  test('runtime-only tab activation does not repeatedly write an unchanged file-only view', () async {
+    ws.openTab(EditorTab(id: 'term:one', title: 'one', icon: Icons.terminal, builder: (_) => const SizedBox()));
+    ws.activate('term:one');
+    await ws.flushViews();
+    expect(app.viewWrites, 0);
+    ws.setSideWidth(410);
+    await ws.flushViews();
+    expect(app.viewWrites, 1);
+    ws.activate('term:one');
+    await ws.flushViews();
+    expect(app.viewWrites, 1);
+  });
+
+  test('groups, width and pins survive project switching and encrypted-view round trip', () async {
+    await ws.selectProject('a');
+    ws.restoreFiles((f) => fileTab(f.path));
+    ws.openTab(fileTab('/project/a.dart'));
+    ws.openTab(fileTab('/project/b.dart'));
+    ws.arrangeEditors(EditorArrangement.rows);
+    ws.setTabPlacement(TabPlacement.left);
+    ws.setTabsWidth(250); ws.setSideWidth(420);
+    ws.pinTab('file:home:/project/b.dart');
+    await ws.selectProject('b');
+    expect(ws.tabLayout.groups, hasLength(1));
+    expect(ws.tabLayout.sideWidth, 300);
+    await ws.selectProject('a');
+    expect(ws.tabLayout.groups, hasLength(2));
+    expect(ws.tabLayout.tabsWidth, 250);
+    expect(ws.tabLayout.sideWidth, 420);
+    await ws.flushViews();
+    final other = Workspace(app, 'server');
+    other.restoreFiles((f) => fileTab(f.path));
+    expect(other.tabLayout.groups, hasLength(2));
+    expect(other.tabLayout.placement, TabPlacement.left);
+    expect(other.tabLayout.pinned, contains('file:home:/project/b.dart'));
+    expect(other.focusedId, ws.focusedId);
+    await other.flushViews(); other.dispose();
+  });
+
+  test('bulk close protects pinned tabs and stops after cancelling dirty prompt', () async {
+    for (final name in ['a', 'b', 'c']) { ws.openTab(fileTab('/project/$name')); }
+    final first = ws.tabs.first, second = ws.tabs[1];
+    ws.pinTab(first.id);
+    second.confirmClose = () async => false;
+    await ws.closeTabs(ws.visibleTabs.map((t) => t.id));
+    expect(ws.tabs, hasLength(3));
+    expect(await ws.closeTab(first.id), isTrue, reason: 'explicitly closing a pinned tab is still allowed');
+  });
+
+  test('bulk close cannot continue into a different project after confirmation', () async {
+    await ws.selectProject('a');
+    ws.openTab(fileTab('/project/a')); ws.openTab(fileTab('/project/b'));
+    final consent = Completer<bool>();
+    ws.tabs.first.confirmClose = () => consent.future;
+    final close = ws.closeTabs(ws.visibleTabs.map((t) => t.id));
+    await ws.selectProject('b');
+    ws.openTab(fileTab('/project/b'));
+    consent.complete(true);
+    await close;
+    expect(ws.visibleTabs.single.id, 'file:home:/project/b');
+  });
+  test('late service reply from the old link cannot replace the reconnected capabilities', () async {
+    final old = _SlowServices(), fresh = _SlowServices();
+    final raceApp = _ReconnectApp(old);
+    final workspace = Workspace(raceApp, 'server');
+    raceApp.current = fresh;
+    await raceApp.update((p) {});
+    fresh.ready.complete({'services': [{'id': 'fresh', 'enabled': true}]});
+    await Future<void>.delayed(Duration.zero);
+    old.ready.complete({'services': [{'id': 'stale', 'enabled': true}]});
+    await Future<void>.delayed(Duration.zero);
+    expect(workspace.serviceInfo('fresh'), isNotNull);
+    expect(workspace.serviceInfo('stale'), isNull);
+    workspace.dispose(); raceApp.dispose();
+  });
+  test('bulk close stops even if a project is switched away and back while confirming', () async {
+    await ws.selectProject('a');
+    ws.openTab(fileTab('/project/a')); ws.openTab(fileTab('/project/b'));
+    final consent = Completer<bool>();
+    ws.tabs.first.confirmClose = () => consent.future;
+    final close = ws.closeTabs(ws.visibleTabs.map((t) => t.id));
+    await ws.selectProject('b');
+    await ws.selectProject('a');
+    consent.complete(true);
+    await close;
+    expect(ws.visibleTabs.single.id, 'file:home:/project/b');
+  });
+  test('bulk close does not close a replacement tab with the same ID', () async {
+    ws.openTab(fileTab('/project/a')); ws.openTab(fileTab('/project/b'));
+    final consent = Completer<bool>();
+    ws.tabs.first.confirmClose = () => consent.future;
+    final close = ws.closeTabs(ws.visibleTabs.map((t) => t.id));
+    ws.dropTabs((t) => t.id == 'file:home:/project/b');
+    final replacement = fileTab('/project/b');
+    ws.openTab(replacement);
+    consent.complete(true);
+    await close;
+    expect(ws.tabs, [replacement]);
   });
 }

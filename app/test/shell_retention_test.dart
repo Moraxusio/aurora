@@ -4,11 +4,13 @@ import 'package:aurora/kernel/input_mode.dart';
 import 'package:aurora/kernel/registry.dart';
 import 'package:aurora/kernel/shell.dart';
 import 'package:aurora/kernel/workspace.dart';
+import 'package:aurora/kernel/tab_layout.dart';
 import 'package:aurora/state/app_state.dart';
 import 'package:aurora/theme/ide_theme.dart';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -95,6 +97,59 @@ void main() {
       app.dispose();
     },
   );
+  testWidgets('sidebar resizes, restores preferred width and long titles fit narrow windows', (t) async {
+    t.view.physicalSize = const Size(1400, 900); t.view.devicePixelRatio = 1;
+    addTearDown(t.view.resetPhysicalSize); addTearDown(t.view.resetDevicePixelRatio);
+    final app = _App();
+    app._entry.name = '非常长的服务器名称 ' * 8;
+    final builds = <String, int>{}, feature = _Feature('terminal', 'Terminal fixture', {});
+    final features = Features(); features.all..clear()..add(feature);
+    final input = InputMode(touch: false);
+    await t.pumpWidget(MaterialApp(theme: buildTheme(Brightness.light), home: InputMode.scope(mode: input, child: Shell(app: app, features: features))));
+    await t.pumpAndSettle();
+    final ws = feature.workspace!;
+    ws.openTab(EditorTab(id: 'one', title: 'One', icon: Icons.description, builder: (_) => _Probe('one', builds)));
+    await t.pumpAndSettle();
+    final original = t.getSize(find.byKey(const ValueKey('main-sidebar'))).width;
+    await t.drag(find.byKey(const ValueKey('sidebar-resize')), const Offset(90, 0)); await t.pumpAndSettle();
+    expect(t.getSize(find.byKey(const ValueKey('main-sidebar'))).width, greaterThan(original));
+    final preferred = ws.tabLayout.sideWidth;
+    t.view.physicalSize = const Size(620, 800); await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    await t.tap(find.byTooltip('显示或隐藏侧栏（Ctrl+B）')); await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('drawer-resize')), findsOneWidget);
+    await t.drag(find.byKey(const ValueKey('drawer-resize')), const Offset(-30, 0)); await t.pumpAndSettle();
+    expect(ws.tabLayout.sideWidth, lessThan(preferred));
+    t.view.physicalSize = const Size(390, 800); await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    t.view.physicalSize = const Size(1400, 900); await t.pumpAndSettle();
+    expect(t.getSize(find.byKey(const ValueKey('main-sidebar'))).width, ws.tabLayout.sideWidth);
+    expect(builds['one'], 1, reason: 'resizing and responsive navigation must not reopen a document');
+    await ws.flushViews(); await t.pumpWidget(const SizedBox());
+    features.dispose(); input.dispose(); app.dispose();
+  });
+
+  testWidgets('group shortcuts and Ctrl+W target the focused group', (t) async {
+    t.view.physicalSize = const Size(1400, 900); t.view.devicePixelRatio = 1;
+    addTearDown(t.view.resetPhysicalSize); addTearDown(t.view.resetDevicePixelRatio);
+    final app = _App(), feature = _Feature('terminal', 'Terminal fixture', {});
+    final features = Features(); features.all..clear()..add(feature);
+    final input = InputMode(touch: false);
+    await t.pumpWidget(MaterialApp(theme: buildTheme(Brightness.light), home: InputMode.scope(mode: input, child: Shell(app: app, features: features))));
+    await t.pumpAndSettle();
+    final ws = feature.workspace!;
+    for (final id in ['a', 'b']) { ws.openTab(EditorTab(id: id, title: id, icon: Icons.terminal, builder: (_) => Text(id))); }
+    ws.arrangeEditors(EditorArrangement.columns); await t.pumpAndSettle();
+    await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft); await t.sendKeyEvent(LogicalKeyboardKey.digit1); await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await t.pumpAndSettle();
+    expect(ws.focusedId, 'a');
+    await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft); await t.sendKeyEvent(LogicalKeyboardKey.keyW); await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await t.pumpAndSettle();
+    expect(ws.tabs.single.id, 'b');
+    expect(ws.focusedId, 'b');
+    await ws.flushViews(); await t.pumpWidget(const SizedBox());
+    features.dispose(); input.dispose(); app.dispose();
+  });
 }
 
 class _App extends AppState {
@@ -120,6 +175,9 @@ class _App extends AppState {
   @override
   ConnStatus status(String id) =>
       ConnStatus(ConnState.connected, addr: 'fixture:17710');
+  @override Future<void> saveWorkspaceViews(String id, Map<String, WorkspaceView> views) async {
+    if (views[''] != null) _entry.browserView = WorkspaceView.fromJson(views['']!.toJson());
+  }
   void changed() => notifyListeners();
 }
 

@@ -21,6 +21,7 @@ import 'ai_settings_dialog.dart';
 import 'ai_attachments.dart';
 import 'ai_path_picker.dart';
 import 'ai_attachment_tile.dart';
+import 'ai_history.dart';
 
 class _AiPasteIntent extends Intent { const _AiPasteIntent(); }
 
@@ -87,6 +88,12 @@ class _AiStudioViewState extends State<AiStudioView> {
   OpStream? _stream;
   Link? _streamLink;
   bool _disposed = false;
+  int _loadGeneration = 0;
+  Timer? _eventRetry;
+  String? _eventNote;
+  final Map<String, Map<String, dynamic>> _activities = {};
+  final List<Map<String, dynamic>> _loadingEvents = [];
+  bool _replayingEvents = false;
 
   Workspace get ws => widget.ws;
 
@@ -140,13 +147,16 @@ class _AiStudioViewState extends State<AiStudioView> {
     }
     _streamLink = link;
     await _loadRoots(link);
-    if (_sessionId != null) {
-      await _loadSession(link, _sessionId!);
-    }
+    if (_disposed || !mounted || !identical(link, ws.link) || !identical(link, _streamLink)) return;
+    if (_sessionId != null) unawaited(_loadSession(link, _sessionId!));
     unawaited(_openEventStream(link));
   }
 
   void _closeStream() {
+    _loadingEvents.clear();
+    _eventRetry?.cancel();
+    _eventRetry = null;
+    _loadGeneration++;
     _stream?.reset();
     _stream = null;
     _streamLink = null;
@@ -156,7 +166,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     try {
       final r = await link.call('fs.roots') as Map;
       final list = [for (final x in r['roots'] as List) (x as Map).cast<String, dynamic>()];
-      if (!mounted) return;
+      if (_disposed || !mounted || !identical(link, ws.link)) return;
       setState(() {
         _roots = list;
         if (_root.isEmpty) {
@@ -176,13 +186,15 @@ class _AiStudioViewState extends State<AiStudioView> {
   }
 
   Future<void> _loadSession(Link link, String id) async {
+    if (_disposed || !mounted || !identical(link, ws.link)) return;
+    final generation = ++_loadGeneration;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await link.call('ai.get', {'id': id}) as Map;
-      if (!mounted) return;
+      final res = await loadAiHistory(link, id);
+      if (!mounted || generation != _loadGeneration || !identical(link, ws.link)) return;
       final sess = AiSession.fromJson((res['session'] as Map).cast<String, dynamic>());
       final running = res['running'] == true;
       final pending = res['pending_permission'] is Map
@@ -193,6 +205,13 @@ class _AiStudioViewState extends State<AiStudioView> {
         _messageCache.clear();
         _running = running;
         _pendingPerm = pending;
+        _activities.clear();
+        for (final a in (res['activities'] as List? ?? const [])) {
+          if (a is Map) {
+            final row = a.cast<String, dynamic>();
+            _activities['${row['session_id']}:${row['tool_call_id']}'] = row;
+          }
+        }
         _root = sess.root;
         _workdir = sess.workdir;
         _agentMode = sess.agent == 'plan' ? 'plan' : 'build';
@@ -200,38 +219,36 @@ class _AiStudioViewState extends State<AiStudioView> {
         _loading = false;
       });
       _updateTabTitle(sess.title);
+      _replayLoadingEvents();
       _scrollToBottom();
-    } on OpError catch (e) {
-      if (mounted) {
+    } on Object catch (e) {
+      if (mounted && generation == _loadGeneration && identical(link, ws.link)) {
         setState(() {
-          _error = e.message;
+          _error = e is OpError ? e.message : e is StateError ? e.message : '会话加载失败，历史和输入均已保留，请重试';
           _loading = false;
         });
+        if (_session != null) _replayLoadingEvents();
       }
     }
   }
 
   void _updateTabTitle(String title) {
     final tabId = widget.initialSessionId == null ? 'ai:new' : 'ai:${widget.initialSessionId}';
-    final t = ws.tab(tabId);
-    if (t != null && title.isNotEmpty && t.title != title) {
-      t.title = title;
-      // Trigger tab bar repaint
-      ws.filesRevision.value = ws.filesRevision.value;
-    }
+    ws.updateTabTitle(tabId, title);
   }
 
   Future<void> _openEventStream(Link link) async {
+    OpStream? opened;
     try {
       final st = await link.open('ai.stream', {
         if (_sessionId != null) 'session_id': _sessionId,
       });
+      opened = st;
       await st.response();
-      if (_disposed || !identical(link, ws.link)) {
-        st.reset();
-        return;
-      }
+      if (_disposed || !mounted || !identical(link, ws.link) || !identical(link, _streamLink)) return;
       _stream = st;
+      if (mounted) setState(() => _eventNote = null);
+      if (_sessionId != null) unawaited(_loadSession(link, _sessionId!));
       while (!_disposed) {
         final f = await st.read();
         if (f == null) break;
@@ -240,7 +257,17 @@ class _AiStudioViewState extends State<AiStudioView> {
         _handleStreamEvent(ev);
       }
     } on Object {
-      // Reconnect handled by _onWorkspaceChanged
+      // A single operation stream can fail while the TLS link remains healthy.
+    } finally {
+      opened?.reset();
+      if (opened != null && identical(_stream, opened)) _stream = null;
+      if (!_disposed && mounted && identical(link, ws.link) && identical(link, _streamLink)) {
+        setState(() => _eventNote = '实时状态流中断，正在恢复；请以重新同步结果为准');
+        _eventRetry?.cancel();
+        _eventRetry = Timer(const Duration(seconds: 3), () {
+          if (!_disposed && identical(link, ws.link)) unawaited(_openEventStream(link));
+        });
+      }
     }
   }
 
@@ -248,8 +275,39 @@ class _AiStudioViewState extends State<AiStudioView> {
     if (!mounted || _disposed) return;
     final type = ev['type'] as String? ?? '';
     if (type == 'ping') return;
+    if (_loading && !_replayingEvents) {
+      if (_loadingEvents.length >= 512) { _loadingEvents.removeAt(0); }
+      _loadingEvents.add(ev);
+      return;
+    }
     final sid = ev['session_id'] as String? ?? '';
-    if (_sessionId == null || sid != _sessionId) return;
+    if (_sessionId == null || (sid != _sessionId && ev['root_session_id'] != _sessionId)) return;
+    if (type == 'sync.required') {
+      if (ws.link != null) unawaited(_loadSession(ws.link!, _sessionId!));
+      return;
+    }
+    final activityKey = '$sid:${ev['tool_call_id']}';
+    if (type == 'tool.running') _activities[activityKey] = Map.of(ev);
+    if (type == 'tool.progress') {
+      final a = _activities[activityKey];
+      if (a != null) {
+        final text = '${a['output'] ?? ''}${ev['delta'] ?? ''}';
+        a['output'] = text.length > 32768 ? text.substring(text.length - 32768) : text;
+      }
+      final live = _liveTools.where((t) => t.callId == ev['tool_call_id']).firstOrNull;
+      if (live != null && sid == _sessionId) live.output = _activities[activityKey]?['output'] as String? ?? '';
+      _paintTimer ??= Timer(const Duration(milliseconds: 33), () { _paintTimer = null; if (mounted) setState(() {}); });
+      return;
+    }
+    if (type == 'tool.done') _activities.remove(activityKey);
+    if (sid != _sessionId) {
+      setState(() {
+        if (type == 'permission.ask' && ev['permission'] is Map) _pendingPerm = AiPermissionQuestion.fromJson((ev['permission'] as Map).cast<String,dynamic>());
+        if (type == 'tool.done' && _pendingPerm?.callId == ev['tool_call_id']) _pendingPerm = null;
+        if (type == 'session.status' && ev['status'] != 'running') _activities.removeWhere((_, a) => a['session_id'] == sid);
+      });
+      return;
+    }
 
     // Coalesce high-frequency text chunks; do not re-layout Markdown per token.
     if(type=='text.delta'||type=='reasoning.delta'||type=='compaction.delta'){
@@ -272,6 +330,7 @@ class _AiStudioViewState extends State<AiStudioView> {
           final status = ev['status'] as String? ?? '';
           _running = status == 'running';
           if (!_running) {
+            _activities.clear();
             _liveReasoning = '';
             _liveText = '';
             _liveCompaction = '';
@@ -414,7 +473,7 @@ class _AiStudioViewState extends State<AiStudioView> {
           if (ev['message'] is Map) {
             final msg = AiMessage.fromJson((ev['message'] as Map).cast<String, dynamic>());
             _session ??= AiSession(id: sid, title: '新会话', root: _root, workdir: _workdir);
-            _session!.messages.add(msg);
+            if (!_session!.messages.any((m) => m.id == msg.id)) _session!.messages.add(msg);
           } else if ((ev['error'] as String? ?? '').isNotEmpty) {
             ws.toast('${ev['error']}', error: true);
           }
@@ -427,6 +486,14 @@ class _AiStudioViewState extends State<AiStudioView> {
       if (ev['total_usage'] is Map && _session != null) _session!.totalUsage = AiUsage.fromJson((ev['total_usage'] as Map).cast<String,dynamic>());
     });
     _scrollToBottom();
+  }
+
+  void _replayLoadingEvents() {
+    final buffered = List<Map<String,dynamic>>.of(_loadingEvents);
+    _loadingEvents.clear();
+    _replayingEvents = true;
+    try { for (final event in buffered) { _handleStreamEvent(event); } }
+    finally { _replayingEvents = false; }
   }
 
   void _onScroll(){
@@ -456,7 +523,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     if (_sending) return;
     final link = ws.link;
     if (link == null) {
-      ws.toast('服务器未连接', error: true);
+      ws.toast(ws.entry?.isLocal == true ? '本地 agent 未连接' : '服务器未连接', error: true);
       return;
     }
     final prov = _activeProvider;
@@ -672,10 +739,10 @@ class _AiStudioViewState extends State<AiStudioView> {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     if (ws.link == null) return NotConnected(ws: ws);
-    if (_loading) {
+    if (_loading && _session == null) {
       return const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)));
     }
-    if (_error != null) {
+    if (_error != null && _session == null) {
       return EmptyHint(
         icon: Icons.error_outline_rounded,
         text: _error!,
@@ -692,6 +759,12 @@ class _AiStudioViewState extends State<AiStudioView> {
       children: [
         _buildTopBar(ide, prov),
         _buildRuntimeBar(ide, prov),
+        if (_loading) const LinearProgressIndicator(minHeight: 2),
+        if (_eventNote != null || _error != null) MaterialBanner(
+          content: Text(_error ?? _eventNote!, style: const TextStyle(fontSize: 12)),
+          actions: [TextButton(onPressed: () { if (_sessionId != null && ws.link != null) unawaited(_loadSession(ws.link!, _sessionId!)); }, child: const Text('重新同步'))],
+        ),
+        if (_activities.isNotEmpty) _buildActivities(ide),
         const Divider(height: 1),
         if (todos.isNotEmpty) _buildTodoBanner(ide, todos),
         Expanded(
@@ -749,9 +822,9 @@ class _AiStudioViewState extends State<AiStudioView> {
               for(final folder in ws.project?.folders ?? const <WorkspacePath>[]) PopupMenuItem(value:AiPathChoice(folder.root,folder.path,folder.path),child:Text('项目：${folder.path}')),
               for(final r in _roots) PopupMenuItem(value:AiPathChoice(r['id'] as String,'/','/'),child:Text('${r['label']??r['id']} /')),
               const PopupMenuDivider(),
-              const PopupMenuItem(value:AiPathChoice('*browse*','',''),child:Row(children:[Icon(Icons.folder_open,size:18),SizedBox(width:8),Text('浏览服务器目录…')])),
+              PopupMenuItem(value:const AiPathChoice('*browse*','',''),child:Row(children:[const Icon(Icons.folder_open,size:18),const SizedBox(width:8),Text(ws.entry?.isLocal == true ? '浏览本机目录…' : '浏览服务器目录…')])),
             ],
-            child:Padding(padding:const EdgeInsets.symmetric(horizontal:6,vertical:8),child:Row(children:[Icon(Icons.folder_open_rounded,size:16,color:ide.accent),const SizedBox(width:7),Expanded(child:Text('${_root.isEmpty?'默认根目录':_root} : $_workdir',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:13,color:ide.text,fontWeight:FontWeight.w500))),Icon(canPickDir?Icons.expand_more:Icons.lock_outline,size:15,color:ide.textDim)])),
+            child:Padding(padding:const EdgeInsets.symmetric(horizontal:6,vertical:8),child:Row(children:[Icon(Icons.folder_open_rounded,size:16,color:ide.accent),const SizedBox(width:7),Expanded(child:Text(ws.entry?.isLocal == true ? ws.app.localAgent.nativePath(_root,_workdir) : '${_root.isEmpty?'默认根目录':_root} : $_workdir',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:13,color:ide.text,fontWeight:FontWeight.w500))),Icon(canPickDir?Icons.expand_more:Icons.lock_outline,size:15,color:ide.textDim)])),
           )),
           PopupMenuButton<double>(key:const ValueKey('ai-chat-font'),tooltip:'对话字号（保存在本机）',initialValue:_chatFontSize,onSelected:_setChatFontSize,itemBuilder:(_)=>const[PopupMenuItem(value:13.5,child:Text('紧凑 · 13.5')),PopupMenuItem(value:15.0,child:Text('标准 · 15')),PopupMenuItem(value:17.0,child:Text('舒适 · 17'))],icon:Icon(Icons.text_fields,size:17,color:ide.textDim)),
           if (_sessionId != null && (_session?.messages.isNotEmpty ?? false))
@@ -878,10 +951,10 @@ class _AiStudioViewState extends State<AiStudioView> {
                 child: Icon(Icons.auto_awesome_rounded, size: 24, color: ide.accent),
               ),
               const SizedBox(height: Space.l),
-              Text('Aurora AI 智能体 (OpenCode 引擎)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ide.text)),
+              Text('Aurora AI 工作台', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ide.text)),
               const SizedBox(height: Space.xs + 2),
               Text(
-                '完整兼容 OpenCode 协议头、系统提示词与工具链。可直接在远程服务器上阅读和修改代码、搜索仓库、诊断日志并支持影子 Git 一键回退。',
+                ws.entry?.isLocal == true ? '直接阅读和修改本机项目、搜索代码、调用 PowerShell。无需服务器，工具执行仍遵循批准设置。' : '阅读和修改远程代码、搜索仓库、执行 shell；工作状态面板可查看子代理和命令输出。支持 OpenCode 兼容协议及影子 Git 回退。',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12.5, color: ide.textDim, height: 1.5),
               ),
@@ -1061,6 +1134,38 @@ class _AiStudioViewState extends State<AiStudioView> {
     );
   }
 
+  Widget _buildActivities(Ide ide) {
+    return Material(color: ide.sideBar, child: Container(
+      key: const ValueKey('ai-active-work'),
+      constraints: const BoxConstraints(maxHeight: 240),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: ide.border))),
+      child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 4), child: Text('正在工作 · ${_activities.length} 项', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: ide.accent))),
+        for (final a in _activities.values) Builder(builder: (context) {
+          final name = a['tool_name'] as String? ?? '工具';
+          final child = a['session_id'] != _sessionId;
+          Map args = const {};
+          try { args = a['input'] is Map ? a['input'] as Map : jsonDecode(a['input'] as String? ?? '{}') as Map; } on Object { /* partial tool arguments */ }
+          final label = name == 'shell' ? '${args['command'] ?? '启动 shell…'}' : name == 'subagent' ? '${args['description'] ?? '子代理'}' : '$name · ${args['path'] ?? args['pattern'] ?? ''}';
+          final output = a['output'] as String? ?? '';
+          final childId = child ? a['session_id'] as String? : (a['metadata'] as Map?)?['child_session_id'] as String?;
+          final proxy = switch ((a['metadata'] as Map?)?['proxy_mode']) { 'agent' => '执行端代理', 'environment' => '继承环境 / 系统代理', 'direct' => '未发现代理变量', _ => '跟随执行环境' };
+          return ExpansionTile(
+            key: ValueKey('activity-${a['session_id']}-${a['tool_call_id']}'),
+            dense: true,
+            leading: Icon(name == 'shell' ? Icons.terminal : name == 'subagent' ? Icons.account_tree_outlined : Icons.build_outlined, size: 17, color: ide.accent),
+            title: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+            subtitle: Text(child ? '子代理 · ${a['session_title'] ?? ''}${name == 'shell' ? ' · $proxy' : ''}' : name == 'shell' ? 'Shell 正在执行 · $proxy' : name == 'subagent' ? '子代理运行中 · ${args['agent'] ?? 'explore'}' : '主代理正在执行', style: TextStyle(fontSize: 11, color: ide.textDim)),
+            children: [
+              if (childId != null) TextButton.icon(onPressed: () => ws.openTab(aiStudioTab(ws, sessionId: childId, title: child ? a['session_title'] as String? ?? '子代理' : args['description'] as String? ?? '子代理')), icon: const Icon(Icons.open_in_new, size: 14), label: const Text('查看子代理会话')),
+              Padding(padding: const EdgeInsets.all(12), child: Align(alignment: Alignment.centerLeft, child: SelectableText(output.isEmpty ? '等待输出…' : output, style: TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 11.5, color: ide.text)))),
+            ],
+          );
+        }),
+      ])),
+    ));
+  }
+
   Widget _buildLiveStep(Ide ide) {
     return Padding(
       padding: const EdgeInsets.only(bottom: Space.l),
@@ -1227,7 +1332,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                       ],
                     ))),
                   ),
-                if(_attachments.isNotEmpty) Padding(padding:const EdgeInsets.only(bottom:8),child:Text('发送时上传并保存到服务器 AI 私有目录，供历史重放；图片/PDF 需模型支持。',maxLines:2,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:11.5,color:ide.textDim,height:1.5))),
+                if(_attachments.isNotEmpty) Padding(padding:const EdgeInsets.only(bottom:8),child:Text(ws.entry?.isLocal == true ? '发送时复制到本地 agent 私有目录用于历史重放；模型调用会把附件发给提供商。' : '发送时上传并保存到服务器 AI 私有目录，供历史重放；图片/PDF 需模型支持。',maxLines:2,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:11.5,color:ide.textDim,height:1.5))),
                 if(_attachmentNote!=null) Padding(padding:const EdgeInsets.only(bottom:8),child:Text(_attachmentNote!,style:TextStyle(fontSize:12,color:ide.accent))),
                 Shortcuts(shortcuts:const{
                   SingleActivator(LogicalKeyboardKey.keyV,control:true):_AiPasteIntent(),
@@ -1323,10 +1428,10 @@ class _AiStudioViewState extends State<AiStudioView> {
                     ),
                     if (activeFile != null)
                       IconBtn(Icons.attach_file_rounded, '附加当前打开文件 (${activeFile.name})', _attachActiveFile, size: 15),
-                    PopupMenuButton<String>(key:const ValueKey('ai-attach-menu'),tooltip:'添加图片或文件',onSelected:(v){if(v=='local')_pickLocalFiles();if(v=='paste')_paste();if(v=='remote')_attachFileByPath();},itemBuilder:(_)=>const[
-                      PopupMenuItem(value:'local',child:Text('选择本机图片 / 文件…')),
-                      PopupMenuItem(value:'paste',child:Text('粘贴图片 / 文件 / 文本')),
-                      PopupMenuItem(value:'remote',child:Text('浏览服务器文件…')),
+                    PopupMenuButton<String>(key:const ValueKey('ai-attach-menu'),tooltip:'添加图片或文件',onSelected:(v){if(v=='local')_pickLocalFiles();if(v=='paste')_paste();if(v=='remote')_attachFileByPath();},itemBuilder:(_)=>[
+                      const PopupMenuItem(value:'local',child:Text('选择本机图片 / 文件…')),
+                      const PopupMenuItem(value:'paste',child:Text('粘贴图片 / 文件 / 文本')),
+                      PopupMenuItem(value:'remote',child:Text(ws.entry?.isLocal == true ? '浏览本机项目文件…' : '浏览服务器文件…')),
                     ],icon:Icon(Icons.add_photo_alternate_outlined,size:19,color:ide.accent)),
                     if (_running) ...[
                       const SizedBox(width: 4),

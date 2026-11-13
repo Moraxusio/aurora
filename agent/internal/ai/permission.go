@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -223,6 +224,11 @@ var readOnlyCmds = map[string]bool{
 }
 
 func isReadOnlyShellCommand(cmd string) bool {
+	// PowerShell aliases/functions and expression syntax differ from POSIX.
+	// Do not incorrectly auto-approve a Windows command using the Unix allowlist.
+	if runtime.GOOS == "windows" {
+		return false
+	}
 	trimmed := strings.TrimSpace(cmd)
 	if trimmed == "" {
 		return true
@@ -268,6 +274,7 @@ func isReadOnlyShellCommand(cmd string) bool {
 func isHighRiskShellCommand(cmd string) bool {
 	lower := " " + strings.ToLower(cmd) + " "
 	highRisk := []string{
+		"remove-item", "format-volume", "clear-disk", "initialize-disk", "stop-computer", "restart-computer", "diskpart", "bcdedit", " reg delete ", " rd /s", " rmdir /s", " del /s",
 		" rm -rf /", " rm -fr /", " mkfs", " dd if=", " shutdown", " reboot", " poweroff",
 		" init 0", " iptables -f", " ufw reset", " > /dev/sd", " chmod -r 777 /",
 	}

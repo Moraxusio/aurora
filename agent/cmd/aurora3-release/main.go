@@ -92,6 +92,7 @@ func signCmd(args []string, out io.Writer) error {
 	channel := fs.String("channel", update.ChannelStable, "channel")
 	version := fs.String("version", "", "version (MAJOR.MINOR.PATCH)")
 	arch := fs.String("arch", "", "linux architecture: amd64 or arm64 (D-14)")
+	targetOS := fs.String("os", "linux", "target platform: linux or windows")
 	file := fs.String("file", "", "the build to sign")
 	dir := fs.String("out", "", "output directory")
 	if err := fs.Parse(args); err != nil {
@@ -102,6 +103,9 @@ func signCmd(args []string, out io.Writer) error {
 	}
 	if *arch != "amd64" && *arch != "arm64" {
 		return errors.New("--arch must be amd64 or arm64")
+	}
+	if *targetOS != "linux" && *targetOS != "windows" {
+		return errors.New("--os must be linux or windows")
 	}
 	if _, _, err := update.ParseVersionStrict(*version); err != nil {
 		return err
@@ -115,8 +119,11 @@ func signCmd(args []string, out io.Writer) error {
 		return err
 	}
 	m := update.Manifest{Product: *product, Channel: *channel, Version: *version,
-		File: fmt.Sprintf("%s-%s-linux-%s", *product, *version, *arch), Size: size, SHA256: sum,
+		File: fmt.Sprintf("%s-%s-%s-%s", *product, *version, *targetOS, *arch), Size: size, SHA256: sum,
 		Created: time.Now().UTC().Format(time.RFC3339)}
+	if *targetOS == "windows" {
+		m.File += ".exe"
+	}
 	mb, sig, err := update.Sign(m, priv)
 	if err != nil {
 		return err

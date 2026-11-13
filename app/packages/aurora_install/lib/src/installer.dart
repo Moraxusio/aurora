@@ -26,11 +26,11 @@ class AgentBuild {
   String get arch => manifest.file.split('-').last;
 
   /// Verifies the signature and the file's size and SHA-256.
-  static Future<AgentBuild> open(String dir, {List<Uint8List>? trusted}) async {
+  static Future<AgentBuild> open(String dir, {List<Uint8List>? trusted, String product = 'aurora3-agent'}) async {
     final sep = Platform.pathSeparator;
     final mb = await File('$dir${sep}manifest.json').readAsBytes();
     final sig = await File('$dir${sep}manifest.sig').readAsBytes();
-    final m = verifyManifest(mb, sig, trusted: trusted);
+    final m = verifyManifest(mb, sig, trusted: trusted, product: product);
     if (m.file == 'manifest.json' || m.file == 'manifest.sig') throw ManifestException('签名清单的文件名无效');
     final f = File('$dir$sep${m.file}');
     if (!await f.exists()) throw ManifestException('缺少 ${m.file}');

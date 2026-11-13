@@ -48,12 +48,19 @@ class EventStream implements OpStream {
 
 class RuntimeLink extends FakeAiLink {
   final events = EventStream();
+  OpStream? firstStream;
+  Completer<Object?>? rootsGate;
+  int opens = 0;
   bool legacy = false;
   bool longHistory = false;
   @override
-  Future<OpStream> open(String op, [Object? args, Priority priority = Priority.interactive]) async => events;
+  Future<OpStream> open(String op, [Object? args, Priority priority = Priority.interactive]) async {
+    opens++;
+    return opens == 1 ? firstStream ?? events : events;
+  }
   @override
   Future<Object?> call(String op, [Object? args, Duration timeout = const Duration(seconds: 60)]) async {
+    if (op == 'fs.roots' && rootsGate != null) return rootsGate!.future;
     final result = await super.call(op, args, timeout);
     if (op == 'ai.get' && !legacy) {
       final session = (result as Map)['session'] as Map;
@@ -69,6 +76,12 @@ class RuntimeLink extends FakeAiLink {
     }
     return result;
   }
+}
+
+class _RejectedEventStream extends EventStream {
+  int resets = 0;
+  @override Future<Object?> response() async => throw StateError('synthetic stream handshake failure');
+  @override void reset() { resets++; super.reset(); }
 }
 
 void main() {
@@ -154,6 +167,28 @@ void main() {
   }
 
   String text(WidgetTester t, String key) => t.widget<Text>(find.byKey(ValueKey(key))).data!;
+  testWidgets('failed event handshake releases stream before retrying the healthy link', (t) async {
+    final rejected = _RejectedEventStream();
+    link.firstStream = rejected;
+    await pump(t);
+    expect(rejected.resets, 1);
+    expect(find.textContaining('实时状态流中断'), findsOneWidget);
+    await t.pump(const Duration(seconds: 3));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(link.opens, 2);
+    expect(find.textContaining('实时状态流中断'), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+  testWidgets('late roots response after closing AI tab cannot reopen streams or setState', (t) async {
+    final roots = Completer<Object?>();
+    link.rootsGate = roots;
+    await pump(t);
+    await t.pumpWidget(const SizedBox());
+    roots.complete({'roots': <Object>[]});
+    await t.pump(const Duration(milliseconds: 100));
+    expect(link.opens, 0);
+    expect(t.takeException(), isNull);
+  });
   testWidgets('actual provider/model differs from next selection and context is not total', (t) async {
     await pump(t);
     expect(text(t, 'ai-actual-model'), contains('ChatGPT 订阅 / gpt-6.1-sol'));
@@ -223,6 +258,37 @@ void main() {
     await pump(t, width: 390);
     expect(find.byKey(const ValueKey('ai-runtime-bar')), findsOneWidget);
     await snapshot(t, 'ai-runtime-mobile');
+  });
+  testWidgets('working shell and child agents show live output and finish independently', (t) async {
+    await pump(t);
+    link.events.emit({'type':'tool.running','tool_call_id':'parent-task','tool_name':'subagent','input':{'agent':'explore','description':'检查本地项目'},'metadata':{'child_session_id':'child-1'}});
+    link.events.emit({'type':'tool.running','session_id':'child-1','root_session_id':'ses_1','session_title':'检查本地项目','tool_call_id':'child-shell','tool_name':'shell','input':{'command':'Get-ChildItem'},'metadata':{'proxy_mode':'environment'}});
+    link.events.emit({'type':'tool.progress','session_id':'child-1','root_session_id':'ses_1','tool_call_id':'child-shell','delta':'synthetic live output'});
+    await t.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const ValueKey('ai-active-work')), findsOneWidget);
+    expect(find.text('正在工作 · 2 项'), findsOneWidget);
+    expect(find.text('Get-ChildItem'), findsOneWidget);
+    await t.tap(find.text('Get-ChildItem'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 250));
+    expect(find.text('synthetic live output'), findsOneWidget);
+    await snapshot(t, 'ai-working-agents-desktop');
+    link.events.emit({'type':'tool.done','session_id':'child-1','root_session_id':'ses_1','tool_call_id':'child-shell'});
+    await t.pump();
+    expect(find.text('正在工作 · 1 项'), findsOneWidget);
+    link.events.emit({'type':'tool.done','tool_call_id':'parent-task'});
+    await t.pump();
+    expect(find.byKey(const ValueKey('ai-active-work')), findsNothing);
+  });
+  testWidgets('working activity fits phone width and sync event reloads history', (t) async {
+    await pump(t, width: 390);
+    link.events.emit({'type':'tool.running','tool_call_id':'shell','tool_name':'shell','input':{'command':'pwsh -NoProfile -Command "build a long project path with spaces"'},'metadata':{'proxy_mode':'agent'}});
+    await t.pump();
+    await snapshot(t, 'ai-working-shell-mobile');
+    final before = link.rpcCalls.where((c) => c.$1 == 'ai.get').length;
+    link.events.emit({'type':'sync.required'});
+    for (var i=0;i<3;i++) { await t.pump(const Duration(milliseconds: 30)); }
+    expect(link.rpcCalls.where((c) => c.$1 == 'ai.get').length, greaterThan(before));
   });
   testWidgets('stream text is coalesced and reading history is not forcibly scrolled', (t) async {
     link.longHistory = true;

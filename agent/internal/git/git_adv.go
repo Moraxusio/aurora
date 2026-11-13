@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 package git
 
@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"aurora3/internal/wire"
@@ -523,14 +522,9 @@ func (e *Env) gitIgnore(ctx context.Context, raw json.RawMessage) (any, error) {
 // giving it to the repository's owner.
 func writeIgnore(file string, data []byte, g *gitCtx) error {
 	mode := os.FileMode(0o644)
-	uid, gid := -1, -1
+	uid, gid := ignoreOwner(file, g)
 	if fi, err := os.Lstat(file); err == nil {
 		mode = fi.Mode().Perm()
-		if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-			uid, gid = int(st.Uid), int(st.Gid)
-		}
-	} else if g.cred != nil {
-		uid, gid = int(g.cred.Uid), int(g.cred.Gid)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(file), ".gitignore.aurora-*")
 	if err != nil {

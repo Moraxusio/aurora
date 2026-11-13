@@ -821,11 +821,11 @@ class _FileTreePageState extends State<_FileTreePage> {
     showFileInfo(
       context,
       root: n.root,
-      path: n.path,
+      path: ws.entry?.isLocal == true ? ws.app.localAgent.nativePath(n.root, n.path) : n.path,
       entry: n.entry,
       isDir: n.isDir,
       du: n.du,
-      measure: n.isDir ? () => _du(n) : null,
+      measure: n.isDir && _canMeasure ? () => _du(n) : null,
       onMeasured: (r) {
         if (mounted) setState(() => _applyDu(n, r));
       },
@@ -833,6 +833,7 @@ class _FileTreePageState extends State<_FileTreePage> {
   }
 
   // ---- menu and keys ----
+  bool get _canMeasure => ws.entry?.isLocal != true || ws.hasOp('fs.du');
 
   List<MenuItem> _multiMenu() {
     final items = _selectedItems();
@@ -840,7 +841,7 @@ class _FileTreePageState extends State<_FileTreePage> {
     return [
       MenuItem('复制 ${items.length} 项', () => _copy(), icon: Icons.content_copy_outlined, hint: 'Ctrl+C'),
       MenuItem('剪切 ${items.length} 项', () => _copy(cut: true), icon: Icons.content_cut, hint: 'Ctrl+X'),
-      if (dirs.isNotEmpty) MenuItem('计算文件夹大小', () => _measure(dirs), icon: Icons.data_usage_rounded),
+      if (dirs.isNotEmpty && _canMeasure) MenuItem('计算文件夹大小', () => _measure(dirs), icon: Icons.data_usage_rounded),
       const MenuItem.separator(),
       MenuItem('删除 ${items.length} 项…', () => _deleteItems(items), icon: Icons.delete_outline, danger: true, hint: 'Delete'),
       const MenuItem.separator(),
@@ -871,9 +872,9 @@ class _FileTreePageState extends State<_FileTreePage> {
         MenuItem(dir ? '粘贴到这里' : '粘贴到同一文件夹', clip == null ? null : () => _paste(n), icon: Icons.content_paste, hint: 'Ctrl+V'),
       if (!isRoot) MenuItem('创建副本', () => _duplicate(n), icon: Icons.file_copy_outlined),
       const MenuItem.separator(),
-      MenuItem('复制路径', () => copyText(n.path, what: '已复制路径'), icon: Icons.copy),
+      MenuItem('复制路径', () => copyText(ws.entry?.isLocal == true ? ws.app.localAgent.nativePath(n.root, n.path) : n.path, what: '已复制路径'), icon: Icons.copy),
       if (dir) MenuItem('刷新', () => _load(n), icon: Icons.refresh),
-      if (dir) MenuItem(n.du == null ? '计算大小' : '重新计算大小', n.duBusy ? null : () => _measure([n]), icon: Icons.data_usage_rounded),
+      if (dir && _canMeasure) MenuItem(n.du == null ? '计算大小' : '重新计算大小', n.duBusy ? null : () => _measure([n]), icon: Icons.data_usage_rounded),
       if (isRoot && widget.projectId.isNotEmpty) MenuItem('从工作区移除文件夹', () => ws.removeFolder(WorkspacePath(root: n.root, path: n.path)), icon: Icons.folder_off_outlined),
       MenuItem('属性…', () => _properties(n), icon: Icons.info_outline),
       if (!isRoot) ...[
@@ -1029,7 +1030,7 @@ class _FileTreePageState extends State<_FileTreePage> {
           }, color: _hidden ? ide.accent : null),
           const Spacer(),
           IconBtn(Icons.data_usage_rounded, '计算选中文件夹的大小（同时显示它下面各文件夹的大小）',
-              target == null || target.duBusy ? null : () => _measure([target])),
+              !_canMeasure || target == null || target.duBusy ? null : () => _measure([target])),
           Builder(builder: (ctx) => IconBtn(Icons.sort_rounded, '排序：${const {'name': '名称', 'size': '大小', 'mtime': '修改时间', 'type': '类型'}[_sort]}${_desc ? '（降序）' : ''}', () => _sortMenu(ctx),
               color: _sort != 'name' || _desc ? ide.accent : null)),
           IconBtn(Icons.refresh, '刷新', _refreshAll),

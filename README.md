@@ -1,5 +1,9 @@
 # Aurora
 
+核心理念：**标签页优先，布局服务于任务**。文件、终端、AI 与工具视图在可组合的编辑组里工作，移动位置不丢状态。3.14.0 的多编辑组、标签排布与宽度调整见 [标签页工作台](docs/TABS.md)。
+
+3.14.0 增加 Windows 本地模式：直接打开本机文件夹，使用 PowerShell、Git 和 AI；本地 agent 随客户端运行，与 Linux 远程 agent 分开。设计、构建和限制见 [Windows 本地 agent](docs/LOCAL_AGENT.md)。
+
 Aurora is a remote server management tool that aims to go beyond what plain SSH offers.
 Aurora 是一个远程服务器管理工具，目标是比 SSH 更强的远程管理能力。
 

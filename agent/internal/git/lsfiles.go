@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 package git
 
@@ -28,6 +28,7 @@ func (r Runner) LsFiles(ctx context.Context, limit int) ([]string, bool, error) 
 	cctx, cancel := context.WithTimeout(ctx, lsFilesTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, r.g.exe, "-c", "safe.directory=*", "-c", "core.quotepath=off", "ls-files", "-co", "--exclude-standard", "-z")
+	hideGitWindow(cmd)
 	cmd.Dir, cmd.Env = r.g.dir, r.g.env
 	out, err := cmd.StdoutPipe()
 	if err != nil {

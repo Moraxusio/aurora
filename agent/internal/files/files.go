@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 package files
 
@@ -126,18 +126,13 @@ type entry struct {
 
 func etag(fi fs.FileInfo) string {
 	var ino, ctime int64
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		ino = int64(st.Ino)
-		ctime = st.Ctim.Sec*1e9 + st.Ctim.Nsec
-	}
+	ino, ctime = fileIdentity(fi)
 	return fmt.Sprintf("%x-%x-%x-%x", fi.ModTime().UnixNano(), fi.Size(), ino, ctime)
 }
 
 func (s *Env) toEntry(root *os.Root, rootDir, rel string, fi fs.FileInfo) entry {
 	e := entry{Name: fi.Name(), Size: fi.Size(), Mtime: fi.ModTime().UnixMilli(), Mode: fi.Mode().String()}
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		e.Owner, e.Group = idNames.user(st.Uid), idNames.group(st.Gid)
-	}
+	e.Owner, e.Group = fileOwner(fi)
 	switch {
 	case fi.IsDir():
 		e.Type = "dir"
@@ -159,10 +154,11 @@ func (s *Env) toEntry(root *os.Root, rootDir, rel string, fi fs.FileInfo) entry 
 		e.Target = "outside"
 		best := -1
 		for _, r := range s.Roots {
-			if (resolved == r.Path || strings.HasPrefix(resolved, strings.TrimSuffix(r.Path, "/")+"/")) && len(r.Path) > best {
+			if paths.Within(r.Path, resolved) && len(r.Path) > best {
 				best = len(r.Path)
 				e.LinkRoot = r.ID
-				e.LinkPath = "/" + strings.TrimPrefix(strings.TrimPrefix(resolved, r.Path), "/")
+				rel, _ := filepath.Rel(r.Path, resolved)
+				e.LinkPath = "/" + filepath.ToSlash(rel)
 			}
 		}
 		if best >= 0 {
@@ -375,23 +371,6 @@ func writeAtomic(root *os.Root, rel string, r io.Reader, mode fs.FileMode) (int6
 // ownerFor is who a file written at rel should belong to: its current owner
 // when it exists, otherwise the owner of the folder it goes into. ok is false
 // when the agent is not root (it cannot give files away then anyway).
-func ownerFor(root *os.Root, rel string) (uid, gid int, ok bool) {
-	if os.Geteuid() != 0 {
-		return 0, 0, false
-	}
-	fi, err := root.Lstat(rel)
-	if err != nil {
-		fi, err = root.Stat(path.Dir(rel))
-	}
-	if err != nil {
-		return 0, 0, false
-	}
-	st, isStat := fi.Sys().(*syscall.Stat_t)
-	if !isStat {
-		return 0, 0, false
-	}
-	return int(st.Uid), int(st.Gid), true
-}
 
 func checkTarget(root *os.Root, rel string, a *fsArgs) (fs.FileMode, error) {
 	if rel == "." {
@@ -537,7 +516,7 @@ func (s *Env) fsCopy(ctx context.Context, raw json.RawMessage) (any, error) {
 	}
 	srcAbs := filepath.Join(rootPath(s, a.Root), rel)
 	dstAbs := filepath.Join(rootPath(s, toID), to)
-	if dstAbs == srcAbs || strings.HasPrefix(dstAbs+"/", srcAbs+"/") {
+	if paths.Within(srcAbs, dstAbs) {
 		return nil, wire.Errf(wire.CodeBadRequest, "不能复制到自身或其子目录中")
 	}
 	src, err := root.Lstat(rel)
@@ -563,9 +542,7 @@ const maxCopyDepth = 64
 // keepMeta gives the copy the source's owner (the agent is usually root and
 // would otherwise own every copy), permission bits and modification time.
 func keepMeta(dst *os.Root, name string, fi fs.FileInfo, link bool) {
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok && os.Geteuid() == 0 {
-		_ = dst.Lchown(name, int(st.Uid), int(st.Gid))
-	}
+	copyOwner(dst, name, fi)
 	if link {
 		return
 	}

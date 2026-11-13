@@ -185,10 +185,18 @@ class _OverviewViewState extends State<OverviewView> {
         width: 44,
         height: 44,
         decoration: BoxDecoration(color: ide.accentSoft, borderRadius: BorderRadius.circular(Radii.island + 2)),
-        child: Icon(Icons.dns_rounded, size: 22, color: ide.accent),
+        child: Icon(e.isLocal ? Icons.computer : Icons.dns_rounded, size: 22, color: ide.accent),
       ),
       children: [
-        FormSection(title: '连接', children: [
+        if (e.isLocal) const FormSection(title: '本地执行环境', children: [
+          FormRow(title: 'agent 类型', value: 'Windows 本地 agent（非远程服务）'),
+          FormRow(title: '运行权限', value: '当前 Windows 用户，不自动提权'),
+          FormRow(title: '生命周期', value: '隐藏到托盘继续运行；完全退出结束受管任务'),
+          FormRow(title: '终端', value: 'ConPTY + PowerShell，不提供跨 agent 重启的持久会话'),
+          FormRow(title: '代理', value: '继承环境代理，否则使用 Windows 手动 HTTP(S) 代理；PAC-only 暂不支持'),
+          FormRow(title: '凭证', value: '继续使用原加密 profile；本地连接令牌只在本次启动内存中保存'),
+        ]),
+        if (!e.isLocal) FormSection(title: '连接', children: [
           FormRow(title: 'SSH', value: s == null ? '—' : '${s.user}@${s.host}:${s.port}'),
           FormRow(title: '主机密钥', value: kh == null ? '—' : '${kh.type} ${kh.fingerprint}'),
           FormRow(title: '直连地址', value: d == null ? '—' : d.addrs.join('  ')),
@@ -207,7 +215,7 @@ class _OverviewViewState extends State<OverviewView> {
             FormRow(
               title: 'agent 版本',
               value: info.version,
-              trailing: TextButton.icon(
+              trailing: e.isLocal ? const Text('随客户端更新') : TextButton.icon(
                 onPressed: () => showAgentUpgrade(context, ws.app, ws.serverId),
                 icon: const Icon(Icons.system_update_alt_rounded, size: 16),
                 label: const Text('检查并升级'),
@@ -216,7 +224,7 @@ class _OverviewViewState extends State<OverviewView> {
           ]),
         FormSection(
           title: '服务',
-          note: '服务开关是功能选择，不是安全边界：持有直连令牌就能取得 root 权限。每次改动都写入服务器的审计日志。',
+          note: e.isLocal ? '服务开关不是沙箱：本地 agent 拥有当前用户的文件和进程权限。开关本次启动有效。' : '服务开关是功能选择，不是安全边界：持有直连令牌就能取得 root 权限。每次改动都写入服务器的审计日志。',
           children: [
             if (ws.link == null)
               const FormRow(title: '连接后显示')
@@ -226,7 +234,7 @@ class _OverviewViewState extends State<OverviewView> {
               for (final svc in ws.services) _serviceRow(ide, svc),
           ],
         ),
-        FormSection(title: '服务器', children: [
+        if (!e.isLocal) FormSection(title: '服务器', children: [
           FormRow(
             icon: Icons.sync_rounded,
             title: '重新安装或配对',
@@ -247,7 +255,7 @@ class _OverviewViewState extends State<OverviewView> {
             onTap: _busy ? null : _remove,
           ),
         ]),
-        FormSection(title: '危险操作', danger: true, children: [
+        if (!e.isLocal) FormSection(title: '危险操作', danger: true, children: [
           FormRow(
             title: '卸载 agent',
             subtitle: '停止 agent，删除程序和 systemd 单元；配置和身份保留',

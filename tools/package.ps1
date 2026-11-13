@@ -9,6 +9,7 @@
 #     aurora.exe, flutter_windows.dll, aurora_tls.dll, data\   the client
 #     agent\amd64\  manifest.json, manifest.sig, aurora3-agent-<v>-linux-amd64
 #     agent\policy.json, policy.sig  signed upgrade policy
+#     local-agent\windows-amd64\  signed client-owned Windows backend
 #     LICENSES.txt  every third-party component and its licence
 #     README.txt
 # plus Aurora-<version>.zip and its SHA-256.
@@ -63,12 +64,19 @@ try {
     $env:GOOS = 'linux'; $env:GOARCH = 'amd64'
     & $go build -trimpath -ldflags "-s -w -X main.Version=$Version" -o "$work\aurora3-agent" ./cmd/aurora3-agent
     if ($LASTEXITCODE) { throw 'build aurora3-agent' }
+    $env:GOOS = 'windows'
+    & $go build -trimpath -ldflags "-H=windowsgui -s -w -X main.Version=$Version" -o "$work\aurora3-local-agent.exe" ./cmd/aurora3-local-agent
+    if ($LASTEXITCODE) { throw 'build Windows local agent' }
 } finally { Pop-Location; Remove-Item Env:GOOS, Env:GOARCH -ErrorAction SilentlyContinue }
 & "$work\aurora3-release.exe" sign --key $Key --version $Version --arch amd64 --file "$work\aurora3-agent" --out "$dir\agent\amd64"
 if ($LASTEXITCODE) { throw 'sign' }
 # Checked with the release key compiled into the tools, as the client does.
 & "$work\aurora3-release.exe" verify --dir "$dir\agent\amd64"
 if ($LASTEXITCODE) { throw 'verify' }
+& "$work\aurora3-release.exe" sign --key $Key --product aurora3-local-agent --os windows --version $Version --arch amd64 --file "$work\aurora3-local-agent.exe" --out "$dir\local-agent\windows-amd64"
+if ($LASTEXITCODE) { throw 'sign Windows local agent' }
+& "$work\aurora3-release.exe" verify --product aurora3-local-agent --dir "$dir\local-agent\windows-amd64"
+if ($LASTEXITCODE) { throw 'verify Windows local agent' }
 $policyArgs = @('policy', '--key', $Key, '--out', "$dir\agent")
 if ($Policy) { $policyArgs += @('--input', $Policy) }
 & "$work\aurora3-release.exe" @policyArgs
@@ -93,8 +101,10 @@ $m = Get-Content "$dir\agent\amd64\manifest.json" -Raw | ConvertFrom-Json
 @"
 Aurora $Version (Windows)
 
-运行 aurora.exe。第一次使用时点“添加服务器”，填写 Linux 服务器的 SSH 地址和账号，
-程序会通过 SSH 安装 aurora3-agent，之后直接连接，不再需要 SSH。
+运行 aurora.exe。Windows 可直接打开本机文件夹，无需服务器或管理员安装。
+本地 agent 随客户端启动，完全退出客户端时结束其受管终端和任务，不提供 tmux 持久会话。
+优先使用已安装的 pwsh，否则回退 Windows PowerShell；使用用户本机开发环境与代理。
+远程开发仍可“添加服务器”，通过 SSH 安装 Linux agent，之后直接加密连接。
 
 - 支持的服务器：Linux x86-64（amd64），需要 systemd。
 - 服务器上只使用 v3 的名字：/usr/local/bin/aurora3-agent、aurora3-agent.service、
@@ -103,13 +113,24 @@ Aurora $Version (Windows)
   只有当前 Windows 用户能打开。
 
 本次更新（$Version）：
+- 标签页优先工作台：单组、左右、上下、三列和四宫格，最多 4 个编辑组。
+  标签可放顶部、底部、多行或左右纵向，支持重排、跨组拖动和四边拆分。
+  主侧栏/纵向标签可拖宽，编辑组可调比例，分隔条双击复位；横向标签有宽度滑块。
+  项目分别记忆文件布局和固定状态，窄窗暂时聚焦当前组；移动布局不重建当前任务。
+  固定项在批量关闭时受保护，取消或切换项目停止后续关闭；不保存未保存文字，
+  不自动复活终端进程/AI 运行任务。真实桌面拖放、多屏 DPI 和触摸实机仍待验证。
+- Windows 可直接打开本机文件夹，使用本地 PowerShell、Git 和 AI，无需远程服务器。
+  本地 agent 随客户端更新；隐藏到托盘继续运行，完全退出结束受管任务，不提供 tmux 持久会话。
+- AI 长历史改为分块加载；工作面板显示子代理、shell 输出和代理来源，状态流可恢复。
+  提供商设置支持手动添加/搜索模型，拉取与手动模型合并，可选择本机或当前 agent 网络。
+  继续保留原加密配置、API Key 和 OAuth；首次增加本机入口前备份原加密 profile。
 - OpenAI / ChatGPT 设备码授权默认走本机网络/系统代理，可切换服务器出口并重试。
-  本机刷新不把 refresh 发给 agent；模型请求仍由服务器发出。获取设备码时的 403
+  本机刷新不把 refresh 发给 agent；模型请求由当前本地 / 远程 agent 发出。获取设备码时的 403
   不等于订阅无效，更换授权出口不保证解决所有上游限制。Windows PAC-only 暂不解析。
 - AI 输入框支持 Ctrl+V/菜单粘贴图片和复制的文件、本机选文件及服务器文件浏览。
   支持 PNG/JPEG/GIF/WebP、PDF、UTF-8 文本/代码；单件 8 MiB、文本 256 KiB，
   每条最多 8 件且合计 20 MiB。粘贴不上传，发送才分块上传；图片/PDF 需要模型支持。
-- 附件明文保留在服务器 AI 私有目录用于历史重放，库限额 512 MiB，不写工作目录；
+- 附件明文保留在当前 agent 的 AI 私有目录用于历史重放，库限额 512 MiB，不写工作目录；
   删除会话保护共享引用。发送未成功或回退形成的孤儿附件尚无自动清理。
 - 新会话工作目录使用项目/根目录下拉和面包屑浏览，不再手输；已有会话目录固定。
 - 正文默认 15 px，支持持久化字号、复制回答、惰性历史及流式合帧，读历史不强制滚底，
@@ -118,7 +139,7 @@ Aurora $Version (Windows)
   使用 zstd。尚未移植 WebSocket、browser callback 或 token-sharing。
 - 自动化测试与宽屏/手机组件截图通过；真实 ChatGPT 授权/对话、Windows 原生剪贴板
   和 Android 真机尚未验证。令牌仍加密保存在本机，长任务到期需客户端下次调用刷新。
-- 使用本功能需将服务器上的 aurora3-agent 升级至 $Version（连接后点击升级提示即可）。
+- 远程使用本轮历史/活动能力需将服务器上的 aurora3-agent 升级至 $Version；本地 agent 随客户端提供。
 代理功能：
 - 在“代理”页添加 Clash 订阅 URL，或粘贴节点链接；选用节点后，新建终端时勾选
   “这个会话走代理”。git 的 HTTP/HTTPS 远程操作跟随代理服务开关。

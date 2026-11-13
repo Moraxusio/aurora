@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 // Package git serves the "git" service: repository status, history, staging,
 // commits, branches and remotes, run as the repository's owner (v2 gitrun.go).

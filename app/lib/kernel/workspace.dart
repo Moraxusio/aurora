@@ -2,6 +2,7 @@
 // service, and the way features reach the link. It outlives the widgets: the
 // shell can be rebuilt, or another server shown, and the tabs stay.
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
@@ -15,13 +16,19 @@ import 'editor_tab.dart';
 import 'feature.dart';
 import 'file_watch.dart';
 import 'widgets.dart';
+import 'tab_layout.dart';
 
 class Workspace extends ChangeNotifier {
   final AppState app;
   final String serverId;
   final List<EditorTab> tabs = [];
-  String? activeId;
+  final Map<String, TabLayout> _layouts = {};
+  final Map<String, Future<bool>> _closingTabs = {};
+  int editorFocusRequest = 0;
+  String? get activeId => tabLayout.groups.first.active;
+  set activeId(String? id) => tabLayout.groups.first.active = id;
   String? _projectId;
+  int _projectRevision = 0;
   final Map<String, String?> _activeByProject = {};
   final Set<String> _restored = {};
   final Map<String, WorkspaceView> _views = {};
@@ -35,7 +42,29 @@ class Workspace extends ChangeNotifier {
 
   String get projectKey => _projectId ?? '';
   ProjectWorkspace? get project => entry?.workspace(_projectId);
-  List<EditorTab> get visibleTabs => tabs.where((t) => t.file == null || t.projects.contains(projectKey)).toList();
+  List<EditorTab> get visibleTabs {
+    final visible = {for (final t in _tabsFor(projectKey)) t.id: t};
+    return [for (final id in tabLayout.ordered) if (visible[id] != null) visible[id]!];
+  }
+
+  TabLayout get tabLayout => _layoutFor(projectKey);
+  TabLayout _layoutFor(String key) => _layouts.putIfAbsent(key, () {
+    final view = _viewForKey(key);
+    final ids = {..._tabsFor(key).map((t) => t.id), if (!_restored.contains(key)) ...view.files.map((f) => 'file:${f.root}:${f.path}')};
+    final layout = TabLayout.fromJson(view.tabLayout, ids);
+    if (view.tabLayout.isEmpty) {
+      final id = _activeByProject[key] ?? (view.activeFile == null ? null : 'file:${view.activeFile!.root}:${view.activeFile!.path}');
+      if (id != null) layout.activate(id);
+    }
+    return layout;
+  });
+
+  List<EditorTab> tabsInGroup(String id) => [for (final tabId in tabLayout.group(id)?.tabs ?? <String>[]) ?tab(tabId)];
+
+  void _syncLayout(String key) {
+    final view = _viewForKey(key);
+    _layoutFor(key).reconcile({..._tabsFor(key).map((t) => t.id), if (!_restored.contains(key)) ...view.files.map((f) => 'file:${f.root}:${f.path}')});
+  }
 
   /// agent.services: id, enabled, available, reason, ops.
   List<Map<String, dynamic>> services = [];
@@ -89,12 +118,10 @@ class Workspace extends ChangeNotifier {
     final e = entry;
     final selected = e?.workspace(e.selectedWorkspace)?.id;
     if (_projectId != selected) {
-      if (_restored.contains(projectKey)) _activeByProject[projectKey] = activeId;
+      if (_restored.contains(projectKey)) _activeByProject[projectKey] = focusedId;
+      _projectRevision++;
       _projectId = selected;
-      sideId = null; // a split is a view of one project's tabs
-      sideFocused = false;
-      activeId = _activeByProject[projectKey];
-      if (!visibleTabs.any((t) => t.id == activeId)) activeId = visibleTabs.firstOrNull?.id;
+      _syncLayout(projectKey);
     }
     viewRevision++;
     watch.relink();
@@ -130,10 +157,15 @@ class Workspace extends ChangeNotifier {
     if (l == null) return;
     try {
       final r = await l.call('agent.services') as Map;
+      if (_disposed || !identical(l, link)) return;
       services = [for (final s in r['services'] as List) (s as Map).cast<String, dynamic>()];
       servicesError = null;
     } on OpError catch (e) {
+      if (_disposed || !identical(l, link)) return;
       servicesError = e.message;
+    } on Object {
+      if (_disposed || !identical(l, link)) return;
+      servicesError = '服务列表读取失败，请重试连接';
     }
     // an answer or an error: either way the wait is over
     if (identical(l, link)) servicesLoaded = true;
@@ -187,17 +219,26 @@ class Workspace extends ChangeNotifier {
     return null;
   }
 
+  void updateTabTitle(String id, String title) {
+    final current = tab(id);
+    if (_disposed || current == null || title.isEmpty || current.title == title) return;
+    current.title = title;
+    notifyListeners();
+  }
+
   /// Opens [t], or brings the open tab with the same id to the front.
   void openTab(EditorTab t) {
     final existing = tab(t.id);
     if (existing != null) {
       if (existing.file != null) existing.projects.add(projectKey);
+      _syncLayout(projectKey);
       if (!identical(t, existing)) t.dispose();
       activate(t.id);
       return;
     }
     tabs.add(t);
     if (t.file != null) t.projects.add(projectKey);
+    _syncLayout(projectKey);
     _show(t.id);
     compactEditor = true;
     rememberFiles();
@@ -208,52 +249,36 @@ class Workspace extends ChangeNotifier {
     final t = tab(id);
     if (t == null) return;
     if (t.file != null) t.projects.add(projectKey);
+    _syncLayout(projectKey);
     _show(id);
     compactEditor = true;
     rememberFiles();
     notifyListeners();
   }
 
-  /// Puts [id] in front on the side that has the focus. A tab already shown on
-  /// the other side moves the focus there instead of being shown twice.
+  /// Reveals [id] in its group, or adds a new tab to the focused group.
   void _show(String id) {
-    if (split) {
-      if (id == sideId) {
-        sideFocused = true;
-        return;
-      }
-      if (id == activeId) {
-        sideFocused = false;
-        return;
-      }
-      if (sideFocused) {
-        sideId = id;
-        return;
-      }
-    }
-    activeId = id;
-    _activeByProject[projectKey] = activeId;
+    tabLayout.add(id);
+    editorFocusRequest++;
+    _activeByProject[projectKey] = focusedId;
   }
 
-  // ---- split editor ----
-  //
-  // The editor area can show two tabs side by side. A tab's widget lives once
-  // (an editor holds unsaved text and undo history, a terminal its stream), so
-  // the two sides never show the same tab: the right side shows [sideId], the
-  // left side the active tab among the others.
+  // ---- editor groups ----
+  // The layout owns groups and geometry, not document state. The older
+  // sideId/sideFocused/splitActive API remains only for dual-pane callers.
 
   /// The tab on the right side, or null when the editor is not split.
-  String? sideId;
+  String? get sideId => tabLayout.groups.length > 1 ? tabLayout.groups[1].active : null;
 
   /// Which side has the focus for Ctrl+W, Ctrl+Tab and the status bar.
-  bool sideFocused = false;
+  bool get sideFocused => tabLayout.groups.length > 1 && tabLayout.focused == tabLayout.groups[1].id;
 
-  bool get split => sideId != null && visibleTabs.any((t) => t.id == sideId);
+  bool get split => tabLayout.groups.length > 1;
 
   /// The tab the user is working in: the right one when that side has focus.
-  String? get focusedId => split && sideFocused ? sideId : activeId;
+  String? get focusedId => tabLayout.current.active;
 
-  /// Ctrl+\: moves the active tab to the right side (or back when it is there).
+  /// Legacy dual-pane toggle; the shell's Ctrl+\ uses splitGroup instead.
   void splitActive() {
     final id = focusedId;
     if (id == null) return;
@@ -262,66 +287,111 @@ class Workspace extends ChangeNotifier {
     if (others.isEmpty) return toast('再打开一个标签才能拆分');
     // the left side shows the tab that was before it, the right side this one
     final i = visibleTabs.indexWhere((t) => t.id == id);
-    sideId = id;
-    sideFocused = true;
-    activeId = visibleTabs.where((t) => t.id != id).elementAt((i - 1).clamp(0, others.length - 1)).id;
-    _activeByProject[projectKey] = activeId;
-    notifyListeners();
+    final from = tabLayout.owner(id)!;
+    tabLayout.split(from.id, SplitAxis.horizontal, tab: id);
+    from.active = others[(i - 1).clamp(0, others.length - 1)].id;
+    _layoutChanged();
   }
 
   void unsplit() {
-    if (sideId == null) return;
-    final back = sideId;
-    sideId = null;
-    sideFocused = false;
-    if (back != null && tab(back) != null) activeId = back;
-    _activeByProject[projectKey] = activeId;
-    notifyListeners();
+    arrangeEditors(EditorArrangement.single);
   }
 
   void focusSide(bool right) {
-    if (sideFocused == right) return;
-    sideFocused = right && split;
+    focusGroup(tabLayout.groups[right && split ? 1 : 0].id);
+  }
+
+  void focusGroup(String id) {
+    if (tabLayout.focused == id || tabLayout.group(id) == null) return;
+    tabLayout.focus(id);
+    editorFocusRequest++;
+    _layoutChanged();
+  }
+
+  void focusGroupAt(int index) {
+    if (index >= 0 && index < tabLayout.groups.length) focusGroup(tabLayout.groups[index].id);
+  }
+
+  void arrangeEditors(EditorArrangement arrangement) { tabLayout.arrange(arrangement); _layoutChanged(); }
+  void splitGroup(SplitAxis axis, {String? group, String? tabId, bool before = false}) {
+    final from = group ?? tabLayout.focused;
+    if (tabLayout.split(from, axis, tab: tabId ?? tabLayout.group(from)?.active, before: before) == null) {
+      toast('最多同时显示 4 个编辑组；可将标签拖入已有分组');
+      return;
+    }
+    _layoutChanged();
+  }
+  void mergeGroup(String id) { tabLayout.mergeGroup(id); _layoutChanged(); }
+  void moveTab(String id, String group, {int? index}) {
+    if (tab(id) == null) return;
+    tabLayout.move(id, group, index: index); _layoutChanged();
+  }
+  void reorderActive(int delta) {
+    final id = focusedId;
+    if (id == null) return;
+    final g = tabLayout.owner(id)!;
+    final i = g.tabs.indexOf(id);
+    moveTab(id, g.id, index: (i + (delta > 0 ? 2 : -1)).clamp(0, g.tabs.length));
+  }
+  void pinTab(String id) { tabLayout.togglePin(id); _layoutChanged(); }
+  void setTabPlacement(TabPlacement placement) { tabLayout.placement = placement; _layoutChanged(); }
+  void setSideWidth(double width) {
+    if (!width.isFinite) return;
+    tabLayout.sideWidth = width.clamp(180, 640); _layoutChanged();
+  }
+  void setTabsWidth(double width) {
+    if (!width.isFinite) return;
+    tabLayout.tabsWidth = width.clamp(120, 400); _layoutChanged();
+  }
+  void setTabWidth(double width) {
+    if (!width.isFinite) return;
+    tabLayout.tabWidth = width.clamp(100, 260); _layoutChanged();
+  }
+  void resizeGroup(String split, double ratio) { tabLayout.resizeSplit(split, ratio); _layoutChanged(); }
+  void _layoutChanged() {
+    if (_disposed) return;
+    _activeByProject[projectKey] = focusedId;
+    rememberFiles();
     notifyListeners();
   }
 
+  /// Snapshot instances, not only IDs; leaving the project cancels the rest
+  /// even if it is selected again before a dirty prompt is answered.
+  Future<void> closeTabs(Iterable<String> ids, {bool keepPinned = true}) async {
+    final revision = _projectRevision;
+    final closing = [for (final id in ids) ?tab(id)];
+    for (final current in closing) {
+      if (_disposed || revision != _projectRevision) break;
+      if (!identical(tab(current.id), current)) continue;
+      if (keepPinned && tabLayout.pinned.contains(current.id)) continue;
+      if (!await closeTab(current.id)) break;
+    }
+  }
+
   /// Closes a tab; asks first when it has unsaved changes. Returns whether it closed.
-  Future<bool> closeTab(String id) async {
+  Future<bool> closeTab(String id) {
+    final key = '$projectKey\u0000$id';
+    return _closingTabs[key] ??= _closeTab(id, projectKey).whenComplete(() { _closingTabs.remove(key); });
+  }
+
+  Future<bool> _closeTab(String id, String key) async {
     final t = tab(id);
     if (t == null) return true;
-    final key = projectKey;
     if (!visibleTabs.contains(t)) return false;
     final shared = t.file != null && t.projects.length > 1;
     if (!shared && t.confirmClose != null && !await t.confirmClose!()) return false;
     if (_disposed || !tabs.contains(t)) return true;
-    final shown = _tabsFor(key);
-    final i = shown.indexOf(t);
     // Closing a project membership must not discard a shared buffer that is
     // still open elsewhere. Its final close retains the normal dirty prompt.
     if (t.file != null && t.projects.length > 1) {
       t.projects.remove(key);
     } else {
       tabs.remove(t);
+      for (final layout in _layouts.values) { layout.remove(id); }
       t.dispose();
     }
-    final remaining = _tabsFor(key);
-    if (sideId == id && key == projectKey) {
-      // the right side's tab closed: the editor is one pane again
-      sideId = null;
-      sideFocused = false;
-    }
-    final left = remaining.where((x) => x.id != sideId).toList();
-    final next = left.isEmpty ? null : left[i.clamp(0, left.length - 1)].id;
-    if (_activeByProject[key] == id) _activeByProject[key] = next;
-    if (activeId == id && key == projectKey) {
-      activeId = next;
-      // nothing left for the left side: the right one takes it over
-      if (next == null && sideId != null) {
-        activeId = sideId;
-        sideId = null;
-        sideFocused = false;
-      }
-    }
+    _layoutFor(key).remove(id);
+    _activeByProject[key] = _layoutFor(key).current.active;
     _rememberFilesFor(key, removed: t.file);
     notifyListeners();
     return true;
@@ -334,11 +404,7 @@ class Workspace extends ChangeNotifier {
     if (gone.isEmpty) return;
     for (final t in gone) {
       tabs.remove(t);
-      if (sideId == t.id) {
-        sideId = null;
-        sideFocused = false;
-      }
-      if (activeId == t.id) activeId = visibleTabs.where((x) => x.id != sideId).firstOrNull?.id;
+      for (final layout in _layouts.values) { layout.remove(t.id); }
       if (t.file != null) {
         for (final key in t.projects) {
           final view = _viewForKey(key);
@@ -353,11 +419,9 @@ class Workspace extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Ctrl+Tab: the next tab on the side that has the focus (the other side's
-  /// tab is skipped, it cannot be shown twice).
+  /// Ctrl+Tab cycles within the focused editor group.
   void next(int step) {
-    final other = split ? (sideFocused ? activeId : sideId) : null;
-    final shown = visibleTabs.where((t) => t.id != other).toList();
+    final shown = tabsInGroup(tabLayout.focused);
     if (shown.length < 2) return;
     final i = shown.indexWhere((t) => t.id == focusedId);
     activate(shown[((i < 0 ? 0 : i) + step) % shown.length].id);
@@ -443,6 +507,7 @@ class Workspace extends ChangeNotifier {
     _dirtyViews.remove(id);
     _restored.remove(id);
     _activeByProject.remove(id);
+    _layouts.remove(id);
     // Includes references from a project that has never been restored in this
     // process. They must survive deleting the grouping as well.
     _views[''] = WorkspaceView.fromJson(entry!.browserView.toJson());
@@ -458,6 +523,7 @@ class Workspace extends ChangeNotifier {
   /// The kernel accepts a feature-provided builder and does not import files.
   void restoreFiles(EditorTab Function(WorkspacePath file) build) {
     final key = projectKey;
+    final layout = _layoutFor(key);
     if (!_restored.add(key)) return;
     final view = _viewForKey(key);
     for (final file in view.files) {
@@ -467,10 +533,12 @@ class Workspace extends ChangeNotifier {
       else { existing.projects.add(key); candidate.dispose(); }
     }
     final activeFile = view.activeFile;
-    activeId = _activeByProject.containsKey(key) ? _activeByProject[key] :
-      (activeFile == null ? null : tabs.where((t) => t.file == activeFile && t.projects.contains(key)).firstOrNull?.id) ?? activeId;
-    if (!visibleTabs.any((t) => t.id == activeId)) activeId = visibleTabs.firstOrNull?.id;
-    _activeByProject[key] = activeId;
+    _syncLayout(key);
+    if (view.tabLayout.isEmpty) {
+      final id = _activeByProject[key] ?? (activeFile == null ? null : tabs.where((t) => t.file == activeFile && t.projects.contains(key)).firstOrNull?.id);
+      if (id != null) layout.activate(id);
+    }
+    _activeByProject[key] = focusedId;
     notifyListeners();
   }
 
@@ -493,10 +561,16 @@ class Workspace extends ChangeNotifier {
     // files. Keep those references instead of silently replacing them by [].
     final next = _restored.contains(key) ? files : {...view.files, ...files}.toList();
     if (removed != null) next.remove(removed);
-    final activeFile = tab(key == projectKey ? activeId ?? '' : _activeByProject[key] ?? '')?.file;
-    if (listEquals(view.files, next) && view.activeFile == activeFile) return;
+    final layout = _layoutFor(key);
+    final activeFile = tab(layout.current.active ?? '')?.file;
+    final allowed = {for (final file in next) 'file:${file.root}:${file.path}'};
+    final defaults = layout.groups.length == 1 && layout.placement == TabPlacement.top && layout.sideWidth == 300 && layout.tabsWidth == 180 && layout.tabWidth == 160 && !layout.pinned.any(allowed.contains);
+    final snapshot = next.isEmpty && defaults ? <String, dynamic>{} : layout.toJson(allowed: allowed);
+    final nextActive = _restored.contains(key) || activeFile != null ? activeFile : view.activeFile;
+    if (listEquals(view.files, next) && view.activeFile == nextActive && jsonEncode(view.tabLayout) == jsonEncode(snapshot)) return;
     view.files = next;
-    if (_restored.contains(key) || activeFile != null) view.activeFile = activeFile;
+    view.activeFile = nextActive;
+    view.tabLayout = snapshot;
     _queueView(key, view);
   }
 

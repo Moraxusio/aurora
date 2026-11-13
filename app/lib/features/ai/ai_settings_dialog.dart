@@ -10,6 +10,7 @@ import '../../state/app_state.dart';
 import '../../theme/ide_theme.dart';
 import 'ai_auth.dart';
 import 'ai_oauth_client.dart';
+import 'ai_model_discovery.dart';
 
 class _Preset {
   final String label;
@@ -22,7 +23,8 @@ class _Preset {
 
 const _presets = <_Preset>[
   _Preset('OpenAI / ChatGPT 订阅（设备码）', 'ChatGPT 订阅', 'openai-responses', 'https://chatgpt.com/backend-api/codex', 'gpt-6.1-sol'),
-  _Preset('OpenCode Gateway / 兼容网关', 'OpenCode API', 'openai-chat', 'https://api.openai.com/v1', 'claude-sonnet-4-5'),
+  _Preset('自定义 OpenAI 兼容网关', '兼容网关', 'openai-chat', '', ''),
+  _Preset('OpenAI API Key', 'OpenAI API', 'openai-chat', 'https://api.openai.com/v1', 'gpt-5.2'),
   _Preset('Anthropic Messages (/v1/messages)', 'Anthropic', 'anthropic-messages', 'https://api.anthropic.com/v1', 'claude-sonnet-4-5'),
   _Preset('OpenAI Responses (/v1/responses)', 'OpenAI Responses', 'openai-responses', 'https://api.openai.com/v1', 'gpt-5.2-codex'),
   _Preset('OpenRouter', 'OpenRouter', 'openai-chat', 'https://openrouter.ai/api/v1', 'anthropic/claude-sonnet-4.5'),
@@ -56,6 +58,9 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   final _apiKeyCtl = TextEditingController();
   final _modelCtl = TextEditingController();
   final _contextCtl = TextEditingController();
+  final _modelSearchCtl = TextEditingController();
+  bool _modelsViaClient = false;
+  Map<String, String> _originalKeys = {};
 
   String _protocol = 'openai-chat';
   String _authMode = '';
@@ -73,12 +78,14 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _ai = widget.app.ready
         ? AiSettings.fromJson(widget.app.profile.ai.toJson())
         : AiSettings();
+    _originalKeys = {for (final p in _ai.providers) p.id: p.apiKey};
+    _modelsViaClient = widget.ws?.link == null;
     if (_ai.providers.isEmpty) {
       final first = AiProvider.create(
-        name: 'OpenCode API',
+        name: 'OpenAI API',
         protocol: 'openai-chat',
         baseUrl: 'https://api.openai.com/v1',
-        model: 'claude-sonnet-4-5',
+        model: 'gpt-5.2',
       );
       _ai.providers.add(first);
       _ai.selectedProviderId = first.id;
@@ -93,6 +100,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _apiKeyCtl.dispose();
     _modelCtl.dispose();
     _contextCtl.dispose();
+    _modelSearchCtl.dispose();
     super.dispose();
   }
 
@@ -111,9 +119,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     p.reasoningEffort = _reasoningEffort;
     p.useProxy = _useProxy;
     p.contextWindow = int.tryParse(_contextCtl.text.trim()) ?? 0;
-    if (_fetchedModels.isNotEmpty) {
-      p.models = List.of(_fetchedModels);
-    }
+    p.models = {..._fetchedModels, if (p.model.isNotEmpty) p.model}.toList();
   }
 
   void _loadProvider(AiProvider p) {
@@ -129,6 +135,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _useProxy = p.useProxy;
     _fetchedModels = List.of(p.models);
     _fetchNote = null;
+    _modelSearchCtl.clear();
   }
 
   void _addFromPreset(_Preset preset) {
@@ -162,8 +169,8 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
 
   Future<void> _fetchModels() async {
     final link = widget.ws?.link;
-    if (link == null) {
-      setState(() => _fetchNote = '请先连接一台装有新版 agent 的服务器，以通过服务器测试并拉取模型列表');
+    if (!_modelsViaClient && link == null) {
+      setState(() => _fetchNote = '所选 agent 未连接，可切换“本机网络”拉取，或手动添加模型');
       return;
     }
     _saveCurrentToMemory();
@@ -173,16 +180,21 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       _fetchNote = null;
     });
     try {
-      final prepared = await prepareAiProvider(widget.app, link, current);
-      final res = await link.call('ai.models', {'provider': prepared.toWireJson()}) as Map;
+      final Map res;
+      if (_modelsViaClient) {
+        res = {'models': await discoverAiModels(current)};
+      } else {
+        final prepared = await prepareAiProvider(widget.app, link!, current);
+        res = await link.call('ai.models', {'provider': prepared.toWireJson()}) as Map;
+      }
       final list = <String>[
         for (final m in (res['models'] as List? ?? const []))
           if (m is Map && (m['id'] as String? ?? '').isNotEmpty) m['id'] as String,
       ];
       if (!mounted || current.id != _editingId || !_ai.providers.contains(current)) return;
       setState(() {
-        _fetchedModels = list;
-        current.models = list;
+        _fetchedModels = {..._fetchedModels, ...list, if (_modelCtl.text.trim().isNotEmpty) _modelCtl.text.trim()}.toList()..sort();
+        current.models = List.of(_fetchedModels);
         for (final m in (res['models'] as List? ?? const [])) {
           if (m is Map && m['id'] is String && m['context_window'] is num && (m['context_window'] as num) > 0) {
             current.modelContextWindows[m['id'] as String] = (m['context_window'] as num).toInt();
@@ -220,13 +232,12 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
           throw StateError('登录配置已变更，请重新打开设置');
         }
         target.oauth = c;
-        target.apiKey = '';
         target.authMode = 'chatgpt-device';
         target.protocol = 'openai-responses';
         target.baseUrl = 'https://chatgpt.com/backend-api/codex';
         target.model = current.model;
       });
-      if (mounted) setState(() { current.oauth = c; _apiKeyCtl.clear(); _fetchNote = '订阅登录已加密保存'; });
+      if (mounted) setState(() { current.oauth = c; _fetchNote = '订阅登录已加密保存；原 API Key 保留但订阅调用不使用它'; });
     } on Object { if (mounted) setState(() => _fetchNote = '登录凭据保存失败或配置已变更，请重试'); }
   }
 
@@ -241,6 +252,12 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   }
 
   Future<void> _saveAndClose() async {
+    if (!_subscription) {
+      final uri = Uri.tryParse(_baseUrlCtl.text.trim());
+      if (uri == null || !uri.hasAuthority || uri.userInfo.isNotEmpty || !['http','https'].contains(uri.scheme)) {
+        Toast.show('请填写有效的 HTTP(S) API Base URL，不能在 URL 中嵌入账号密码', error: true); return;
+      }
+    }
     final contextValue = int.tryParse(_contextCtl.text.trim());
     if (_contextCtl.text.trim().isNotEmpty && (contextValue == null || contextValue < 0)) {
       Toast.show('上下文窗口应为非负整数，留空或 0 使用模型默认值', error:true); return;
@@ -260,8 +277,15 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
         // A refresh may have rotated tokens while this settings dialog was open.
         for (final local in _ai.providers) {
           final live = p.ai.providers.where((x) => x.id == local.id).firstOrNull;
-          if (live != null) local.oauth = live.oauth;
+          if (live != null) {
+            local.oauth = live.oauth;
+            if (live.apiKey != _originalKeys[local.id]) {
+              if (local.apiKey != _originalKeys[local.id]) throw StateError('凭证已在别处更新，请重新打开设置，防止覆盖');
+              local.apiKey = live.apiKey;
+            }
+          }
         }
+        _ai.chatFontSize = p.ai.chatFontSize;
         p.ai = AiSettings.fromJson(_ai.toJson());
       });
       if (mounted) Navigator.pop(context);
@@ -273,11 +297,13 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
+    final visibleModels = _fetchedModels.where((m) => m.toLowerCase().contains(_modelSearchCtl.text.trim().toLowerCase())).toList();
     return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 680, maxHeight: 660),
         child: Padding(
-          padding: const EdgeInsets.all(Space.xl),
+          padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 500 ? 16 : Space.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -290,7 +316,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('AI 模型与 OpenCode 协议配置', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: ide.text)),
-                        Text('密钥仅加密保存在本机（DPAPI / Keystore），按次经固定指纹 TLS 传给服务器内存，绝不落盘。',
+                        Text('已有凭证保留在本机加密配置中。模型调用由当前本地 / 远程 agent 执行；模型列表可选择网络出口。',
                             style: TextStyle(fontSize: 11.5, color: ide.textDim)),
                       ],
                     ),
@@ -362,7 +388,8 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                         const SizedBox(width: Space.m),
                         Expanded(
                           flex: 4,
-                          child: DropdownButtonFormField<String>(
+                            child: DropdownButtonFormField<String>(
+                              key: ValueKey('ai-protocol-$_editingId-$_protocol'),
                             isExpanded: true,
                             initialValue: _protocol,
                             decoration: const InputDecoration(labelText: 'OpenCode 线协议'),
@@ -398,17 +425,18 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                     const SizedBox(height: Space.m + 2),
                     DropdownButtonFormField<String>(
                       key: ValueKey('ai-auth-$_editingId-$_authMode'),
+                      isExpanded: true,
                       initialValue: _authMode,
                       decoration:const InputDecoration(labelText:'登录方式 / 鉴权格式'),
                       items:const [
-                        DropdownMenuItem(value:'', child:Text('API Key · 自动兼容')),
-                        DropdownMenuItem(value:'bearer', child:Text('API Key · Bearer')),
-                        DropdownMenuItem(value:'x-api-key', child:Text('API Key · x-api-key')),
-                        DropdownMenuItem(value:'chatgpt-device', child:Text('ChatGPT 订阅 · Device 设备码')),
+                        DropdownMenuItem(value:'', child:Text('API Key · 自动兼容', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value:'bearer', child:Text('API Key · Bearer', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value:'x-api-key', child:Text('API Key · x-api-key', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value:'chatgpt-device', child:Text('ChatGPT 订阅 · Device 设备码', overflow: TextOverflow.ellipsis)),
                       ],
                       onChanged:(v) => setState(() {
                         _authMode = v ?? '';
-                        if (_subscription) { _protocol = 'openai-responses'; _baseUrlCtl.text = 'https://chatgpt.com/backend-api/codex'; _apiKeyCtl.clear(); if (!_modelCtl.text.startsWith('gpt-')) _modelCtl.text = 'gpt-6.1-sol'; }
+                        if (_subscription) { _protocol = 'openai-responses'; _baseUrlCtl.text = 'https://chatgpt.com/backend-api/codex'; if (!_modelCtl.text.startsWith('gpt-')) _modelCtl.text = 'gpt-6.1-sol'; }
                       }),
                     ),
                     const SizedBox(height:Space.m),
@@ -424,6 +452,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                         Expanded(
                           flex: 5,
                           child: TextField(
+                            key: const ValueKey('ai-api-key'),
                             controller: _apiKeyCtl,
                             obscureText: _obscureKey,
                             decoration: InputDecoration(
@@ -450,6 +479,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                       children: [
                         Expanded(
                           child: TextField(
+                            key: const ValueKey('ai-model-id'),
                             controller: _modelCtl,
                             decoration: const InputDecoration(
                               labelText: '模型 ID (Model)',
@@ -470,35 +500,39 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                         ),
                       ],
                     ),
+                    Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      TextButton.icon(key: const ValueKey('ai-add-model'), onPressed: () {
+                        final id = _modelCtl.text.trim();
+                        if (id.isEmpty) { setState(() => _fetchNote = '先填写模型 ID，再点击添加'); return; }
+                        setState(() { _fetchedModels = {..._fetchedModels, id}.toList()..sort(); _fetchNote = '已添加 $id，保存后可在会话模型选择器使用'; });
+                      }, icon: const Icon(Icons.add, size: 16), label: const Text('添加此模型')),
+                      ChoiceChip(label: const Text('本机网络'), selected: _modelsViaClient, onSelected: _fetchingModels ? null : (_) => setState(() => _modelsViaClient = true)),
+                      ChoiceChip(label: const Text('当前 agent 网络'), selected: !_modelsViaClient, onSelected: _fetchingModels ? null : (_) => setState(() => _modelsViaClient = false)),
+                    ]),
                     if (_fetchNote != null) ...[
                       const SizedBox(height: Space.xs + 2),
                       Text(_fetchNote!, style: TextStyle(fontSize: 12, color: ide.textDim)),
                     ],
                     if (_fetchedModels.isNotEmpty) ...[
                       const SizedBox(height: Space.s),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 88),
-                        child: SingleChildScrollView(
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: [
-                              for (final m in _fetchedModels)
-                                ActionChip(
-                                  visualDensity: VisualDensity.compact,
-                                  label: Text(m, style: const TextStyle(fontSize: 11.5)),
-                                  onPressed: () => setState(() => _modelCtl.text = m),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      TextField(key: const ValueKey('ai-search-models'), controller: _modelSearchCtl, onChanged: (_) => setState(() {}), decoration: InputDecoration(prefixIcon: const Icon(Icons.search, size: 16), hintText: '搜索 ${_fetchedModels.length} 个模型（手动模型会保留）', isDense: true)),
+                      SizedBox(height: visibleModels.isEmpty ? 42 : (visibleModels.length * 40.0).clamp(40, 140), child: visibleModels.isEmpty
+                        ? const Center(child: Text('没有匹配模型，可在上方手动添加'))
+                        : ListView.builder(key: const ValueKey('ai-model-catalog'), itemExtent: 40, itemCount: visibleModels.length, itemBuilder: (_, index) {
+                          final m = visibleModels[index];
+                          return ListTile(dense: true, selected: _modelCtl.text.trim() == m,
+                            title: Text(m, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                            leading: Icon(_modelCtl.text.trim() == m ? Icons.check_circle_outline : Icons.circle_outlined, size: 16),
+                            trailing: IconButton(tooltip: '从已保存列表移除', icon: const Icon(Icons.close, size: 14), onPressed: () => setState(() => _fetchedModels.remove(m))),
+                            onTap: () => setState(() => _modelCtl.text = m));
+                        })),
                     ],
                     const SizedBox(height: Space.m + 2),
                     Row(
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
+                            key: ValueKey('ai-reasoning-$_editingId'),
                             isExpanded: true,
                             initialValue: _reasoningEffort,
                             decoration: const InputDecoration(labelText: '推理思考强度 (Reasoning / Thinking)'),
@@ -542,8 +576,8 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('通过服务器的「代理出口」访问模型 API 与执行命令', style: TextStyle(fontSize: 12.5, color: ide.text)),
-                                Text('当国内服务器无法直连 Anthropic / OpenAI / GitHub 时开启（复用代理出口节点）',
+                                Text('使用执行端代理访问模型 API 与 AI shell', style: TextStyle(fontSize: 12.5, color: ide.text)),
+                                Text('远程 agent 使用其代理出口；本地 agent 使用本机代理。shell 也继承执行端环境代理。',
                                     style: TextStyle(fontSize: 11.5, color: ide.textFaint)),
                               ],
                             ),
@@ -556,7 +590,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                 ),
               ),
               const SizedBox(height: Space.l),
-              Row(
+              Wrap(alignment: WrapAlignment.end, spacing: Space.s,
                 children: [
                   if (_ai.providers.length > 1)
                     TextButton.icon(
@@ -565,7 +599,6 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                       icon: const Icon(Icons.delete_outline_rounded, size: 16),
                       label: const Text('删除此配置'),
                     ),
-                  const Spacer(),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: Text('取消', style: TextStyle(color: ide.text)),

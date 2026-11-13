@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 // Package paths holds the path rules shared by the services: resolving a
 // client path inside a configured root, and the mount points a walk must not
@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"aurora3/internal/wire"
@@ -28,6 +29,10 @@ func ReadFile(p string) string {
 
 // Within reports whether p is root or lies below it.
 func Within(root, p string) bool {
+	if runtime.GOOS == "windows" {
+		r, err := filepath.Rel(root, p)
+		return err == nil && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator)) && !filepath.IsAbs(r)
+	}
 	return root == "/" || p == root || strings.HasPrefix(p, strings.TrimSuffix(root, "/")+"/")
 }
 
@@ -101,6 +106,11 @@ func cleanRel(p string) (string, error) {
 		return "", ErrInvalid
 	}
 	for _, part := range strings.Split(p, "/") {
+		if runtime.GOOS == "windows" && part != "" && part != "." {
+			if strings.ContainsAny(part, `:<>"|?*`) || strings.TrimRight(part, " .") != part || !filepath.IsLocal(part) {
+				return "", ErrInvalid
+			}
+		}
 		if part == ".." {
 			return "", ErrOutside
 		}

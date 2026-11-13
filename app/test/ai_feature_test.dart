@@ -422,4 +422,48 @@ void main() {
     await t.pumpAndSettle();
     expect(app.profile.ai.activeProvider!.model, 'gpt-5.2-codex');
   });
+  testWidgets('manual model and credential survive fetching and saving settings', (t) async {
+    await pumpView(t, Builder(builder: (ctx) => TextButton(onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws), child: const Text('配置'))));
+    final key = app.profile.ai.activeProvider!.apiKey;
+    await t.tap(find.text('配置'));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('ai-model-id')), 'manual-model-fixture');
+    await t.ensureVisible(find.byKey(const ValueKey('ai-add-model')));
+    await t.tap(find.byKey(const ValueKey('ai-add-model')));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.text('拉取模型'));
+    await t.tap(find.text('拉取模型'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ai-save-settings')));
+    await t.pumpAndSettle();
+    expect(app.profile.ai.activeProvider!.models, contains('manual-model-fixture'));
+    expect(app.profile.ai.activeProvider!.apiKey, key);
+  });
+  testWidgets('provider settings fits a 390px phone without losing credentials', (t) async {
+    await pumpView(t, Builder(builder: (ctx) => TextButton(onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws), child: const Text('配置'))));
+    t.view.physicalSize = const Size(390, 900);
+    await t.pump();
+    await t.tap(find.text('配置'));
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    await t.tap(find.byKey(const ValueKey('ai-auth-prov_1-')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('ChatGPT 订阅 · Device 设备码').last);
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    expect(find.byKey(const ValueKey('ai-save-settings')), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('ai-save-settings')));
+    await t.pumpAndSettle();
+    expect(app.profile.ai.activeProvider!.apiKey, 'sk-opencode-test');
+    expect(app.profile.ai.activeProvider!.authMode, 'chatgpt-device');
+  });
+  testWidgets('saving display settings preserves a concurrently rotated API key', (t) async {
+    await pumpView(t, Builder(builder: (ctx) => TextButton(onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws), child: const Text('配置'))));
+    await t.tap(find.text('配置'));
+    await t.pumpAndSettle();
+    await app.update((p) => p.ai.providers.first.apiKey = 'rotated-key-fixture');
+    await t.tap(find.byKey(const ValueKey('ai-save-settings')));
+    await t.pumpAndSettle();
+    expect(app.profile.ai.activeProvider!.apiKey, 'rotated-key-fixture');
+  });
 }

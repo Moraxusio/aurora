@@ -37,6 +37,22 @@ void main() {
     expect(p.servers.single.workspace('project')!.folders, hasLength(2));
     expect(p.servers.single.browserView.treeSet, isTrue);
   });
+  test('nested tab layout snapshots are copied independently from the encrypted profile', () {
+    final p = fixture();
+    p.servers.single.browserView.tabLayout = {'groups': [{'id': 'g1', 'tabs': ['file:home:/src/a']}], 'placement': 'left', 'side_width': 420};
+    final copy = p.copy();
+    ((copy.servers.single.browserView.tabLayout['groups'] as List).first['tabs'] as List).clear();
+    expect(((p.servers.single.browserView.tabLayout['groups'] as List).first['tabs'] as List), hasLength(1));
+    final json = p.toJson();
+    (((json['servers'] as List).first['browser_view']['tab_layout']['groups'] as List).first['tabs'] as List).clear();
+    expect(((p.servers.single.browserView.tabLayout['groups'] as List).first['tabs'] as List), hasLength(1));
+  });
+  test('layout-only view is persisted and malformed optional layout does not break old credentials', () {
+    final view = WorkspaceView(tabLayout: {'placement': 'bottom'});
+    expect(view.isEmpty, isFalse);
+    expect(WorkspaceView.fromJson(view.toJson()).tabLayout, {'placement': 'bottom'});
+    expect(WorkspaceView.fromJson({'tab_layout': 'invalid'}).tabLayout, isEmpty);
+  });
   test('paths normalize and containment respects root and component boundaries', () {
     expect(path('src//./main.dart/'), path('/src/main.dart'));
     expect(path(''), path('/'));

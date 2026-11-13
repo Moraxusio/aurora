@@ -61,6 +61,32 @@ func TestSignAndVerify(t *testing.T) {
 	}
 }
 
+func TestWindowsLocalProductCannotBeRemoteAgent(t *testing.T) {
+	key, _ := testKey(t)
+	bin := filepath.Join(t.TempDir(), "fixture.exe")
+	if err := os.WriteFile(bin, []byte("synthetic local binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := signCmd([]string{"--key", key, "--product", "aurora3-local-agent", "--os", "windows", "--version", "3.14.0", "--arch", "amd64", "--file", bin, "--out", dir}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	m, err := verifyDir("aurora3-local-agent", update.ChannelStable, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.File != "aurora3-local-agent-3.14.0-windows-amd64.exe" {
+		t.Fatal(m.File)
+	}
+	if _, err := verifyDir(update.ProductAgent, update.ChannelStable, dir); err == nil {
+		t.Fatal("local executable accepted as remote agent")
+	}
+	flip(t, filepath.Join(dir, m.File), 2)
+	if _, err := verifyDir("aurora3-local-agent", update.ChannelStable, dir); err == nil {
+		t.Fatal("tampered local executable accepted")
+	}
+}
+
 func TestVerifyRejects(t *testing.T) {
 	key, _ := testKey(t)
 	cases := map[string]func(dir string){

@@ -37,6 +37,8 @@ type HelloReply struct {
 // AgentInfo describes one server. Relays hand it to authenticated clients so
 // they can configure the direct link to a new machine automatically.
 type AgentInfo struct {
+	Kind      string     `json:"kind,omitempty"`
+	Platform  string     `json:"platform,omitempty"`
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`
 	Host      string     `json:"host"`

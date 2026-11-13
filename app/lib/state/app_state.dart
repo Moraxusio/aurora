@@ -14,6 +14,7 @@ import '../features/proxy/proxy_model.dart';
 import 'android_agent.dart';
 import 'profile_access.dart';
 import 'upgrade_model.dart';
+import 'local_agent.dart';
 
 /// Where the signed agent builds are: `agent/` next to the executable in a
 /// release folder (M1.7), or AURORA3_AGENT_DIR for development.
@@ -26,6 +27,36 @@ String agentDir() {
 }
 
 class AppState extends ChangeNotifier implements ProfileAccess {
+  final localAgent = LocalAgent();
+  ConnStatus? _localFailure;
+  String? localEntryError;
+
+  Future<void> ensureLocalEntry() async {
+    if (!Platform.isWindows || !ready) return;
+    if (servers.any((s) => s.isLocal)) return;
+    try {
+      // Preserve a byte-for-byte encrypted rollback copy before the first write.
+      // This code never decodes, logs or exports the credential payload.
+      if (storePath != null) {
+        final old = File(storePath!);
+        final backup = File('$storePath.before-local-v1');
+        if (await old.exists() && !await backup.exists()) await old.copy(backup.path);
+      }
+      await update((p) { if (p.servers.any((s) => s.isLocal)) return; final s = ServerEntry(id: newId(), name: '本机 Windows', kind: 'local'); p.servers.insert(0, s); p.selected ??= s.id; });
+      localEntryError = null;
+    } on Object {
+      localEntryError = '本机入口保存失败，已有加密配置保持不变；请检查配置目录写入权限';
+    }
+  }
+
+  Future<String> useLocal() async {
+    await ensureLocalEntry();
+    final s = servers.where((s) => s.isLocal).firstOrNull;
+    if (s == null) throw StateError(localEntryError ?? '无法创建本机入口');
+    await select(s.id);
+    await connect(s.id);
+    return s.id;
+  }
   late final ProxyModel proxies = ProxyModel(this);
   late final UpgradeModel upgrades = UpgradeModel(this, () => builds, () => upgradePolicy);
   ProfileStore? _store;
@@ -153,7 +184,7 @@ class AppState extends ChangeNotifier implements ProfileAccess {
 
   // ---- connections ----
 
-  ConnStatus status(String id) => _conns[id]?.status ?? ConnStatus(ConnState.idle);
+  ConnStatus status(String id) => (server(id)?.isLocal == true ? _localFailure : null) ?? _conns[id]?.status ?? ConnStatus(ConnState.idle);
   @override
   Link? link(String id) {
     final l = _conns[id]?.link;
@@ -170,17 +201,30 @@ class AppState extends ChangeNotifier implements ProfileAccess {
   Future<void> connect(String id) async {
     final s = profile.server(id);
     if (s == null) return;
-    final t = _target(s);
+    Target? t;
+    if (s.isLocal) {
+      _localFailure = ConnStatus(ConnState.connecting);
+      notifyListeners();
+      try {
+        t = await localAgent.start('${File(storePath!).parent.path}${Platform.pathSeparator}local-agent');
+        _localFailure = null;
+      } on Object {
+        _localFailure = ConnStatus(ConnState.failed, failure: ConnFailure(DialFailure.protocol, '本地 agent 启动失败。请检查随包 local-agent 的完整性与签名；不会影响远程连接或已有凭证。'));
+        notifyListeners(); return;
+      }
+    } else {
+      t = _target(s);
+    }
     if (t == null) return;
     var c = _conns[id];
     if (c == null) {
-      c = Connection(t, goodAddr: s.direct!.goodAddr);
+      c = Connection(t, goodAddr: s.isLocal ? null : s.direct?.goodAddr);
       _conns[id] = c;
       _subs[id] = c.changes.listen((st) {
         final freshLink = link(id);
-        if (st.state == ConnState.connected && freshLink != null) unawaited(proxies.connected(id, freshLink));
-        if (st.state == ConnState.connected && freshLink != null) unawaited(upgrades.connected(id, freshLink));
-        if (st.state == ConnState.connected && st.addr != null && st.addr != s.direct?.goodAddr) {
+        if (!s.isLocal && st.state == ConnState.connected && freshLink != null) unawaited(proxies.connected(id, freshLink));
+        if (!s.isLocal && st.state == ConnState.connected && freshLink != null) unawaited(upgrades.connected(id, freshLink));
+        if (!s.isLocal && st.state == ConnState.connected && st.addr != null && st.addr != s.direct?.goodAddr) {
           unawaited(update((p) {
             final e = p.server(id);
             if (e?.direct != null) {
@@ -259,6 +303,7 @@ class AppState extends ChangeNotifier implements ProfileAccess {
 
   @override
   void dispose() {
+    unawaited(localAgent.stop());
     for (final s in _subs.values) {
       s.cancel();
     }

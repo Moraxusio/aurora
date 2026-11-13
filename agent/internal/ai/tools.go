@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 package ai
 
@@ -13,9 +13,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
-	"syscall"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -191,6 +192,9 @@ func ToolDefinitions(agentMode string, depth int) []ToolDef {
 			},
 			"required": []string{"command"},
 		},
+	}
+	if runtime.GOOS == "windows" {
+		shellTool.Description = "Execute a non-interactive PowerShell command on Windows and return its output. Use PowerShell syntax, quote paths, and prefer dedicated file tools. The command inherits the local user environment and configured proxy. Cancellation terminates the managed process tree."
 	}
 
 	todoTool := ToolDef{
@@ -867,7 +871,7 @@ func execGrepTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 			args = append(args, "--glob", in.Include)
 		}
 		args = append(args, "--", in.Pattern, searchTarget)
-		cmd := exec.CommandContext(cctx, rgPath, args...)
+		cmd := quietCommandContext(cctx, rgPath, args...)
 		cmd.Dir = tc.absWorkdir
 		out, runErr := cmd.Output()
 		if runErr == nil || len(out) > 0 {
@@ -992,15 +996,7 @@ func execShellTool(ctx context.Context, tc toolContext, rawInput json.RawMessage
 	cctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
 	defer cancel()
 
-	shellBin := "/bin/bash"
-	if _, err := os.Stat(shellBin); err != nil {
-		shellBin = "sh"
-	}
-	cmd := exec.Command(shellBin, "-c", cmdStr)
-	cmd.Dir = cwd
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	env := append(os.Environ(),
+	env := append(shellEnvironment(),
 		"AGENT=1",
 		"OPENCODE=1",
 		"AI_AGENT=opencode",
@@ -1015,23 +1011,23 @@ func execShellTool(ctx context.Context, tc toolContext, rawInput json.RawMessage
 			}
 		}
 	}
-	cmd.Env = env
 
 	// Cap in-memory capture at 2 MiB to prevent runaway output OOM; TruncateOutput spills up to that cleanly.
-	buf := &cappedBuffer{max: 2 * 1024 * 1024}
-	cmd.Stdout = buf
-	cmd.Stderr = buf
-
-	if err := cmd.Start(); err != nil {
+	buf := &cappedBuffer{max: 2 * 1024 * 1024, progress: func(delta string) {
+		tc.env.broadcast(StreamEvent{Type: "tool.progress", SessionID: tc.session.ID, MessageID: tc.messageID, ToolCallID: tc.callID, ToolName: "shell", Delta: delta})
+	}}
+	process, err := startShellCommand(cmdStr, cwd, env, buf)
+	if err != nil {
 		return ToolExecResult{Output: "Failed to start command: " + err.Error(), IsError: true}
 	}
+	defer process.Close()
 	if tc.env.Audit != nil {
 		tc.env.Audit.Write("ai.shell", map[string]any{"session": tc.session.ID, "cwd": cwd, "command": cmdStr})
 	}
 
 	done := make(chan error, 1)
 	go func() {
-		done <- cmd.Wait()
+		done <- process.Wait()
 	}()
 
 	var waitErr error
@@ -1040,21 +1036,22 @@ func execShellTool(ctx context.Context, tc toolContext, rawInput json.RawMessage
 	case waitErr = <-done:
 	case <-cctx.Done():
 		timedOut = ctx.Err() == nil
-		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-			select {
-			case waitErr = <-done:
-			case <-time.After(500 * time.Millisecond):
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-				waitErr = <-done
-			}
+		process.Kill(false)
+		select {
+		case waitErr = <-done:
+		case <-time.After(500 * time.Millisecond):
+			process.Kill(true)
+			waitErr = <-done
 		}
 	}
 
 	out := strings.TrimRight(buf.String(), "\n")
 	exitCode := 0
 	if waitErr != nil {
-		var ee *exec.ExitError
+		var ee interface {
+			error
+			ExitCode() int
+		}
 		if errors.As(waitErr, &ee) {
 			exitCode = ee.ExitCode()
 		} else {
@@ -1107,12 +1104,57 @@ func execShellTool(ctx context.Context, tc toolContext, rawInput json.RawMessage
 }
 
 type cappedBuffer struct {
-	buf bytes.Buffer
-	max int
+	mu           sync.Mutex
+	progress     func(string)
+	lastProgress time.Time
+	pending      string
+	buf          bytes.Buffer
+	max          int
+}
+
+func toolRuntimeMetadata(name string, cfg ProviderConfig, proxy func() map[string]string) map[string]any {
+	if name != "shell" {
+		return nil
+	}
+	mode := "direct"
+	hasProxy := func(env []string) bool {
+		for _, v := range env {
+			k, value, _ := strings.Cut(v, "=")
+			if value != "" && (strings.EqualFold(k, "http_proxy") || strings.EqualFold(k, "https_proxy") || strings.EqualFold(k, "all_proxy")) {
+				return true
+			}
+		}
+		return false
+	}
+	if hasProxy(shellEnvironment()) {
+		mode = "environment"
+	}
+	if cfg.UseProxy && proxy != nil {
+		for k, v := range proxy() {
+			if v != "" && (strings.EqualFold(k, "http_proxy") || strings.EqualFold(k, "https_proxy") || strings.EqualFold(k, "all_proxy")) {
+				mode = "agent"
+				break
+			}
+		}
+	}
+	return map[string]any{"proxy_mode": mode, "platform": runtime.GOOS}
 }
 
 func (c *cappedBuffer) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	origLen := len(p)
+	if c.progress != nil {
+		c.pending += strings.ToValidUTF8(string(p), "�")
+		if len(c.pending) > 8192 {
+			c.pending = c.pending[len(c.pending)-8192:]
+		}
+		if time.Since(c.lastProgress) >= 100*time.Millisecond {
+			c.progress(c.pending)
+			c.pending = ""
+			c.lastProgress = time.Now()
+		}
+	}
 	rem := c.max - c.buf.Len()
 	if rem > 0 {
 		if len(p) > rem {
@@ -1123,7 +1165,7 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 	return origLen, nil
 }
 
-func (c *cappedBuffer) String() string { return c.buf.String() }
+func (c *cappedBuffer) String() string { c.mu.Lock(); defer c.mu.Unlock(); return c.buf.String() }
 
 func execTodoWriteTool(tc toolContext, rawInput json.RawMessage) ToolExecResult {
 	var in struct {
@@ -1181,7 +1223,7 @@ func execSubagentTool(ctx context.Context, tc toolContext, rawInput json.RawMess
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 
-	report, childID, err := tc.env.runChildSubagent(ctx, tc.session, tc.provider, subAgent, in.Description, in.Prompt, tc.depth+1)
+	report, childID, err := tc.env.runChildSubagent(ctx, tc.session, tc.provider, subAgent, in.Description, in.Prompt, tc.callID, tc.depth+1)
 	if err != nil {
 		return ToolExecResult{Output: "Subagent failed: " + err.Error(), IsError: true}
 	}

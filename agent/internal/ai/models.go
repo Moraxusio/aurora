@@ -381,7 +381,11 @@ func FetchModels(ctx context.Context, cfg ProviderConfig, proxyEnv func() map[st
 	if base == "" {
 		base = defaultBase
 	}
-	base = strings.TrimRight(base, "/")
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil, errors.New("模型 Base URL 必须是有效的 HTTP(S) 地址")
+	}
+	base = strings.TrimRight(u.Path, "/")
 	for _, suf := range []string{"/chat/completions", "/messages", "/responses"} {
 		base = strings.TrimSuffix(base, suf)
 	}
@@ -389,15 +393,22 @@ func FetchModels(ctx context.Context, cfg ProviderConfig, proxyEnv func() map[st
 
 	// Gateways are often given without the /v1 suffix and then answer the
 	// models URL with their web page. Try the address as typed, then with /v1.
-	candidates := []string{base + "/models"}
+	u.Path = base + "/models"
+	candidates := []string{u.String()}
 	if !strings.HasSuffix(base, "/v1") && !strings.Contains(base, "/v1/") {
-		candidates = append(candidates, base+"/v1/models")
+		u.Path = base + "/v1/models"
+		candidates = append(candidates, u.String())
 	}
 	var lastErr error
+	emptySuccess := false
 	for _, endpoint := range candidates {
 		list, err := fetchModelsAt(cctx, cfg, proxyEnv, endpoint)
-		if err == nil {
+		if err == nil && len(list) > 0 {
 			return list, nil
+		}
+		if err == nil {
+			emptySuccess = true
+			continue
 		}
 		lastErr = err
 		var he *HTTPStatusError
@@ -405,12 +416,22 @@ func FetchModels(ctx context.Context, cfg ProviderConfig, proxyEnv func() map[st
 			break // the key is the problem, not the address
 		}
 	}
+	if emptySuccess {
+		return []ModelInfo{}, nil
+	}
 	return nil, lastErr
 }
 
 var errNotJSON = errors.New("接口返回的不是 JSON（像是网页）。请检查 Base URL：通常要以 /v1 结尾，且不要包含 /chat/completions")
 
 func fetchModelsAt(cctx context.Context, cfg ProviderConfig, proxyEnv func() map[string]string, endpoint string) ([]ModelInfo, error) {
+	return fetchModelPages(cctx, cfg, proxyEnv, endpoint, 0)
+}
+
+func fetchModelPages(cctx context.Context, cfg ProviderConfig, proxyEnv func() map[string]string, endpoint string, page int) ([]ModelInfo, error) {
+	if page >= 20 {
+		return nil, errors.New("模型列表分页超过 20 页，请缩小范围或手动添加")
+	}
 	httpReq, err := http.NewRequestWithContext(cctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -422,15 +443,20 @@ func fetchModelsAt(cctx context.Context, cfg ProviderConfig, proxyEnv func() map
 	}
 
 	client := newHTTPClient(cfg.UseProxy, proxyEnv)
+	defer client.CloseIdleConnections()
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	res, err := client.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
 	defer res.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(res.Body, 4*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(res.Body, 4*1024*1024+1))
 	if err != nil {
 		return nil, err
+	}
+	if len(body) > 4*1024*1024 {
+		return nil, errors.New("模型列表超过 4 MiB，请手动添加模型")
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return nil, &HTTPStatusError{Status: res.StatusCode, Body: string(body)}
@@ -440,51 +466,107 @@ func fetchModelsAt(cctx context.Context, cfg ProviderConfig, proxyEnv func() map
 		return nil, errNotJSON
 	}
 
-	var parsed struct {
-		Data []struct {
-			ID            string `json:"id"`
-			Name          string `json:"name"`
-			DisplayName   string `json:"display_name"`
-			ContextLength int    `json:"context_length"`
-			MaxInput      int    `json:"max_input_tokens"`
-		} `json:"data"`
-		Models []struct {
-			ID          string `json:"id"`
-			Name        string `json:"name"`
-			DisplayName string `json:"display_name"`
-		} `json:"models"`
+	list, err := parseModelList(body)
+	if err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(bytes.TrimSpace(body), &parsed); err != nil {
-		return nil, fmt.Errorf("invalid /models JSON: %w", err)
+	var pagination struct {
+		HasMore bool   `json:"has_more"`
+		LastID  string `json:"last_id"`
 	}
+	_ = json.Unmarshal(body, &pagination)
+	if pagination.HasMore {
+		if pagination.LastID == "" {
+			return nil, errors.New("模型分页缺少 last_id")
+		}
+		u, err := url.Parse(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		q := u.Query()
+		if q.Get("after_id") == pagination.LastID {
+			return nil, errors.New("模型接口重复返回分页游标")
+		}
+		q.Set("after_id", pagination.LastID)
+		u.RawQuery = q.Encode()
+		next, err := fetchModelPages(cctx, cfg, proxyEnv, u.String(), page+1)
+		if err != nil {
+			return nil, err
+		}
+		seen := map[string]bool{}
+		for _, m := range list {
+			seen[m.ID] = true
+		}
+		for _, m := range next {
+			if !seen[m.ID] {
+				seen[m.ID] = true
+				list = append(list, m)
+			}
+		}
+		sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
+	}
+	return list, nil
+}
 
-	var list []ModelInfo
-	seen := map[string]bool{}
-	for _, m := range parsed.Data {
-		if m.ID == "" || seen[m.ID] {
-			continue
-		}
-		seen[m.ID] = true
-		nm := m.DisplayName
-		if nm == "" {
-			nm = m.Name
-		}
-		cw := m.ContextLength
-		if cw == 0 {
-			cw = m.MaxInput
-		}
-		list = append(list, ModelInfo{ID: m.ID, Name: nm, ContextWindow: cw})
+func parseModelList(body []byte) ([]ModelInfo, error) {
+	type row struct {
+		ID            string `json:"id"`
+		Name          string `json:"name"`
+		DisplayName   string `json:"display_name"`
+		ContextLength int    `json:"context_length"`
+		ContextWindow int    `json:"context_window"`
+		MaxInput      int    `json:"max_input_tokens"`
+		MaxTokens     int    `json:"max_output_tokens"`
 	}
-	for _, m := range parsed.Models {
-		id := m.ID
-		if id == "" {
-			id = strings.TrimPrefix(m.Name, "models/")
+	var parsed struct {
+		Data   []json.RawMessage `json:"data"`
+		Models []json.RawMessage `json:"models"`
+	}
+	var entries []json.RawMessage
+	if len(bytes.TrimSpace(body)) > 0 && bytes.TrimSpace(body)[0] == '[' {
+		if err := json.Unmarshal(body, &entries); err != nil {
+			return nil, fmt.Errorf("invalid /models JSON: %w", err)
 		}
+	} else {
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			return nil, fmt.Errorf("invalid /models JSON: %w", err)
+		}
+		if parsed.Data == nil && parsed.Models == nil {
+			return nil, errors.New("JSON 中没有 data/models 列表，请检查 API 地址或手动添加模型")
+		}
+		entries = append(parsed.Data, parsed.Models...)
+	}
+	list := []ModelInfo{}
+	seen := map[string]bool{}
+	for _, raw := range entries {
+		var id string
+		var m row
+		if json.Unmarshal(raw, &id) != nil {
+			if json.Unmarshal(raw, &m) != nil {
+				continue
+			}
+			id = m.ID
+			if id == "" {
+				id = strings.TrimPrefix(m.Name, "models/")
+			}
+		}
+		id = strings.TrimSpace(id)
 		if id == "" || seen[id] {
 			continue
 		}
 		seen[id] = true
-		list = append(list, ModelInfo{ID: id, Name: m.DisplayName})
+		name := m.DisplayName
+		if name == "" {
+			name = m.Name
+		}
+		cw := m.ContextLength
+		if cw == 0 {
+			cw = m.ContextWindow
+		}
+		if cw == 0 {
+			cw = m.MaxInput
+		}
+		list = append(list, ModelInfo{ID: id, Name: name, ContextWindow: cw, MaxTokens: m.MaxTokens})
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
 	return list, nil

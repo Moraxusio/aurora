@@ -53,20 +53,20 @@ func (m *SnapshotManager) ensureRepo(ctx context.Context, worktree string) (stri
 	if err := os.MkdirAll(gitDir, 0o700); err != nil {
 		return "", err
 	}
-	cmd := exec.CommandContext(ctx, gitPath, "--git-dir="+gitDir, "init", "--bare", "--quiet")
+	cmd := quietCommandContext(ctx, gitPath, "--git-dir="+gitDir, "init", "--bare", "--quiet")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git init shadow: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
 	// Configure fast snapshot behavior matching OpenCode's opencode.gitconfig
-	_, _ = exec.CommandContext(ctx, gitPath, "--git-dir="+gitDir, "config", "core.autocrlf", "false").CombinedOutput()
-	_, _ = exec.CommandContext(ctx, gitPath, "--git-dir="+gitDir, "config", "core.quotepath", "false").CombinedOutput()
+	_, _ = quietCommandContext(ctx, gitPath, "--git-dir="+gitDir, "config", "core.autocrlf", "false").CombinedOutput()
+	_, _ = quietCommandContext(ctx, gitPath, "--git-dir="+gitDir, "config", "core.quotepath", "false").CombinedOutput()
 	return gitDir, nil
 }
 
 func (m *SnapshotManager) runGit(ctx context.Context, gitDir, worktree string, extraEnv []string, args ...string) ([]byte, error) {
 	baseArgs := []string{"--git-dir=" + gitDir, "--work-tree=" + worktree}
 	baseArgs = append(baseArgs, args...)
-	cmd := exec.CommandContext(ctx, "git", baseArgs...)
+	cmd := quietCommandContext(ctx, "git", baseArgs...)
 	cmd.Dir = worktree
 	env := append(os.Environ(),
 		"GIT_TERMINAL_PROMPT=0",

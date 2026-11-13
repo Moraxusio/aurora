@@ -116,7 +116,7 @@ class _PathPickerState extends State<_PathPicker> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                widget.directory ? '选择会话工作目录' : '选择服务器文件',
+                widget.directory ? '选择会话工作目录' : widget.link.server.kind == 'local' ? '选择本机文件' : '选择服务器文件',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: ide.text),
               ),
               const SizedBox(height: 14),
@@ -124,7 +124,7 @@ class _PathPickerState extends State<_PathPicker> {
                 key: ValueKey('ai-picker-root-$root'),
                 initialValue: widget.roots.any((r) => r['id'] == root) ? root : null,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: '服务器根目录'),
+                decoration: InputDecoration(labelText: widget.link.server.kind == 'local' ? '本机根目录' : '服务器根目录'),
                 items: [
                   for (final r in widget.roots)
                     DropdownMenuItem(value: r['id'] as String, child: Text('${r['label'] ?? r['id']}')),

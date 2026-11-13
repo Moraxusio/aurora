@@ -26,6 +26,19 @@ type gitCtx struct {
 	env  []string
 }
 
+func hideGitWindow(*exec.Cmd) {}
+
+func ignoreOwner(file string, g *gitCtx) (int, int) {
+	if fi, err := os.Lstat(file); err == nil {
+		if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+			return int(st.Uid), int(st.Gid)
+		}
+	} else if g.cred != nil {
+		return int(g.cred.Uid), int(g.cred.Gid)
+	}
+	return -1, -1
+}
+
 var errNoGit = wire.Errf(wire.CodeUnsupported, "服务器上没有安装 git")
 
 // gitFor prepares git for dir. proxy, when non-nil and returning a map, adds the

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,12 +24,13 @@ const (
 // Config lives in /etc/aurora3/agent.json. It holds the direct token, so it is
 // written with 0600 permissions.
 type Config struct {
+	Kind string `json:"kind,omitempty"` // local lifecycle is independent of GOOS
 	// Instance names this agent when several run on one server (D-101); empty
 	// is the default instance. It decides the tmux socket and unit names.
 	Instance string `json:"instance,omitempty"`
 	Name     string `json:"name"`
-	Listen string `json:"listen"` // direct TLS listener, default ":17710"
-	Token  string `json:"token"`  // direct client token
+	Listen   string `json:"listen"` // direct TLS listener, default ":17710"
+	Token    string `json:"token"`  // direct client token
 	// PublicAddrs are extra host:port values clients should try (NAT, port
 	// forward). Local interface addresses are added at run time.
 	PublicAddrs []string `json:"public_addrs,omitempty"`
@@ -68,6 +70,15 @@ func LoadConfig(path string) (*Config, error) {
 // Validate checks the config and fills the defaults. The rules and messages
 // are v2's (internal/agent/config.go).
 func (c *Config) Validate() error {
+	if c.Kind != "" && c.Kind != "remote" && c.Kind != "local" {
+		return errors.New("未知的 agent 类型")
+	}
+	if c.Kind == "local" {
+		host, _, err := net.SplitHostPort(c.Listen)
+		if err != nil || host != "127.0.0.1" {
+			return errors.New("本地 agent 只能监听 IPv4 回环地址")
+		}
+	}
 	if len(c.Token) < 32 {
 		return errors.New("token 至少 32 个字符")
 	}

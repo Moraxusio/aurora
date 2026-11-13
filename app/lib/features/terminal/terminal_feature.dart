@@ -56,7 +56,7 @@ void openSession(Workspace ws, String name) {
       id: 'term:$name',
       title: name,
       icon: Icons.terminal,
-      tooltip: 'tmux 会话 $name',
+      tooltip: ws.entry?.isLocal == true ? '本地 PowerShell · $name（退出客户端后结束）' : 'tmux 会话 $name',
       builder: (_) => SessionView(key: ValueKey('${ws.serverId}/$name'), ws: ws, session: name),
     ),
   );
@@ -97,7 +97,8 @@ Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
     ws.toast('会话名只能用字母、数字、点、下划线、连字符', error: true);
     return null;
   }
-  final res = await ws.guard(() => link.call('session.create', {'name': name, if (r.proxy) 'proxy': true}));
+  final folder = ws.project?.folders.firstOrNull;
+  final res = await ws.guard(() => link.call('session.create', {'name': name, if (r.proxy) 'proxy': true, if (folder != null) 'root': folder.root, if (folder != null) 'path': folder.path}));
   if (res == null) return null;
   // A name that was already a session is opened as it is (D-48): say that it
   // was not given the proxy the box asked for, instead of letting the user think so.
@@ -119,6 +120,7 @@ class ProxyOffer {
 }
 
 ProxyOffer proxyOffer(Workspace ws) {
+  if (ws.entry?.isLocal == true) return const ProxyOffer.unavailable('本地终端自动继承当前用户的环境代理 / Windows 手动系统代理');
   final s = ws.serviceInfo('proxy');
   if (s == null) return const ProxyOffer.unavailable('这台服务器的 agent 没有代理功能');
   if (s['enabled'] != true) return const ProxyOffer.unavailable('代理服务是关闭的：在“代理”页打开它');
@@ -223,14 +225,14 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   @override
   void initState() {
     super.initState();
-    _active = ws.activeId;
+    _active = ws.focusedId;
     ws.addListener(_selectionChanged);
     _load();
   }
 
   void _selectionChanged() {
-    if (_active == ws.activeId) return;
-    setState(() => _active = ws.activeId);
+    if (_active == ws.focusedId) return;
+    setState(() => _active = ws.focusedId);
   }
 
   @override
@@ -313,7 +315,7 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
                         leading: Icon(Icons.terminal, size: 14, color: (s['attached'] as num? ?? 0) > 0 ? ide.ok : ide.textDim),
                         label: s['name'] as String,
                         detail: '${s['windows'] ?? 1} 个窗口${(s['attached'] as num? ?? 0) > 0 ? ' · 已连接' : ''}',
-                        selected: ws.activeId == 'term:${s['name']}',
+                        selected: ws.focusedId == 'term:${s['name']}',
                         onTap: () => openSession(ws, s['name'] as String),
                         trailing: IconBtn(Icons.close, '结束会话', () => _kill(s['name'] as String)),
                         menu: () => [
@@ -452,6 +454,7 @@ class _SessionViewState extends State<SessionView> {
     ws.removeListener(_onWs);
     _out?.cancel();
     _t?.close();
+    if (ws.entry?.isLocal == true && ws.link != null) unawaited(ws.link!.call('session.kill', {'name': widget.session}).catchError((Object _) => null));
     _focus.dispose();
     _controller.dispose();
     super.dispose();

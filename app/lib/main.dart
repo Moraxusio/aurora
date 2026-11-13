@@ -16,6 +16,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final app = AppState();
   await app.init();
+  await app.ensureLocalEntry();
   runApp(AuroraApp(app: app));
 }
 

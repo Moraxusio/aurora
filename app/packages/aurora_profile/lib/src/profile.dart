@@ -87,6 +87,9 @@ class Profile {
 
 /// One server the client manages.
 class ServerEntry {
+  /// Lifecycle is independent from platform: old entries remain remote.
+  String kind;
+  bool get isLocal => kind == 'local';
   /// Client-local id, fixed when the entry is created.
   final String id;
   String name;
@@ -125,7 +128,7 @@ class ServerEntry {
   String? selectedWorkspace;
   WorkspaceView browserView;
 
-  ServerEntry({required this.id, required this.name, this.agentId, this.instance = '', this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy, this.upgrade, List<String>? failedUpgrades,
+  ServerEntry({required this.id, required this.name, this.kind = 'remote', this.agentId, this.instance = '', this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy, this.upgrade, List<String>? failedUpgrades,
     List<ProjectWorkspace>? workspaces, this.selectedWorkspace, WorkspaceView? browserView})
       : forwards = forwards ?? [], failedUpgrades = failedUpgrades ?? [], workspaces = workspaces ?? [], browserView = browserView ?? WorkspaceView();
 
@@ -135,6 +138,7 @@ class ServerEntry {
 
   factory ServerEntry.fromJson(Map<String, dynamic> j) => ServerEntry(
         id: j['id'] as String,
+        kind: j['kind'] == 'local' ? 'local' : 'remote',
         name: j['name'] as String? ?? '',
         agentId: j['agent_id'] as String?,
         instance: j['instance'] as String? ?? '',
@@ -152,6 +156,7 @@ class ServerEntry {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        if (isLocal) 'kind': 'local',
         'name': name,
         'agent_id': ?agentId,
         if (instance.isNotEmpty) 'instance': instance,
@@ -197,23 +202,38 @@ class WorkspacePath {
 }
 
 class WorkspaceView {
+  // Versioned client-only tab geometry; contains file references, never text.
+  Map<String, dynamic> tabLayout;
   List<WorkspacePath> expanded, files;
   WorkspacePath? activeFile;
   bool treeSet;
-  WorkspaceView({List<WorkspacePath>? expanded, List<WorkspacePath>? files, this.activeFile, this.treeSet = false}) : expanded = expanded ?? [], files = files ?? [];
-  bool get isEmpty => !treeSet && expanded.isEmpty && files.isEmpty && activeFile == null;
+  WorkspaceView({List<WorkspacePath>? expanded, List<WorkspacePath>? files, this.activeFile, this.treeSet = false, Map<String, dynamic>? tabLayout}) : expanded = expanded ?? [], files = files ?? [], tabLayout = _copyTabLayout(tabLayout ?? {});
+  bool get isEmpty => !treeSet && expanded.isEmpty && files.isEmpty && activeFile == null && tabLayout.isEmpty;
   factory WorkspaceView.fromJson(Map<String, dynamic> j) => WorkspaceView(
     expanded: [for (final p in j['expanded'] as List? ?? const []) WorkspacePath.fromJson(_map(p))],
     files: [for (final p in j['files'] as List? ?? const []) WorkspacePath.fromJson(_map(p))],
     activeFile: j['active_file'] == null ? null : WorkspacePath.fromJson(_map(j['active_file'])),
     treeSet: j['tree_set'] as bool? ?? false,
+    tabLayout: j['tab_layout'] is Map ? _map(j['tab_layout']) : {},
   );
   Map<String, dynamic> toJson() => {
     if (expanded.isNotEmpty) 'expanded': [for (final p in expanded) p.toJson()],
     if (files.isNotEmpty) 'files': [for (final p in files) p.toJson()],
     'active_file': ?activeFile?.toJson(),
     if (treeSet) 'tree_set': true,
+    if (tabLayout.isNotEmpty) 'tab_layout': _copyTabLayout(tabLayout),
   };
+}
+
+Map<String, dynamic> _copyTabLayout(Map<String, dynamic> value) {
+  Object? copy(Object? v, int depth) {
+    if (depth > 16) return null;
+    if (v is Map) return <String, dynamic>{for (final e in v.entries.take(2000)) if (e.key is String) e.key as String: copy(e.value, depth + 1)};
+    if (v is List) return [for (final item in v.take(2000)) copy(item, depth + 1)];
+    if (v == null || v is String || v is bool || (v is num && v.isFinite)) return v;
+    return null;
+  }
+  return copy(value, 0) as Map<String, dynamic>;
 }
 
 class ProjectWorkspace {

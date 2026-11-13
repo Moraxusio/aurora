@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 package ai
 
@@ -32,13 +32,14 @@ type Env struct {
 	Audit    Auditor
 	Proxy    func() map[string]string
 
-	once      sync.Once
-	mu        sync.Mutex
-	sessions  map[string]*Session
-	running   map[string]*activeRun
-	subs      map[chan StreamEvent]struct{}
-	perms     *PermissionGate
-	snapshots *SnapshotManager
+	once       sync.Once
+	mu         sync.Mutex
+	sessions   map[string]*Session
+	running    map[string]*activeRun
+	subs       map[chan StreamEvent]struct{}
+	perms      *PermissionGate
+	snapshots  *SnapshotManager
+	activities map[string]StreamEvent
 }
 
 func (e *Env) init() {
@@ -47,6 +48,7 @@ func (e *Env) init() {
 		e.running = map[string]*activeRun{}
 		e.subs = map[chan StreamEvent]struct{}{}
 		e.perms = NewPermissionGate()
+		e.activities = map[string]StreamEvent{}
 		e.snapshots = NewSnapshotManager(e.StateDir)
 		e.loadAllFromDisk()
 	})
@@ -129,6 +131,39 @@ func (e *Env) unsubscribe(ch chan StreamEvent) {
 func (e *Env) broadcast(ev StreamEvent) {
 	e.init()
 	e.mu.Lock()
+	if s := e.sessions[ev.SessionID]; s != nil {
+		ev.SessionTitle = s.Title
+		for s.ParentID != "" {
+			ev.RootSessionID = s.ParentID
+			s = e.sessions[s.ParentID]
+			if s == nil {
+				break
+			}
+		}
+	}
+	key := ev.SessionID + ":" + ev.ToolCallID
+	switch ev.Type {
+	case "tool.running":
+		e.activities[key] = ev
+	case "tool.progress":
+		if active, ok := e.activities[key]; ok {
+			active.Output += ev.Delta
+			if len(active.Output) > 32768 {
+				active.Output = active.Output[len(active.Output)-32768:]
+			}
+			e.activities[key] = active
+		}
+	case "tool.done":
+		delete(e.activities, key)
+	case "session.status":
+		if ev.Status != "running" {
+			for k, a := range e.activities {
+				if a.SessionID == ev.SessionID {
+					delete(e.activities, k)
+				}
+			}
+		}
+	}
 	chans := make([]chan StreamEvent, 0, len(e.subs))
 	for ch := range e.subs {
 		chans = append(chans, ch)
@@ -152,6 +187,20 @@ func (e *Env) broadcast(ev StreamEvent) {
 			}
 		}
 	}
+}
+
+func (e *Env) activitiesFor(id string) []StreamEvent {
+	e.init()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := []StreamEvent{}
+	for _, ev := range e.activities {
+		if ev.SessionID == id || ev.RootSessionID == id {
+			out = append(out, ev)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SessionID+out[i].ToolCallID < out[j].SessionID+out[j].ToolCallID })
+	return out
 }
 
 func (e *Env) resolveWorkspace(rootID, workdir string) (Root, string, string, error) {
@@ -993,6 +1042,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 				ToolCallID: call.ToolCallID,
 				ToolName:   call.ToolName,
 				Input:      call.Input,
+				Metadata:   toolRuntimeMetadata(call.ToolName, prov, e.Proxy),
 			})
 
 			// OpenCode 3-strike doom-loop detector
@@ -1186,7 +1236,7 @@ func (e *Env) recordError(sessionID, model, errMsg string) {
 	})
 }
 
-func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov ProviderConfig, agentType, desc, prompt string, depth int) (string, string, error) {
+func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov ProviderConfig, agentType, desc, prompt, parentCallID string, depth int) (string, string, error) {
 	now := time.Now().UnixMilli()
 	child := &Session{
 		ID:             NewID("ses"),
@@ -1230,6 +1280,8 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 	}
 	_ = e.persistSessionLocked(child)
 	e.mu.Unlock()
+	input, _ := json.Marshal(map[string]string{"agent": agentType, "description": desc})
+	e.broadcast(StreamEvent{Type: "tool.running", SessionID: parent.ID, ToolCallID: parentCallID, ToolName: "subagent", Input: input, Metadata: map[string]any{"child_session_id": child.ID, "agent": agentType, "description": desc, "started_at": now}})
 
 	e.runLoop(childCtx, child.ID, depth)
 

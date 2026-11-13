@@ -77,6 +77,8 @@ class AgentInfo {
   String get name => raw['name'] as String? ?? '';
   String get host => raw['host'] as String? ?? '';
   String get os => raw['os'] as String? ?? '';
+  String get kind => raw['kind'] == 'local' ? 'local' : 'remote';
+  String get platform => raw['platform'] as String? ?? '';
   String get version => raw['version'] as String? ?? '';
   List<String> get caps => (raw['caps'] as List?)?.cast<String>() ?? const [];
 }

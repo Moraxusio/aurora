@@ -84,6 +84,9 @@ func New(cfg *Config, cfgPath, version string, services []service.Service, lookP
 		"agent.service":  s.agentSetService,
 		"agent.actions":  s.agentActions,
 	} {
+		if name == "agent.actions" && cfg.Kind == "local" {
+			continue
+		}
 		if err := reg.AddEntry(name, h); err != nil {
 			return nil, err
 		}
@@ -353,7 +356,9 @@ func (s *Server) serveStream(ctx context.Context, st net.Conn) {
 			_ = wire.WriteJSON(st, wire.ErrResponse(wireError(req.Op, svcID, err)))
 			return
 		}
-		_ = wire.WriteJSON(st, wire.OKResponse(res))
+		if err := wire.WriteJSON(st, wire.OKResponse(res)); errors.Is(err, wire.ErrFrameTooLarge) {
+			_ = wire.WriteJSON(st, wire.ErrResponse(wire.Errf(wire.CodeBadRequest, "结果超过单帧限制，请升级客户端并使用分块读取")))
+		}
 		return
 	}
 	if transferOp(req.Op) {
@@ -407,7 +412,14 @@ func (s *Server) Info() wire.AgentInfo {
 		port = a.Port
 	}
 	d := wire.DirectInfo{Port: port, Addrs: s.directAddrs(port), CertSHA256: s.pin}
-	return wire.AgentInfo{ID: s.id, Name: name, Host: host, OS: osName() + " " + runtime.GOARCH, Version: s.version, Arch: runtime.GOARCH, Caps: caps, Direct: d}
+	kind := s.cfg.Kind
+	if kind == "" {
+		kind = "remote"
+	}
+	if kind == "local" {
+		d.Addrs = []string{net.JoinHostPort("127.0.0.1", strconv.Itoa(port))}
+	}
+	return wire.AgentInfo{ID: s.id, Name: name, Host: host, Kind: kind, Platform: runtime.GOOS, OS: osName() + " " + runtime.GOARCH, Version: s.version, Arch: runtime.GOARCH, Caps: caps, Direct: d}
 }
 
 func (s *Server) agentInfo(context.Context, json.RawMessage) (any, error) {

@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 package files
 
@@ -317,6 +317,7 @@ func (s *Env) fsLogs(ctx context.Context, raw json.RawMessage) (any, error) {
 	}
 	return map[string]any{"files": out}, nil
 }
+
 // dirOf resolves a root-relative path to its absolute, symlink-checked form.
 // Copied from v2 gitrun.go; the git service does not need it, search does.
 func (s *Env) dirOf(rootID, p string) (rootAbs, abs string, err error) {
@@ -338,4 +339,3 @@ func (s *Env) dirOf(rootID, p string) (rootAbs, abs string, err error) {
 	}
 	return rootAbs, abs, nil
 }
-

@@ -197,28 +197,30 @@ type SessionSummary struct {
 
 // StreamEvent is pushed to subscribed clients over ai.stream.
 type StreamEvent struct {
-	Type       string              `json:"type"`
-	SessionID  string              `json:"session_id"`
-	MessageID  string              `json:"message_id,omitempty"`
-	PartID     string              `json:"part_id,omitempty"`
-	ToolCallID string              `json:"tool_call_id,omitempty"`
-	ToolName   string              `json:"tool_name,omitempty"`
-	Delta      string              `json:"delta,omitempty"`
-	Title      string              `json:"title,omitempty"`
-	Status     string              `json:"status,omitempty"`
-	Error      string              `json:"error,omitempty"`
-	Message    *Message            `json:"message,omitempty"`
-	Input      json.RawMessage     `json:"input,omitempty"`
-	Output     string              `json:"output,omitempty"`
-	IsError    bool                `json:"is_error,omitempty"`
-	Metadata   map[string]any      `json:"metadata,omitempty"`
-	Permission *PermissionQuestion `json:"permission,omitempty"`
-	Todos      []TodoItem          `json:"todos,omitempty"`
-	Diffs      []FileDiff          `json:"diffs,omitempty"`
-	Usage      *Usage              `json:"usage,omitempty"`
-	TotalUsage *Usage              `json:"total_usage,omitempty"`
-	Runtime    *RuntimeInfo        `json:"runtime,omitempty"`
-	Context    *ContextInfo        `json:"context,omitempty"`
+	Type          string              `json:"type"`
+	SessionID     string              `json:"session_id"`
+	RootSessionID string              `json:"root_session_id,omitempty"`
+	SessionTitle  string              `json:"session_title,omitempty"`
+	MessageID     string              `json:"message_id,omitempty"`
+	PartID        string              `json:"part_id,omitempty"`
+	ToolCallID    string              `json:"tool_call_id,omitempty"`
+	ToolName      string              `json:"tool_name,omitempty"`
+	Delta         string              `json:"delta,omitempty"`
+	Title         string              `json:"title,omitempty"`
+	Status        string              `json:"status,omitempty"`
+	Error         string              `json:"error,omitempty"`
+	Message       *Message            `json:"message,omitempty"`
+	Input         json.RawMessage     `json:"input,omitempty"`
+	Output        string              `json:"output,omitempty"`
+	IsError       bool                `json:"is_error,omitempty"`
+	Metadata      map[string]any      `json:"metadata,omitempty"`
+	Permission    *PermissionQuestion `json:"permission,omitempty"`
+	Todos         []TodoItem          `json:"todos,omitempty"`
+	Diffs         []FileDiff          `json:"diffs,omitempty"`
+	Usage         *Usage              `json:"usage,omitempty"`
+	TotalUsage    *Usage              `json:"total_usage,omitempty"`
+	Runtime       *RuntimeInfo        `json:"runtime,omitempty"`
+	Context       *ContextInfo        `json:"context,omitempty"`
 }
 
 // Explicit allowlist: credentials, account IDs, URLs and custom headers must

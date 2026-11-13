@@ -1,8 +1,10 @@
-// One tab of the editor area: a terminal, a file, a diff, a log, the monitor.
+// One retained task. Documents belong to editors; terminals to the bottom panel.
 // The kernel keeps every open tab's widget alive while another is shown, so a
 // terminal keeps its screen and an editor its unsaved text.
 import 'package:flutter/material.dart';
 import 'package:aurora_profile/aurora_profile.dart';
+
+enum TabArea { editor, terminal }
 
 class EditorTab {
   /// Unique within a workspace, e.g. "term:main" or "file:home:/etc/hosts".
@@ -15,6 +17,8 @@ class EditorTab {
   final String? tooltip;
   final WidgetBuilder builder;
   final WorkspacePath? file;
+  final TabArea area;
+  bool get isTerminal => area == TabArea.terminal;
   // File buffers are unique per server/path. Membership, rather than copying
   // editors, gives each project its own tab list without divergent dirty text.
   final Set<String> projects = {};
@@ -32,7 +36,8 @@ class EditorTab {
   /// Set by editors; the tab may already be open when it is called.
   void Function(int line, int col)? reveal;
 
-  EditorTab({required this.id, required this.title, required this.icon, required this.builder, this.iconColor, this.tooltip, this.file});
+  EditorTab({required this.id, required this.title, required this.icon, required this.builder, this.iconColor, this.tooltip, this.file, TabArea? area})
+    : area = area ?? (id.startsWith('term:') ? TabArea.terminal : TabArea.editor);
 
   void dispose() {
     dirty.dispose();

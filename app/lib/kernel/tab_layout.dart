@@ -148,7 +148,11 @@ class TabLayout {
     bool before = false,
   }) {
     final original = group(groupId);
-    if (original == null || groups.length >= maxGroups) return null;
+    if (original == null ||
+        groups.length >= maxGroups ||
+        (tab != null && owner(tab) == null)) {
+      return null;
+    }
     final next = TabGroup('g${++_serial}');
     groups.insert(groups.indexOf(original) + (before ? 0 : 1), next);
     final branch = TabSplit(
@@ -213,24 +217,33 @@ class TabLayout {
   }
 
   void arrange(EditorArrangement arrangement) {
-    final ids = ordered, active = current.active;
+    final active = current.active;
     final count = switch (arrangement) {
       EditorArrangement.single => 1,
       EditorArrangement.threeColumns => 3,
       EditorArrangement.grid => 4,
       _ => 2,
     };
-    groups
-      ..clear()
-      ..addAll(List.generate(count, (_) => TabGroup('g${++_serial}')));
-    for (var i = 0; i < ids.length; i++) {
-      groups[(i * count ~/ ids.length).clamp(0, count - 1)].tabs.add(ids[i]);
+    // Presets change the grid, not task ownership. Keep existing group IDs,
+    // active documents and focus; new cells are empty, not arbitrary slices of
+    // the tab list. Removing cells merges their contents into the last survivor.
+    if (groups.length > count) {
+      final target = groups[count - 1];
+      final removed = groups.skip(count).toList();
+      for (final group in removed) {
+        target.tabs.addAll(group.tabs);
+        if (group.id == focused) {
+          focused = target.id;
+          target.active = active ?? target.active;
+        }
+      }
+      groups.removeRange(count, groups.length);
+      target.active ??= target.tabs.firstOrNull;
+      _sortPins(target);
     }
-    for (final g in groups) {
-      g.active = g.tabs.contains(active) ? active : g.tabs.firstOrNull;
-      _sortPins(g);
+    while (groups.length < count) {
+      groups.add(TabGroup('g${++_serial}'));
     }
-    focused = owner(active ?? '')?.id ?? groups.first.id;
     TabNode leaf(int i) => TabLeaf(groups[i].id);
     TabSplit branch(
       SplitAxis axis,

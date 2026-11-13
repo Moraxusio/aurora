@@ -1,6 +1,6 @@
 // How long it takes to switch between the things in the window, measured on
 // the real window against a real agent (agent/tools/ui-agent.sh):
-//   - a side bar to another (terminal, files, git, systemd, forwards);
+//   - a side bar to another (files, git, systemd, forwards), or the terminal panel;
 //   - an editor tab to another;
 //   - the same side bar chosen again after one visit.
 // For each switch: milliseconds until the screen has stopped changing, the
@@ -112,7 +112,6 @@ void main() {
     final samples = <Sample>[];
     // First visit to each side bar, then back to it a second time.
     final bars = [
-      ('terminal', '终端', '终端会话'),
       ('files', '文件', '文件'),
       ('git', '源代码管理', '源代码管理'),
       ('systemd', '系统服务', '系统服务'),
@@ -120,6 +119,12 @@ void main() {
       ('proxy', '代理', '代理'),
     ];
     for (final round in ['first visit', 'second visit']) {
+      if (find.byKey(const ValueKey('terminal-panel-header')).evaluate().isNotEmpty) {
+        await click(t, find.byTooltip('隐藏终端面板（保留会话）'));
+      }
+      samples.add(await measure('terminal panel, $round', () => terminalPanel(t),
+        until: find.byKey(const ValueKey('terminal-panel-header'))));
+      await click(t, find.byTooltip('隐藏终端面板（保留会话）'));
       for (final (key, tip, title) in bars) {
         if (find.text(title.toUpperCase()).evaluate().isNotEmpty) {
           // the side bar is already shown: a click would hide it; go to another first

@@ -6,6 +6,8 @@ import 'dart:ui' as ui;
 
 import 'package:aurora/features/ai/ai_studio_view.dart';
 import 'package:aurora/features/files/file_editor.dart';
+import 'package:aurora/features/terminal/terminal_feature.dart'
+    show openSession;
 import 'package:aurora/kernel/editor_tab.dart';
 import 'package:aurora/kernel/desktop_lifecycle.dart';
 import 'package:aurora/kernel/input_mode.dart';
@@ -21,9 +23,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart' show TerminalView;
 
 import 'ai_feature_test.dart' show FakeAiLink;
 import 'support/workspace_fixture.dart';
+import 'support/terminal_fixture.dart';
 
 const _code = '''import 'package:flutter/material.dart';
 
@@ -75,8 +79,26 @@ class _IdleStream implements OpStream {
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
+class _VisualTerminalStream extends MemoryTerminalStream {
+  bool painted = false;
+  @override
+  Future<void> sendJson(Object? data) async {
+    await super.sendJson(data);
+    if (!painted && (data as Map)['type'] == 'resize') {
+      painted = true;
+      output(
+        '\x1b[38;5;110maurora\x1b[0m  \x1b[38;5;108m~/project\x1b[0m\r\n'
+        '\$ flutter test\r\n'
+        '\x1b[38;5;108m00:01 +24: All tests passed!\x1b[0m\r\n\r\n'
+        '\x1b[38;5;110maurora\x1b[0m  \x1b[38;5;108m~/project\x1b[0m\r\n\$ ',
+      );
+    }
+  }
+}
+
 class _VisualLink extends FakeAiLink {
   final Features features;
+  final List<MemoryTerminalStream> terminalStreams = [];
   _VisualLink(this.features) {
     pendingPermission = null;
     directories['/project'] = [
@@ -93,7 +115,7 @@ class _VisualLink extends FakeAiLink {
   }
   @override
   AgentInfo get server => AgentInfo({
-    'version': '3.14.0',
+    'version': '3.15.0',
     'os': 'linux',
     'arch': 'amd64',
     'caps': <String>[],
@@ -103,13 +125,29 @@ class _VisualLink extends FakeAiLink {
     String op, [
     Object? args,
     Priority priority = Priority.interactive,
-  ]) async => _IdleStream();
+  ]) async {
+    if (op == 'terminal') {
+      final stream = _VisualTerminalStream();
+      terminalStreams.add(stream);
+      return stream;
+    }
+    return _IdleStream();
+  }
+
   @override
   Future<Object?> call(
     String op, [
     Object? args,
     Duration timeout = const Duration(seconds: 60),
   ]) async {
+    if (op == 'session.list') {
+      return {
+        'sessions': [
+          {'name': 'main', 'attached': 1, 'windows': 1},
+          {'name': 'server', 'attached': 0, 'windows': 1},
+        ],
+      };
+    }
     if (op == 'agent.services') {
       return {
         'services': [
@@ -288,6 +326,14 @@ void main() {
       expect(t.takeException(), isNull);
       await snapshot(t, 'workbench-light');
       await show(Brightness.dark);
+      openSession(ws, 'main');
+      await t.pumpAndSettle();
+      expect(find.byType(TerminalView), findsOneWidget);
+      expect(find.byKey(const ValueKey('tab-term:main')), findsNothing);
+      await snapshot(t, 'workbench-bottom-terminal');
+      await show(Brightness.light);
+      await snapshot(t, 'workbench-bottom-terminal-light');
+      await show(Brightness.dark);
       ws.openTab(
         EditorTab(
           id: 'ai:ses_1',
@@ -301,6 +347,14 @@ void main() {
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       await snapshot(t, 'workbench-split-ai');
+      ws.setTabPlacement(TabPlacement.right);
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      await snapshot(t, 'workbench-right-tabs-terminal');
+      ws.toggleTerminalMaximized();
+      await t.pumpAndSettle();
+      await snapshot(t, 'workbench-terminal-maximized');
+      ws.hideTerminalPanel();
       ws.arrangeEditors(EditorArrangement.single);
       ws.setTabPlacement(TabPlacement.left);
       await t.pumpAndSettle();
@@ -318,6 +372,15 @@ void main() {
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       await snapshot(t, 'workbench-phone');
+      ws.showTerminalPanel();
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      await snapshot(t, 'workbench-phone-terminal');
+      expect(
+        link.terminalStreams,
+        hasLength(1),
+        reason: 'one real terminal widget and attachment across all layouts',
+      );
       await ws.flushViews();
       await t.pumpWidget(const SizedBox());
       await t.pump(const Duration(seconds: 1));

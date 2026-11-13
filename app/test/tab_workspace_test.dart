@@ -185,7 +185,7 @@ void main() {
     (t) async {
       open('a');
       open('b');
-      ws.arrangeEditors(EditorArrangement.columns);
+      ws.splitGroup(SplitAxis.horizontal, tabId: 'b');
       await pump(t);
       await t.enterText(find.byKey(const ValueKey('input-b')), 'retained text');
       final root = ws.tabLayout.root;
@@ -338,7 +338,7 @@ void main() {
     (t) async {
       open('a');
       open('b');
-      ws.arrangeEditors(EditorArrangement.columns);
+      ws.splitGroup(SplitAxis.horizontal, tabId: 'b');
       await pump(t);
       await t.tap(find.byKey(const ValueKey('input-a')));
       await t.pump();
@@ -448,7 +448,7 @@ void main() {
       await pump(t);
       expect(find.textContaining('编辑组'), findsNothing);
       expect(t.getTopLeft(find.text('Document b')).dy, lessThanOrEqualTo(37));
-      ws.arrangeEditors(EditorArrangement.columns);
+      ws.splitGroup(SplitAxis.horizontal, tabId: 'b');
       await t.pumpAndSettle();
       final root = ws.tabLayout.root;
       await t.tap(find.byTooltip('视图操作').last);

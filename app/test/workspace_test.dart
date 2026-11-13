@@ -58,7 +58,9 @@ void main() {
     ws.openTab(fileTab('/other/b.txt'));
     await ws.selectProject('a');
     expect(ws.activeId, 'file:home:/project/a.dart');
-    expect(ws.visibleTabs.map((t) => t.id), ['term:one', 'file:home:/project/a.dart']);
+    expect(ws.visibleTabs.map((t) => t.id), ['file:home:/project/a.dart']);
+    expect(ws.terminalTabs.map((t) => t.id), ['term:one']);
+    expect(ws.tabLayout.owner('term:one'), isNull);
     expect(ws.tabs, hasLength(3));
   });
 
@@ -304,5 +306,73 @@ void main() {
     final next = TabDragData(ws, current);
     await ws.closeTab(current.id); ws.openTab(fileTab('/project/drag.dart'));
     expect(next.valid(ws), isFalse);
+  });
+
+  test('editor layout actions and bulk closing cannot move or close panel terminals', () async {
+    ws.openTab(fileTab('/project/a')); ws.openTab(fileTab('/project/b'));
+    ws.splitGroup(SplitAxis.horizontal, tabId: 'file:home:/project/b');
+    final terminal = EditorTab(id: 'term:main', title: 'main', icon: Icons.terminal, builder: (_) => const SizedBox());
+    ws.openTab(terminal);
+    final before = ws.tabLayout.toJson().toString();
+    ws.moveTab(terminal.id, ws.tabLayout.current.id);
+    ws.splitGroup(SplitAxis.vertical, tabId: terminal.id);
+    expect(ws.tabLayout.toJson().toString(), before);
+    expect(TabDragData(ws, terminal).valid(ws), isFalse);
+    ws.arrangeEditors(EditorArrangement.rows);
+    expect(ws.terminalActiveId, terminal.id);
+    await ws.closeTabs(ws.visibleTabs.map((tab) => tab.id));
+    expect(ws.tabs, [same(terminal)]);
+    expect(ws.terminalTabs, [same(terminal)]);
+    expect(ws.visibleTabs, isEmpty);
+  });
+
+  test('terminal selection and visibility survive project changes without polluting file snapshots', () async {
+    await ws.selectProject('a'); ws.openTab(fileTab('/project/a'));
+    ws.openTab(EditorTab(id: 'term:one', title: 'one', icon: Icons.terminal, builder: (_) => const SizedBox()));
+    await ws.selectProject('b'); ws.openTab(fileTab('/other/b'));
+    ws.openTab(EditorTab(id: 'term:two', title: 'two', icon: Icons.terminal, builder: (_) => const SizedBox()));
+    await ws.selectProject('a');
+    expect(ws.editorActiveId, 'file:home:/project/a');
+    expect(ws.terminalPanel.visible, isTrue); expect(ws.terminalActiveId, 'term:two');
+    ws.hideTerminalPanel(); expect(ws.tabs, hasLength(4));
+    ws.showTerminalPanel(); expect(ws.focusedId, 'term:two');
+    await ws.flushViews();
+    expect(app.data.toJson().toString(), isNot(contains('term:')));
+    expect(app.data.servers.single.workspace('a')!.view.activeFile, ref('/project/a'));
+  });
+
+  test('only panel height is persisted and failed geometry saves block project switches', () async {
+    ws.setTerminalHeight(340);
+    app.failViews = true;
+    await ws.selectProject('a');
+    expect(ws.projectKey, ''); expect(ws.viewSaveError, isNotNull);
+    app.failViews = false;
+    await ws.selectProject('a');
+    expect(ws.projectKey, 'a');
+    ws.showTerminalPanel(); ws.toggleTerminalMaximized();
+    await ws.flushViews();
+    final next = Workspace(app, 'server');
+    expect(next.terminalPanel.height, 340);
+    expect(next.terminalPanel.visible, isFalse);
+    expect(next.terminalPanel.maximized, isFalse);
+    expect(next.terminalTabs, isEmpty);
+    await next.flushViews(); next.dispose();
+  });
+
+  test('concurrent terminal close across a project switch asks once and leaves replacement sessions alone', () async {
+    final consent = Completer<bool>(); var asked = 0;
+    final terminal = EditorTab(id: 'term:one', title: 'one', icon: Icons.terminal, builder: (_) => const SizedBox());
+    terminal.confirmClose = () { asked++; return consent.future; };
+    ws.openTab(terminal);
+    final one = ws.closeTab(terminal.id);
+    await ws.selectProject('a');
+    final two = ws.closeTab(terminal.id);
+    ws.dropTabs((tab) => identical(tab, terminal));
+    final replacement = EditorTab(id: terminal.id, title: 'new session', icon: Icons.terminal, builder: (_) => const SizedBox());
+    ws.openTab(replacement);
+    consent.complete(true);
+    expect(await one, isTrue); expect(await two, isTrue); expect(asked, 1);
+    expect(ws.terminalTabs, [same(replacement)]);
+    expect(ws.terminalActiveId, replacement.id);
   });
 }

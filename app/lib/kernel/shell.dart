@@ -16,7 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../features/search/quick_open.dart';
-import '../features/terminal/terminal_feature.dart' show createSession, openSession;
+import '../features/terminal/terminal_feature.dart' show createSession, openSession, SessionList;
 import '../state/app_state.dart';
 import '../theme/ide_theme.dart';
 import '../ui/add_server.dart';
@@ -34,6 +34,7 @@ import 'window_frame.dart';
 import 'workspace.dart';
 import 'tab_layout.dart';
 import 'tab_workspace_view.dart';
+import 'workbench_view.dart';
 
 const double _wide = 900, _narrow = 600;
 
@@ -195,8 +196,10 @@ class _ShellState extends State<Shell> {
           Command(id: 'editor.tabs.${placement.name}', title: placementLabel(placement), group: '标签与布局', icon: Icons.tab_outlined, run: () => ws.setTabPlacement(placement)),
         Command(id: 'tab.pin', title: '固定 / 取消固定当前标签', group: '标签与布局', icon: Icons.push_pin_outlined, enabled: () => ws.active != null, run: () => ws.pinTab(ws.active!.id)),
         Command(id: 'app.settings', title: '设置（主题、字号、自动换行）', group: '设置', icon: Icons.settings_outlined, run: () => ws.openTab(settingsTab(app))),
-        Command(id: 'tab.next', title: '下一个标签', group: '视图', shortcut: 'Ctrl+Tab', enabled: () => ws.visibleTabs.length > 1, run: () => ws.next(1)),
-        Command(id: 'tab.prev', title: '上一个标签', group: '视图', shortcut: 'Ctrl+Shift+Tab', enabled: () => ws.visibleTabs.length > 1, run: () => ws.next(-1)),
+        Command(id: 'tab.next', title: '下一个标签', group: '视图', shortcut: 'Ctrl+Tab', enabled: () => ws.navigationTabs.length > 1, run: () => ws.next(1)),
+        Command(id: 'tab.prev', title: '上一个标签', group: '视图', shortcut: 'Ctrl+Shift+Tab', enabled: () => ws.navigationTabs.length > 1, run: () => ws.next(-1)),
+        Command(id: 'panel.toggle', title: '显示或隐藏终端面板', group: '视图', shortcut: 'Ctrl+J', icon: Icons.terminal, run: ws.toggleTerminalPanel),
+        Command(id: 'terminal.focus', title: '聚焦终端面板', group: '终端', shortcut: 'Ctrl+`', icon: Icons.terminal, run: ws.showTerminalPanel),
         Command(id: 'side.toggle', title: '显示或隐藏侧栏', group: '视图', icon: Icons.view_sidebar_outlined, shortcut: 'Ctrl+B', run: _toggleSide),
         Command(id: 'server.overview', title: '服务器概览与设置', group: '服务器', icon: Icons.info_outline, run: () => ws.openTab(overviewTab(ws, widget.features))),
         Command(id: 'server.reconnect', title: '重新连接', group: '服务器', icon: Icons.sync, run: () => app.connect(ws.serverId)),
@@ -255,7 +258,6 @@ class _ShellState extends State<Shell> {
     final ide = Ide.of(context);
     final size = MediaQuery.sizeOf(context);
     final mode = size.width >= _wide ? 2 : (size.width >= _narrow ? 1 : 0);
-    final cmds = _commands(ws);
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true): () => showPalette(context, _commands(ws)),
@@ -270,6 +272,11 @@ class _ShellState extends State<Shell> {
         if (ws != null && MediaQuery.sizeOf(context).width >= _narrow)
           const SingleActivator(LogicalKeyboardKey.backslash, control: true, shift: true): () => ws.splitGroup(SplitAxis.vertical),
         if (ws != null) ...{
+          const SingleActivator(LogicalKeyboardKey.keyJ, control: true): ws.toggleTerminalPanel,
+          const SingleActivator(LogicalKeyboardKey.backquote, control: true): ws.showTerminalPanel,
+          const SingleActivator(LogicalKeyboardKey.backquote, control: true, shift: true): () {
+            if (_usable(ws, 'terminal')) { createSession(ws, context: context); } else { ws.showTerminalPanel(); }
+          },
           const SingleActivator(LogicalKeyboardKey.digit1, control: true): () => ws.focusGroupAt(0),
           const SingleActivator(LogicalKeyboardKey.digit2, control: true): () => ws.focusGroupAt(1),
           const SingleActivator(LogicalKeyboardKey.digit3, control: true): () => ws.focusGroupAt(2),
@@ -278,10 +285,10 @@ class _ShellState extends State<Shell> {
           const SingleActivator(LogicalKeyboardKey.pageDown, control: true, shift: true): () => ws.reorderActive(1),
           const SingleActivator(LogicalKeyboardKey.enter, control: true, shift: true): ws.toggleFocusMode,
         },
-        if (ws != null && _usable(ws, 'search'))
-          const SingleActivator(LogicalKeyboardKey.keyP, control: true): () => showQuickOpen(ws, context: context),
-        if (ws != null && _usable(ws, 'search'))
-          const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => ws.focusSearch.value++,
+        if (ws != null)
+          const SingleActivator(LogicalKeyboardKey.keyP, control: true): () => _find(ws),
+        if (ws != null)
+          const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () { if (_usable(ws, 'search')) ws.focusSearch.value++; },
         if (ws != null) const SingleActivator(LogicalKeyboardKey.tab, control: true): () => ws.next(1),
         if (ws != null) const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true): () => ws.next(-1),
       },
@@ -292,14 +299,14 @@ class _ShellState extends State<Shell> {
           body: SafeArea(
             child: ws == null
                 ? _EmptyShell(app: app, onAdd: _addServer)
-                : ListenableBuilder(listenable: Listenable.merge([ws, ws.geometryRevision]), builder: (context, _) => _layout(context, ws, mode, cmds, ide)),
+                : ListenableBuilder(listenable: Listenable.merge([ws, ws.geometryRevision]), builder: (context, _) => _layout(context, ws, mode, ide)),
           ),
         ),
       ),
     );
   }
 
-  Widget _layout(BuildContext context, Workspace ws, int mode, List<Command> cmds, Ide ide) {
+  Widget _layout(BuildContext context, Workspace ws, int mode, Ide ide) {
     final narrow = mode == 0;
     final wide = mode == 2;
     const gap = 0.0;
@@ -313,7 +320,7 @@ class _ShellState extends State<Shell> {
     ]);
     void servers() => setState(() => _serversOpen = !_serversOpen);
     final status = _StatusBar(ws: ws, app: app, onTapConn: () => app.connect(ws.serverId));
-    final showEditor = !narrow || (ws.compactEditor && ws.visibleTabs.isNotEmpty);
+    final showEditor = !narrow || (ws.compactEditor && (ws.visibleTabs.isNotEmpty || ws.terminalPanel.visible));
     final sideShown = _sideOpen && wide;
     final sideWidth = ws.tabLayout.sideWidth.clamp(180.0, (MediaQuery.sizeOf(context).width - 340).clamp(180.0, 640.0));
     final drawerWidth = ws.tabLayout.sideWidth.clamp(180.0, MediaQuery.sizeOf(context).width * .7);
@@ -329,7 +336,7 @@ class _ShellState extends State<Shell> {
             sideOpen: _sideOpen,
             onServers: servers,
             onFind: () => _find(ws),
-            onPalette: () => showPalette(context, cmds),
+            onPalette: () => showPalette(context, _commands(ws)),
             onToggleSide: _toggleSide,
           ),
         // Below the title bar: the window buttons cover the top-right 40 px.
@@ -346,7 +353,7 @@ class _ShellState extends State<Shell> {
                   vertical: true,
                   onPick: (f) => _pick(ws, f),
                   onServers: servers,
-                  onPalette: () => showPalette(context, cmds),
+                   onPalette: () => showPalette(context, _commands(ws)),
                   onOverview: () => ws.openTab(overviewTab(ws, widget.features)),
                 ),
               if (sideShown) ...[
@@ -403,7 +410,7 @@ class _ShellState extends State<Shell> {
         ),
         if (narrow && !showEditor) _ActivityBar(ws: ws, features: widget.features, current: _featureId, vertical: false,
           onPick: (f) => _pick(ws, f), onServers: servers,
-          onPalette: () => showPalette(context, cmds), onOverview: () => ws.openTab(overviewTab(ws, widget.features))),
+          onPalette: () => showPalette(context, _commands(ws)), onOverview: () => ws.openTab(overviewTab(ws, widget.features))),
         status,
       ],
     );
@@ -501,7 +508,9 @@ class _TitleBar extends StatelessWidget {
             ),
           ),
         ),
-        IconBtn(sideOpen ? Icons.view_sidebar : Icons.view_sidebar_outlined, '显示或隐藏侧栏（Ctrl+B）', onToggleSide),
+         IconBtn(sideOpen ? Icons.view_sidebar : Icons.view_sidebar_outlined, '显示或隐藏侧栏（Ctrl+B）', onToggleSide),
+         IconBtn(Icons.terminal, '显示或隐藏终端面板（Ctrl+J）', ws.toggleTerminalPanel,
+           color: ws.terminalPanel.visible ? ide.accent : null),
          SizedBox(width: 28, height: 28, child: TabLayoutMenu(ws: ws)),
         const SizedBox(width: Space.s),
         const WindowButtonsGap(),
@@ -644,8 +653,8 @@ class _ActivityBar extends StatelessWidget {
             final usable = st == FeatureState.available || st == FeatureState.loading;
             final tip = usable ? f.title : '${f.title}（${_stateText(st)}）';
             return vertical
-                ? rail(f.icon, tip, on: current == f.id, dim: !usable, tap: () => onPick(f))
-                : tab(f.icon, f.title, tip, on: current == f.id, dim: !usable, tap: () => onPick(f));
+                ? rail(f.icon, tip, on: current == f.id || (f.id == 'terminal' && ws.terminalPanel.visible), dim: !usable, tap: () => onPick(f))
+                : tab(f.icon, f.title, tip, on: current == f.id || (f.id == 'terminal' && ws.terminalPanel.visible), dim: !usable, tap: () => onPick(f));
           },
         ),
     ];
@@ -887,7 +896,20 @@ class _EditorAreaState extends State<_EditorArea> {
   @override
   Widget build(BuildContext context) {
     final ws = widget.ws, features = widget.features;
-    return TabWorkspaceView(ws: ws, empty: _Welcome(ws: ws, features: features, onPalette: widget.onPalette, onFind: widget.onFind));
+    final terminal = features.byId('terminal');
+    return WorkbenchView(ws: ws,
+      empty: _Welcome(ws: ws, features: features, onPalette: widget.onPalette, onFind: widget.onFind),
+      onNewTerminal: ws.link != null && terminal != null && ws.stateOf(terminal) == FeatureState.available
+        ? () => createSession(ws, context: context) : null,
+      terminalSessionsBuilder: (onOpened) => LinkGate(ws: ws, builder: (_, _) {
+        final feature = features.byId('terminal');
+        if (feature == null) return const SizedBox();
+        final state = ws.stateOf(feature);
+        if (state == FeatureState.loading) return const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)));
+        if (state != FeatureState.available) return _Unavailable(ws: ws, feature: feature, state: state);
+        return SessionList(ws: ws, compact: true, onOpened: onOpened);
+      }),
+    );
   }
 }
 

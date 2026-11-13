@@ -18,6 +18,7 @@ import 'feature.dart';
 import 'file_watch.dart';
 import 'widgets.dart';
 import 'tab_layout.dart';
+import 'terminal_panel_state.dart';
 
 class Workspace extends ChangeNotifier {
   final AppState app;
@@ -26,6 +27,18 @@ class Workspace extends ChangeNotifier {
   final Map<String, TabLayout> _layouts = {};
   final Map<String, Future<bool>> _closingTabs = {};
   int editorFocusRequest = 0;
+  int terminalFocusRequest = 0;
+  bool _terminalFocused = false;
+  late final TerminalPanelState terminalPanel = _loadTerminalPanel();
+  bool get terminalFocused => _terminalFocused && terminalPanel.visible;
+  String? get terminalActiveId => terminalPanel.active;
+  String? get editorActiveId => tabLayout.current.active;
+  List<EditorTab> get terminalTabs {
+    final byId = {for (final tab in tabs) if (tab.isTerminal) tab.id: tab};
+    return [for (final id in terminalPanel.ids) ?byId[id]];
+  }
+  List<EditorTab> get editorTabs => tabs.where((tab) => !tab.isTerminal).toList();
+  List<EditorTab> get navigationTabs => terminalFocused ? terminalTabs : tabsInGroup(tabLayout.focused);
   String? get activeId => tabLayout.groups.first.active;
   set activeId(String? id) => tabLayout.groups.first.active = id;
   String? _projectId;
@@ -127,10 +140,13 @@ class Workspace extends ChangeNotifier {
     final e = entry;
     final selected = e?.workspace(e.selectedWorkspace)?.id;
     if (_projectId != selected) {
-      if (_restored.contains(projectKey)) _activeByProject[projectKey] = focusedId;
+      if (_restored.contains(projectKey)) _activeByProject[projectKey] = editorActiveId;
       _projectRevision++;
       _projectId = selected;
       focusMode = false;
+      _terminalFocused = false;
+      terminalPanel.maximized = false;
+      editorFocusRequest++;
       _syncLayout(projectKey);
     }
     viewRevision++;
@@ -247,6 +263,14 @@ class Workspace extends ChangeNotifier {
       return;
     }
     tabs.add(t);
+    if (t.isTerminal) {
+      terminalPanel.activate(t.id);
+      _terminalFocused = true;
+      terminalFocusRequest++;
+      compactEditor = true;
+      notifyListeners();
+      return;
+    }
     if (t.file != null) t.projects.add(projectKey);
     _syncLayout(projectKey);
     _show(t.id);
@@ -258,6 +282,14 @@ class Workspace extends ChangeNotifier {
   void activate(String id) {
     final t = tab(id);
     if (t == null) return;
+    if (t.isTerminal) {
+      terminalPanel.activate(id);
+      _terminalFocused = true;
+      terminalFocusRequest++;
+      compactEditor = true;
+      notifyListeners();
+      return;
+    }
     if (t.file != null) t.projects.add(projectKey);
     _syncLayout(projectKey);
     _show(id);
@@ -268,9 +300,64 @@ class Workspace extends ChangeNotifier {
 
   /// Reveals [id] in its group, or adds a new tab to the focused group.
   void _show(String id) {
+    _terminalFocused = false;
+    terminalPanel.maximized = false;
     tabLayout.add(id);
     editorFocusRequest++;
-    _activeByProject[projectKey] = focusedId;
+    _activeByProject[projectKey] = editorActiveId;
+  }
+
+  // ---- bottom terminal panel ----
+
+  TerminalPanelState _loadTerminalPanel() {
+    final height = _viewForKey('').tabLayout['panel_height'];
+    return TerminalPanelState(height: height is num && height.isFinite
+      ? height.toDouble().clamp(120.0, 1200.0) : TerminalPanelState.defaultHeight);
+  }
+
+  void showTerminalPanel() {
+    terminalPanel.visible = true;
+    _terminalFocused = true;
+    terminalFocusRequest++;
+    compactEditor = true;
+    notifyListeners();
+  }
+
+  void focusTerminalPanel() {
+    if (!terminalPanel.visible) return showTerminalPanel();
+    if (_terminalFocused) return;
+    _terminalFocused = true;
+    terminalFocusRequest++;
+    notifyListeners();
+  }
+
+  void hideTerminalPanel() {
+    if (!terminalPanel.visible) return;
+    terminalPanel.visible = false;
+    terminalPanel.maximized = false;
+    _terminalFocused = false;
+    editorFocusRequest++;
+    notifyListeners();
+  }
+
+  void toggleTerminalPanel() {
+    if (terminalPanel.visible) { hideTerminalPanel(); } else { showTerminalPanel(); }
+  }
+
+  void toggleTerminalMaximized() {
+    terminalPanel.maximized = !terminalPanel.maximized;
+    terminalPanel.visible = true;
+    _terminalFocused = true;
+    terminalFocusRequest++;
+    notifyListeners();
+  }
+
+  void setTerminalHeight(double height) {
+    if (!height.isFinite) return;
+    final next = height.clamp(120.0, 1200.0);
+    if (terminalPanel.height == next) return;
+    terminalPanel.height = next;
+    _geometryChanged(key: '');
   }
 
   // ---- editor groups ----
@@ -286,11 +373,11 @@ class Workspace extends ChangeNotifier {
   bool get split => tabLayout.groups.length > 1;
 
   /// The tab the user is working in: the right one when that side has focus.
-  String? get focusedId => tabLayout.current.active;
+  String? get focusedId => terminalFocused ? terminalActiveId : editorActiveId;
 
   /// Legacy dual-pane toggle; the shell's Ctrl+\ uses splitGroup instead.
   void splitActive() {
-    final id = focusedId;
+    final id = editorActiveId;
     if (id == null) return;
     if (split && id == sideId) return unsplit();
     final others = visibleTabs.where((t) => t.id != id).toList();
@@ -300,6 +387,8 @@ class Workspace extends ChangeNotifier {
     final from = tabLayout.owner(id)!;
     tabLayout.split(from.id, SplitAxis.horizontal, tab: id);
     from.active = others[(i - 1).clamp(0, others.length - 1)].id;
+    _terminalFocused = false;
+    editorFocusRequest++;
     _layoutChanged();
   }
 
@@ -312,39 +401,52 @@ class Workspace extends ChangeNotifier {
   }
 
   void focusGroup(String id) {
-    if (tabLayout.focused == id || tabLayout.group(id) == null) return;
+    if (tabLayout.group(id) == null) return;
+    final changed = tabLayout.focused != id;
+    if (!changed && !terminalFocused) return;
+    _terminalFocused = false;
+    terminalPanel.maximized = false;
     tabLayout.focus(id);
     editorFocusRequest++;
-    _layoutChanged();
+    if (changed) { _layoutChanged(); } else { notifyListeners(); }
   }
 
   void focusGroupAt(int index) {
     if (index >= 0 && index < tabLayout.groups.length) focusGroup(tabLayout.groups[index].id);
   }
 
-  void arrangeEditors(EditorArrangement arrangement) { focusMode = false; tabLayout.arrange(arrangement); _layoutChanged(); }
+  void arrangeEditors(EditorArrangement arrangement) { focusMode = false; _terminalFocused = false; terminalPanel.maximized = false; editorFocusRequest++; tabLayout.arrange(arrangement); _layoutChanged(); }
   void splitGroup(SplitAxis axis, {String? group, String? tabId, bool before = false}) {
+    if (tabId != null && (tab(tabId) == null || tab(tabId)!.isTerminal)) return;
     final from = group ?? tabLayout.focused;
     if (tabLayout.split(from, axis, tab: tabId ?? tabLayout.group(from)?.active, before: before) == null) {
       toast('最多同时显示 4 个编辑组；可将标签拖入已有分组');
       return;
     }
     focusMode = false;
+    _terminalFocused = false;
+    editorFocusRequest++;
     _layoutChanged();
   }
-  void mergeGroup(String id) { focusMode = false; tabLayout.mergeGroup(id); _layoutChanged(); }
+  void mergeGroup(String id) { focusMode = false; _terminalFocused = false; editorFocusRequest++; tabLayout.mergeGroup(id); _layoutChanged(); }
   void moveTab(String id, String group, {int? index}) {
-    if (tab(id) == null) return;
-    if (tabLayout.move(id, group, index: index)) _layoutChanged();
+    if (tab(id) == null || tab(id)!.isTerminal) return;
+    if (tabLayout.move(id, group, index: index)) { _terminalFocused = false; editorFocusRequest++; _layoutChanged(); }
   }
   void reorderActive(int delta) {
     final id = focusedId;
     if (id == null) return;
-    final g = tabLayout.owner(id)!;
+    if (terminalFocused) {
+      final i = terminalPanel.ids.indexOf(id);
+      if (terminalPanel.move(id, i + (delta > 0 ? 2 : -1))) notifyListeners();
+      return;
+    }
+    final g = tabLayout.owner(id);
+    if (g == null) return;
     final i = g.tabs.indexOf(id);
     moveTab(id, g.id, index: (i + (delta > 0 ? 2 : -1)).clamp(0, g.tabs.length));
   }
-  void pinTab(String id) { tabLayout.togglePin(id); _layoutChanged(); }
+  void pinTab(String id) { if (tab(id)?.isTerminal == true) return; tabLayout.togglePin(id); _layoutChanged(); }
   void setTabPlacement(TabPlacement placement) { tabLayout.placement = placement; _layoutChanged(); }
   void setSideWidth(double width) {
     if (!width.isFinite) return;
@@ -369,14 +471,15 @@ class Workspace extends ChangeNotifier {
   }
   void toggleFocusMode() {
     if (!split) { focusMode = false; return; }
+    if (terminalFocused) focusGroup(tabLayout.focused);
     focusMode = !focusMode;
     _scheduleGeometryFrame();
   }
   // Dragging never invalidates file trees, AI configurations or terminal
   // listeners. Reflow at most once per frame; serialize once after the gesture.
-  void _geometryChanged() {
+  void _geometryChanged({String? key}) {
     if (_disposed) return;
-    _geometryDirty.add(projectKey);
+    _geometryDirty.add(key ?? projectKey);
     _scheduleViewSave();
     _scheduleGeometryFrame();
   }
@@ -394,7 +497,7 @@ class Workspace extends ChangeNotifier {
   }
   void _layoutChanged() {
     if (_disposed) return;
-    _activeByProject[projectKey] = focusedId;
+    _activeByProject[projectKey] = editorActiveId;
     rememberFiles();
     notifyListeners();
   }
@@ -414,17 +517,27 @@ class Workspace extends ChangeNotifier {
 
   /// Closes a tab; asks first when it has unsaved changes. Returns whether it closed.
   Future<bool> closeTab(String id) {
-    final key = '$projectKey\u0000$id';
+    final key = '${tab(id)?.isTerminal == true ? '@terminal' : projectKey}\u0000$id';
     return _closingTabs[key] ??= _closeTab(id, projectKey).whenComplete(() { _closingTabs.remove(key); });
   }
 
   Future<bool> _closeTab(String id, String key) async {
     final t = tab(id);
     if (t == null) return true;
-    if (!visibleTabs.contains(t)) return false;
+    if (!t.isTerminal && !visibleTabs.contains(t)) return false;
     final shared = t.file != null && t.projects.length > 1;
     if (!shared && t.confirmClose != null && !await t.confirmClose!()) return false;
     if (_disposed || !tabs.contains(t)) return true;
+    if (t.isTerminal) {
+      tabs.remove(t);
+      final previous = terminalPanel.active;
+      terminalPanel.remove(id);
+      if (terminalPanel.active == null && _terminalFocused) { _terminalFocused = false; editorFocusRequest++; }
+      else if (_terminalFocused && terminalPanel.active != previous) { terminalFocusRequest++; }
+      t.dispose();
+      notifyListeners();
+      return true;
+    }
     // Closing a project membership must not discard a shared buffer that is
     // still open elsewhere. Its final close retains the normal dirty prompt.
     if (t.file != null && t.projects.length > 1) {
@@ -446,8 +559,10 @@ class Workspace extends ChangeNotifier {
   void dropTabs(bool Function(EditorTab) test) {
     final gone = tabs.where(test).toList();
     if (gone.isEmpty) return;
+    final terminalBefore = terminalPanel.active;
     for (final t in gone) {
       tabs.remove(t);
+      if (t.isTerminal) terminalPanel.remove(t.id);
       for (final layout in _layouts.values) { layout.remove(t.id); }
       if (t.file != null) {
         for (final key in t.projects) {
@@ -459,13 +574,17 @@ class Workspace extends ChangeNotifier {
       }
       t.dispose();
     }
+    if (_terminalFocused && terminalBefore != terminalPanel.active) {
+      if (terminalPanel.active == null) { _terminalFocused = false; editorFocusRequest++; }
+      else { terminalFocusRequest++; }
+    }
     _scheduleViewSave();
     notifyListeners();
   }
 
   /// Ctrl+Tab cycles within the focused editor group.
   void next(int step) {
-    final shown = tabsInGroup(tabLayout.focused);
+    final shown = navigationTabs;
     if (shown.length < 2) return;
     final i = shown.indexWhere((t) => t.id == focusedId);
     activate(shown[((i < 0 ? 0 : i) + step) % shown.length].id);
@@ -488,7 +607,7 @@ class Workspace extends ChangeNotifier {
     }
     if (_projectId == id) return;
     rememberFiles();
-    if (_dirtyViews.isNotEmpty && !await flushViews()) return;
+    if ((_dirtyViews.isNotEmpty || _geometryDirty.isNotEmpty) && !await flushViews()) return;
     await app.update((p) {
       final server = p.server(serverId);
       if (server != null) server.selectedWorkspace = id;
@@ -499,7 +618,7 @@ class Workspace extends ChangeNotifier {
     if (name.trim().isEmpty) return;
     final id = newId();
     rememberFiles();
-    if (_dirtyViews.isNotEmpty && !await flushViews()) return;
+    if ((_dirtyViews.isNotEmpty || _geometryDirty.isNotEmpty) && !await flushViews()) return;
     await app.update((p) {
       final s = p.server(serverId);
       if (s == null) return;
@@ -532,7 +651,7 @@ class Workspace extends ChangeNotifier {
     if (id == null) return;
     await _changeProject(() async {
     rememberFiles();
-    if (_dirtyViews.isNotEmpty && !await flushViews()) return;
+    if ((_dirtyViews.isNotEmpty || _geometryDirty.isNotEmpty) && !await flushViews()) return;
     // Removing a workspace forgets its grouping only. Dirty buffers are moved
     // to the server browser; no file or remote session is deleted.
     final moved = tabs.where((t) => t.projects.contains(id)).toList();
@@ -583,7 +702,7 @@ class Workspace extends ChangeNotifier {
       final id = _activeByProject[key] ?? (activeFile == null ? null : tabs.where((t) => t.file == activeFile && t.projects.contains(key)).firstOrNull?.id);
       if (id != null) layout.activate(id);
     }
-    _activeByProject[key] = focusedId;
+    _activeByProject[key] = editorActiveId;
     notifyListeners();
   }
 
@@ -595,7 +714,7 @@ class Workspace extends ChangeNotifier {
   WorkspaceView viewForCurrent() => _viewForKey(projectKey);
   WorkspaceView viewForProject(String key) => _viewForKey(key);
 
-  List<EditorTab> _tabsFor(String key) => tabs.where((t) => t.file == null || t.projects.contains(key)).toList();
+  List<EditorTab> _tabsFor(String key) => tabs.where((t) => !t.isTerminal && (t.file == null || t.projects.contains(key))).toList();
 
   void rememberFiles() => _rememberFilesFor(projectKey);
 
@@ -611,7 +730,9 @@ class Workspace extends ChangeNotifier {
     final activeFile = tab(layout.current.active ?? '')?.file;
     final allowed = {for (final file in next) 'file:${file.root}:${file.path}'};
     final defaults = layout.groups.length == 1 && layout.placement == TabPlacement.top && layout.sideWidth == 300 && layout.tabsWidth == 180 && layout.tabWidth == 160 && !layout.pinned.any(allowed.contains);
-    final snapshot = next.isEmpty && defaults ? <String, dynamic>{} : layout.toJson(allowed: allowed);
+    final panelHeight = key.isEmpty ? terminalPanel.height : TerminalPanelState.defaultHeight;
+    final snapshot = next.isEmpty && defaults && panelHeight == TerminalPanelState.defaultHeight ? <String, dynamic>{} : layout.toJson(allowed: allowed);
+    if (panelHeight != TerminalPanelState.defaultHeight) snapshot['panel_height'] = panelHeight;
     final nextActive = _restored.contains(key) || activeFile != null ? activeFile : view.activeFile;
     if (listEquals(view.files, next) && view.activeFile == nextActive && jsonEncode(view.tabLayout) == jsonEncode(snapshot)) return;
     view.files = next;

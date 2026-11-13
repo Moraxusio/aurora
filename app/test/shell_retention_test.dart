@@ -141,7 +141,7 @@ void main() {
     await t.pumpAndSettle();
     final ws = feature.workspace!;
     for (final id in ['a', 'b']) { ws.openTab(EditorTab(id: id, title: id, icon: Icons.terminal, builder: (_) => Text(id))); }
-    ws.arrangeEditors(EditorArrangement.columns); await t.pumpAndSettle();
+    ws.splitGroup(SplitAxis.horizontal, tabId: 'b'); await t.pumpAndSettle();
     await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft); await t.sendKeyEvent(LogicalKeyboardKey.digit1); await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await t.pumpAndSettle();
     expect(ws.focusedId, 'a');

@@ -3,6 +3,7 @@ import 'package:aurora/kernel/input_mode.dart';
 import 'package:aurora/kernel/tab_layout.dart';
 import 'package:aurora/kernel/tab_workspace_view.dart';
 import 'package:aurora/kernel/workspace.dart';
+import 'package:aurora/kernel/workbench_view.dart';
 import 'package:aurora/theme/ide_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -142,6 +143,89 @@ void main() {
         serviceNotifications,
         0,
         reason: 'widths must use the separate frame-coalesced geometry signal',
+      );
+    },
+  );
+
+  testWidgets(
+    'terminal panel resize is frame coalesced and hidden terminal buffers keep their constraints',
+    (t) async {
+      t.view.physicalSize = const Size(1200, 900);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
+      final app = WorkspaceApp(),
+          input = InputMode(touch: false),
+          counts = <String, int>{};
+      final ws = Workspace(app, 'server');
+      ws.openTab(
+        EditorTab(
+          id: 'doc',
+          title: 'doc',
+          icon: Icons.description,
+          builder: (_) => const SizedBox(),
+        ),
+      );
+      for (var i = 0; i < 12; i++) {
+        final id = 'term:$i';
+        ws.openTab(
+          EditorTab(
+            id: id,
+            title: id,
+            icon: Icons.terminal,
+            builder: (_) => _LayoutProbe(
+              () => counts.update(id, (n) => n + 1, ifAbsent: () => 1),
+            ),
+          ),
+        );
+      }
+      await t.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(Brightness.dark),
+          home: InputMode.scope(
+            mode: input,
+            child: Scaffold(
+              body: ListenableBuilder(
+                listenable: ws,
+                builder: (_, _) =>
+                    WorkbenchView(ws: ws, empty: const SizedBox()),
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      await ws.flushViews();
+      final before = Map.of(counts);
+      var business = 0, geometry = 0;
+      ws.addListener(() => business++);
+      ws.geometryRevision.addListener(() => geometry++);
+      for (var i = 0; i < 240; i++) {
+        ws.setTerminalHeight(260 + i.toDouble());
+      }
+      expect(
+        ws.viewForCurrent().tabLayout['panel_height'],
+        isNull,
+        reason: 'do not serialize inside a drag',
+      );
+      await t.pump();
+      expect(business, 0);
+      expect(geometry, 1);
+      final hidden = [
+        for (var i = 0; i < 11; i++) counts['term:$i']! - before['term:$i']!,
+      ].fold(0, (a, b) => a + b);
+      expect(hidden, 0);
+      await ws.flushViews();
+      expect(
+        app.data.servers.single.browserView.tabLayout['panel_height'],
+        499,
+      );
+      await t.pumpWidget(const SizedBox());
+      ws.dispose();
+      app.dispose();
+      input.dispose();
+      debugPrint(
+        'PANEL_RESIZE_BENCH updates=240 businessNotifications=$business geometryFrames=$geometry hiddenTerminalLayouts=$hidden',
       );
     },
   );

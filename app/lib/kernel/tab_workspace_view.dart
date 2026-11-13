@@ -99,10 +99,10 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
       _revision = ws.viewRevision;
       _bodies.clear();
     }
-    final live = ws.tabs.toSet();
+    final live = ws.editorTabs.toSet();
     _bodies.removeWhere((tab, _) => !live.contains(tab));
     _lastRects.removeWhere((tab, _) => !live.contains(tab));
-    final tabsById = {for (final t in ws.tabs) t.id: t};
+    final tabsById = {for (final t in live) t.id: t};
     final ide = Ide.of(context), layout = ws.tabLayout;
     return LayoutBuilder(
       builder: (context, box) {
@@ -326,9 +326,14 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
           child: Stack(
             children: [
               if (ws.visibleTabs.isEmpty && layout.groups.length == 1)
-                Positioned.fill(child: widget.empty),
-              ...chrome,
-              for (final t in ws.tabs)
+                Positioned.fromRect(
+                  rect: contents[layout.current.id]!,
+                  child: ClipRect(
+                    key: const ValueKey('editor-empty-viewport'),
+                    child: widget.empty,
+                  ),
+                ),
+              for (final t in ws.editorTabs)
                 Builder(
                   key: ObjectKey(t),
                   builder: (_) {
@@ -342,23 +347,32 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                       rect: rect ?? _lastRects.putIfAbsent(t, () => bounds),
                       child: Offstage(
                         offstage: !on,
-                        child: TickerMode(
-                          enabled: on,
-                          child: ExcludeFocus(
-                            excluding: !on,
-                            child: Listener(
-                              behavior: HitTestBehavior.translucent,
-                              onPointerDown: (_) {
-                                if (group != null) ws.focusGroup(group.id);
-                              },
-                              child: _TabFocusFrame(
-                                request: on && layout.current.active == t.id
-                                    ? ws.editorFocusRequest
-                                    : -1,
-                                child: RepaintBoundary(
-                                  child: _bodies.putIfAbsent(
-                                    t,
-                                    () => Builder(builder: t.builder),
+                        child: ClipRect(
+                          key: ValueKey('editor-viewport-${t.id}'),
+                          child: TickerMode(
+                            enabled: on,
+                            child: ExcludeFocus(
+                              excluding: !on,
+                              child: Listener(
+                                behavior: HitTestBehavior.translucent,
+                                onPointerDown: (_) {
+                                  if (group != null) ws.focusGroup(group.id);
+                                },
+                                child: TabFocusFrame(
+                                  request:
+                                      on &&
+                                          !ws.terminalFocused &&
+                                          layout.current.active == t.id
+                                      ? ws.editorFocusRequest
+                                      : -1,
+                                  canFocus: () =>
+                                      !ws.terminalFocused &&
+                                      ws.editorActiveId == t.id,
+                                  child: RepaintBoundary(
+                                    child: _bodies.putIfAbsent(
+                                      t,
+                                      () => Builder(builder: t.builder),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -369,6 +383,7 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                     );
                   },
                 ),
+              ...chrome,
               for (final d in dividers)
                 Positioned.fromRect(
                   rect: d.rect,
@@ -410,15 +425,21 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
   }
 }
 
-class _TabFocusFrame extends StatefulWidget {
+class TabFocusFrame extends StatefulWidget {
   final int request;
   final Widget child;
-  const _TabFocusFrame({required this.request, required this.child});
+  final bool Function()? canFocus;
+  const TabFocusFrame({
+    super.key,
+    required this.request,
+    required this.child,
+    this.canFocus,
+  });
   @override
-  State<_TabFocusFrame> createState() => _TabFocusFrameState();
+  State<TabFocusFrame> createState() => _TabFocusFrameState();
 }
 
-class _TabFocusFrameState extends State<_TabFocusFrame> {
+class _TabFocusFrameState extends State<TabFocusFrame> {
   final _scope = FocusScopeNode();
   @override
   void initState() {
@@ -427,7 +448,7 @@ class _TabFocusFrameState extends State<_TabFocusFrame> {
   }
 
   @override
-  void didUpdateWidget(_TabFocusFrame oldWidget) {
+  void didUpdateWidget(TabFocusFrame oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.request != widget.request) _request();
   }
@@ -436,7 +457,12 @@ class _TabFocusFrameState extends State<_TabFocusFrame> {
     final serial = widget.request;
     if (serial < 0) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && widget.request == serial && !_scope.hasFocus) {
+      if (mounted &&
+          widget.request == serial &&
+          (widget.canFocus?.call() ?? true) &&
+          (ModalRoute.of(context)?.isCurrent ?? true) &&
+          _scope.canRequestFocus &&
+          !_scope.hasFocus) {
         _scope.requestFocus();
       }
     });
@@ -881,7 +907,7 @@ class _TabListState extends State<_TabList> {
                       event.scrollDelta.dx != 0
                           ? event.scrollDelta.dx
                           : event.scrollDelta.dy,
-                     );
+                    );
                   }
                 });
               },
@@ -922,7 +948,7 @@ class _TabTileState extends State<_TabTile> {
         layout = ws.tabLayout;
     final ide = Ide.of(context),
         on = group.active == tab.id,
-        focused = group.id == layout.focused;
+        focused = group.id == layout.focused && !ws.terminalFocused;
     final pin = layout.pinned.contains(tab.id);
     final tile = ContextArea(
       items: () => [

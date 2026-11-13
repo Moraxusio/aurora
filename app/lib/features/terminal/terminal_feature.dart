@@ -1,5 +1,5 @@
 // Terminals (service "terminal"): the server's tmux sessions are listed in the
-// side bar, and each one opens as an editor tab with its own terminal. The
+// bottom panel, and each one has its own retained terminal viewport. The
 // attach logic is the first version's: the view asks tmux for its real size
 // at once, a stream that ended because the link dropped or the agent restarted
 // attaches again by itself (D-18), "exit" and "closed" (D-51) do not.
@@ -38,10 +38,10 @@ class TerminalFeature extends Feature {
   List<String> get ops => const ['session.list', 'session.create', 'terminal'];
 
   @override
-  SideBarView? sideBar(BuildContext context, Workspace ws) => SideBarView(
-    title: '终端会话',
-    body: SessionList(ws: ws),
-  );
+  SideBarView? sideBar(BuildContext context, Workspace ws) => null;
+
+  @override
+  void open(Workspace ws) => ws.showTerminalPanel();
 
   @override
   List<Command> commands(Workspace ws) => [
@@ -49,11 +49,12 @@ class TerminalFeature extends Feature {
   ];
 }
 
-/// Opens a session as a tab (or brings its tab to the front).
+/// Opens a session in the bottom panel without replacing the editor selection.
 void openSession(Workspace ws, String name) {
   ws.openTab(
     EditorTab(
       id: 'term:$name',
+      area: TabArea.terminal,
       title: name,
       icon: Icons.terminal,
       tooltip: ws.entry?.isLocal == true ? '本地 PowerShell · $name（退出客户端后结束）' : 'tmux 会话 $name',
@@ -203,7 +204,9 @@ class _NewSessionDialogState extends State<NewSessionDialog> {
 
 class SessionList extends StatefulWidget {
   final Workspace ws;
-  const SessionList({super.key, required this.ws});
+  final bool compact;
+  final VoidCallback? onOpened;
+  const SessionList({super.key, required this.ws, this.compact = false, this.onOpened});
   @override
   State<SessionList> createState() => _SessionListState();
 }
@@ -213,6 +216,8 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   bool _loading = true;
   String? _error;
   String? _active;
+  int _loadGeneration = 0;
+  final Set<String> _ending = {};
 
   Workspace get ws => widget.ws;
 
@@ -225,14 +230,14 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   @override
   void initState() {
     super.initState();
-    _active = ws.focusedId;
+    _active = ws.terminalActiveId;
     ws.addListener(_selectionChanged);
     _load();
   }
 
   void _selectionChanged() {
-    if (_active == ws.focusedId) return;
-    setState(() => _active = ws.focusedId);
+    if (_active == ws.terminalActiveId) return;
+    setState(() => _active = ws.terminalActiveId);
   }
 
   @override
@@ -244,10 +249,12 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   Future<void> _load({bool quiet = false}) async {
     final link = ws.link;
     if (link == null) return;
+    final generation = ++_loadGeneration;
+    final observed = ws.terminalTabs.toSet();
     try {
       final r = await link.call('session.list') as Map;
       final list = [for (final s in r['sessions'] as List) (s as Map).cast<String, dynamic>()];
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration || !identical(link, ws.link)) return;
       setState(() {
         _sessions = list;
         _error = null;
@@ -255,9 +262,9 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
       });
       // a tab whose session no longer exists has nothing to show
       final names = {for (final s in list) s['name'] as String};
-      ws.dropTabs((t) => t.id.startsWith('term:') && !names.contains(t.id.substring(5)));
+      ws.dropTabs((t) => observed.contains(t) && t.id.startsWith('term:') && !names.contains(t.id.substring(5)));
     } on w.OpError catch (e) {
-      if (mounted && !quiet) {
+      if (mounted && generation == _loadGeneration && identical(link, ws.link) && (!quiet || _loading)) {
         setState(() {
           _error = e.message;
           _loading = false;
@@ -267,11 +274,22 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   }
 
   Future<void> _kill(String name) async {
-    final ok = await confirmDialog(context, title: '结束会话 $name？', body: '会话里运行的程序都会被结束。', ok: '结束', danger: true);
-    if (!ok) return;
-    await ws.guard(() => ws.link!.call('session.kill', {'name': name}));
-    ws.dropTabs((t) => t.id == 'term:$name');
-    await _load();
+    final link = ws.link;
+    if (link == null || !_ending.add(name)) return;
+    final target = ws.tab('term:$name');
+    try {
+      final ok = await confirmDialog(context, title: '结束会话 $name？', body: '会话里运行的程序都会被结束。', ok: '结束', danger: true);
+      if (!ok || !mounted || !identical(link, ws.link)) return;
+      final ended = await ws.guard(() async {
+        await link.call('session.kill', {'name': name});
+        return true;
+      });
+      if (ended != true || !mounted || !identical(link, ws.link)) return;
+      ws.dropTabs((t) => identical(t, target));
+      await _load();
+    } finally {
+      _ending.remove(name);
+    }
   }
 
   @override
@@ -281,14 +299,15 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
     return Column(
       children: [
         Container(
-          height: 30,
+          height: InputMode.isTouch(context) ? 44 : 30,
           padding: const EdgeInsets.symmetric(horizontal: 2),
           child: Row(
             children: [
-              IconBtn(Icons.add, '新建会话', () async {
+              if (!widget.compact) IconBtn(Icons.add, '新建会话', () async {
                 final n = await createSession(ws, context: context);
                 if (n != null) _load();
               }),
+              if (widget.compact) Padding(padding: const EdgeInsets.only(left: 8), child: Text('会话', style: TextStyle(fontSize: 11, color: ide.textDim))),
               const Spacer(),
               IconBtn(Icons.refresh, '刷新', _load),
             ],
@@ -315,11 +334,11 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
                         leading: Icon(Icons.terminal, size: 14, color: (s['attached'] as num? ?? 0) > 0 ? ide.ok : ide.textDim),
                         label: s['name'] as String,
                         detail: '${s['windows'] ?? 1} 个窗口${(s['attached'] as num? ?? 0) > 0 ? ' · 已连接' : ''}',
-                        selected: ws.focusedId == 'term:${s['name']}',
-                        onTap: () => openSession(ws, s['name'] as String),
+                        selected: ws.terminalActiveId == 'term:${s['name']}',
+                        onTap: () { openSession(ws, s['name'] as String); widget.onOpened?.call(); },
                         trailing: IconBtn(Icons.close, '结束会话', () => _kill(s['name'] as String)),
                         menu: () => [
-                          MenuItem('打开', () => openSession(ws, s['name'] as String), icon: Icons.open_in_new),
+                          MenuItem('打开', () { openSession(ws, s['name'] as String); widget.onOpened?.call(); }, icon: Icons.open_in_new),
                           MenuItem('复制会话名', () => copyText(s['name'] as String), icon: Icons.copy),
                           const MenuItem.separator(),
                           MenuItem('结束会话…', () => _kill(s['name'] as String), icon: Icons.close, danger: true),
@@ -419,7 +438,7 @@ class _SessionViewState extends State<SessionView> {
       unawaited(t.resize(_cols, _rows));
       _out = t.output.listen(_decoder.add);
       setState(() => _state = '');
-      _focus.requestFocus();
+      if (_wantsFocus) _focus.requestFocus();
       final why = await t.done;
       await _out?.cancel();
       _t = null;
@@ -482,12 +501,14 @@ class _SessionViewState extends State<SessionView> {
     final visible = TickerMode.valuesOf(context).enabled;
     if (!visible && _focus.hasFocus) {
       _focus.unfocus();
-    } else if (visible && _t != null && !_focus.hasFocus) {
+    } else if (_wantsFocus && _t != null && !_focus.hasFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_disposed && TickerMode.valuesOf(context).enabled) _focus.requestFocus();
+        if (!_disposed && _wantsFocus) _focus.requestFocus();
       });
     }
   }
+
+  bool get _wantsFocus => mounted && ws.terminalFocused && ws.terminalActiveId == 'term:${widget.session}' && TickerMode.valuesOf(context).enabled && (ModalRoute.of(context)?.isCurrent ?? true);
 
   void _key(TerminalKey k) {
     _term.keyInput(k);
@@ -514,7 +535,7 @@ class _SessionViewState extends State<SessionView> {
                     _term,
                     controller: _controller,
                     focusNode: _focus,
-                    autofocus: true,
+                    autofocus: false,
                     theme: theme,
                     textStyle: const TerminalStyle(fontSize: 14, fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback),
                     padding: const EdgeInsets.fromLTRB(10, 6, 4, 4),

@@ -84,7 +84,7 @@ void main() {
     final l = TabLayout()
       ..add('a')
       ..add('b');
-    l.arrange(EditorArrangement.columns);
+    l.split(l.current.id, SplitAxis.horizontal, tab: 'b');
     final destination = l.groups.first.id;
     l.move('b', destination);
     expect(l.groups, hasLength(1));

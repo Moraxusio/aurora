@@ -111,7 +111,7 @@ void main() {
     await shot(t, '01-welcome');
 
     // ---- terminal ----
-    await activity(t, '终端', title: '终端会话');
+    await terminalPanel(t);
     await waitFor(t, find.text('新建会话'));
     await click(t, find.widgetWithText(OutlinedButton, '新建会话'));
     await settle(t, upTo: const Duration(milliseconds: 600));
@@ -119,7 +119,7 @@ void main() {
     await waitFor(t, find.byType(TerminalView));
     final view = t.widget<TerminalView>(find.byType(TerminalView));
     final cols = view.terminal.viewWidth;
-    expect(cols, greaterThan(80), reason: 'the terminal uses the whole editor area, not 80 columns');
+    expect(cols, greaterThan(80), reason: 'the terminal uses its bottom viewport, not a fixed 80 columns');
     await waitUntil(t, () => _screen(view.terminal).contains('\$'), 'the shell prompt');
     // typing on the real keyboard path: ASCII as key presses, Chinese as
     // Unicode packets as an IME sends them

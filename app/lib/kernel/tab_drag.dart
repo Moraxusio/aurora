@@ -24,6 +24,7 @@ class TabDragData {
       project == ws.projectKey &&
       generation == ws.projectGeneration &&
       identical(ws.tab(tab.id), tab) &&
+      !tab.isTerminal &&
       ws.tabLayout.owner(tab.id) != null;
 }
 
@@ -40,9 +41,13 @@ class PaneDropTarget extends StatefulWidget {
 class _PaneDropTargetState extends State<PaneDropTarget> {
   _Edge? _edge;
   _Edge? _intent(TabDragData data, Offset global) {
-    if (!data.valid(widget.ws)) return null;
+    if (!data.valid(widget.ws) ||
+        widget.ws.tabLayout.group(widget.group) == null) {
+      return null;
+    }
     final box = context.findRenderObject() as RenderBox;
     final p = box.globalToLocal(global), size = box.size;
+    if (!(Offset.zero & size).contains(p)) return null;
     final distances = [p.dx, size.width - p.dx, p.dy, size.height - p.dy];
     final closest = distances.reduce(math.min);
     final threshold = math.min(80.0, math.min(size.width, size.height) * .23);
@@ -207,10 +212,15 @@ class _TabStripDropTargetState extends State<TabStripDropTarget>
   }
 
   void _move(DragTargetDetails<TabDragData> d) {
-    if (!d.data.valid(widget.ws) || !widget.scroll.hasClients) return _clear();
+    if (!d.data.valid(widget.ws) ||
+        !identical(widget.ws.tabLayout.group(widget.group.id), widget.group) ||
+        !widget.scroll.hasClients) {
+      return _clear();
+    }
     _pointer = d;
     final box = context.findRenderObject() as RenderBox;
     final p = box.globalToLocal(d.offset), size = box.size;
+    if (size.width <= 0 || size.height <= 0) return _clear();
     final across = widget.vertical || widget.wrap ? p.dy : p.dx;
     final extent = widget.vertical || widget.wrap ? size.height : size.width;
     final scroll = widget.scroll.position;

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Path of app/tool/sendkeys.ps1 (--dart-define=AURORA3_UI_SENDKEYS=..).
@@ -79,6 +80,13 @@ Future<void> activity(WidgetTester t, String tooltip, {required String title}) a
     await settle(t, upTo: const Duration(milliseconds: 500));
   }
   expect(shown, findsOneWidget, reason: 'the $tooltip side bar is shown');
+}
+
+/// Terminals have their own bottom panel, not a feature side bar.
+Future<void> terminalPanel(WidgetTester t) async {
+  final shown = find.byKey(const ValueKey('terminal-panel-header'));
+  if (shown.evaluate().isEmpty) await activityIcon(t, '终端');
+  await waitFor(t, shown);
 }
 
 /// Low-frequency tools live in the overflow rather than permanent rail icons.

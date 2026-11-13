@@ -153,7 +153,7 @@ void main() {
     expect(t.widget<TreeRow>(nodeRow).detail, matches(r'^\d+ ms$'));
 
     // Create the session through the dialog, not a direct session.create call.
-    await activity(t, '终端', title: '终端会话');
+    await terminalPanel(t);
     await waitFor(t, find.text('新建会话'));
     await click(t, find.widgetWithText(OutlinedButton, '新建会话'));
     await t.pumpAndSettle();

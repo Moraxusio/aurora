@@ -414,7 +414,7 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 
 ### 3.12.0 编译、打包与本地归档（2026-11-13）
 
-- 用户已授权编译、打包、发布。源码提交 `0dabbe2bb0dd766a5357fe383d222c629e4eaac4`，Windows 与 Android 统一 `-Version 3.12.0`；已归档至 `release3\Aurora-3.12.0` 及同目录对应 ZIP、sidecar、三个 APK 和 Android SHA-256 清单，未覆盖任何旧产物。GitHub 发布及远程下载校验待下一步进行。
+- 用户已授权编译、打包、发布。源码提交 `0dabbe2bb0dd766a5357fe383d222c629e4eaac4`，Windows 与 Android 统一 `-Version 3.12.0`；已归档至 `release3\Aurora-3.12.0` 及同目录对应 ZIP、sidecar、三个 APK 和 Android SHA-256 清单，未覆盖任何旧产物。2026-11-13 已发布 GitHub Release `v3.12.0`：https://github.com/Moraxusio/aurora/releases/tag/v3.12.0 。ZIP、sidecar、3 个 APK、`SHA256SUMS.txt` 共 6 个资产全部重新下载，逐个 SHA-256 与本地一致；标签指向产物记录提交 `813745317138ff13eb9142494fa37434caea3b5e`。
 - Windows ZIP：25,507,680 字节，SHA-256 `9661cca3da4138c358f96a5c9f5703d8eebd172088b17e94d37c13c4584fb49a`；sidecar 一致，ZIP 的 30 个文件与文件夹逐字节一致，归档后的文件夹和资产再次逐个比对一致；文件/产品版本 3.12.0。
 - 内置 linux/amd64 agent：13,578,402 字节，SHA-256 `7838f6871836e791cacc06235618e9b734e288ada0067889a7d1be9f36484b1f`，版本命令输出 3.12.0；Go 构建元数据 `vcs.revision=0dabbe2bb0dd766a5357fe383d222c629e4eaac4`、`vcs.modified=false`。正式发布公钥（key ID `87828dfb18459372`）验签通过；临时副本中的 agent 字节与 manifest 篡改被拒。签名策略验签、策略篡改拒绝、普通降级拒绝均通过。
 - Android APK：arm64-v8a（versionCode 33200）39,490,634 字节，SHA-256 `926bab560ecfcea31322ee64bcf12a72d198c68834b8fa96407b52d8d1e22e38`；armeabi-v7a（32200）34,901,458 字节，SHA-256 `48a0a98c51e2b86f3d14b59dbe3c55eed18f9895a4c24710aa8902bb2f0856a7`；x86_64（35200）41,718,756 字节，SHA-256 `8931c8af2bd760d51d3546209691b22b32769b605404f68c1b2b73065118ba81`。versionName 均为 3.12.0；apksigner、ABI 与版本检查通过，签名证书 SHA-256 与之前相同（`db59a41d…1554882`），三个 APK 的 5 个 agent 文件和 3 个法律文件逐字节与 Windows 包一致，Android SHA-256 清单通过。

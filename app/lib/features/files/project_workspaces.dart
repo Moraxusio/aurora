@@ -11,10 +11,10 @@ class ProjectWorkspaceBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context), current = ws.project;
-    return Container(padding: const EdgeInsets.fromLTRB(9, 9, 5, 8),
-      decoration: BoxDecoration(color: ide.tabBar, border: Border(bottom: BorderSide(color: ide.border))),
+    return Container(height: 36, padding: const EdgeInsets.only(left: 12, right: 4),
+      color: ide.sideBar,
       child: Row(children: [
-        Icon(current == null ? Icons.dns_outlined : Icons.workspaces_outline, size: 19, color: ide.accent),
+        Icon(current == null ? Icons.folder_outlined : Icons.folder_open_outlined, size: 15, color: ide.textDim),
         const SizedBox(width: 7),
         Expanded(child: PopupMenuButton<String>(key: const ValueKey('project-switcher'), tooltip: '切换工作区',
           onSelected: (id) => ws.selectProject(id.isEmpty ? null : id),
@@ -28,12 +28,9 @@ class ProjectWorkspaceBar extends StatelessWidget {
                 Text('${p.folders.length}', style: TextStyle(color: ide.textDim, fontSize: 11)),
               ])),
           ],
-          child: Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(current?.name ?? '浏览服务器', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
-            Text(current == null ? '全部可用根目录' : '${current.folders.length} 个项目文件夹', style: TextStyle(fontSize: 10.5, color: ide.textDim)),
-          ])), Icon(Icons.unfold_more, size: 16, color: ide.textDim)]),
+          child: Row(children: [Expanded(child: Text(current?.name ?? '文件', maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5))), Icon(Icons.expand_more, size: 15, color: ide.textDim)]),
         )),
-        IconBtn(Icons.add, '新建工作区', () => createProjectWorkspace(context, ws)),
         PopupMenuButton<String>(tooltip: '工作区选项', padding: EdgeInsets.zero,
           icon: Icon(Icons.more_horiz, size: 18, color: ide.textDim),
           onSelected: (action) async {

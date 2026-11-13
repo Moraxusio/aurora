@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 
 import '../state/app_state.dart';
@@ -36,6 +37,10 @@ class Workspace extends ChangeNotifier {
   Future<bool>? _flushingViews;
   String? viewSaveError;
   Timer? _saveViewTimer;
+  final Set<String> _geometryDirty = {};
+  final ValueNotifier<int> geometryRevision = ValueNotifier(0);
+  int? _geometryFrame;
+  bool focusMode = false;
   bool _disposed = false;
   Future<void> _projectChanges = Future.value();
   bool _notifyQueued = false;
@@ -59,7 +64,11 @@ class Workspace extends ChangeNotifier {
     return layout;
   });
 
-  List<EditorTab> tabsInGroup(String id) => [for (final tabId in tabLayout.group(id)?.tabs ?? <String>[]) ?tab(tabId)];
+  List<EditorTab> tabsInGroup(String id) {
+    final byId = {for (final t in tabs) t.id: t};
+    return [for (final tabId in tabLayout.group(id)?.tabs ?? <String>[]) ?byId[tabId]];
+  }
+  int get projectGeneration => _projectRevision;
 
   void _syncLayout(String key) {
     final view = _viewForKey(key);
@@ -121,6 +130,7 @@ class Workspace extends ChangeNotifier {
       if (_restored.contains(projectKey)) _activeByProject[projectKey] = focusedId;
       _projectRevision++;
       _projectId = selected;
+      focusMode = false;
       _syncLayout(projectKey);
     }
     viewRevision++;
@@ -312,19 +322,20 @@ class Workspace extends ChangeNotifier {
     if (index >= 0 && index < tabLayout.groups.length) focusGroup(tabLayout.groups[index].id);
   }
 
-  void arrangeEditors(EditorArrangement arrangement) { tabLayout.arrange(arrangement); _layoutChanged(); }
+  void arrangeEditors(EditorArrangement arrangement) { focusMode = false; tabLayout.arrange(arrangement); _layoutChanged(); }
   void splitGroup(SplitAxis axis, {String? group, String? tabId, bool before = false}) {
     final from = group ?? tabLayout.focused;
     if (tabLayout.split(from, axis, tab: tabId ?? tabLayout.group(from)?.active, before: before) == null) {
       toast('最多同时显示 4 个编辑组；可将标签拖入已有分组');
       return;
     }
+    focusMode = false;
     _layoutChanged();
   }
-  void mergeGroup(String id) { tabLayout.mergeGroup(id); _layoutChanged(); }
+  void mergeGroup(String id) { focusMode = false; tabLayout.mergeGroup(id); _layoutChanged(); }
   void moveTab(String id, String group, {int? index}) {
     if (tab(id) == null) return;
-    tabLayout.move(id, group, index: index); _layoutChanged();
+    if (tabLayout.move(id, group, index: index)) _layoutChanged();
   }
   void reorderActive(int delta) {
     final id = focusedId;
@@ -337,17 +348,50 @@ class Workspace extends ChangeNotifier {
   void setTabPlacement(TabPlacement placement) { tabLayout.placement = placement; _layoutChanged(); }
   void setSideWidth(double width) {
     if (!width.isFinite) return;
-    tabLayout.sideWidth = width.clamp(180, 640); _layoutChanged();
+    final next = width.clamp(180.0, 640.0);
+    if (next == tabLayout.sideWidth) return;
+    tabLayout.sideWidth = next; _geometryChanged();
   }
   void setTabsWidth(double width) {
     if (!width.isFinite) return;
-    tabLayout.tabsWidth = width.clamp(120, 400); _layoutChanged();
+    final next = width.clamp(120.0, 400.0);
+    if (next == tabLayout.tabsWidth) return;
+    tabLayout.tabsWidth = next; _geometryChanged();
   }
   void setTabWidth(double width) {
     if (!width.isFinite) return;
-    tabLayout.tabWidth = width.clamp(100, 260); _layoutChanged();
+    final next = width.clamp(100.0, 260.0);
+    if (next == tabLayout.tabWidth) return;
+    tabLayout.tabWidth = next; _geometryChanged();
   }
-  void resizeGroup(String split, double ratio) { tabLayout.resizeSplit(split, ratio); _layoutChanged(); }
+  void resizeGroup(String split, double ratio) {
+    if (tabLayout.resizeSplit(split, ratio)) _geometryChanged();
+  }
+  void toggleFocusMode() {
+    if (!split) { focusMode = false; return; }
+    focusMode = !focusMode;
+    _scheduleGeometryFrame();
+  }
+  // Dragging never invalidates file trees, AI configurations or terminal
+  // listeners. Reflow at most once per frame; serialize once after the gesture.
+  void _geometryChanged() {
+    if (_disposed) return;
+    _geometryDirty.add(projectKey);
+    _scheduleViewSave();
+    _scheduleGeometryFrame();
+  }
+  void _scheduleGeometryFrame() {
+    if (_disposed || _geometryFrame != null) return;
+    _geometryFrame = SchedulerBinding.instance.scheduleFrameCallback((_) {
+      _geometryFrame = null;
+      if (!_disposed) geometryRevision.value++;
+    });
+  }
+  void _captureGeometry() {
+    final keys = _geometryDirty.toList();
+    _geometryDirty.clear();
+    for (final key in keys) { _rememberFilesFor(key); }
+  }
   void _layoutChanged() {
     if (_disposed) return;
     _activeByProject[projectKey] = focusedId;
@@ -508,6 +552,7 @@ class Workspace extends ChangeNotifier {
     _restored.remove(id);
     _activeByProject.remove(id);
     _layouts.remove(id);
+    _geometryDirty.remove(id);
     // Includes references from a project that has never been restored in this
     // process. They must survive deleting the grouping as well.
     _views[''] = WorkspaceView.fromJson(entry!.browserView.toJson());
@@ -555,6 +600,7 @@ class Workspace extends ChangeNotifier {
   void rememberFiles() => _rememberFilesFor(projectKey);
 
   void _rememberFilesFor(String key, {WorkspacePath? removed}) {
+    _geometryDirty.remove(key);
     final view = _viewForKey(key);
     final files = [for (final t in _tabsFor(key)) if (t.file != null) t.file!];
     // Other service tabs can open before the file feature restores saved
@@ -590,12 +636,13 @@ class Workspace extends ChangeNotifier {
   }
 
   void _scheduleViewSave() {
-    if (_disposed || _dirtyViews.isEmpty) return;
+    if (_disposed || (_dirtyViews.isEmpty && _geometryDirty.isEmpty)) return;
     _saveViewTimer?.cancel();
     _saveViewTimer = Timer(const Duration(milliseconds: 500), () { unawaited(flushViews()); });
   }
 
   Future<bool> flushViews() async {
+    _captureGeometry();
     _saveViewTimer?.cancel();
     _saveViewTimer = null;
     if (_flushingViews != null) {
@@ -611,7 +658,9 @@ class Workspace extends ChangeNotifier {
   }
 
   Future<bool> _flushLoop() async {
-    while (_dirtyViews.isNotEmpty) {
+    while (_dirtyViews.isNotEmpty || _geometryDirty.isNotEmpty) {
+      _captureGeometry();
+      if (_dirtyViews.isEmpty) break;
       final pending = {for (final key in _dirtyViews) key: WorkspaceView.fromJson(_viewForKey(key).toJson())};
       _dirtyViews.clear();
       if (!await _writeViews(pending)) return false;
@@ -652,6 +701,8 @@ class Workspace extends ChangeNotifier {
   void dispose() {
     unawaited(flushViews().then<void>((_) {}));
     _disposed = true;
+    if (_geometryFrame != null) SchedulerBinding.instance.cancelFrameCallbackWithId(_geometryFrame!);
+    geometryRevision.dispose();
     app.removeListener(_onApp);
     for (final t in tabs) {
       t.dispose();

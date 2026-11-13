@@ -55,6 +55,10 @@ class IdeLink extends FileTreeLink {
 }
 
 void main() {
+  test('Dart source uses the existing syntax highlighter instead of plain text', () {
+    expect(languageFor('src/main.dart')?.name, 'dart');
+    expect(languageFor('README.unknown'), isNull);
+  });
   late IdeLink link;
   late WorkspaceApp app;
   late Workspace ws;

@@ -57,6 +57,7 @@ class _AiStudioViewState extends State<AiStudioView> {
   AiSession? _session;
   bool _loading = false;
   bool _running = false;
+  bool _runtimeExpanded = false;
   String? _error;
 
   String _root = '';
@@ -850,11 +851,17 @@ class _AiStudioViewState extends State<AiStudioView> {
     final contextText = ctx == null ? '上下文：暂无统计（旧 agent / 尚未调用）' : '上下文 ${ctx.estimated ? '≈' : ''}${_fmtTokens(ctx.tokens)} / ${ctx.limit > 0 ? _fmtTokens(ctx.limit) : '未知'} tokens${ratio != null ? ' · ${(ratio * 100).toStringAsFixed(1)}%' : ''}';
     return Container(
       key:const ValueKey('ai-runtime-bar'), width:double.infinity,
-      padding:const EdgeInsets.symmetric(horizontal:Space.l, vertical:Space.s),
-      decoration:BoxDecoration(color:ide.sideBar.withValues(alpha:0.5), border:Border(bottom:BorderSide(color:ide.border))),
+      padding:const EdgeInsets.symmetric(horizontal:Space.l),
+      decoration:BoxDecoration(border:Border(bottom:BorderSide(color:ide.border))),
       child:Column(crossAxisAlignment:CrossAxisAlignment.start, children:[
-        Tooltip(message:'本步实际发送的提供商配置与模型 ID；网关可能自行映射模型，无法认证其内部模型身份。', child:Text('${_running ? '本步实际' : '最近实际'}：$actual', key:const ValueKey('ai-actual-model'), style:TextStyle(fontSize:12, color:ide.text))),
-        const SizedBox(height:4),
+        SizedBox(height:32,child:Row(children:[
+          Expanded(child:Tooltip(message:'本步实际发送的提供商配置与模型 ID；网关可能自行映射模型，无法认证其内部模型身份。\n$actual',child:Text('${_running ? '本步实际' : '最近实际'}：$actual',key:const ValueKey('ai-actual-model'),maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:11.5,color:ide.textDim)))),
+          const SizedBox(width:12),
+          Tooltip(message:contextText,child:Text(ratio==null?'暂无统计':'上下文 ≈${(ratio*100).toStringAsFixed(0)}%',key:const ValueKey('ai-context-summary'),style:TextStyle(fontSize:11,color:ratio!=null&&ratio>=.85?color:ide.textDim))),
+          const SizedBox(width:4),
+          IconBtn(_runtimeExpanded?Icons.expand_less:Icons.expand_more,'模型与上下文详情',()=>setState(()=>_runtimeExpanded=!_runtimeExpanded),size:16),
+        ])),
+        if(_runtimeExpanded)...[
         Text('下次调用：${prov == null ? '未配置' : '${prov.name} / ${prov.model}'}', key:const ValueKey('ai-next-model'), style:TextStyle(fontSize:11.5, color:ide.textDim)),
         const SizedBox(height:6),
         Wrap(spacing:16, runSpacing:4, crossAxisAlignment:WrapCrossAlignment.center, children:[
@@ -863,6 +870,8 @@ class _AiStudioViewState extends State<AiStudioView> {
             Tooltip(message:'累计输入 ${usage.inputTokens}（含缓存 ${usage.cacheReadTokens}）· 输出 ${usage.outputTokens}', child:Text('累计用量 ${_fmtTokens(usage.totalTokens)} tokens', key:const ValueKey('ai-total-usage'), style:TextStyle(fontSize:11, color:ide.textFaint))),
         ]),
         if (ratio != null) ...[const SizedBox(height:5), LinearProgressIndicator(value:ratio.clamp(0.0,1.0), minHeight:3, color:color, backgroundColor:ide.border)],
+        const SizedBox(height:8),
+        ],
       ]),
     );
   }

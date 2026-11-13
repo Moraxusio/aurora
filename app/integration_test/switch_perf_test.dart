@@ -123,10 +123,10 @@ void main() {
       for (final (key, tip, title) in bars) {
         if (find.text(title.toUpperCase()).evaluate().isNotEmpty) {
           // the side bar is already shown: a click would hide it; go to another first
-          await click(t, find.byTooltip(bars.firstWhere((b) => b.$1 != key).$2).first);
+          await activityIcon(t, bars.firstWhere((b) => b.$1 != key).$2);
           await settle(t, upTo: const Duration(milliseconds: 800));
         }
-        samples.add(await measure('$key side bar, $round', () => click(t, find.byTooltip(tip).first)));
+        samples.add(await measure('$key side bar, $round', () => activityIcon(t, tip)));
       }
     }
     // Editor tabs: open two files and a diff, then switch between them.

@@ -44,7 +44,7 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      final ws = terminal.workspace!;
+      final ws = files.workspace!;
       ws.openTab(
         EditorTab(
           id: 'one',
@@ -61,6 +61,8 @@ void main() {
           builder: (_) => _Probe('two', builds),
         ),
       );
+      await t.pumpAndSettle();
+      await t.tap(find.byTooltip('Terminal fixture'));
       await t.pumpAndSettle();
       await t.tap(find.byTooltip('Files fixture'));
       await t.pumpAndSettle();

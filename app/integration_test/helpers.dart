@@ -75,8 +75,24 @@ Future<void> click(WidgetTester t, Finder f) async {
 Future<void> activity(WidgetTester t, String tooltip, {required String title}) async {
   final shown = find.text(title.toUpperCase());
   if (shown.evaluate().isEmpty) {
-    await click(t, find.byTooltip(tooltip).first);
+    await activityIcon(t, tooltip);
     await settle(t, upTo: const Duration(milliseconds: 500));
   }
   expect(shown, findsOneWidget, reason: 'the $tooltip side bar is shown');
+}
+
+/// Low-frequency tools live in the overflow rather than permanent rail icons.
+Future<void> activityIcon(WidgetTester t, String tooltip) async {
+  final direct = find.byTooltip(tooltip);
+  if (direct.evaluate().isNotEmpty) { await click(t, direct.first); return; }
+  await click(t, find.byTooltip('更多工具'));
+  await t.pump(const Duration(milliseconds: 250));
+  await click(t, find.text(tooltip).last);
+}
+
+Future<void> openOverview(WidgetTester t) async {
+  await click(t, find.byTooltip('设置与连接'));
+  await t.pump(const Duration(milliseconds: 250));
+  await click(t, find.text('连接与服务'));
+  await t.pump(const Duration(milliseconds: 250));
 }

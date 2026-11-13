@@ -167,6 +167,10 @@ void main() {
   }
 
   String text(WidgetTester t, String key) => t.widget<Text>(find.byKey(ValueKey(key))).data!;
+  Future<void> expandDetails(WidgetTester t) async {
+    await t.tap(find.byTooltip('模型与上下文详情'));
+    await t.pump();
+  }
   testWidgets('failed event handshake releases stream before retrying the healthy link', (t) async {
     final rejected = _RejectedEventStream();
     link.firstStream = rejected;
@@ -191,6 +195,9 @@ void main() {
   });
   testWidgets('actual provider/model differs from next selection and context is not total', (t) async {
     await pump(t);
+    expect(find.byKey(const ValueKey('ai-next-model')), findsNothing);
+    expect(t.getSize(find.byKey(const ValueKey('ai-runtime-bar'))).height, lessThanOrEqualTo(34));
+    await expandDetails(t);
     expect(text(t, 'ai-actual-model'), contains('ChatGPT 订阅 / gpt-6.1-sol'));
     expect(text(t, 'ai-next-model'), contains('新网关 / new-model'));
     expect(text(t, 'ai-context-usage'), contains('42.0k / 500.0k'));
@@ -201,6 +208,7 @@ void main() {
   });
   testWidgets('step metadata, duplicate finish and compaction use authoritative state', (t) async {
     await pump(t);
+    await expandDetails(t);
     final next = {..._runtime, 'provider_name': 'Step 网关', 'model': 'step-model'};
     link.events.emit({
       'type': 'step.start',
@@ -250,6 +258,7 @@ void main() {
   testWidgets('legacy session never attributes old messages to selected provider', (t) async {
     link.legacy = true;
     await pump(t);
+    await expandDetails(t);
     expect(text(t, 'ai-actual-model'), contains('未知提供商'));
     expect(text(t, 'ai-context-usage'), contains('暂无统计'));
     expect(text(t, 'ai-next-model'), contains('新网关'));

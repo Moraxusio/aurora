@@ -9,6 +9,7 @@ import 'package:aurora/state/app_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'helpers.dart' show openOverview;
 
 const addr = String.fromEnvironment('AURORA3_SSH_ADDR');
 const hostKey = String.fromEnvironment('AURORA3_SSH_HOSTKEY');
@@ -82,7 +83,7 @@ void main() {
     await waitFor(t, find.textContaining('127.0.0.1:17710'));
     const want = String.fromEnvironment('AURORA3_EXPECT_VERSION');
     if (want.isNotEmpty) {
-      await t.tap(find.byTooltip('概览与设置'));
+      await openOverview(t);
       await waitFor(t, find.text('agent 版本'));
       expect(find.text(want), findsWidgets, reason: 'the overview shows the agent version the build carried');
     }
@@ -104,7 +105,7 @@ void main() {
 
     // Uninstall from the overview: the session is listed and must be
     // confirmed, then the agent is removed and the link goes away.
-    await t.tap(find.byTooltip('概览与设置'));
+    await openOverview(t);
     await pumpFor(t, const Duration(milliseconds: 600));
     await waitFor(t, find.text('卸载 agent'));
     await t.ensureVisible(find.text('卸载 agent'));

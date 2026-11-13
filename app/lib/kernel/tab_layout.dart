@@ -98,26 +98,35 @@ class TabLayout {
       ..addAll(ids.where((id) => !pinned.contains(id)));
   }
 
-  void move(String tab, String destination, {int? index}) {
+  bool move(String tab, String destination, {int? index}) {
     final from = owner(tab), to = group(destination);
-    if (from == null || to == null) return;
+    if (from == null || to == null) return false;
+    final same = identical(from, to);
     final oldIndex = from.tabs.indexOf(tab);
     var at = index ?? to.tabs.length;
-    if (identical(from, to) && at > oldIndex) at--;
+    if (same && at > oldIndex) at--;
+    final pins =
+        to.tabs.where(pinned.contains).length -
+        (same && pinned.contains(tab) ? 1 : 0);
+    at = pinned.contains(tab)
+        ? at.clamp(0, pins)
+        : at.clamp(pins, to.tabs.length - (same ? 1 : 0));
+    if (same && at == oldIndex) {
+      final changed = from.active != tab || focused != from.id;
+      activate(tab);
+      return changed;
+    }
     from.tabs.remove(tab);
     if (from.active == tab) {
       from.active = from.tabs.isEmpty
           ? null
-           : from.tabs[oldIndex.clamp(0, from.tabs.length - 1)];
+          : from.tabs[oldIndex.clamp(0, from.tabs.length - 1)];
     }
-    final pins = to.tabs.where(pinned.contains).length;
-    at = pinned.contains(tab)
-        ? at.clamp(0, pins)
-        : at.clamp(pins, to.tabs.length);
     to.tabs.insert(at, tab);
     to.active = tab;
     focused = to.id;
     if (!identical(from, to) && from.tabs.isEmpty) mergeGroup(from.id);
+    return true;
   }
 
   void remove(String tab) {
@@ -158,7 +167,7 @@ class TabLayout {
         if (from.active == tab) {
           from.active = from.tabs.isEmpty
               ? null
-               : from.tabs[(i - 1).clamp(0, from.tabs.length - 1)];
+              : from.tabs[(i - 1).clamp(0, from.tabs.length - 1)];
         }
         next.tabs.add(tab);
         next.active = tab;
@@ -247,15 +256,23 @@ class TabLayout {
     };
   }
 
-  void resizeSplit(String id, double ratio) {
+  bool resizeSplit(String id, double ratio) {
+    var changed = false;
     void visit(TabNode node) {
       if (node is! TabSplit) return;
-      if (node.id == id && ratio.isFinite) node.ratio = ratio.clamp(.15, .85);
+      if (node.id == id && ratio.isFinite) {
+        final next = ratio.clamp(.15, .85);
+        if (node.ratio != next) {
+          node.ratio = next;
+          changed = true;
+        }
+      }
       visit(node.first);
       visit(node.second);
     }
 
     visit(root);
+    return changed;
   }
 
   /// Call with file IDs only for persistence. Terminal/AI tasks are never

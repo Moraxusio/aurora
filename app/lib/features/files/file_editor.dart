@@ -17,6 +17,7 @@ import 'package:re_highlight/languages/bash.dart';
 import 'package:re_highlight/languages/c.dart';
 import 'package:re_highlight/languages/cpp.dart';
 import 'package:re_highlight/languages/css.dart';
+import 'package:re_highlight/languages/dart.dart';
 import 'package:re_highlight/languages/diff.dart';
 import 'package:re_highlight/languages/dockerfile.dart';
 import 'package:re_highlight/languages/go.dart';
@@ -59,6 +60,7 @@ import 'file_viewers.dart';
     'sh' || 'bash' || 'zsh' || 'env' => (name: 'bash', mode: m(langBash)),
     'py' || 'pyw' => (name: 'python', mode: m(langPython)),
     'go' => (name: 'go', mode: m(langGo)),
+    'dart' => (name: 'dart', mode: m(langDart)),
     'js' || 'mjs' || 'cjs' || 'jsx' => (name: 'javascript', mode: m(langJavascript)),
     'ts' || 'tsx' => (name: 'typescript', mode: m(langTypescript)),
     'json' || 'jsonc' => (name: 'json', mode: m(langJson)),

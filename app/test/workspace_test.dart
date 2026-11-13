@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:aurora/kernel/editor_tab.dart';
 import 'package:aurora/kernel/workspace.dart';
 import 'package:aurora/kernel/tab_layout.dart';
+import 'package:aurora/kernel/tab_drag.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aurora_wire/aurora_wire.dart';
@@ -292,5 +293,16 @@ void main() {
     consent.complete(true);
     await close;
     expect(ws.tabs, [replacement]);
+  });
+  test('a stale drag cannot act on a replacement tab or a revisited project', () async {
+    await ws.selectProject('a');
+    final current = fileTab('/project/drag.dart'); ws.openTab(current);
+    final drag = TabDragData(ws, current);
+    expect(drag.valid(ws), isTrue);
+    await ws.selectProject('b'); await ws.selectProject('a');
+    expect(drag.valid(ws), isFalse);
+    final next = TabDragData(ws, current);
+    await ws.closeTab(current.id); ws.openTab(fileTab('/project/drag.dart'));
+    expect(next.valid(ws), isFalse);
   });
 }

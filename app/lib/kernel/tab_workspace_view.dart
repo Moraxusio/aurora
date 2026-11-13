@@ -1,133 +1,41 @@
 import 'dart:math' as math;
 
-import 'package:flutter/gestures.dart' show kMiddleMouseButton;
+import 'package:flutter/gestures.dart'
+    show
+        kMiddleMouseButton,
+        kPrimaryMouseButton,
+        PointerScrollEvent,
+        GestureBinding;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../theme/ide_theme.dart';
 import 'editor_tab.dart';
+import 'tab_drag.dart';
+import 'tab_layout_menu.dart';
 import 'input_mode.dart';
 import 'tab_layout.dart';
 import 'widgets.dart';
 import 'workspace.dart';
 
-const _gap = 6.0, _header = 30.0;
-double _rowOf(BuildContext context) => InputMode.isTouch(context) ? 44 : 34;
+export 'tab_layout_menu.dart'
+    show TabLayoutMenu, arrangementLabel, placementLabel;
 
-String arrangementLabel(EditorArrangement a) => switch (a) {
-  EditorArrangement.single => '单编辑组',
-  EditorArrangement.columns => '左右两列',
-  EditorArrangement.rows => '上下两行',
-  EditorArrangement.threeColumns => '三列并排',
-  EditorArrangement.grid => '四宫格',
-};
-String placementLabel(TabPlacement p) => switch (p) {
-  TabPlacement.top => '顶部单行',
-  TabPlacement.bottom => '底部单行',
-  TabPlacement.left => '左侧纵向标签',
-  TabPlacement.right => '右侧纵向标签',
-  TabPlacement.wrap => '顶部多行',
-};
-
-/// The same discoverable menu is available in the title bar and every group.
-class TabLayoutMenu extends StatelessWidget {
-  final Workspace ws;
-  const TabLayoutMenu({super.key, required this.ws});
-  @override
-  Widget build(BuildContext context) => PopupMenuButton<String>(
-    tooltip: '标签与编辑区布局',
-    icon: const Icon(Icons.dashboard_customize_outlined, size: 18),
-    onSelected: (value) {
-      for (final a in EditorArrangement.values) {
-        if (value == 'layout:${a.name}') ws.arrangeEditors(a);
-      }
-      for (final p in TabPlacement.values) {
-        if (value == 'tabs:${p.name}') ws.setTabPlacement(p);
-      }
-      if (value == 'reset') {
-        ws.setSideWidth(300);
-        ws.setTabsWidth(180);
-        ws.setTabWidth(160);
-      }
-      if (value == 'width') {
-        showDialog<void>(
-          context: context,
-          builder: (context) => StatefulBuilder(
-            builder: (context, setDialog) => AlertDialog(
-              title: const Text('标签宽度'),
-              content: SizedBox(
-                width: 320,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('单行 / 多行标签 · ${ws.tabLayout.tabWidth.round()} px'),
-                    Slider(
-                      value: ws.tabLayout.tabWidth,
-                      min: 100,
-                      max: 260,
-                      divisions: 32,
-                      label: '${ws.tabLayout.tabWidth.round()} px',
-                      onChanged: (value) {
-                        ws.setTabWidth(value);
-                        setDialog(() {});
-                      },
-                    ),
-                    const Text(
-                      '纵向标签和主侧栏可直接拖动边缘；双击分隔条恢复默认值。',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('完成'),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-    },
-    itemBuilder: (_) => [
-      const PopupMenuItem<String>(
-        enabled: false,
-        child: Text('编辑区排布 · 内容不会重新打开'),
-      ),
-      for (final a in EditorArrangement.values)
-        PopupMenuItem(
-          value: 'layout:${a.name}',
-          child: Text(arrangementLabel(a)),
-        ),
-      const PopupMenuDivider(),
-      for (final p in TabPlacement.values)
-        CheckedPopupMenuItem(
-          value: 'tabs:${p.name}',
-          checked: ws.tabLayout.placement == p,
-          child: Text(placementLabel(p)),
-        ),
-      const PopupMenuDivider(),
-      const PopupMenuItem(value: 'width', child: Text('调整单个标签宽度…')),
-      const PopupMenuItem(value: 'reset', child: Text('恢复默认侧栏 / 标签宽度')),
-    ],
-  );
-}
-
-class _TabDrag {
-  final Workspace workspace;
-  final String project, id;
-  const _TabDrag(this.workspace, this.project, this.id);
-  bool valid(Workspace ws) =>
-      identical(workspace, ws) &&
-      project == ws.projectKey &&
-      ws.tab(id) != null;
-}
+const _gap = 5.0;
+double _rowOf(BuildContext context) => InputMode.isTouch(context) ? 44 : 36;
 
 class _DividerGeometry {
   final TabSplit split;
   final Rect rect;
   final double extent;
-  const _DividerGeometry(this.split, this.rect, this.extent);
+  final double minRatio, maxRatio;
+  const _DividerGeometry(
+    this.split,
+    this.rect,
+    this.extent,
+    this.minRatio,
+    this.maxRatio,
+  );
 }
 
 /// All document bodies stay direct, keyed siblings in ONE stack. Even changing
@@ -142,9 +50,36 @@ class TabWorkspaceView extends StatefulWidget {
 
 class _TabWorkspaceViewState extends State<TabWorkspaceView> {
   final Map<EditorTab, Widget> _bodies = {};
+  final Map<EditorTab, Rect> _lastRects = {};
+  final _drag = ValueNotifier<TabDragData?>(null);
   Workspace? _workspace;
   int _revision = -1;
-  bool _dragging = false;
+  @override
+  void initState() {
+    super.initState();
+    widget.ws.geometryRevision.addListener(_reflow);
+  }
+
+  @override
+  void didUpdateWidget(TabWorkspaceView old) {
+    super.didUpdateWidget(old);
+    if (old.ws != widget.ws) {
+      old.ws.geometryRevision.removeListener(_reflow);
+      widget.ws.geometryRevision.addListener(_reflow);
+      _lastRects.clear();
+    }
+  }
+
+  void _reflow() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.ws.geometryRevision.removeListener(_reflow);
+    _drag.dispose();
+    super.dispose();
+  }
 
   Size _minimum(TabNode node) {
     if (node is TabLeaf) return const Size(260, 160);
@@ -164,7 +99,10 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
       _revision = ws.viewRevision;
       _bodies.clear();
     }
-    _bodies.removeWhere((tab, _) => !ws.tabs.contains(tab));
+    final live = ws.tabs.toSet();
+    _bodies.removeWhere((tab, _) => !live.contains(tab));
+    _lastRects.removeWhere((tab, _) => !live.contains(tab));
+    final tabsById = {for (final t in ws.tabs) t.id: t};
     final ide = Ide.of(context), layout = ws.tabLayout;
     return LayoutBuilder(
       builder: (context, box) {
@@ -173,7 +111,9 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
         final dividers = <_DividerGeometry>[];
         final minimum = _minimum(layout.root);
         final compact =
-            box.maxWidth < minimum.width || box.maxHeight < minimum.height;
+            box.maxWidth < minimum.width ||
+            box.maxHeight < minimum.height ||
+            ws.focusMode;
         void place(TabNode node, Rect rect) {
           if (node is TabLeaf) {
             rects[node.group] = rect;
@@ -207,6 +147,8 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                 split,
                 Rect.fromLTWH(rect.left + first, rect.top, _gap, rect.height),
                 extent,
+                low / extent,
+                high / extent,
               ),
             );
           } else {
@@ -228,6 +170,8 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                 split,
                 Rect.fromLTWH(rect.left, rect.top + first, rect.width, _gap),
                 extent,
+                low / extent,
+                high / extent,
               ),
             );
           }
@@ -243,7 +187,7 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
         for (final g in layout.groups) {
           final rect = rects[g.id];
           if (rect == null) continue;
-          final tabs = ws.tabsInGroup(g.id);
+          final tabs = [for (final id in g.tabs) ?tabsById[id]];
           final requested = layout.placement;
           final vertical =
               (requested == TabPlacement.left ||
@@ -260,20 +204,20 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                     .clamp(120.0, math.min(400.0, rect.width - 280))
                     .toDouble()
               : rect.width;
-          final columns = math.max(1, (rect.width / layout.tabWidth).floor());
+          final railSpace = 64 + (compact && layout.groups.length > 1 ? 42 : 0);
+          final columns = math.max(
+            1,
+            ((rect.width - railSpace) / layout.tabWidth).floor(),
+          );
           final rows = placement == TabPlacement.wrap
               ? (tabs.length / columns).ceil().clamp(1, 3)
               : 1;
-          final strip = math.min(
-            row * rows,
-            math.max(0.0, rect.height - _header - 60),
-          );
-          final headerHeight = math.min(_header, rect.height);
+          final strip = math.min(row * rows, math.max(0.0, rect.height - 60));
           var content = Rect.fromLTWH(
             rect.left,
-            rect.top + headerHeight,
+            rect.top,
             rect.width,
-            math.max(0.0, rect.height - headerHeight),
+            rect.height,
           );
           Rect tabRect;
           if (vertical) {
@@ -303,8 +247,13 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                   key: ValueKey('tabs-resize-${g.id}'),
                   axis: Axis.horizontal,
                   label: '调整纵向标签宽度',
-                  onDelta: (delta) =>
-                      ws.setTabsWidth(width + (left ? delta : -delta)),
+                  onDelta: (delta) => ws.setTabsWidth(
+                    layout.tabsWidth.clamp(
+                          120.0,
+                          math.min(400.0, rect.width - 280),
+                        ) +
+                        (left ? delta : -delta),
+                  ),
                   onReset: () => ws.setTabsWidth(180),
                 ),
               ),
@@ -327,26 +276,17 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
           contents[g.id] = content;
           chrome.add(
             Positioned.fromRect(
-              rect: Rect.fromLTWH(
-                rect.left,
-                rect.top,
-                rect.width,
-                headerHeight,
-              ),
-              child: _GroupHeader(ws: ws, group: g, compact: compact),
-            ),
-          );
-          chrome.add(
-            Positioned.fromRect(
               rect: tabRect,
-              child: _TabList(
+              child: _PaneBar(
                 key: ValueKey('tab-list-${g.id}'),
                 ws: ws,
                 group: g,
                 vertical: vertical,
                 wrap: placement == TabPlacement.wrap,
-                onDrag: (value) {
-                  if (mounted) setState(() => _dragging = value);
+                compact: compact,
+                drag: _drag,
+                onDrag: (data) {
+                  if (mounted) _drag.value = data;
                 },
               ),
             ),
@@ -356,16 +296,16 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
             chrome.add(
               Positioned.fromRect(
                 rect: content,
-                child: DragTarget<_TabDrag>(
+                child: DragTarget<TabDragData>(
                   onWillAcceptWithDetails: (d) => d.data.valid(ws),
-                  onAcceptWithDetails: (d) => ws.moveTab(d.data.id, g.id),
+                  onAcceptWithDetails: (d) => ws.moveTab(d.data.tab.id, g.id),
                   builder: (_, candidates, _) => Material(
                     color: candidates.isNotEmpty ? ide.accentSoft : ide.editor,
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Text(
-                          '将标签拖到这里\n或在此组打开文件 / 终端',
+                          '拖入标签，或在这里打开文件',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: ide.textDim, fontSize: 12),
                         ),
@@ -377,6 +317,10 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
             );
           }
         }
+        final owners = {
+          for (final group in layout.groups)
+            for (final id in group.tabs) id: group,
+        };
         return Material(
           color: ide.editor,
           child: Stack(
@@ -388,13 +332,14 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                 Builder(
                   key: ObjectKey(t),
                   builder: (_) {
-                    final group = layout.owner(t.id);
+                    final group = owners[t.id];
                     final rect = group != null && group.active == t.id
                         ? contents[group.id]
                         : null;
                     final on = rect != null;
+                    if (rect != null) _lastRects[t] = rect;
                     return Positioned.fromRect(
-                      rect: rect ?? bounds,
+                      rect: rect ?? _lastRects.putIfAbsent(t, () => bounds),
                       child: Offstage(
                         offstage: !on,
                         child: TickerMode(
@@ -435,17 +380,28 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                     label: '调整编辑组大小',
                     onDelta: (delta) => ws.resizeGroup(
                       d.split.id,
-                      d.split.ratio + delta / math.max(1, d.extent),
+                      d.split.ratio.clamp(d.minRatio, d.maxRatio) +
+                          delta / math.max(1, d.extent),
                     ),
                     onReset: () => ws.resizeGroup(d.split.id, .5),
                   ),
                 ),
-              if (_dragging)
-                for (final item in contents.entries)
-                  Positioned.fromRect(
-                    rect: item.value,
-                    child: _DropZones(ws: ws, group: item.key),
-                  ),
+              Positioned.fill(
+                child: ValueListenableBuilder<TabDragData?>(
+                  valueListenable: _drag,
+                  builder: (_, data, _) => data == null || !data.valid(ws)
+                      ? const SizedBox.shrink()
+                      : Stack(
+                          children: [
+                            for (final item in contents.entries)
+                              Positioned.fromRect(
+                                rect: item.value,
+                                child: PaneDropTarget(ws: ws, group: item.key),
+                              ),
+                          ],
+                        ),
+                ),
+              ),
             ],
           ),
         );
@@ -557,10 +513,18 @@ class _TabResizeHandleState extends State<TabResizeHandle> {
               ? () => setState(() => _drag = false)
               : null,
           child: SizedBox.expand(
-            child: ColoredBox(
-              color: _hover || _drag
-                  ? ide.accent.withValues(alpha: .6)
-                  : ide.frame,
+            child: Center(
+              child: SizedBox(
+                width: horizontal ? (_hover || _drag ? 2 : 1) : double.infinity,
+                height: horizontal
+                    ? double.infinity
+                    : (_hover || _drag ? 2 : 1),
+                child: ColoredBox(
+                  color: _hover || _drag
+                      ? ide.accent.withValues(alpha: .7)
+                      : ide.border,
+                ),
+              ),
             ),
           ),
         ),
@@ -569,29 +533,32 @@ class _TabResizeHandleState extends State<TabResizeHandle> {
   }
 }
 
-class _GroupHeader extends StatelessWidget {
+class _PaneBar extends StatelessWidget {
   final Workspace ws;
   final TabGroup group;
-  final bool compact;
-  const _GroupHeader({
+  final bool compact, vertical, wrap;
+  final ValueNotifier<TabDragData?> drag;
+  final ValueChanged<TabDragData?> onDrag;
+  const _PaneBar({
+    super.key,
     required this.ws,
     required this.group,
     required this.compact,
+    required this.vertical,
+    required this.wrap,
+    required this.drag,
+    required this.onDrag,
   });
   @override
   Widget build(BuildContext context) {
-    final ide = Ide.of(context), layout = ws.tabLayout;
-    final focused = layout.focused == group.id;
-    return Material(
-      color: focused ? ide.accentSoft : ide.tabBar,
-      child: Row(
-        children: [
-          const SizedBox(width: 8),
-          Expanded(
+    final ide = Ide.of(context), layout = ws.tabLayout, row = _rowOf(context);
+    final switcher = compact && layout.groups.length > 1
+        ? SizedBox(
+            width: 42,
+            height: row,
             child: PopupMenuButton<String>(
-              tooltip: compact && layout.groups.length > 1
-                  ? '窄屏聚焦模式 · 切换编辑组（保留原布局）'
-                  : '切换编辑组',
+              tooltip: '切换视图',
+              padding: EdgeInsets.zero,
               onSelected: ws.focusGroup,
               itemBuilder: (_) => [
                 for (var i = 0; i < layout.groups.length; i++)
@@ -599,66 +566,132 @@ class _GroupHeader extends StatelessWidget {
                     value: layout.groups[i].id,
                     checked: layout.focused == layout.groups[i].id,
                     child: Text(
-                      '编辑组 ${i + 1} · ${ws.tab(layout.groups[i].active ?? '')?.title ?? '空组'}',
+                      '${i + 1}  ${ws.tab(layout.groups[i].active ?? '')?.title ?? '空视图'}',
                     ),
                   ),
               ],
-              child: Align(
-                alignment: Alignment.centerLeft,
+              child: Center(
                 child: Text(
-                  '${compact && layout.groups.length > 1 ? '聚焦 · ' : ''}编辑组 ${layout.groups.indexOf(group) + 1} · ${group.tabs.length}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: focused ? ide.accent : ide.textDim,
-                  ),
+                  '${layout.groups.indexOf(group) + 1}/${layout.groups.length}',
+                  style: TextStyle(fontSize: 11, color: ide.textDim),
                 ),
               ),
             ),
+          )
+        : null;
+    final actions = SizedBox(
+      width: 32,
+      height: row,
+      child: PopupMenuButton<String>(
+        tooltip: '视图操作',
+        padding: EdgeInsets.zero,
+        icon: const Icon(Icons.more_horiz, size: 17),
+        onSelected: (value) {
+          if (value == 'right') {
+            ws.splitGroup(SplitAxis.horizontal, group: group.id);
+          }
+          if (value == 'down') {
+            ws.splitGroup(SplitAxis.vertical, group: group.id);
+          }
+          if (value == 'merge') ws.mergeGroup(group.id);
+          if (value == 'close') ws.closeTabs(group.tabs);
+          if (value == 'layout') showTabLayoutDialog(context, ws);
+          if (value == 'focus') {
+            ws.focusGroup(group.id);
+            ws.toggleFocusMode();
+          }
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'right',
+            enabled: layout.groups.length < TabLayout.maxGroups,
+            child: const Text('向右分屏'),
           ),
-          SizedBox(
-            width: 28,
-            child: _OpenTabsMenu(ws: ws, group: group),
+          PopupMenuItem(
+            value: 'down',
+            enabled: layout.groups.length < TabLayout.maxGroups,
+            child: const Text('向下分屏'),
           ),
-          SizedBox(width: 28, child: TabLayoutMenu(ws: ws)),
-          SizedBox(
-            width: 28,
-            child: PopupMenuButton<String>(
-              tooltip: '编辑组操作',
-              icon: const Icon(Icons.more_horiz, size: 16),
-              onSelected: (value) {
-                if (value == 'right') {
-                  ws.splitGroup(SplitAxis.horizontal, group: group.id);
-                }
-                if (value == 'down') {
-                  ws.splitGroup(SplitAxis.vertical, group: group.id);
-                }
-                if (value == 'merge') ws.mergeGroup(group.id);
-                if (value == 'close') ws.closeTabs(group.tabs);
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'right',
-                  enabled: layout.groups.length < TabLayout.maxGroups,
-                  child: const Text('向右拆分此组'),
-                ),
-                PopupMenuItem(
-                  value: 'down',
-                  enabled: layout.groups.length < TabLayout.maxGroups,
-                  child: const Text('向下拆分此组'),
-                ),
-                if (layout.groups.length > 1)
-                  const PopupMenuItem(
-                    value: 'merge',
-                    child: Text('合并此组（保留所有标签）'),
-                  ),
-                const PopupMenuItem(value: 'close', child: Text('关闭此组的未固定标签')),
-              ],
+          if (layout.groups.length > 1) ...[
+            PopupMenuItem(
+              value: 'focus',
+              child: Text(ws.focusMode ? '还原分屏' : '放大当前视图'),
             ),
-          ),
-          const SizedBox(width: 4),
+            const PopupMenuItem(value: 'merge', child: Text('合并此视图（保留标签）')),
+          ],
+          const PopupMenuDivider(),
+          const PopupMenuItem(value: 'layout', child: Text('标签栏与布局…')),
+          const PopupMenuItem(value: 'close', child: Text('关闭未固定标签')),
         ],
+      ),
+    );
+    final strip = _TabList(
+      ws: ws,
+      group: group,
+      vertical: vertical,
+      wrap: wrap,
+      drag: drag,
+      onDrag: onDrag,
+    );
+    return Material(
+      color: ide.tabBar,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: vertical
+              ? null
+              : Border(bottom: BorderSide(color: ide.border)),
+        ),
+        child: vertical
+            ? Column(
+                children: [
+                  SizedBox(
+                    height: row,
+                    child: Row(
+                      children: [
+                        ?switcher,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '标签',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: ide.textFaint,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 28,
+                          child: _OpenTabsMenu(ws: ws, group: group),
+                        ),
+                        actions,
+                      ],
+                    ),
+                  ),
+                  Expanded(child: strip),
+                ],
+              )
+            : LayoutBuilder(
+                builder: (_, box) {
+                  final overflow =
+                      !wrap &&
+                      group.tabs.length * layout.tabWidth >
+                          box.maxWidth - 32 - (switcher != null ? 42 : 0);
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ?switcher,
+                      Expanded(child: strip),
+                      if (overflow)
+                        SizedBox(
+                          width: 28,
+                          height: row,
+                          child: _OpenTabsMenu(ws: ws, group: group),
+                        ),
+                      actions,
+                    ],
+                  );
+                },
+              ),
       ),
     );
   }
@@ -670,7 +703,7 @@ class _OpenTabsMenu extends StatelessWidget {
   const _OpenTabsMenu({required this.ws, required this.group});
   @override
   Widget build(BuildContext context) => PopupMenuButton<String>(
-    tooltip: '此组全部标签',
+    tooltip: '所有标签',
     icon: const Icon(Icons.expand_more, size: 17),
     onSelected: ws.activate,
     itemBuilder: (_) => [
@@ -695,13 +728,14 @@ class _TabList extends StatefulWidget {
   final Workspace ws;
   final TabGroup group;
   final bool vertical, wrap;
-  final ValueChanged<bool> onDrag;
+  final ValueListenable<TabDragData?> drag;
+  final ValueChanged<TabDragData?> onDrag;
   const _TabList({
-    super.key,
     required this.ws,
     required this.group,
     required this.vertical,
     required this.wrap,
+    required this.drag,
     required this.onDrag,
   });
   @override
@@ -764,36 +798,17 @@ class _TabListState extends State<_TabList> {
         tabs = ws.tabsInGroup(group.id),
         width = ws.tabLayout.tabWidth;
     final row = _rowOf(context);
-    Widget tab(int index) => DragTarget<_TabDrag>(
-      onWillAcceptWithDetails: (d) => d.data.valid(ws),
-      onAcceptWithDetails: (d) => ws.moveTab(d.data.id, group.id, index: index),
-      builder: (_, candidates, _) => DecoratedBox(
-        decoration: BoxDecoration(
-          border: candidates.isEmpty
-              ? null
-              : Border(
-                  left: BorderSide(color: Ide.of(context).accent, width: 3),
-                ),
-        ),
-        child: _TabTile(
-          ws: ws,
-          tab: tabs[index],
-          group: group,
-          vertical: widget.vertical,
-          onDrag: widget.onDrag,
-        ),
-      ),
+    Widget tab(int index) => _TabTile(
+      key: ObjectKey(tabs[index]),
+      ws: ws,
+      tab: tabs[index],
+      group: group,
+      vertical: widget.vertical,
+      onDrag: widget.onDrag,
     );
-    final end = DragTarget<_TabDrag>(
-      onWillAcceptWithDetails: (d) => d.data.valid(ws),
-      onAcceptWithDetails: (d) => ws.moveTab(d.data.id, group.id),
-      builder: (_, candidates, _) => SizedBox(
-        width: widget.vertical ? double.infinity : 40,
-        height: row,
-        child: candidates.isEmpty
-            ? null
-            : ColoredBox(color: Ide.of(context).accentSoft),
-      ),
+    final end = SizedBox(
+      width: widget.vertical ? double.infinity : 40,
+      height: row,
     );
     final ide = Ide.of(context);
     return Material(
@@ -801,7 +816,7 @@ class _TabListState extends State<_TabList> {
       child: LayoutBuilder(
         builder: (_, box) {
           _revealActive(group, box, row, width);
-          return widget.wrap
+          final list = widget.wrap
               ? Builder(
                   builder: (_) {
                     final itemWidth = math.min(width, box.maxWidth);
@@ -823,6 +838,7 @@ class _TabListState extends State<_TabList> {
                 )
               : Scrollbar(
                   controller: _scroll,
+                  thickness: widget.vertical ? 4 : 2,
                   child: ListView.builder(
                     controller: _scroll,
                     scrollDirection: widget.vertical
@@ -830,9 +846,48 @@ class _TabListState extends State<_TabList> {
                         : Axis.horizontal,
                     itemExtent: widget.vertical ? row : width,
                     itemCount: tabs.length + 1,
+                    findChildIndexCallback: (key) {
+                      if (key is! ObjectKey || key.value is! EditorTab) {
+                        return null;
+                      }
+                      final index = tabs.indexOf(key.value as EditorTab);
+                      return index < 0 ? null : index;
+                    },
                     itemBuilder: (_, i) => i == tabs.length ? end : tab(i),
                   ),
                 );
+          return TabStripDropTarget(
+            ws: ws,
+            group: group,
+            scroll: _scroll,
+            vertical: widget.vertical,
+            wrap: widget.wrap,
+            width: width,
+            row: row,
+            drag: widget.drag,
+            child: Listener(
+              onPointerSignal: (event) {
+                if (widget.vertical ||
+                    widget.wrap ||
+                    event is! PointerScrollEvent ||
+                    !_scroll.hasClients) {
+                  return;
+                }
+                GestureBinding.instance.pointerSignalResolver.register(event, (
+                  _,
+                ) {
+                  if (mounted && _scroll.hasClients) {
+                    _scroll.position.pointerScroll(
+                      event.scrollDelta.dx != 0
+                          ? event.scrollDelta.dx
+                          : event.scrollDelta.dy,
+                     );
+                  }
+                });
+              },
+              child: list,
+            ),
+          );
         },
       ),
     );
@@ -844,8 +899,9 @@ class _TabTile extends StatefulWidget {
   final EditorTab tab;
   final TabGroup group;
   final bool vertical;
-  final ValueChanged<bool> onDrag;
+  final ValueChanged<TabDragData?> onDrag;
   const _TabTile({
+    super.key,
     required this.ws,
     required this.tab,
     required this.group,
@@ -876,7 +932,7 @@ class _TabTileState extends State<_TabTile> {
           icon: pin ? Icons.push_pin : Icons.push_pin_outlined,
         ),
         MenuItem(
-          '向右拆分',
+          '向右分屏',
           () => ws.splitGroup(
             SplitAxis.horizontal,
             group: group.id,
@@ -885,7 +941,7 @@ class _TabTileState extends State<_TabTile> {
           icon: Icons.vertical_split_outlined,
         ),
         MenuItem(
-          '向下拆分',
+          '向下分屏',
           () =>
               ws.splitGroup(SplitAxis.vertical, group: group.id, tabId: tab.id),
           icon: Icons.horizontal_split_outlined,
@@ -893,7 +949,7 @@ class _TabTileState extends State<_TabTile> {
         for (final g in layout.groups)
           if (g.id != group.id)
             MenuItem(
-              '移至编辑组 ${layout.groups.indexOf(g) + 1}',
+              '移到视图 ${layout.groups.indexOf(g) + 1}',
               () => ws.moveTab(tab.id, g.id),
             ),
         const MenuItem.separator(),
@@ -911,7 +967,7 @@ class _TabTileState extends State<_TabTile> {
           '关闭右侧 / 后续标签',
           () => ws.closeTabs(group.tabs.skip(group.tabs.indexOf(tab.id) + 1)),
         ),
-        MenuItem('关闭此组未固定标签', () => ws.closeTabs(group.tabs)),
+        MenuItem('关闭未固定标签', () => ws.closeTabs(group.tabs)),
       ],
       child: Listener(
         onPointerDown: (e) {
@@ -927,17 +983,27 @@ class _TabTileState extends State<_TabTile> {
               child: Container(
                 key: ValueKey('tab-${tab.id}'),
                 height: _rowOf(context),
-                margin: const EdgeInsets.all(2),
-                padding: const EdgeInsets.only(left: 8, right: 3),
+                margin: widget.vertical
+                    ? const EdgeInsets.symmetric(horizontal: 5, vertical: 1)
+                    : EdgeInsets.zero,
+                padding: const EdgeInsets.only(left: 12, right: 5),
                 decoration: BoxDecoration(
-                  color: on && focused
-                      ? ide.tabActive
-                      : on || _hover
+                  color: on
+                      ? ide.editor
+                      : _hover
                       ? ide.hover
                       : null,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: widget.vertical
+                      ? BorderRadius.circular(5)
+                      : null,
                   border: on && focused
-                      ? Border(left: BorderSide(color: ide.accent, width: 2))
+                      ? (widget.vertical
+                            ? Border(
+                                left: BorderSide(color: ide.accent, width: 2),
+                              )
+                            : Border(
+                                top: BorderSide(color: ide.accent, width: 2),
+                              ))
                       : null,
                 ),
                 child: Row(
@@ -945,7 +1011,7 @@ class _TabTileState extends State<_TabTile> {
                     Icon(
                       tab.icon,
                       size: 15,
-                      color: tab.iconColor ?? (on ? ide.accent : ide.textDim),
+                      color: tab.iconColor ?? ide.textDim,
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -954,7 +1020,7 @@ class _TabTileState extends State<_TabTile> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           color: on ? ide.text : ide.textDim,
                         ),
                       ),
@@ -1011,103 +1077,58 @@ class _TabTileState extends State<_TabTile> {
         ),
       ),
     );
-    final drag = _TabDrag(ws, ws.projectKey, tab.id);
-    final feedback = Material(
-      elevation: 6,
-      color: ide.surface,
-      borderRadius: BorderRadius.circular(6),
-      child: SizedBox(
-        width: 180,
-        height: _rowOf(context),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Text(
-            tab.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: ide.text, fontSize: 12),
+    final drag = TabDragData(ws, tab);
+    final feedback = Transform.translate(
+      offset: const Offset(12, 12),
+      child: Material(
+        elevation: 4,
+        color: ide.surface,
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          width: 180,
+          height: _rowOf(context),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Icon(tab.icon, size: 15, color: tab.iconColor ?? ide.textDim),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tab.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: ide.text, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
     if (InputMode.isTouch(context)) {
-      return LongPressDraggable<_TabDrag>(
+      return LongPressDraggable<TabDragData>(
         data: drag,
         feedback: feedback,
-        onDragStarted: () => widget.onDrag(true),
-        onDragEnd: (_) => widget.onDrag(false),
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        maxSimultaneousDrags: 1,
+        onDragStarted: () => widget.onDrag(drag),
+        onDragEnd: (_) => widget.onDrag(null),
         childWhenDragging: Opacity(opacity: .35, child: tile),
         child: tile,
       );
     }
-    return Draggable<_TabDrag>(
+    return Draggable<TabDragData>(
       data: drag,
       feedback: feedback,
-      onDragStarted: () => widget.onDrag(true),
-      onDragEnd: (_) => widget.onDrag(false),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      allowedButtonsFilter: (buttons) => buttons == kPrimaryMouseButton,
+      maxSimultaneousDrags: 1,
+      onDragStarted: () => widget.onDrag(drag),
+      onDragEnd: (_) => widget.onDrag(null),
       childWhenDragging: Opacity(opacity: .35, child: tile),
       child: tile,
-    );
-  }
-}
-
-class _DropZones extends StatelessWidget {
-  final Workspace ws;
-  final String group;
-  const _DropZones({required this.ws, required this.group});
-  @override
-  Widget build(BuildContext context) {
-    Widget zone(String direction, String label) => DragTarget<_TabDrag>(
-      onWillAcceptWithDetails: (d) =>
-          d.data.valid(ws) &&
-          (direction == 'center' ||
-              ws.tabLayout.groups.length < TabLayout.maxGroups),
-      onAcceptWithDetails: (d) {
-        if (direction == 'center') {
-          ws.moveTab(d.data.id, group);
-          return;
-        }
-        ws.splitGroup(
-          direction == 'left' || direction == 'right'
-              ? SplitAxis.horizontal
-              : SplitAxis.vertical,
-          group: group,
-          tabId: d.data.id,
-          before: direction == 'left' || direction == 'up',
-        );
-      },
-      builder: (_, candidates, _) => Container(
-        key: ValueKey('drop-$group-$direction'),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Ide.of(context).accent
-              .withValues(alpha: candidates.isEmpty ? .06 : .25),
-          border: Border.all(
-            color: Ide.of(context).accent.withValues(alpha: .45),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(color: Ide.of(context).accent, fontSize: 12),
-        ),
-      ),
-    );
-    return Column(
-      children: [
-        Expanded(child: zone('up', '在上方拆分')),
-        Expanded(
-          flex: 3,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: zone('left', '左侧')),
-              Expanded(flex: 2, child: zone('center', '移入此组')),
-              Expanded(child: zone('right', '右侧')),
-            ],
-          ),
-        ),
-        Expanded(child: zone('down', '在下方拆分')),
-      ],
     );
   }
 }

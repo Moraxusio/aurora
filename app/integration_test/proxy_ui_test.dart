@@ -177,7 +177,7 @@ void main() {
     // session created by ui-agent.sh without a marker. Cancel must leave the
     // switch on; only the second explicit confirmation turns it off.
     if (!oldAgent) {
-      await click(t, find.byTooltip('概览与设置'));
+      await openOverview(t);
       final proxySwitch = find.byKey(const ValueKey('service-switch-proxy'));
       await waitFor(t, proxySwitch, upTo: const Duration(seconds: 10));
       expect(t.widget<Switch>(proxySwitch).value, isTrue);

@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../kernel/feature.dart';
+import '../../kernel/input_mode.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
@@ -1016,24 +1017,31 @@ class _FileTreePageState extends State<_FileTreePage> {
     final clip = ws.fileClipboard.value;
     return Column(children: [
       Container(
-        height: 30,
+        height: InputMode.isTouch(context) ? 44 : 30,
         color: ide.sideBar,
         padding: const EdgeInsets.symmetric(horizontal: 2),
         child: Row(children: [
           IconBtn(Icons.note_add_outlined, '新建文件', target == null ? null : () => _newFile(target)),
           IconBtn(Icons.create_new_folder_outlined, '新建文件夹', target == null ? null : () => _mkdir(target)),
-          IconBtn(Icons.upload_file, '上传', target == null ? null : () => _upload(target)),
           if (clip != null) IconBtn(Icons.content_paste, '粘贴到选中的文件夹（Ctrl+V）', _busy != null ? null : () => _paste(), color: ide.accent),
-          IconBtn(_hidden ? Icons.visibility : Icons.visibility_off_outlined, _hidden ? '隐藏以 . 开头的文件' : '显示隐藏文件', () {
-            setState(() => _hidden = !_hidden);
-            _refreshAll();
-          }, color: _hidden ? ide.accent : null),
           const Spacer(),
-          IconBtn(Icons.data_usage_rounded, '计算选中文件夹的大小（同时显示它下面各文件夹的大小）',
-              !_canMeasure || target == null || target.duBusy ? null : () => _measure([target])),
-          Builder(builder: (ctx) => IconBtn(Icons.sort_rounded, '排序：${const {'name': '名称', 'size': '大小', 'mtime': '修改时间', 'type': '类型'}[_sort]}${_desc ? '（降序）' : ''}', () => _sortMenu(ctx),
-              color: _sort != 'name' || _desc ? ide.accent : null)),
           IconBtn(Icons.refresh, '刷新', _refreshAll),
+          Builder(builder: (ctx) => SizedBox(width: InputMode.isTouch(context) ? 44 : 28, child: PopupMenuButton<String>(
+            tooltip: '文件选项', padding: EdgeInsets.zero,
+            icon: Icon(Icons.more_horiz, size: 17, color: _hidden || _sort != 'name' || _desc ? ide.accent : ide.textDim),
+            onSelected: (value) {
+              if (value == 'upload' && target != null) _upload(target);
+              if (value == 'hidden') { setState(() => _hidden = !_hidden); _refreshAll(); }
+              if (value == 'sort') _sortMenu(ctx);
+              if (value == 'measure' && target != null) _measure([target]);
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'upload', enabled: target != null, child: const Text('上传文件…')),
+              CheckedPopupMenuItem(value: 'hidden', checked: _hidden, child: const Text('显示隐藏文件')),
+              PopupMenuItem(value: 'sort', child: Text('排序：${const {'name': '名称', 'size': '大小', 'mtime': '修改时间', 'type': '类型'}[_sort]}${_desc ? '（降序）' : ''}')),
+              if (_canMeasure) PopupMenuItem(value: 'measure', enabled: target != null && !target.duBusy, child: const Text('计算选中文件夹大小')),
+            ],
+          ))),
         ]),
       ),
       const Divider(),

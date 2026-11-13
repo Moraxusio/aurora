@@ -183,7 +183,8 @@ void main() {
     expect(top(t, '/project/src') < top(t, '/project/a.txt'), isTrue);
     expect(top(t, '/project/a.txt') < top(t, '/project/big.bin') && top(t, '/project/big.bin') < top(t, '/project/README.md'), isTrue);
 
-    await t.tap(find.byTooltip('排序：名称'));
+    await t.tap(find.byTooltip('文件选项')); await t.pumpAndSettle();
+    await t.tap(find.text('排序：名称'));
     await pumps(t, 6);
     await t.tap(find.text('大小'));
     await pumps(t);
@@ -191,7 +192,8 @@ void main() {
     expect(top(t, '/project/a.txt') < top(t, '/project/README.md') && top(t, '/project/README.md') < top(t, '/project/big.bin'), isTrue, reason: '12 B, 42 B, 5 MB');
     expect(top(t, '/project/src') < top(t, '/project/a.txt'), isTrue);
 
-    await t.tap(find.byTooltip('排序：大小'));
+    await t.tap(find.byTooltip('文件选项')); await t.pumpAndSettle();
+    await t.tap(find.text('排序：大小'));
     await pumps(t, 6);
     await t.tap(find.text('降序'));
     await pumps(t);
@@ -199,7 +201,8 @@ void main() {
     expect(top(t, '/project/big.bin') < top(t, '/project/README.md') && top(t, '/project/README.md') < top(t, '/project/a.txt'), isTrue);
     expect(top(t, '/project/src') < top(t, '/project/big.bin'), isTrue, reason: 'folders first still holds');
 
-    await t.tap(find.byTooltip('排序：大小（降序）'));
+    await t.tap(find.byTooltip('文件选项')); await t.pumpAndSettle();
+    await t.tap(find.text('排序：大小（降序）'));
     await pumps(t, 6);
     await t.tap(find.text('修改时间'));
     await pumps(t);

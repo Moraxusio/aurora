@@ -4,11 +4,13 @@ import 'dart:ui' as ui;
 import 'package:aurora/kernel/editor_tab.dart';
 import 'package:aurora/kernel/input_mode.dart';
 import 'package:aurora/kernel/tab_layout.dart';
+import 'package:aurora/kernel/tab_drag.dart';
 import 'package:aurora/kernel/tab_workspace_view.dart';
 import 'package:aurora/kernel/workspace.dart';
 import 'package:aurora/theme/ide_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -57,7 +59,8 @@ void main() {
       'Segoe UI': r'C:\Windows\Fonts\segoeui.ttf',
       'Microsoft YaHei UI': r'C:\Windows\Fonts\msyh.ttc',
       if (flutterRoot != null)
-        'MaterialIcons': '$flutterRoot/bin/cache/artifacts/material_fonts/materialicons-regular.otf',
+        'MaterialIcons':
+            '$flutterRoot/bin/cache/artifacts/material_fonts/materialicons-regular.otf',
     }.entries) {
       final file = File(entry.value);
       if (!file.existsSync()) continue;
@@ -188,7 +191,8 @@ void main() {
       final root = ws.tabLayout.root;
       t.view.physicalSize = const Size(390, 760);
       await t.pumpAndSettle();
-      expect(find.textContaining('聚焦 · 编辑组'), findsOneWidget);
+      expect(find.byTooltip('切换视图'), findsOneWidget);
+      expect(find.textContaining('编辑组'), findsNothing);
       expect(find.byKey(const ValueKey('input-b')), findsOneWidget);
       ws.focusGroupAt(0);
       await t.pumpAndSettle();
@@ -254,7 +258,7 @@ void main() {
       final destination = find.byKey(const ValueKey('tab-a'));
       await t.dragFrom(
         t.getCenter(source),
-        t.getCenter(destination) - t.getCenter(source),
+        t.getTopLeft(destination) + const Offset(12, 18) - t.getCenter(source),
       );
       await t.pumpAndSettle();
       expect(ws.tabLayout.current.tabs, ['terminal', 'a', 'b']);
@@ -274,11 +278,17 @@ void main() {
       final gesture = await t.startGesture(start);
       await gesture.moveBy(const Offset(22, 0));
       await t.pump();
-      final target = find.byKey(
-        ValueKey('drop-${ws.tabLayout.current.id}-down'),
-      );
-      await gesture.moveTo(t.getCenter(target));
+      final group = ws.tabLayout.current.id;
+      final target = find.byKey(ValueKey('pane-drop-$group'));
+      final rect = t.getRect(target);
+      await gesture.moveTo(Offset(rect.center.dx, rect.bottom - 12));
       await t.pump();
+      expect(
+        ws.tabLayout.groups,
+        hasLength(1),
+        reason: 'hover is a preview, not a model mutation',
+      );
+      expect(find.byKey(ValueKey('drop-preview-$group')), findsOneWidget);
       await gesture.up();
       await t.pumpAndSettle();
       expect(ws.tabLayout.groups, hasLength(2));
@@ -290,9 +300,7 @@ void main() {
       );
       await next.moveBy(const Offset(22, 0));
       await t.pump();
-      await next.moveTo(
-        t.getCenter(find.byKey(ValueKey('drop-$first-center'))),
-      );
+      await next.moveTo(t.getCenter(find.byKey(ValueKey('pane-drop-$first'))));
       await t.pump();
       await next.up();
       await t.pumpAndSettle();
@@ -416,9 +424,11 @@ void main() {
         t.getSize(find.byKey(const ValueKey('tab-a'))).height,
         greaterThanOrEqualTo(40),
       );
-      await t.tap(find.byTooltip('标签与编辑区布局').first);
+      await t.tap(find.byTooltip('视图操作').first);
       await t.pumpAndSettle();
-      await t.tap(find.text('调整单个标签宽度…'));
+      await t.tap(find.text('标签栏与布局…'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('标签宽度'));
       await t.pumpAndSettle();
       final before = ws.tabLayout.tabWidth;
       await t.drag(find.byType(Slider), const Offset(60, 0));
@@ -426,6 +436,116 @@ void main() {
       expect(ws.tabLayout.tabWidth, greaterThan(before));
       await t.tap(find.text('完成'));
       await t.pumpAndSettle();
+      await finish(t);
+    },
+  );
+
+  testWidgets(
+    'one quiet tab row, focus and restore never change the saved split tree',
+    (t) async {
+      open('a');
+      open('b');
+      await pump(t);
+      expect(find.textContaining('编辑组'), findsNothing);
+      expect(t.getTopLeft(find.text('Document b')).dy, lessThanOrEqualTo(37));
+      ws.arrangeEditors(EditorArrangement.columns);
+      await t.pumpAndSettle();
+      final root = ws.tabLayout.root;
+      await t.tap(find.byTooltip('视图操作').last);
+      await t.pumpAndSettle();
+      await t.tap(find.text('放大当前视图'));
+      await t.pumpAndSettle();
+      expect(ws.focusMode, isTrue);
+      expect(find.byTooltip('切换视图'), findsOneWidget);
+      expect(find.byKey(const ValueKey('input-a')), findsNothing);
+      await t.tap(find.byTooltip('视图操作'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('还原分屏'));
+      await t.pumpAndSettle();
+      expect(ws.tabLayout.root, same(root));
+      expect(find.byKey(const ValueKey('input-a')), findsOneWidget);
+      expect(opened, {'a': 1, 'b': 1});
+      await finish(t);
+    },
+  );
+
+  testWidgets('dragging auto scrolls a long strip and commits only on drop', (
+    t,
+  ) async {
+    for (var i = 0; i < 30; i++) {
+      open('tab-$i');
+    }
+    ws.activate('tab-0');
+    await pump(t, size: const Size(600, 700));
+    var changes = 0;
+    void changed() => changes++;
+    ws.addListener(changed);
+    final gesture = await t.startGesture(
+      t.getCenter(find.byKey(const ValueKey('tab-tab-0'))),
+    );
+    await gesture.moveBy(const Offset(24, 0));
+    await t.pump();
+    final strip = t.getRect(find.byType(TabStripDropTarget));
+    await gesture.moveTo(Offset(strip.right - 3, strip.center.dy));
+    for (var i = 0; i < 90; i++) {
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    expect(ws.tabLayout.ordered.first, 'tab-0');
+    expect(changes, 0, reason: 'hover and edge scrolling are paint-only');
+    await gesture.up();
+    await t.pumpAndSettle();
+    expect(ws.tabLayout.ordered.indexOf('tab-0'), greaterThan(2));
+    expect(changes, 1);
+    expect(opened.values, everyElement(1));
+    ws.removeListener(changed);
+    await finish(t);
+  });
+
+  testWidgets(
+    'cancelled edge drag clears the preview without changing layout',
+    (t) async {
+      open('a');
+      open('b');
+      await pump(t);
+      final group = ws.tabLayout.current.id, root = ws.tabLayout.root;
+      final gesture = await t.startGesture(
+        t.getCenter(find.byKey(const ValueKey('tab-b'))),
+      );
+      await gesture.moveBy(const Offset(24, 0));
+      await t.pump();
+      final rect = t.getRect(find.byKey(ValueKey('pane-drop-$group')));
+      await gesture.moveTo(Offset(rect.right - 8, rect.center.dy));
+      await t.pump();
+      expect(find.byKey(ValueKey('drop-preview-$group')), findsOneWidget);
+      await gesture.cancel();
+      await t.pumpAndSettle();
+      expect(ws.tabLayout.root, same(root));
+      expect(find.byKey(ValueKey('pane-drop-$group')), findsNothing);
+      expect(disposed, isEmpty);
+      await finish(t);
+    },
+  );
+  testWidgets(
+    'ordinary mouse wheel scrolls the horizontal tab strip without changing focus',
+    (t) async {
+      for (var i = 0; i < 15; i++) {
+        open('tab-$i');
+      }
+      ws.activate('tab-0');
+      await pump(t, size: const Size(600, 700));
+      final strip = find.byType(TabStripDropTarget);
+      final list = t.widget<ListView>(
+        find.descendant(of: strip, matching: find.byType(ListView)),
+      );
+      await t.sendEventToBinding(
+        PointerScrollEvent(
+          position: t.getCenter(strip),
+          scrollDelta: const Offset(0, 180),
+        ),
+      );
+      await t.pump();
+      expect(list.controller!.offset, greaterThan(0));
+      expect(ws.focusedId, 'tab-0');
       await finish(t);
     },
   );

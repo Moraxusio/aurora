@@ -306,7 +306,7 @@ void main() {
 
   testWidgets('the composer shows the model and thinking strength, and the picker changes both', (t) async {
     await pumpView(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
-    expect(find.text('claude-sonnet-4-5'), findsWidgets);
+    expect(find.text('OpenCode Gateway / claude-sonnet-4-5'), findsOneWidget);
     await t.tap(find.byKey(const ValueKey('ai-model-btn')));
     await settle(t);
 
@@ -323,7 +323,7 @@ void main() {
     expect(app.profile.ai.activeProvider!.models, contains('claude-sonnet-4-5'));
 
     // The composer now names the new model and the strength.
-    expect(find.text('gpt-5.2-codex'), findsOneWidget);
+    expect(find.text('OpenCode Gateway / gpt-5.2-codex'), findsOneWidget);
     expect(find.text('深度'), findsOneWidget);
 
     // And what is sent to the agent carries both.
@@ -414,7 +414,7 @@ void main() {
 
     await t.tap(find.text('拉取模型'));
     await t.pumpAndSettle();
-    expect(find.text('已获取 2 个可用模型'), findsOneWidget);
+    expect(find.text('已获取 2 个模型'), findsOneWidget);
     await t.tap(find.text('gpt-5.2-codex'));
     await t.pump();
 

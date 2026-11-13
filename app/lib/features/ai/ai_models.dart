@@ -224,12 +224,35 @@ class AiPart {
   }
 }
 
+class AiRuntimeInfo {
+  final String providerName;
+  final String providerId;
+  final String model;
+  final String protocol;
+  final String authMode;
+  const AiRuntimeInfo({this.providerName='', this.providerId='', this.model='', this.protocol='', this.authMode=''});
+  factory AiRuntimeInfo.fromJson(Map<String, dynamic> j) => AiRuntimeInfo(providerName:j['provider_name'] as String? ?? '', providerId:j['provider_id'] as String? ?? '', model:j['model'] as String? ?? '', protocol:j['protocol'] as String? ?? '', authMode:j['auth_mode'] as String? ?? '');
+  String get label => '${providerName.isEmpty ? '未知提供商' : providerName} / $model';
+}
+
+class AiContextInfo {
+  final int tokens;
+  final int limit;
+  final int lastInput;
+  final bool estimated;
+  final String limitSource;
+  const AiContextInfo({this.tokens=0, this.limit=0, this.lastInput=0, this.estimated=true, this.limitSource='unknown'});
+  factory AiContextInfo.fromJson(Map<String, dynamic> j) => AiContextInfo(tokens:(j['tokens'] as num?)?.toInt() ?? 0, limit:(j['limit'] as num?)?.toInt() ?? 0, lastInput:(j['last_input'] as num?)?.toInt() ?? 0, estimated:j['estimated'] != false, limitSource:j['limit_source'] as String? ?? 'unknown');
+  double? get ratio => limit > 0 ? tokens / limit : null;
+}
+
 class AiMessage {
   final String id;
   final String sessionId;
   final String role; // user | assistant | tool | compaction
   final String agent;
   final String model;
+  final AiRuntimeInfo? runtime;
   final List<AiPart> parts;
   final String finish;
   final String error;
@@ -243,6 +266,7 @@ class AiMessage {
     required this.role,
     this.agent = '',
     this.model = '',
+    this.runtime,
     required this.parts,
     this.finish = '',
     this.error = '',
@@ -260,6 +284,7 @@ class AiMessage {
         role: j['role'] as String? ?? 'user',
         agent: j['agent'] as String? ?? '',
         model: j['model'] as String? ?? '',
+        runtime: j['runtime'] is Map ? AiRuntimeInfo.fromJson((j['runtime'] as Map).cast<String, dynamic>()) : null,
         parts: [
           for (final p in (j['parts'] as List? ?? const []))
             if (p is Map) AiPart.fromJson(p.cast<String, dynamic>()),
@@ -284,6 +309,8 @@ class AiSession {
   List<AiTodoItem> todos;
   AiUsage totalUsage;
   int lastInputTokens;
+  AiRuntimeInfo? runtime;
+  AiContextInfo? context;
   List<AiMessage> messages;
   int createdAt;
   int updatedAt;
@@ -300,6 +327,8 @@ class AiSession {
     List<AiTodoItem>? todos,
     this.totalUsage = const AiUsage(),
     this.lastInputTokens = 0,
+    this.runtime,
+    this.context,
     List<AiMessage>? messages,
     this.createdAt = 0,
     this.updatedAt = 0,
@@ -323,6 +352,8 @@ class AiSession {
             ? AiUsage.fromJson((j['total_usage'] as Map).cast<String, dynamic>())
             : const AiUsage(),
         lastInputTokens: (j['last_input_tokens'] as num?)?.toInt() ?? 0,
+        runtime: j['runtime'] is Map ? AiRuntimeInfo.fromJson((j['runtime'] as Map).cast<String, dynamic>()) : null,
+        context: j['context'] is Map ? AiContextInfo.fromJson((j['context'] as Map).cast<String, dynamic>()) : null,
         messages: [
           for (final m in (j['messages'] as List? ?? const []))
             if (m is Map) AiMessage.fromJson(m.cast<String, dynamic>()),

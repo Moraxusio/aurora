@@ -8,6 +8,7 @@ import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../state/app_state.dart';
 import '../../theme/ide_theme.dart';
+import 'ai_auth.dart';
 
 class _Preset {
   final String label;
@@ -19,6 +20,7 @@ class _Preset {
 }
 
 const _presets = <_Preset>[
+  _Preset('OpenAI / ChatGPT 订阅（设备码）', 'ChatGPT 订阅', 'openai-responses', 'https://chatgpt.com/backend-api/codex', 'gpt-6.1-sol'),
   _Preset('OpenCode Gateway / 兼容网关', 'OpenCode API', 'openai-chat', 'https://api.openai.com/v1', 'claude-sonnet-4-5'),
   _Preset('Anthropic Messages (/v1/messages)', 'Anthropic', 'anthropic-messages', 'https://api.anthropic.com/v1', 'claude-sonnet-4-5'),
   _Preset('OpenAI Responses (/v1/responses)', 'OpenAI Responses', 'openai-responses', 'https://api.openai.com/v1', 'gpt-5.2-codex'),
@@ -51,6 +53,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   final _baseUrlCtl = TextEditingController();
   final _apiKeyCtl = TextEditingController();
   final _modelCtl = TextEditingController();
+  final _contextCtl = TextEditingController();
 
   String _protocol = 'openai-chat';
   String _authMode = '';
@@ -60,6 +63,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   bool _fetchingModels = false;
   List<String> _fetchedModels = [];
   String? _fetchNote;
+  bool get _subscription => _authMode == 'chatgpt-device';
 
   @override
   void initState() {
@@ -86,6 +90,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _baseUrlCtl.dispose();
     _apiKeyCtl.dispose();
     _modelCtl.dispose();
+    _contextCtl.dispose();
     super.dispose();
   }
 
@@ -103,6 +108,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     p.model = _modelCtl.text.trim();
     p.reasoningEffort = _reasoningEffort;
     p.useProxy = _useProxy;
+    p.contextWindow = int.tryParse(_contextCtl.text.trim()) ?? 0;
     if (_fetchedModels.isNotEmpty) {
       p.models = List.of(_fetchedModels);
     }
@@ -114,6 +120,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _baseUrlCtl.text = p.baseUrl;
     _apiKeyCtl.text = p.apiKey;
     _modelCtl.text = p.model;
+    _contextCtl.text = p.contextWindow > 0 ? '${p.contextWindow}' : '';
     _protocol = p.protocol;
     _authMode = p.authMode;
     _reasoningEffort = p.reasoningEffort;
@@ -130,6 +137,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       baseUrl: preset.baseUrl,
       model: preset.defaultModel,
     );
+    if (preset.baseUrl == 'https://chatgpt.com/backend-api/codex') created.authMode = 'chatgpt-device';
     setState(() {
       _ai.providers.add(created);
       _ai.selectedProviderId = created.id;
@@ -163,30 +171,78 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       _fetchNote = null;
     });
     try {
-      final res = await link.call('ai.models', {'provider': current.toWireJson()}) as Map;
+      final prepared = await prepareAiProvider(widget.app, link, current);
+      final res = await link.call('ai.models', {'provider': prepared.toWireJson()}) as Map;
       final list = <String>[
         for (final m in (res['models'] as List? ?? const []))
           if (m is Map && (m['id'] as String? ?? '').isNotEmpty) m['id'] as String,
       ];
-      if (!mounted) return;
+      if (!mounted || current.id != _editingId || !_ai.providers.contains(current)) return;
       setState(() {
         _fetchedModels = list;
         current.models = list;
+        for (final m in (res['models'] as List? ?? const [])) {
+          if (m is Map && m['id'] is String && m['context_window'] is num && (m['context_window'] as num) > 0) {
+            current.modelContextWindows[m['id'] as String] = (m['context_window'] as num).toInt();
+          }
+        }
         if (_modelCtl.text.trim().isEmpty && list.isNotEmpty) {
           _modelCtl.text = list.first;
         }
-        _fetchNote = list.isEmpty ? '接口返回成功，但未列出模型，请手动输入模型 ID' : '已获取 ${list.length} 个可用模型';
+        _fetchNote = current.isSubscription ? '内置订阅模型建议（不是账号可用性校验），支持手动输入；窗口为 OpenCode 默认输入预算。' : list.isEmpty ? '接口返回成功，但未列出模型，请手动输入模型 ID' : '已获取 ${list.length} 个模型';
       });
     } on OpError catch (e) {
-      if (mounted) setState(() => _fetchNote = e.message);
+      if (mounted && current.id == _editingId) setState(() => _fetchNote = e.message);
     } on Object catch (e) {
-      if (mounted) setState(() => _fetchNote = '拉取失败：$e');
+      if (mounted && current.id == _editingId) setState(() => _fetchNote = e is StateError ? e.message : '拉取失败，请检查连接');
     } finally {
       if (mounted) setState(() => _fetchingModels = false);
     }
   }
 
+  Future<void> _login() async {
+    final link = widget.ws?.link;
+    if (link == null || !widget.app.ready) { Toast.show('请先连接新版 agent 并解锁本机加密配置', error:true); return; }
+    _saveCurrentToMemory();
+    final current = _ai.providers.firstWhere((p) => p.id == _editingId);
+    final baseline = widget.app.profile.ai.providers.where((p) => p.id == current.id).firstOrNull;
+    final c = await showAiDeviceLogin(context, link, useProxy:_useProxy);
+    if (!mounted || c == null || current.id != _editingId || !current.isSubscription) return;
+    try {
+      await widget.app.update((profile) {
+        var target = profile.ai.providers.where((p) => p.id == current.id).firstOrNull;
+        if (target == null) {
+          target = AiProvider.fromJson(current.toJson());
+          profile.ai.providers.add(target);
+        } else if (target.oauth?.refresh != baseline?.oauth?.refresh || target.authMode != baseline?.authMode) {
+          throw StateError('登录配置已变更，请重新打开设置');
+        }
+        target.oauth = c;
+        target.apiKey = '';
+        target.authMode = 'chatgpt-device';
+        target.protocol = 'openai-responses';
+        target.baseUrl = 'https://chatgpt.com/backend-api/codex';
+        target.model = current.model;
+      });
+      if (mounted) setState(() { current.oauth = c; _apiKeyCtl.clear(); _fetchNote = '订阅登录已加密保存'; });
+    } on Object { if (mounted) setState(() => _fetchNote = '登录凭据保存失败或配置已变更，请重试'); }
+  }
+
+  Future<void> _logout() async {
+    final id = _editingId;
+    try {
+      await widget.app.update((profile) {
+        for (final p in profile.ai.providers) { if (p.id == id) p.oauth = null; }
+      });
+      if (mounted) setState(() { for (final p in _ai.providers) { if (p.id == id) p.oauth = null; } });
+    } on Object { Toast.show('退出登录保存失败', error:true); }
+  }
+
   Future<void> _saveAndClose() async {
+    final contextValue = int.tryParse(_contextCtl.text.trim());
+    if (_contextCtl.text.trim().isNotEmpty && (contextValue == null || contextValue < 0)) {
+      Toast.show('上下文窗口应为非负整数，留空或 0 使用模型默认值', error:true); return;
+    }
     _saveCurrentToMemory();
     if (_modelCtl.text.trim().isEmpty) {
       Toast.show('请填写模型 ID（例如 claude-sonnet-4-5 或 gpt-5.2-codex）', error: true);
@@ -199,6 +255,11 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     }
     try {
       await widget.app.update((p) {
+        // A refresh may have rotated tokens while this settings dialog was open.
+        for (final local in _ai.providers) {
+          final live = p.ai.providers.where((x) => x.id == local.id).firstOrNull;
+          if (live != null) local.oauth = live.oauth;
+        }
         p.ai = AiSettings.fromJson(_ai.toJson());
       });
       if (mounted) Navigator.pop(context);
@@ -308,7 +369,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                               DropdownMenuItem(value: 'anthropic-messages', child: Text('Anthropic Messages (/messages)', overflow: TextOverflow.ellipsis)),
                               DropdownMenuItem(value: 'openai-responses', child: Text('OpenAI Responses (/responses)', overflow: TextOverflow.ellipsis)),
                             ],
-                            onChanged: (v) {
+                            onChanged: _subscription ? null : (v) {
                               if (v == null) return;
                               setState(() {
                                 _protocol = v;
@@ -326,13 +387,37 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                     const SizedBox(height: Space.m + 2),
                     TextField(
                       controller: _baseUrlCtl,
+                      enabled: !_subscription,
                       decoration: const InputDecoration(
                         labelText: 'API Base URL',
                         hintText: 'https://api.openai.com/v1 或你的 OpenCode 兼容网关地址',
                       ),
                     ),
                     const SizedBox(height: Space.m + 2),
-                    Row(
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('ai-auth-$_editingId-$_authMode'),
+                      initialValue: _authMode,
+                      decoration:const InputDecoration(labelText:'登录方式 / 鉴权格式'),
+                      items:const [
+                        DropdownMenuItem(value:'', child:Text('API Key · 自动兼容')),
+                        DropdownMenuItem(value:'bearer', child:Text('API Key · Bearer')),
+                        DropdownMenuItem(value:'x-api-key', child:Text('API Key · x-api-key')),
+                        DropdownMenuItem(value:'chatgpt-device', child:Text('ChatGPT 订阅 · Device 设备码')),
+                      ],
+                      onChanged:(v) => setState(() {
+                        _authMode = v ?? '';
+                        if (_subscription) { _protocol = 'openai-responses'; _baseUrlCtl.text = 'https://chatgpt.com/backend-api/codex'; _apiKeyCtl.clear(); if (!_modelCtl.text.startsWith('gpt-')) _modelCtl.text = 'gpt-6.1-sol'; }
+                      }),
+                    ),
+                    const SizedBox(height:Space.m),
+                    if (_subscription) ...[
+                      Text(_ai.providers.firstWhere((p) => p.id == _editingId).oauth == null ? '尚未登录 ChatGPT 订阅' : '已登录 · 凭据加密保存在本机', style:TextStyle(color:ide.textDim, fontSize:12)),
+                      Wrap(spacing:8, children:[
+                        FilledButton.icon(key:const ValueKey('ai-device-login'), onPressed:_login, icon:const Icon(Icons.login, size:16), label:const Text('使用设备码登录')),
+                        TextButton(onPressed:widget.app.ready ? _logout : null, child:const Text('退出订阅登录')),
+                      ]),
+                      const Text('固定连接官方 ChatGPT/Codex；不允许自定义地址或请求头。登录/退出立即保存，不受底部取消按钮影响。', style:TextStyle(fontSize:11.5)),
+                    ] else Row(
                       children: [
                         Expanded(
                           flex: 5,
@@ -349,22 +434,13 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: Space.m),
-                        Expanded(
-                          flex: 3,
-                          child: DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            initialValue: _authMode,
-                            decoration: const InputDecoration(labelText: '鉴权头格式'),
-                            items: const [
-                              DropdownMenuItem(value: '', child: Text('自动 (兼容网关推荐)', overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: 'bearer', child: Text('Authorization: Bearer', overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: 'x-api-key', child: Text('x-api-key', overflow: TextOverflow.ellipsis)),
-                            ],
-                            onChanged: (v) => setState(() => _authMode = v ?? ''),
-                          ),
-                        ),
                       ],
+                    ),
+                    const SizedBox(height: Space.m + 2),
+                    TextField(
+                      key:const ValueKey('ai-context-window'),
+                      controller:_contextCtl, keyboardType:TextInputType.number,
+                      decoration:const InputDecoration(labelText:'上下文输入窗口（tokens，可选）', hintText:'留空使用模型目录 / 默认估值；切换模型前请检查手动覆盖值'),
                     ),
                     const SizedBox(height: Space.m + 2),
                     Row(

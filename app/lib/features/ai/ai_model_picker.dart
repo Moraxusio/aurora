@@ -12,6 +12,7 @@ import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'ai_settings_dialog.dart';
+import 'ai_auth.dart';
 
 /// The thinking-strength choices. The value is what `reasoning_effort` carries
 /// (OpenAI) and what the Anthropic budget is derived from; '' is the model's own default.
@@ -68,19 +69,27 @@ class _ModelPickerState extends State<_ModelPicker> {
       _note = null;
     });
     try {
-      final res = await link.call('ai.models', {'provider': prov.toWireJson()}) as Map;
+      final prepared = await prepareAiProvider(ws.app, link, prov);
+      final res = await link.call('ai.models', {'provider': prepared.toWireJson()}) as Map;
       final ids = <String>[
         for (final m in (res['models'] as List? ?? const []))
           if (m is Map && (m['id'] as String? ?? '').isNotEmpty) m['id'] as String,
       ];
       await _edit((ai) {
         for (final p in ai.providers) {
-          if (p.id == prov.id) p.models = ids;
+          if (p.id == prov.id && p.authMode == prov.authMode && p.baseUrl == prov.baseUrl && p.apiKey == prov.apiKey && p.oauth?.access == prepared.oauth?.access) {
+            p.models = ids;
+            for (final m in (res['models'] as List? ?? const [])) {
+              if (m is Map && m['id'] is String && m['context_window'] is num && (m['context_window'] as num) > 0) p.modelContextWindows[m['id'] as String] = (m['context_window'] as num).toInt();
+            }
+          }
         }
       });
-      if (mounted) setState(() => _note = ids.isEmpty ? '网关没有列出模型，可在上面手动输入模型 ID' : '已获取 ${ids.length} 个模型');
+      if (mounted) setState(() => _note = prov.isSubscription ? '内置订阅模型建议，非账号可用性校验；可手动输入模型 ID' : ids.isEmpty ? '网关没有列出模型，可在上面手动输入模型 ID' : '已获取 ${ids.length} 个模型');
     } on OpError catch (e) {
       if (mounted) setState(() => _note = e.message);
+    } on Object catch (e) {
+      if (mounted) setState(() => _note = e is StateError ? e.message : '拉取模型失败，请检查连接');
     } finally {
       if (mounted) setState(() => _fetching = false);
     }
@@ -171,6 +180,8 @@ class _ModelPickerState extends State<_ModelPicker> {
                     SizedBox(width: 18, child: m == prov.model ? Icon(Icons.check_rounded, size: 15, color: ide.accent) : null),
                     const SizedBox(width: Space.s),
                     Expanded(child: Text(m, style: TextStyle(fontSize: 13, color: ide.text), overflow: TextOverflow.ellipsis)),
+                    if (prov.effectiveContextWindow(m) > 0)
+                      Tooltip(message:'上下文输入预算；目录或手动配置值，不代表订阅权限', child:Text('${(prov.effectiveContextWindow(m)/1000).toStringAsFixed(0)}k', style:TextStyle(fontSize:11, color:ide.textFaint))),
                   ]),
                 ),
               if (models.isEmpty && !canUseTyped)

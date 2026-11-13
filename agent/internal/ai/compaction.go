@@ -92,10 +92,7 @@ func EstimateMessagesTokens(msgs []Message) int {
 
 // ShouldAutoCompact checks OpenCode's 85% / 16k headroom threshold.
 func ShouldAutoCompact(s *Session, cfg ProviderConfig) bool {
-	cw := cfg.ContextWindow
-	if cw <= 0 {
-		cw = defaultContextWindow(cfg.Model)
-	}
+	cw, _ := contextLimit(cfg)
 	if cw <= 0 {
 		return false
 	}
@@ -109,6 +106,9 @@ func ShouldAutoCompact(s *Session, cfg ProviderConfig) bool {
 	}
 	active := BuildActiveHistory(s.Messages)
 	est := s.LastInputToks
+	if s.Context != nil && s.Context.Tokens > est {
+		est = s.Context.Tokens
+	}
 	rawEst := EstimateMessagesTokens(active)
 	if rawEst > est {
 		est = rawEst
@@ -121,6 +121,8 @@ func defaultContextWindow(model string) int {
 	switch {
 	case strings.Contains(m, "claude"):
 		return 200_000
+	case strings.Contains(m, "gpt-6"):
+		return 500_000
 	case strings.Contains(m, "gpt-5") || strings.Contains(m, "gpt-4.1"):
 		return 272_000
 	case strings.Contains(m, "gpt-4o") || strings.Contains(m, "deepseek") || strings.Contains(m, "kimi") || strings.Contains(m, "qwen"):

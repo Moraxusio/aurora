@@ -45,6 +45,10 @@ powershell -File tools\package.ps1 -Version X.Y.Z -Key path\to\release.key
 - 本地配置（服务器、凭据）使用系统机制加密保存（Windows 为 DPAPI）。
 - 详细威胁模型和决定见 `docs/DESIGN.md`。
 
+## AI 工作台
+
+内置可独立启停的 `ai` 服务，支持 API Key 网关与 OpenAI / ChatGPT 设备码订阅登录；工作台区分实际请求的提供商/模型、下一次选择、上下文估算与累计用量。使用方法、凭据边界和未验证范围见 [AI 使用说明](docs/AI.md)（设备码授权和上下文元数据需要客户端及 agent 3.12.0 以上）。
+
 ## 状态
 
 项目仍在积极开发中，接口和配置格式可能变化。尚未验证的部分（Android、macOS、iOS、arm64 等）记录在 `docs/PLAN.md`。

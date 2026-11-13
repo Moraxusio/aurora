@@ -103,11 +103,17 @@ Aurora $Version (Windows)
   只有当前 Windows 用户能打开。
 
 本次更新（$Version）：
-- 新增内置 AI 智能体服务（ai，D-104）：移植 OpenCode 协议与工具引擎，原生兼容
-  OpenAI Chat、Anthropic Messages 与 OpenAI Responses 流式协议及 OpenCode 请求头。
-- 支持在远程工作区读写、三级精确编辑（保留 BOM 与 CRLF/LF）、搜索、执行命令、
-  子智能体协作、上下文检查点压缩，以及基于影子 Git 树的一键文件回退。
-- API Key 仅加密保存在本机 profile.bin，按次经固定指纹 TLS 传至服务器内存，绝不落盘。
+- AI 页显示上下文估算占用/输入预算/百分比，累计用量另列；压缩、回退后重新估算。
+- 显示当步实际请求的提供商与模型、下一次选择；每条回答保留当时的提供商和模型。
+- 复用 OpenCode（MIT）的 OpenAI / ChatGPT 订阅 device 登录、token 交换/刷新和 Codex
+  HTTP SSE 路由。入口：AI 设置 -> 添加 OpenAI / ChatGPT 订阅（设备码）预设。
+- API Key 与 OAuth 令牌加密保存在本机 profile.bin；日常调用只发送 access，refresh
+  仅在专用刷新 RPC 中短暂经过服务器内存，不写入服务器会话、日志或广播事件。
+- 订阅固定使用官方 ChatGPT/Codex，禁止自定义 URL/headers 与重定向；模型列表为内置
+  建议，不是账号资格查询。登录/退出立即保存；长任务到期后需由客户端重新发送刷新。
+- 上下文数字为活动输入估算，不是全部会话累计 tokens，也不证明网关内部真实模型身份。
+- 已做本地 HTTP 授权桩、加密落盘、界面与 Go 测试；真实 ChatGPT 授权/对话、真实
+  Windows 窗口交互和 Android 真机尚未验证。未移植 OpenCode 的 WebSocket/zstd。
 - 使用本功能需将服务器上的 aurora3-agent 升级至 $Version（连接后点击升级提示即可）。
 代理功能：
 - 在“代理”页添加 Clash 订阅 URL，或粘贴节点链接；选用节点后，新建终端时勾选

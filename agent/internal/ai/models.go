@@ -303,6 +303,11 @@ var errSSEStreamDone = errors.New("sse stream done")
 
 // StreamLLM dispatches an LLMRequest through the selected OpenCode protocol with automatic retry on transient errors.
 func StreamLLM(ctx context.Context, req LLMRequest, proxyEnv func() map[string]string, onDelta func(LLMDelta)) (LLMResponse, error) {
+	var prepErr error
+	req.Provider, prepErr = prepareSubscription(req.Provider)
+	if prepErr != nil {
+		return LLMResponse{}, prepErr
+	}
 	protocol := strings.ToLower(strings.TrimSpace(req.Provider.Protocol))
 	if protocol == "" {
 		protocol = "openai-chat"
@@ -351,6 +356,14 @@ func StreamLLM(ctx context.Context, req LLMRequest, proxyEnv func() map[string]s
 
 // FetchModels queries the provider's /models endpoint using OpenCode headers so the user can pick models directly in Aurora.
 func FetchModels(ctx context.Context, cfg ProviderConfig, proxyEnv func() map[string]string) ([]ModelInfo, error) {
+	var err error
+	cfg, err = prepareSubscription(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.AuthMode == ChatGPTAuthMode {
+		return subscriptionModelSuggestions(cfg), nil
+	}
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 

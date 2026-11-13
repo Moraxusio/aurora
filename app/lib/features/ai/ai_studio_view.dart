@@ -15,6 +15,7 @@ import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'ai_model_picker.dart';
+import 'ai_auth.dart';
 import 'ai_models.dart';
 import 'ai_settings_dialog.dart';
 
@@ -235,6 +236,11 @@ class _AiStudioViewState extends State<AiStudioView> {
     if (_sessionId == null || sid != _sessionId) return;
 
     setState(() {
+      if (ev['runtime'] is Map || ev['context'] is Map) {
+        _session ??= AiSession(id:sid, title:'新会话', root:_root, workdir:_workdir);
+        if (ev['runtime'] is Map) _session!.runtime = AiRuntimeInfo.fromJson((ev['runtime'] as Map).cast<String,dynamic>());
+        if (ev['context'] is Map) _session!.context = AiContextInfo.fromJson((ev['context'] as Map).cast<String,dynamic>());
+      }
       switch (type) {
         case 'session.status':
           final status = ev['status'] as String? ?? '';
@@ -340,7 +346,7 @@ class _AiStudioViewState extends State<AiStudioView> {
             } else {
               _session!.messages.add(msg);
             }
-            if (msg.usage != null) {
+            if (msg.usage != null && idx < 0) {
               final u = msg.usage!;
               final cur = _session!.totalUsage;
               _session!.totalUsage = AiUsage(
@@ -367,7 +373,7 @@ class _AiStudioViewState extends State<AiStudioView> {
           _liveCompaction = '';
           if (ev['message'] is Map && _session != null) {
             final msg = AiMessage.fromJson((ev['message'] as Map).cast<String, dynamic>());
-            _session!.messages.add(msg);
+            if (!_session!.messages.any((m) => m.id == msg.id)) _session!.messages.add(msg);
           }
 
         case 'compaction.error':
@@ -392,6 +398,7 @@ class _AiStudioViewState extends State<AiStudioView> {
             unawaited(_loadSession(ws.link!, _sessionId!));
           }
       }
+      if (ev['total_usage'] is Map && _session != null) _session!.totalUsage = AiUsage.fromJson((ev['total_usage'] as Map).cast<String,dynamic>());
     });
     _scrollToBottom();
   }
@@ -411,8 +418,10 @@ class _AiStudioViewState extends State<AiStudioView> {
   }
 
   AiProvider? get _activeProvider => ws.app.ready ? ws.app.profile.ai.activeProvider : null;
+  bool _sending = false;
 
   Future<void> _send([String? quickPrompt]) async {
+    if (_sending) return;
     final link = ws.link;
     if (link == null) {
       ws.toast('服务器未连接', error: true);
@@ -427,10 +436,13 @@ class _AiStudioViewState extends State<AiStudioView> {
     if (text.isEmpty && _attachments.isEmpty) return;
 
     final sentAttachments = List<AiAttachment>.of(_attachments);
-    if (quickPrompt == null) _inputCtl.clear();
-    setState(() => _attachments.clear());
+    final inputBefore = _inputCtl.text;
+    setState(() => _sending = true);
 
     try {
+      final prepared = await prepareAiProvider(ws.app, link, prov);
+      if (!mounted || !identical(link, ws.link)) return;
+      if (_activeProvider?.id != prov.id || _activeProvider?.model != prov.model) throw StateError('模型选择已变更，请确认后重新发送');
       final res = await link.call('ai.run', {
         if (_sessionId != null) 'session_id': _sessionId,
         'root': _root,
@@ -439,8 +451,11 @@ class _AiStudioViewState extends State<AiStudioView> {
         'permission_mode': _permMode,
         'text': text,
         if (sentAttachments.isNotEmpty) 'attachments': [for (final a in sentAttachments) a.toJson()],
-        'provider': prov.toWireJson(),
+        'provider': prepared.toWireJson(),
       }) as Map;
+      if (!mounted) return;
+      if (quickPrompt == null && _inputCtl.text == inputBefore) _inputCtl.clear();
+      setState(() => _attachments.removeWhere(sentAttachments.contains));
       final sum = AiSessionSummary.fromJson((res['session'] as Map).cast<String, dynamic>());
       final isNew = _sessionId == null;
       _sessionId = sum.id;
@@ -454,6 +469,10 @@ class _AiStudioViewState extends State<AiStudioView> {
       _scrollToBottom();
     } on OpError catch (e) {
       ws.toast(e.message, error: true);
+    } on Object catch (e) {
+      ws.toast(e is StateError ? e.message : '发送失败，输入和附件已保留', error:true);
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
@@ -511,14 +530,17 @@ class _AiStudioViewState extends State<AiStudioView> {
     }
     setState(() => _running = true);
     try {
+      final prepared = await prepareAiProvider(ws.app, link, prov);
       await link.call('ai.compact', {
         'session_id': sid,
-        'provider': prov.toWireJson(),
+        'provider': prepared.toWireJson(),
       });
       await _loadSession(link, sid);
       ws.toast('上下文已按 OpenCode 检查点模板压缩');
     } on OpError catch (e) {
       ws.toast(e.message, error: true);
+    } on Object catch (e) {
+      ws.toast(e is StateError ? e.message : '压缩失败，请检查连接', error:true);
     } finally {
       if (mounted) setState(() => _running = false);
     }
@@ -607,6 +629,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     return Column(
       children: [
         _buildTopBar(ide, prov),
+        _buildRuntimeBar(ide, prov),
         const Divider(height: 1),
         if (todos.isNotEmpty) _buildTodoBanner(ide, todos),
         Expanded(
@@ -649,7 +672,6 @@ class _AiStudioViewState extends State<AiStudioView> {
   }
 
   Widget _buildTopBar(Ide ide, AiProvider? prov) {
-    final usage = _session?.totalUsage;
     final canPickDir = _session == null || _session!.messages.isEmpty;
 
     return Container(
@@ -659,7 +681,9 @@ class _AiStudioViewState extends State<AiStudioView> {
       child: Row(
         children: [
           // Root & Workdir badge
-          InkWell(
+          Expanded(child:SingleChildScrollView(
+            scrollDirection:Axis.horizontal,
+            child:InkWell(
             onTap: canPickDir ? _pickWorkdir : null,
             borderRadius: BorderRadius.circular(Radii.s),
             child: Padding(
@@ -692,19 +716,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                 ],
               ),
             ),
-          ),
-          const Spacer(),
-          if (usage != null && usage.totalTokens > 0)
-            Padding(
-              padding: const EdgeInsets.only(right: Space.m),
-              child: Tooltip(
-                message: '输入 ${usage.inputTokens} (缓存命中 ${usage.cacheReadTokens}) · 输出 ${usage.outputTokens}',
-                child: Text(
-                  '${_fmtTokens(usage.totalTokens)} tok${usage.cacheReadTokens > 0 ? ' · 缓存 ${_fmtTokens(usage.cacheReadTokens)}' : ''}',
-                  style: TextStyle(fontSize: 11.5, color: ide.textFaint),
-                ),
-              ),
-            ),
+          ))),
           if (_sessionId != null && (_session?.messages.isNotEmpty ?? false))
             IconBtn(Icons.compress_rounded, '压缩上下文 (/compact)', _running ? null : _compactManual, size: 15),
           IconBtn(
@@ -715,6 +727,33 @@ class _AiStudioViewState extends State<AiStudioView> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRuntimeBar(Ide ide, AiProvider? prov) {
+    final runtime = _session?.runtime;
+    final ctx = _session?.context;
+    final usage = _session?.totalUsage;
+    final ratio = ctx?.ratio;
+    final color = ratio != null && ratio >= 1 ? ide.error : ratio != null && ratio >= 0.85 ? ide.warn : ide.accent;
+    final actual = runtime?.label ?? (_session?.model.isNotEmpty == true ? '未知提供商 / ${_session!.model}（旧会话）' : '尚未调用模型');
+    final contextText = ctx == null ? '上下文：暂无统计（旧 agent / 尚未调用）' : '上下文 ${ctx.estimated ? '≈' : ''}${_fmtTokens(ctx.tokens)} / ${ctx.limit > 0 ? _fmtTokens(ctx.limit) : '未知'} tokens${ratio != null ? ' · ${(ratio * 100).toStringAsFixed(1)}%' : ''}';
+    return Container(
+      key:const ValueKey('ai-runtime-bar'), width:double.infinity,
+      padding:const EdgeInsets.symmetric(horizontal:Space.l, vertical:Space.s),
+      decoration:BoxDecoration(color:ide.sideBar.withValues(alpha:0.5), border:Border(bottom:BorderSide(color:ide.border))),
+      child:Column(crossAxisAlignment:CrossAxisAlignment.start, children:[
+        Tooltip(message:'本步实际发送的提供商配置与模型 ID；网关可能自行映射模型，无法认证其内部模型身份。', child:Text('${_running ? '本步实际' : '最近实际'}：$actual', key:const ValueKey('ai-actual-model'), style:TextStyle(fontSize:12, color:ide.text))),
+        const SizedBox(height:4),
+        Text('下次调用：${prov == null ? '未配置' : '${prov.name} / ${prov.model}'}', key:const ValueKey('ai-next-model'), style:TextStyle(fontSize:11.5, color:ide.textDim)),
+        const SizedBox(height:6),
+        Wrap(spacing:16, runSpacing:4, crossAxisAlignment:WrapCrossAlignment.center, children:[
+          Tooltip(message:ctx == null ? '需新版 agent；累计用量不代表当前上下文。' : '活动上下文估算（包括系统提示、工具定义、回答与工具输出），不含尚未发送的输入。\n上次实际输入：${ctx.lastInput > 0 ? '${ctx.lastInput} tokens（已含缓存）' : '暂无 / 已压缩或回退'}\n上限来源：${ctx.limitSource == 'configured' ? '目录 / 手动配置' : '模型默认输入预算（可能与真实窗口不同）'}。\n压缩后重新估算；累计用量另列。', child:Text(contextText, key:const ValueKey('ai-context-usage'), style:TextStyle(fontSize:11.5, color:color))),
+          if (usage != null && usage.totalTokens > 0)
+            Tooltip(message:'累计输入 ${usage.inputTokens}（含缓存 ${usage.cacheReadTokens}）· 输出 ${usage.outputTokens}', child:Text('累计用量 ${_fmtTokens(usage.totalTokens)} tokens', key:const ValueKey('ai-total-usage'), style:TextStyle(fontSize:11, color:ide.textFaint))),
+        ]),
+        if (ratio != null) ...[const SizedBox(height:5), LinearProgressIndicator(value:ratio.clamp(0.0,1.0), minHeight:3, color:color, backgroundColor:ide.border)],
+      ]),
     );
   }
 
@@ -936,6 +975,10 @@ class _AiStudioViewState extends State<AiStudioView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (msg.role == 'assistant') Padding(
+            padding:const EdgeInsets.only(bottom:Space.s),
+            child:Text(msg.runtime?.label ?? '未知提供商 / ${msg.model.isEmpty ? '未知模型' : msg.model}（旧记录）', style:TextStyle(fontSize:11, color:ide.textFaint)),
+          ),
           for (final p in msg.parts)
             if (p.type == 'reasoning' && p.text.trim().isNotEmpty)
               Padding(
@@ -1176,7 +1219,10 @@ class _AiStudioViewState extends State<AiStudioView> {
                   ),
                 ),
                 const SizedBox(height: Space.s + 2),
-                Row(
+                Wrap(
+                  spacing: Space.s,
+                  runSpacing: Space.s,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     // Build / Plan switcher
                     _ModePill(
@@ -1209,7 +1255,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                             ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 180),
                               child: Text(
-                                prov == null || prov.model.isEmpty ? '选择模型…' : prov.model,
+                                prov == null || prov.model.isEmpty ? '选择模型…' : '${prov.name} / ${prov.model}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(fontSize: 11.5, color: prov == null || prov.model.isEmpty ? ide.warn : ide.textDim),
@@ -1226,7 +1272,6 @@ class _AiStudioViewState extends State<AiStudioView> {
                         ),
                       ),
                     ),
-                    const Spacer(),
                     if (activeFile != null)
                       IconBtn(Icons.attach_file_rounded, '附加当前打开文件 (${activeFile.name})', _attachActiveFile, size: 15),
                     IconBtn(Icons.post_add_rounded, '按路径附加服务器文件…', _attachFileByPath, size: 15),
@@ -1264,13 +1309,13 @@ class _AiStudioViewState extends State<AiStudioView> {
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         minimumSize: const Size(0, 30),
                       ),
-                      onPressed: _send,
+                      onPressed: _sending ? null : _send,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(_running ? Icons.subdirectory_arrow_left_rounded : Icons.arrow_upward_rounded, size: 15),
                           const SizedBox(width: 4),
-                          Text(_running ? '引导' : '发送', style: const TextStyle(fontSize: 12.5)),
+                          Text(_sending ? '准备中' : _running ? '引导' : '发送', style: const TextStyle(fontSize: 12.5)),
                         ],
                       ),
                     ),

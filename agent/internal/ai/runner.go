@@ -536,6 +536,11 @@ type RunInput struct {
 // if already running, just like OpenCode's inbox), and spawns the background runner goroutine.
 func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	e.init()
+	var prepErr error
+	in.Provider, prepErr = prepareSubscription(in.Provider)
+	if prepErr != nil {
+		return SessionSummary{}, prepErr
+	}
 	if strings.TrimSpace(in.Text) == "" && len(in.Attachments) == 0 {
 		return SessionSummary{}, errors.New("prompt text must not be empty")
 	}
@@ -726,18 +731,9 @@ func (e *Env) generateTitleAsync(sessionID, promptText string, cfg ProviderConfi
 
 	temp := 0.3
 	resp, err := StreamLLM(cctx, LLMRequest{
-		SessionID: sessionID,
-		Initiator: "agent",
-		Provider: ProviderConfig{
-			ID:       cfg.ID,
-			Protocol: cfg.Protocol,
-			BaseURL:  cfg.BaseURL,
-			APIKey:   cfg.APIKey,
-			AuthMode: cfg.AuthMode,
-			Model:    cfg.Model,
-			Headers:  cfg.Headers,
-			UseProxy: cfg.UseProxy,
-		},
+		SessionID:   sessionID,
+		Initiator:   "agent",
+		Provider:    cfg,
 		System:      []string{PromptTitle},
 		Messages:    []Message{{ID: NewID("msg"), Role: "user", Parts: []Part{{Type: "text", Text: promptText}}}},
 		MaxTokens:   80,
@@ -883,10 +879,20 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		}
 
 		asstMsgID := NewID("msg")
+		runtime := runtimeInfo(prov)
+		contextState := activeContext(&sessSnap, prov, contextOverhead(sysPrompts, tools))
+		e.mu.Lock()
+		if cur := e.sessions[sessionID]; cur != nil {
+			cur.Runtime = runtime
+			cur.Context = contextState
+		}
+		e.mu.Unlock()
 		e.broadcast(StreamEvent{
 			Type:      "step.start",
 			SessionID: sessionID,
 			MessageID: asstMsgID,
+			Runtime:   runtime,
+			Context:   contextState,
 		})
 
 		llmResp, llmErr := StreamLLM(ctx, LLMRequest{
@@ -1062,6 +1068,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			Agent:     sessSnap.Agent,
 			Model:     prov.Model,
 			Parts:     allParts,
+			Runtime:   runtime,
 			Finish:    llmResp.Finish,
 			Usage:     &usageCopy,
 			Snapshot:  stepSnap,
@@ -1069,6 +1076,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		}
 
 		hasMoreInbox := false
+		var totalUsage Usage
 		e.mu.Lock()
 		if cur := e.sessions[sessionID]; cur != nil {
 			cur.Messages = append(cur.Messages, asstMsg)
@@ -1077,6 +1085,17 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 				cur.LastInputToks = llmResp.Usage.InputTokens
 			}
 			cur.UpdatedAt = asstMsg.CreatedAt
+			contextState = activeContext(cur, prov, contextOverhead(sysPrompts, tools))
+			contextState.LastInput = llmResp.Usage.InputTokens
+			if llmResp.Usage.InputTokens > 0 {
+				// Inclusive input already includes cache reads; never add them again.
+				exactPlusNew := llmResp.Usage.InputTokens + llmResp.Usage.OutputTokens + EstimateMessagesTokens([]Message{{Parts: resultParts}})
+				if exactPlusNew > contextState.Tokens {
+					contextState.Tokens = exactPlusNew
+				}
+			}
+			cur.Context = contextState
+			totalUsage = cur.TotalUsage
 			_ = e.persistSessionLocked(cur)
 		}
 		if ar := e.running[sessionID]; ar != nil && len(ar.inbox) > 0 {
@@ -1090,12 +1109,15 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			stepDiffs = stepSnap.Files
 		}
 		e.broadcast(StreamEvent{
-			Type:      "step.finish",
-			SessionID: sessionID,
-			MessageID: asstMsg.ID,
-			Message:   &msgCopy,
-			Diffs:     stepDiffs,
-			Usage:     &usageCopy,
+			Type:       "step.finish",
+			SessionID:  sessionID,
+			MessageID:  asstMsg.ID,
+			Message:    &msgCopy,
+			Diffs:      stepDiffs,
+			Usage:      &usageCopy,
+			TotalUsage: &totalUsage,
+			Runtime:    runtime,
+			Context:    contextState,
 		})
 
 		if ctx.Err() != nil {
@@ -1240,6 +1262,11 @@ func (e *Env) CompactSession(ctx context.Context, sessionID string, prov Provide
 }
 
 func (e *Env) compactInternal(ctx context.Context, sessionID string, prov ProviderConfig, absWorkdir string, overflow bool) (Message, error) {
+	var prepErr error
+	prov, prepErr = prepareSubscription(prov)
+	if prepErr != nil {
+		return Message{}, prepErr
+	}
 	e.mu.Lock()
 	s := e.sessions[sessionID]
 	if s == nil {
@@ -1270,6 +1297,9 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 		return Message{}, err
 	}
 
+	var contextState *ContextInfo
+	var totalUsage Usage
+	compMsg.Runtime = runtimeInfo(prov)
 	e.mu.Lock()
 	if cur := e.sessions[sessionID]; cur != nil {
 		cur.Messages = append(cur.Messages, compMsg)
@@ -1277,6 +1307,15 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 			cur.TotalUsage.Add(*compMsg.Usage)
 		}
 		cur.LastInputToks = EstimateMessagesTokens(BuildActiveHistory(cur.Messages))
+		overhead := 0
+		if cur.Context != nil {
+			overhead = cur.Context.Overhead
+		}
+		contextState = activeContext(cur, prov, overhead)
+		contextState.LastInput = 0 // pre-compaction input does not describe the checkpoint
+		cur.Context = contextState
+		cur.Runtime = compMsg.Runtime
+		totalUsage = cur.TotalUsage
 		cur.UpdatedAt = compMsg.CreatedAt
 		_ = e.persistSessionLocked(cur)
 	}
@@ -1284,10 +1323,13 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 
 	cp := compMsg
 	e.broadcast(StreamEvent{
-		Type:      "compaction.done",
-		SessionID: sessionID,
-		MessageID: compMsg.ID,
-		Message:   &cp,
+		Type:       "compaction.done",
+		SessionID:  sessionID,
+		MessageID:  compMsg.ID,
+		Message:    &cp,
+		Context:    contextState,
+		TotalUsage: &totalUsage,
+		Runtime:    compMsg.Runtime,
 	})
 	return compMsg, nil
 }
@@ -1356,6 +1398,20 @@ func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, re
 		s.Messages = append([]Message(nil), s.Messages[:idx]...)
 	}
 	s.LastInputToks = EstimateMessagesTokens(BuildActiveHistory(s.Messages))
+	if s.Context != nil {
+		cp := *s.Context
+		cp.Tokens = s.LastInputToks + cp.Overhead
+		cp.LastInput = 0
+		cp.Estimated = true
+		s.Context = &cp
+	}
+	s.Runtime = nil
+	for i := len(s.Messages) - 1; i >= 0; i-- {
+		if s.Messages[i].Runtime != nil {
+			s.Runtime = s.Messages[i].Runtime
+			break
+		}
+	}
 	s.UpdatedAt = time.Now().UnixMilli()
 	_ = e.persistSessionLocked(s)
 	out := cloneSession(s)

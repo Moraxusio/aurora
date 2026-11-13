@@ -535,14 +535,17 @@ class AiProvider {
   String protocol;
   String baseUrl;
   String apiKey;
-  /// '' (auto) | 'bearer' | 'x-api-key'
+  /// '' (auto) | 'bearer' | 'x-api-key' | 'chatgpt-device'
   String authMode;
+  AiOAuthCredential? oauth;
+  bool get isSubscription => authMode == 'chatgpt-device';
   String model;
   /// Cached / user-listed models for quick switching
   List<String> models;
   /// '' | 'low' | 'medium' | 'high'
   String reasoningEffort;
   int contextWindow;
+  Map<String, int> modelContextWindows;
   int maxTokens;
   /// Route LLM & shell traffic on the server through its configured proxy node (proxysvc).
   bool useProxy;
@@ -555,14 +558,17 @@ class AiProvider {
     this.baseUrl = 'https://api.openai.com/v1',
     this.apiKey = '',
     this.authMode = '',
+    this.oauth,
     this.model = '',
     List<String>? models,
     this.reasoningEffort = '',
     this.contextWindow = 0,
+    Map<String, int>? modelContextWindows,
     this.maxTokens = 0,
     this.useProxy = false,
     Map<String, String>? headers,
-  })  : models = models ?? [],
+  })  : modelContextWindows = modelContextWindows ?? {},
+        models = models ?? [],
         headers = headers ?? {};
 
   static const protocols = ['openai-chat', 'anthropic-messages', 'openai-responses'];
@@ -600,10 +606,16 @@ class AiProvider {
       baseUrl: j['base_url'] as String? ?? '',
       apiKey: j['api_key'] as String? ?? '',
       authMode: j['auth_mode'] as String? ?? '',
+      oauth: j['oauth'] is Map ? AiOAuthCredential.fromJson((j['oauth'] as Map).cast<String, dynamic>()) : null,
       model: j['model'] as String? ?? '',
       models: [for (final m in (j['models'] as List? ?? const [])) '$m'],
       reasoningEffort: j['reasoning_effort'] as String? ?? '',
       contextWindow: (j['context_window'] as num?)?.toInt() ?? 0,
+      modelContextWindows: {
+        if (j['model_context_windows'] is Map)
+          for (final e in (j['model_context_windows'] as Map).entries)
+            if (e.value is num && (e.value as num).toInt() > 0) '${e.key}': (e.value as num).toInt(),
+      },
       maxTokens: (j['max_tokens'] as num?)?.toInt() ?? 0,
       useProxy: j['use_proxy'] == true,
       headers: hdrs,
@@ -617,30 +629,53 @@ class AiProvider {
         'base_url': baseUrl,
         if (apiKey.isNotEmpty) 'api_key': apiKey,
         if (authMode.isNotEmpty) 'auth_mode': authMode,
+        if (oauth != null) 'oauth': oauth!.toJson(),
         'model': model,
         if (models.isNotEmpty) 'models': models,
         if (reasoningEffort.isNotEmpty) 'reasoning_effort': reasoningEffort,
         if (contextWindow > 0) 'context_window': contextWindow,
+        if (modelContextWindows.isNotEmpty) 'model_context_windows': modelContextWindows,
         if (maxTokens > 0) 'max_tokens': maxTokens,
         if (useProxy) 'use_proxy': true,
         if (headers.isNotEmpty) 'headers': headers,
       };
 
   /// Wire payload passed to agent RPCs (`ai.run`, `ai.models`, `ai.compact`).
+  /// NEVER includes refresh tokens. Only ai.auth.refresh may carry those.
   Map<String, dynamic> toWireJson({String? modelOverride}) => {
         'id': id,
         'name': name,
-        'protocol': protocol,
-        'base_url': baseUrl,
-        if (apiKey.isNotEmpty) 'api_key': apiKey,
+        'protocol': isSubscription ? 'openai-responses' : protocol,
+        'base_url': isSubscription ? 'https://chatgpt.com/backend-api/codex' : baseUrl,
+        if (isSubscription && oauth != null) 'api_key': oauth!.access,
+        if (!isSubscription && apiKey.isNotEmpty) 'api_key': apiKey,
+        if (isSubscription && oauth != null) 'expires_at': oauth!.expires,
+        if (isSubscription && oauth != null && oauth!.accountId.isNotEmpty) 'account_id': oauth!.accountId,
         if (authMode.isNotEmpty) 'auth_mode': authMode,
         'model': (modelOverride != null && modelOverride.isNotEmpty) ? modelOverride : model,
         if (reasoningEffort.isNotEmpty) 'reasoning_effort': reasoningEffort,
-        if (contextWindow > 0) 'context_window': contextWindow,
-        if (maxTokens > 0) 'max_tokens': maxTokens,
+        if (effectiveContextWindow(modelOverride) > 0) 'context_window': effectiveContextWindow(modelOverride),
+        if (!isSubscription && maxTokens > 0) 'max_tokens': maxTokens,
         'use_proxy': useProxy,
-        if (headers.isNotEmpty) 'headers': headers,
+        if (!isSubscription && headers.isNotEmpty) 'headers': headers,
       };
+
+  int effectiveContextWindow([String? selected]) => contextWindow > 0 ? contextWindow : modelContextWindows[selected ?? model] ?? 0;
+}
+
+/// Stored only inside the sealed profile. Do not stringify or log credentials.
+class AiOAuthCredential {
+  final String access;
+  final String refresh;
+  final int expires;
+  final String accountId;
+  const AiOAuthCredential({required this.access, required this.refresh, required this.expires, this.accountId = ''});
+  factory AiOAuthCredential.fromJson(Map<String, dynamic> j) => AiOAuthCredential(
+    access: j['access'] as String? ?? '', refresh: j['refresh'] as String? ?? '',
+    expires: (j['expires'] as num?)?.toInt() ?? 0, accountId: j['account_id'] as String? ?? '',
+  );
+  Map<String, dynamic> toJson() => {'access':access, 'refresh':refresh, 'expires':expires, if (accountId.isNotEmpty) 'account_id':accountId};
+  bool get needsRefresh => access.isEmpty || expires <= DateTime.now().millisecondsSinceEpoch + 90000;
 }
 
 /// A host key the user confirmed on first SSH contact (D-2).

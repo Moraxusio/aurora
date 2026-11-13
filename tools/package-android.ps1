@@ -32,6 +32,10 @@ if (-not (Test-Path (Join-Path $windowsDir 'LICENSES.txt'))) { throw "no LICENSE
 if (-not (Test-Path (Join-Path $AgentDir 'amd64\manifest.sig'))) { throw "no signed agent in $AgentDir" }
 $agentVersion = (Get-Content (Join-Path $AgentDir 'amd64\manifest.json') -Raw | ConvertFrom-Json).version
 if ($agentVersion -ne $Version) { throw "the agent in ${AgentDir} is ${agentVersion}, not ${Version}; build the Windows package of this version first" }
+# Never overwrite a previously built APK or append duplicate checksum entries.
+foreach ($name in @("Aurora-$Version-android-arm64-v8a.apk", "Aurora-$Version-android-armeabi-v7a.apk", "Aurora-$Version-android-x86_64.apk", 'SHA256SUMS.txt')) {
+  if (Test-Path -LiteralPath (Join-Path $Out $name)) { throw "$(Join-Path $Out $name) exists; use a fresh output directory" }
+}
 function Clear-Agent {
   Get-ChildItem $dest -Recurse -File | Where-Object { $_.Name -ne '.gitkeep' } | Remove-Item -Force
   Get-ChildItem $legal -File | Where-Object { $_.Name -ne '.gitkeep' } | Remove-Item -Force
@@ -49,7 +53,7 @@ try {
   foreach ($a in 'arm64-v8a', 'armeabi-v7a', 'x86_64') {
     $n = "Aurora-$Version-android-$a.apk"
     $apkOut = Join-Path $Out $n
-    Copy-Item "build\app\outputs\flutter-apk\app-$a-release.apk" $apkOut -Force
+    Copy-Item "build\app\outputs\flutter-apk\app-$a-release.apk" $apkOut
     $fsApk = [IO.File]::OpenRead($apkOut)
     $apkHash = -join ($shaApk.ComputeHash($fsApk) | ForEach-Object { $_.ToString('x2') })
     $fsApk.Close()

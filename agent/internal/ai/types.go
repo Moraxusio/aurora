@@ -40,7 +40,9 @@ type ProviderConfig struct {
 	Protocol        string            `json:"protocol"` // "openai-chat" | "anthropic-messages" | "openai-responses"
 	BaseURL         string            `json:"base_url"`
 	APIKey          string            `json:"api_key,omitempty"`
-	AuthMode        string            `json:"auth_mode,omitempty"` // "bearer" | "x-api-key" | "" (auto)
+	AuthMode        string            `json:"auth_mode,omitempty"`  // "bearer" | "x-api-key" | "chatgpt-device" | "" (auto)
+	AccountID       string            `json:"account_id,omitempty"` // ChatGPT routing only, never persisted in sessions
+	ExpiresAt       int64             `json:"expires_at,omitempty"`
 	Model           string            `json:"model"`
 	ModelName       string            `json:"model_name,omitempty"`
 	ContextWindow   int               `json:"context_window,omitempty"`
@@ -122,6 +124,7 @@ type Message struct {
 	Role      string        `json:"role"` // "user" | "assistant" | "tool" | "compaction"
 	Agent     string        `json:"agent,omitempty"`
 	Model     string        `json:"model,omitempty"`
+	Runtime   *RuntimeInfo  `json:"runtime,omitempty"`
 	Parts     []Part        `json:"parts"`
 	Finish    string        `json:"finish,omitempty"` // "stop" | "tool-calls" | "length" | "aborted" | "error"
 	Error     string        `json:"error,omitempty"`
@@ -148,40 +151,42 @@ type InboxItem struct {
 }
 
 type Session struct {
-	ID             string     `json:"id"`
-	ParentID       string     `json:"parent_id,omitempty"`
-	Title          string     `json:"title"`
-	Pinned         bool       `json:"pinned,omitempty"`
-	Root           string     `json:"root"`                    // Aurora root ID (e.g. "home")
-	Workdir        string     `json:"workdir"`                 // Root-relative path (e.g. "/project")
-	Agent          string     `json:"agent"`                   // "build" | "plan" | "explore" | "general"
-	PermissionMode string     `json:"permission_mode,omitempty"` // "ask" | "auto"
-	Model          string     `json:"model,omitempty"`
-	Protocol       string     `json:"protocol,omitempty"`
-	Todos          []TodoItem `json:"todos,omitempty"`
-	TotalUsage     Usage      `json:"total_usage"`
-	LastInputToks  int        `json:"last_input_tokens,omitempty"`
-	Messages       []Message  `json:"messages"`
-	CreatedAt      int64      `json:"created_at"`
-	UpdatedAt      int64      `json:"updated_at"`
+	ID             string       `json:"id"`
+	ParentID       string       `json:"parent_id,omitempty"`
+	Title          string       `json:"title"`
+	Pinned         bool         `json:"pinned,omitempty"`
+	Root           string       `json:"root"`                      // Aurora root ID (e.g. "home")
+	Workdir        string       `json:"workdir"`                   // Root-relative path (e.g. "/project")
+	Agent          string       `json:"agent"`                     // "build" | "plan" | "explore" | "general"
+	PermissionMode string       `json:"permission_mode,omitempty"` // "ask" | "auto"
+	Model          string       `json:"model,omitempty"`
+	Protocol       string       `json:"protocol,omitempty"`
+	Todos          []TodoItem   `json:"todos,omitempty"`
+	TotalUsage     Usage        `json:"total_usage"`
+	LastInputToks  int          `json:"last_input_tokens,omitempty"`
+	Runtime        *RuntimeInfo `json:"runtime,omitempty"`
+	Context        *ContextInfo `json:"context,omitempty"`
+	Messages       []Message    `json:"messages"`
+	CreatedAt      int64        `json:"created_at"`
+	UpdatedAt      int64        `json:"updated_at"`
 }
 
 // SessionSummary is the lightweight metadata returned by ai.sessions.
 type SessionSummary struct {
-	ID                string                `json:"id"`
-	ParentID          string                `json:"parent_id,omitempty"`
-	Title             string                `json:"title"`
-	Pinned            bool                  `json:"pinned,omitempty"`
-	Root              string                `json:"root"`
-	Workdir           string                `json:"workdir"`
-	Agent             string                `json:"agent"`
-	Model             string                `json:"model,omitempty"`
-	Preview           string                `json:"preview,omitempty"`
-	Running           bool                  `json:"running"`
-	PendingPermission *PermissionQuestion   `json:"pending_permission,omitempty"`
-	MessageCount      int                   `json:"message_count"`
-	CreatedAt         int64                 `json:"created_at,omitempty"`
-	UpdatedAt         int64                 `json:"updated_at"`
+	ID                string              `json:"id"`
+	ParentID          string              `json:"parent_id,omitempty"`
+	Title             string              `json:"title"`
+	Pinned            bool                `json:"pinned,omitempty"`
+	Root              string              `json:"root"`
+	Workdir           string              `json:"workdir"`
+	Agent             string              `json:"agent"`
+	Model             string              `json:"model,omitempty"`
+	Preview           string              `json:"preview,omitempty"`
+	Running           bool                `json:"running"`
+	PendingPermission *PermissionQuestion `json:"pending_permission,omitempty"`
+	MessageCount      int                 `json:"message_count"`
+	CreatedAt         int64               `json:"created_at,omitempty"`
+	UpdatedAt         int64               `json:"updated_at"`
 }
 
 // StreamEvent is pushed to subscribed clients over ai.stream.
@@ -205,6 +210,28 @@ type StreamEvent struct {
 	Todos      []TodoItem          `json:"todos,omitempty"`
 	Diffs      []FileDiff          `json:"diffs,omitempty"`
 	Usage      *Usage              `json:"usage,omitempty"`
+	TotalUsage *Usage              `json:"total_usage,omitempty"`
+	Runtime    *RuntimeInfo        `json:"runtime,omitempty"`
+	Context    *ContextInfo        `json:"context,omitempty"`
+}
+
+// Explicit allowlist: credentials, account IDs, URLs and custom headers must
+// never enter persisted runtime metadata or broadcast stream events.
+type RuntimeInfo struct {
+	ProviderID   string `json:"provider_id,omitempty"`
+	ProviderName string `json:"provider_name,omitempty"`
+	Model        string `json:"model"`
+	Protocol     string `json:"protocol"`
+	AuthMode     string `json:"auth_mode,omitempty"`
+}
+
+type ContextInfo struct {
+	Tokens      int    `json:"tokens"` // estimated active input, NOT cumulative usage
+	Limit       int    `json:"limit"`
+	LimitSource string `json:"limit_source"` // configured | default | unknown
+	LastInput   int    `json:"last_input"`   // exact inclusive input from most recent model call
+	Estimated   bool   `json:"estimated"`
+	Overhead    int    `json:"overhead,omitempty"` // estimated system prompt + tool schemas
 }
 
 type PermissionQuestion struct {

@@ -400,6 +400,14 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - PDF 改为 PDFium 按需分块读取：小于 16 MiB 的 PDF 预加载后打开，大文件用 512 KiB range、并发合并与最近块缓存，按 etag 检测远端替换；阅读器新增目录、缩略图、页码跳转、缩放、全文搜索高亮、夜间模式、密码提示、文档链接跳转/外链复制和会话内阅读位置记忆。
 - 已验证：`flutter analyze lib test` 0 问题；`aurora_profile` 42 项通过；Go `internal/files` 在 WSL 下通过；文件管理器测试 11 项、文件逻辑测试 18 项、PDF range 测试 9 项、真实 PDFium 阅读器测试 8 项通过；app 全量测试 187 项通过（20 项按设计跳过），UI 截图与既有文件/PDF 测试通过。
 - 未验证：真实远程大 PDF 在高延迟网络下的翻页体验、加密 PDF 的真实密码文件、Windows 真实窗口操作、Android 真机；文件夹大小是手动快照，不会自动更新。
-- 打包与归档（源提交 `13848b9`，`-Version 3.11.0`，已归档至 `release3\Aurora-3.11.0`，尚未上传 GitHub）：
+- 打包与归档（源提交 `13848b9`，`-Version 3.11.0`，已归档至 `release3\Aurora-3.11.0`；2026-11-13 已发布 GitHub Release `v3.11.0`，6 个文件重新下载后全部与本地一致；远程 main 为 `3da7826`）：
   - Windows ZIP：25,446,238 字节，SHA-256 `dd38d2a3bd9bf267de28ee65e8e5db72cb173a1248e3232cf4c5746b05115c39`，sidecar 一致，30 个文件与目录逐字节一致；文件/产品版本 3.11.0；内置 agent SHA-256 `8aa930c5c7e011de048e17effc41a3dee4255794f3f2ec7f23f6e95daf014911`，签名验证及篡改拒绝通过；敏感字符串命中 0、可疑文件 0。
   - APK SHA-256：arm64-v8a `f949e596c1486756614f5bb9e56ef4986929c1928177549f500be9d2bc61b406`；armeabi-v7a `6fe334a88b3424fe427a96e64eb82af2d29edc3a206230fa64e2f7a073f1a1aa`；x86_64 `0cb007f4ae4ad0bf557812b878636a210946f4d1bbdf8ada9416b7672b3383ab`。证书与之前相同，三个 APK 的 agent/法律文件逐字节核对通过，敏感字符串命中 0；v2 发布目录仍为 13 项。
+
+### AI 上下文、提供商/模型与 OpenAI 订阅 device 登录（2026-11-13，未打包）
+
+- 见 D-106、`docs/AI.md`。AI 工作台增加当步/最近实际请求的提供商与模型、下一次选择、上下文估算/输入预算/百分比与占用条、单独的累计用量；每条回答保存提供商/模型，旧记录明确未知。窗口元数据按模型保留，设置页支持手动覆盖。窄屏输入工具栏换行，长工作目录可横向滚动；重复 finish/compaction 事件不重复累加。
+- 复用 OpenCode（参考仓库提交 `3d308eae2e68dc39dfc12aba9dd408f9ce1cc0a1`）的 device 授权、token exchange/refresh、account 路由与 Codex headers/body；MIT 署名沿用 `agent/internal/ai/THIRD_PARTY_OPENCODE_LICENSE`。新增三项 `ai.auth.*` RPC、客户端授权对话框、并发刷新与安全存储、固定订阅路由。标题和压缩同样支持订阅，主调用、子智能体共用 Responses 分发。订阅模型建议不冒充账号资格列表，不调用 API Key 的 `/v1/models`。
+- 已验证：Go `internal/ai` 17 项顶层测试（含本地 HTTP 授权桩、pending/interval、交换/刷新/JWT routing、重定向拒绝、标题/压缩、过期/流错误/断流、上下文压缩重算、凭据不落盘/不广播）和 `internal/entry` 17 项在 WSL 直接执行通过，严格保留退出码，未使用旧的 `| tail` 测试脚本；linux/amd64、linux/arm64 agent 构建与定向 `go vet` 通过。`aurora_profile` 46 项通过，含真实 AES-GCM 加密落盘/重开/篡改拒绝及 wire 不带 refresh。Flutter 全量 201 项通过、20 项按设计跳过；AI 定向 21 项，覆盖取消/到期/在途授权、并发刷新/失败保存/删除提供商、输入保留、实际与下一次模型分离、事件幂等、窄屏布局。
+- `flutter analyze lib test` 0 问题。无真实窗口截图：使用 Windows 字体在组件测试中渲染并检查 AI 宽屏/390 px 窄屏，输出到本机临时目录；不抢焦点、不读取真实账号或现有 profile。不更改 v2、正式 agent 安装及 release3 旧产物。
+- 未验证：真实 OpenAI/ChatGPT 账号的完整授权与多轮订阅对话、真实服务器代理出口、真实 Windows 窗口、Android 真机。仅 HTTP SSE 移植，未移植 OpenCode WebSocket/zstd/browser callback/token-sharing；长任务过期需客户端下次调用刷新，退出登录不会撤销账号端授权。尚未打包或发布新版本。

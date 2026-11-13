@@ -15,6 +15,7 @@ import (
 // (packages/ai/src/protocols/open-responses.ts) for GPT-5 / Codex / OpenAI Responses gateways.
 func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() map[string]string, onDelta func(LLMDelta)) (LLMResponse, error) {
 	endpoint := resolveEndpoint(req.Provider.BaseURL, "https://api.openai.com/v1", "/responses")
+	subscription := req.Provider.AuthMode == ChatGPTAuthMode
 
 	var inputItems []map[string]any
 
@@ -137,7 +138,7 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 	if maxTok <= 0 {
 		maxTok = req.Provider.MaxOutputTokens
 	}
-	if maxTok > 0 {
+	if maxTok > 0 && !subscription {
 		body["max_output_tokens"] = maxTok
 	}
 	if req.Provider.ReasoningEffort != "" {
@@ -145,7 +146,7 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 			"effort":  req.Provider.ReasoningEffort,
 			"summary": "auto",
 		}
-	} else if req.Temperature != nil {
+	} else if req.Temperature != nil && !subscription {
 		body["temperature"] = *req.Temperature
 	}
 
@@ -159,16 +160,29 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 		return LLMResponse{}, err
 	}
 	applyOpenCodeHeaders(httpReq.Header, req)
+	if subscription {
+		applySubscriptionHeaders(httpReq.Header, req)
+	}
 
 	client := newHTTPClient(req.Provider.UseProxy, proxyEnv)
+	if subscription {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	}
+	defer client.CloseIdleConnections()
 	res, err := client.Do(httpReq)
 	if err != nil {
+		if subscription {
+			return LLMResponse{}, errors.New("ChatGPT 订阅请求失败，请检查服务器网络或代理出口")
+		}
 		return LLMResponse{}, err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		errBody, _ := io.ReadAll(io.LimitReader(res.Body, 256*1024))
+		if subscription {
+			return LLMResponse{}, subscriptionHTTPError(res.StatusCode, errBody)
+		}
 		return LLMResponse{}, &HTTPStatusError{Status: res.StatusCode, Body: string(errBody)}
 	}
 
@@ -188,6 +202,7 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 	idToIdx := map[string]int{}
 	var usage Usage
 	finishReason := "stop"
+	completed := false
 
 	getOrCreate := func(idx int, itemID string) *respItem {
 		if itemID != "" {
@@ -276,6 +291,12 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 
 		switch evType {
 		case "error", "response.failed":
+			if subscription {
+				if packet.Error != nil && packet.Error.Code == "context_length_exceeded" || packet.Response != nil && packet.Response.Error != nil && packet.Response.Error.Code == "context_length_exceeded" {
+					return subscriptionContextError()
+				}
+				return errors.New("ChatGPT 返回流式错误，请检查订阅额度和模型权限后重试")
+			}
 			return &HTTPStatusError{Status: 500, Body: data}
 
 		case "response.output_item.added", "response.output_item.done":
@@ -376,6 +397,7 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 			}
 
 		case "response.completed", "response.incomplete":
+			completed = true
 			if packet.Response != nil {
 				if packet.Response.Usage != nil {
 					ru := packet.Response.Usage
@@ -420,6 +442,9 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 	})
 	if err != nil && !errors.Is(err, errSSEStreamDone) {
 		return LLMResponse{}, err
+	}
+	if subscription && !completed {
+		return LLMResponse{}, errors.New("ChatGPT 响应流提前断开，请重新发送；登录到期时请先刷新登录")
 	}
 
 	var idxs []int

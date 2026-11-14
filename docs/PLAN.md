@@ -686,3 +686,13 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - README 与包内说明同步三轮功能；生产实现沿用已验收源码。复用前述功能回归、最终 22 项浮层／文件／完整 GUI 定向重验及静态分析结果。正式包核对干净提交、构建前后源摘要、正式入口、版本与签名、ZIP 全文件一致性、许可证及实际隔离启动。
 - GitHub 仓库写入权限与远程 main 基线已确认，版本标签可用；先上传草稿，逐项核对 3 项 Windows 资产的服务端 SHA-256 和大小后发布为 latest。授权仅在仓库外临时 DPAPI 保存，完成记录推送后清理。
 - 旧正式包及三轮候选的 12 项保护摘要已记录，v2 工作区干净、`release` 顶层 13 项。产物使用新的 `release3/Aurora-3.20.0`；本地 agent 继续随客户端运行，原 API Key／OAuth 和配置格式保持兼容，Android 继续暂缓。
+
+### 3.20.0 Windows 已发布（2026-11-15）
+
+- 发布：https://github.com/Moraxusio/aurora/releases/tag/v3.20.0 。源码与标签指向干净提交 `f67e790baca9abf118a9dc1bc6fa0f0c205c2a5a`，包含 D-120／D-121／D-122。客户端 `3.20.0+32000`、两类随包 agent 均为 3.20.0，沿用发行签名密钥 ID `87828dfb18459372`。
+- Release 编译 **40.4 秒**，正式入口显式指定 `lib/main.dart`，完整签名打包 55.1 秒；构建前后 **1461 个源码文件摘要一致**。客户端 AOT `8d2b2d2fb5c455b9a1a365f6247755e002dd25c5ec3a51dc42d4069f0bd2dce8` 与用户已验收的 preview3 完全相同，沿用前述 184 项相关回归、最终 22 项定向重验和静态分析结果，没有重复整轮测试。
+- 本地包 `C:\dev\VPS\release3\Aurora-3.20.0.zip`，**32,098,188 字节**，SHA-256 `bf9b4b79f13f50ee2781d7b56d7414dd4aae23e10fe6b913ef4755be1c8e4072`；ZIP 全部 **33 个文件**与目录逐项一致，sidecar 与 SHA256SUMS 匹配，法律文件及 OpenCode MIT 署名保留。
+- Linux amd64 agent：14,287,010 字节，SHA-256 `f2c9a191dd765b947abe80f5b9e7b07b93e733d7fe1d12a95df370941766bd02`；Windows amd64 本地 agent：13,345,280 字节，SHA-256 `d7ca44d4e2c8f4888e08738c6a1ae11496e711f4696647606360b9d9ccd02c98`。两类产品验签通过，Go 元数据均记录上述 revision 和 `vcs.modified=false`，实际 `version` 命令均返回 3.20.0。
+- 正式包实际 Release 使用临时独立配置／实例启动，连接同包签名本地 agent（界面显示 3.20.0）。原生点击文件选项、切换隐藏文件并确认勾选、排序菜单选择名称、工作台菜单及命令选择器，6 张截图已检查，GUI 异常记录 **0**。仅结束自有客户端 PID 11464，agent PID 29456 随之退出；后台启动器完整保留到验收结束。
+- 源码与标签先推送，再上传草稿；Windows ZIP、ZIP sidecar、`SHA256SUMS.txt` 共 **3 项资产**的服务端 SHA-256 和大小全部匹配后转正式 latest，公开 API 再确认非草稿／非预发布及规范下载链接。发布证据见 [20261115-release-3.20.0.json](performance/20261115-release-3.20.0.json)，本机日志／截图位于临时 `release-3.20.0` 目录。
+- 旧正式包及三个候选的 12 项保护摘要一致，v2 干净、`release` 顶层仍 13 项。无发布授权、私钥、真实 profile 或验收启动器进入正式包；临时 GitHub 授权在本次记录推送后清理。Android 继续暂缓，原始 GPU 灰屏根因及其余实机验收边界沿用前述记录。

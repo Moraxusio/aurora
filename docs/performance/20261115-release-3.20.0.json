@@ -1,0 +1,108 @@
+{
+  "date": "2026-11-15",
+  "version": "3.20.0",
+  "platform": "Windows x64",
+  "source_revision": "f67e790baca9abf118a9dc1bc6fa0f0c205c2a5a",
+  "tag": "v3.20.0",
+  "release_url": "https://github.com/Moraxusio/aurora/releases/tag/v3.20.0",
+  "release_id": 445543546,
+  "published_at_utc": "2026-11-14T19:39:49Z",
+  "draft": false,
+  "prerelease": false,
+  "public_latest_verified": true,
+  "build": {
+    "mode": "Windows Release",
+    "target": "lib/main.dart",
+    "client_version": "3.20.0+32000",
+    "windows_build_seconds": 40.4,
+    "total_packaging_seconds": 55.1,
+    "clean_before_and_after": true,
+    "source_files_checked_before_and_after_build": 1461,
+    "client_aot_sha256": "8d2b2d2fb5c455b9a1a365f6247755e002dd25c5ec3a51dc42d4069f0bd2dce8",
+    "aot_identical_to_accepted_preview": "Aurora-3.20.0-ui-polish-preview3",
+    "regressions_reused": "D-120/D-121/D-122 accepted results; final overlay scope 184 passed and last adjustment 22 passed; final static analysis zero issues"
+  },
+  "package": {
+    "directory": "C:/dev/VPS/release3/Aurora-3.20.0",
+    "zip_bytes": 32098188,
+    "zip_sha256": "bf9b4b79f13f50ee2781d7b56d7414dd4aae23e10fe6b913ef4755be1c8e4072",
+    "zip_sidecar_matches": true,
+    "zip_files_identical_to_directory": 33,
+    "opencode_mit_attribution_present": true,
+    "credential_pattern_hits": 0,
+    "private_or_preview_files": 0,
+    "agents": [
+      {
+        "product": "aurora3-agent",
+        "platform": "linux/amd64",
+        "version_command_result": "3.20.0",
+        "bytes": 14287010,
+        "sha256": "f2c9a191dd765b947abe80f5b9e7b07b93e733d7fe1d12a95df370941766bd02",
+        "key_id": "87828dfb18459372",
+        "signature_verified": true,
+        "source_revision": "f67e790baca9abf118a9dc1bc6fa0f0c205c2a5a",
+        "vcs_modified": false
+      },
+      {
+        "product": "aurora3-local-agent",
+        "platform": "windows/amd64",
+        "version_command_result": "3.20.0",
+        "bytes": 13345280,
+        "sha256": "d7ca44d4e2c8f4888e08738c6a1ae11496e711f4696647606360b9d9ccd02c98",
+        "key_id": "87828dfb18459372",
+        "signature_verified": true,
+        "source_revision": "f67e790baca9abf118a9dc1bc6fa0f0c205c2a5a",
+        "vcs_modified": false
+      }
+    ]
+  },
+  "formal_release_smoke": {
+    "isolated_profile_and_instance": true,
+    "client_pid": 11464,
+    "local_agent_pid": 29456,
+    "local_agent_version_observed_in_ui": "3.20.0",
+    "client_exited": true,
+    "local_agent_followed_client_exit": true,
+    "gui_error_records": 0,
+    "screenshots_reviewed": 6,
+    "actions": ["Connect signed local agent", "Open file options", "Toggle hidden files and confirm check mark", "Open anchored sorting menu and choose name", "Open workbench menu", "Open command picker"]
+  },
+  "publication": {
+    "source_and_tag_pushed": true,
+    "assets_verified_before_publication": true,
+    "public_latest_and_canonical_urls_verified": true,
+    "verification": "local SHA-256 and size compared with GitHub server digest and size; no repeated full download",
+    "assets": [
+      {
+        "name": "Aurora-3.20.0.zip",
+        "bytes": 32098188,
+        "sha256": "bf9b4b79f13f50ee2781d7b56d7414dd4aae23e10fe6b913ef4755be1c8e4072",
+        "asset_id": 748567870,
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.20.0/Aurora-3.20.0.zip"
+      },
+      {
+        "name": "Aurora-3.20.0.zip.sha256",
+        "bytes": 85,
+        "sha256": "e6e5a837ed805fbca98cf376c01079d29220de45f7022ff9e7e755c6e1e5ab09",
+        "asset_id": 748568074,
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.20.0/Aurora-3.20.0.zip.sha256"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 175,
+        "sha256": "34e09460803e95e7e9608deb0dc47f6e6e62761008d02c9a3b0c1c2b794573c3",
+        "asset_id": 748568145,
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.20.0/SHA256SUMS.txt"
+      }
+    ]
+  },
+  "protection": {
+    "protected_artifacts_unchanged": 12,
+    "v2_clean": true,
+    "release_top_level_items": 13,
+    "android_release": "deferred",
+    "credentials_migrated_or_reset": false
+  },
+  "evidence_directory": "release-3.20.0 under the local OpenCode temporary directory",
+  "evidence_files": ["package.log", "source-before.json", "build-result.json", "package-check.json", "release-smoke/processes.json", "release-smoke/result.json", "release-smoke/capture-*.png", "publish-result.json"]
+}

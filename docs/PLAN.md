@@ -634,3 +634,11 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 用户已授权编译、打包及 GitHub 发布。发布范围为 Windows x64 客户端 `3.19.0+31900`、Linux amd64 远程 agent 和 Windows amd64 本地 agent；Android 继续暂缓。
 - D-118／D-119 作为本次功能版本统一提交，从干净提交构建；复用该生产代码已完成的 83 项界面、33 项 profile、Windows／Linux Go 回归和真实本地签名联调，完整静态分析零问题。
 - 使用既有发行签名密钥，产物写入全新 `release3/Aurora-3.19.0` 和同名 ZIP；核对构建来源、客户端／agent 版本、签名、ZIP 文件、许可证和上传资产 SHA-256。旧包与五个预览保护摘要、v2 只读工作区及 `release` 顶层 13 项一并核对。
+
+### 3.19.0 Windows 已发布（2026-11-15）
+
+- 发布：https://github.com/Moraxusio/aurora/releases/tag/v3.19.0 。源码和标签指向干净提交 `4cc89772286cef41945013e030e59734ad590f23`。客户端 `3.19.0+31900`，两类随包 agent 均为 `3.19.0`，发行签名密钥 ID `87828dfb18459372`；Windows ZIP、ZIP sidecar 与 SHA256SUMS 共 3 项资产已发布为 latest，GitHub 服务端 SHA-256 和大小逐项匹配。
+- Release 编译 74.6 秒，正式入口 `lib/main.dart`。构建前后 1431 个源码文件摘要一致，两类 agent 均记录该 revision、`vcs.modified=false`，运行 `version` 均返回 3.19.0。签名、客户端版本、ZIP 33 个文件逐项一致性及 OpenCode MIT 署名检查通过。
+- 本地包：`C:\dev\VPS\release3\Aurora-3.19.0.zip`，32,046,440 字节，SHA-256 `d2973d0abba49c85a6e95e1486a430398b7f22d3edc3ad23cb20c3f328dc3692`；AOT SHA-256 `f777793dc620e40a5147eb04359f9e7c3f24a2360aee9d80bd57a213c8e5f6cb`。
+- Linux amd64 agent：14,287,010 字节，SHA-256 `e674566e85765e6e86352f8031b632d85cbf0d782b8018d79c9174a66f36fb02`；Windows amd64 本地 agent：13,345,280 字节，SHA-256 `c69bd1cb355fd0de815a2b7225893878094436e0430afadea524211bd955116f`。
+- 沿用发布准备记录中的功能回归，没有重复全量测试或真实账号／GPU 联调。旧正式包与五个预览的 13 项保护摘要一致，v2 工作区干净、`release` 顶层仍 13 项。Android 暂缓；远程完整 GPU 详情和 AI 出口选择需用户确认升级 agent。本次 GitHub 授权仅临时 DPAPI 保存，在发布记录推送后清理。

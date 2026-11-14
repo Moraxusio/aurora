@@ -48,4 +48,6 @@
 
 2026-11-14 结果：Go 7 组测试（含 3 个故障子场景）、Flutter 11 项回归全部通过；Go vet、Flutter 完整静态分析零问题，Linux amd64 agent 编译成功。已检查深浅主题截图；功能仍为本地开发版本，尚未打包发布。
 
+后续 D-119 的 Windows 本地扩展与上述 GPU 功能已随 [3.19.0 Windows 发行](https://github.com/Moraxusio/aurora/releases/tag/v3.19.0) 发布；远程完整详情需 agent 3.19.0。真实硬件兼容性仍待实机验证。
+
 运行：`go test ./internal/monitor`（Linux）；`flutter test test/monitor_gpu_test.dart`（Windows）。设置 `AURORA_GPU_SHOTS` 为输出目录可保存深浅主题截图。

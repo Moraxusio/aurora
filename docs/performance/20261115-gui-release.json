@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-15",
+  "candidate": "3.20.0-gui-preview1",
+  "mode": "Windows Release",
+  "target": "lib/main.dart",
+  "client_file_version": "3.20.0+32000",
+  "source_head": "a52577cce0fa7c0f00c0d8b1cbbe6eb2139138f6",
+  "source_working_tree": "uncommitted GUI foundation refactor",
+  "source_files_checked_before_and_after_build": 994,
+  "client_aot_sha256": "f88e06e47ee484806a8fa960a7ad948b684a91fc349931f9d0209011ca3c4f6d",
+  "zip_bytes": 32077366,
+  "zip_sha256": "eba61e0c45cb8c7b1977248ccb4944a8e2e37093187a02f8a5a66726ac5a1591",
+  "zip_sidecar_matches": true,
+  "zip_client_aot_launcher_match_directory": true,
+  "backend_version": "3.19.0",
+  "backend_signatures_verified": true,
+  "backend_and_legal_files_identical_to_base": 11,
+  "opencode_mit_attribution_present": true,
+  "isolated_profile": true,
+  "real_local_agent": true,
+  "native_pointer_gpu_expansion": true,
+  "native_wheel_gpu_process_list": true,
+  "hardware": "NVIDIA GeForce MX450 / 573.91",
+  "gui_fault_records": 0,
+  "test_client_exited": true,
+  "owned_agent_exited": true,
+  "screenshots": [
+    "gui-foundation-release-preview1/capture-013459.png",
+    "gui-foundation-release-preview1/capture-013522.png"
+  ],
+  "driver_power_limit_observation": {
+    "current_watts": 5001,
+    "default_watts": 9.5,
+    "display_matches_native_xml": true
+  },
+  "original_gray_screen_reproduced": false,
+  "original_gray_screen_root_cause_confirmed": false
+}

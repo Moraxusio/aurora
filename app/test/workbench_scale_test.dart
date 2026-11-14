@@ -60,9 +60,9 @@ void main() {
       const point = Offset(450, 250);
       await t.tapAt(point, buttons: 2);
       await t.pumpAndSettle();
-      final menu = find.byType(PopupMenuItem<int>);
+      final menu = find.byType(WorkbenchMenuEntry<int>);
       expect(menu, findsOneWidget);
-      expect(t.getTopLeft(menu).dx, closeTo(point.dx, .01), reason: 'screen position must be converted into the scaled overlay');
+      expect(t.getTopLeft(find.byType(FloatingSurface)).dx, closeTo(point.dx, .01), reason: 'screen position must be converted into the scaled overlay');
       await t.tapAt(t.getCenter(menu));
       await t.pumpAndSettle();
       expect(picked, isTrue);

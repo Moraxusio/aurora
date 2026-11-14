@@ -29,7 +29,9 @@ import 'tab_layout.dart';
 import 'tab_workspace_view.dart';
 import 'workbench_view.dart';
 import 'retained_pages.dart';
+import 'retained_pane.dart';
 import 'workbench_shortcuts.dart';
+import 'ui_diagnostics.dart';
 
 const double _wide = 900, _narrow = 600;
 
@@ -162,6 +164,10 @@ class _ShellState extends State<Shell> {
 
   List<Command> _commands(Workspace? ws) {
     final out = <Command>[
+      Command(id: 'diagnostics.copyGui', title: '复制界面诊断', group: '诊断', icon: Icons.bug_report_outlined, run: () async {
+        await Clipboard.setData(ClipboardData(text: UiDiagnostics.shared.snapshot()));
+        Toast.show('已复制界面诊断');
+      }),
       if (Platform.isWindows) Command(id: 'local.open', title: '打开本机文件夹…', group: '本机', icon: Icons.folder_open, run: () => openLocalFolder(app)),
       Command(id: 'server.add', title: '添加服务器…', group: '服务器', icon: Icons.add, run: _addServer),
       Command(id: 'view.zoomIn', title: '放大界面', group: '外观', shortcut: 'Ctrl++', run: () => _zoom(.1)),
@@ -399,7 +405,6 @@ class _ShellBody extends StatefulWidget {
 }
 
 class _ShellBodyState extends State<_ShellBody> {
-  Rect? _sideRect, _editorRect;
   @override
   Widget build(BuildContext context) => ListenableBuilder(listenable: widget.ws.geometryRevision,
     builder: (context, _) => LayoutBuilder(builder: (_, box) {
@@ -410,15 +415,14 @@ class _ShellBodyState extends State<_ShellBody> {
       final sideVisible = docked || (narrow && !widget.showEditor);
       final width = narrow ? box.maxWidth : ws.tabLayout.sideWidth.clamp(180.0,
         (box.maxWidth - 340).clamp(180.0, 640.0));
-      if (sideVisible) _sideRect = Rect.fromLTWH(rail, 0, width, box.maxHeight);
+      final sideRect = Rect.fromLTWH(rail, 0, width, box.maxHeight);
       final left = rail + (docked ? width + 5 : 0);
-      if (widget.showEditor) _editorRect = Rect.fromLTWH(left, 0, box.maxWidth-left, box.maxHeight);
+      final editorRect = Rect.fromLTWH(left, 0, box.maxWidth-left, box.maxHeight);
       Widget host(String id, Rect rect, bool visible, Widget child) => Positioned.fromRect(key: ValueKey(id), rect: rect,
-        child: Offstage(offstage: !visible, child: TickerMode(enabled: visible,
-          child: ExcludeFocus(excluding: !visible, child: ClipRect(child: RepaintBoundary(child: child))))));
+        child: RetainedPane(visible: visible, child: child));
       return Stack(children: [
-        host('editor-slot', _editorRect ?? Offset.zero & box.biggest, widget.showEditor, widget.editor),
-        host('main-sidebar', _sideRect ?? Rect.fromLTWH(rail, 0, width, box.maxHeight), sideVisible, widget.side),
+        host('editor-slot', editorRect, widget.showEditor, widget.editor),
+        host('main-sidebar', sideRect, sideVisible, widget.side),
         if (docked) Positioned(left: rail+width, top: 0, bottom: 0, width: 5,
           child: TabResizeHandle(key: const ValueKey('sidebar-resize'), axis: Axis.horizontal,
             label: '调整侧栏宽度', value: width, onChanged: ws.setSideWidth, onReset: () => ws.setSideWidth(300))),
@@ -461,7 +465,7 @@ class _TitleBar extends StatelessWidget {
         Row(children: [
         SizedBox(
           width: 48,
-          child: PopupMenuButton<String>(tooltip: '工作台菜单', padding: EdgeInsets.zero,
+          child: WorkbenchMenuButton<String>(tooltip: '工作台菜单', padding: EdgeInsets.zero,
             icon: Image.asset('assets/branding/aurora3-256.png', width: 18, height: 18, semanticLabel: 'Aurora 3'),
             onSelected: (action) {
               if (action == 'find') onFind();
@@ -472,14 +476,14 @@ class _TitleBar extends StatelessWidget {
               if (action == 'ai') openNewAiSession(ws);
             },
             itemBuilder: (_) => [
-              if (Platform.isWindows) const PopupMenuItem(value: 'folder', child: Text('打开本机文件夹…')),
-              const PopupMenuItem(value: 'find', child: Text('快速打开文件…        Ctrl+P')),
-              const PopupMenuItem(value: 'commands', child: Text('命令面板…        Ctrl+Shift+P')),
+              if (Platform.isWindows) const PopupMenuItem(value: 'folder', child: MenuLabel('打开本机文件夹…', icon: Icons.folder_open_outlined)),
+              const PopupMenuItem(value: 'find', child: MenuLabel('快速打开文件…', icon: Icons.search, shortcut: 'Ctrl+P')),
+              const PopupMenuItem(value: 'commands', child: MenuLabel('命令面板…', icon: Icons.keyboard_command_key, shortcut: 'Ctrl+Shift+P')),
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'terminal', child: Text('终端')),
-              const PopupMenuItem(value: 'ai', child: Text('新建 AI 对话')),
+              const PopupMenuItem(value: 'terminal', child: MenuLabel('终端', icon: Icons.terminal)),
+              const PopupMenuItem(value: 'ai', child: MenuLabel('新建 AI 对话', icon: Icons.chat_bubble_outline)),
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'settings', child: Text('设置…        Ctrl+,')),
+              const PopupMenuItem(value: 'settings', child: MenuLabel('设置…', icon: Icons.settings_outlined, shortcut: 'Ctrl+,')),
             ]),
         ),
          ConstrainedBox(constraints: BoxConstraints(maxWidth: (MediaQuery.sizeOf(context).width * .25).clamp(140.0, 300.0)), child: Tooltip(
@@ -666,7 +670,7 @@ class _ActivityBar extends StatelessWidget {
         decoration: BoxDecoration(color: ide.activityBar, border: Border(right: BorderSide(color: ide.border))),
         child: Column(children: [
           Expanded(child: SingleChildScrollView(child: Column(children: feats))),
-          if (secondary.isNotEmpty) SizedBox(width: 40, height: 40, child: PopupMenuButton<Feature>(
+          if (secondary.isNotEmpty) SizedBox(width: 40, height: 40, child: WorkbenchMenuButton<Feature>(
             tooltip: '更多工具', icon: Icon(Icons.more_horiz, size: 21, color: secondary.any((f) => f.id == current) ? ide.accent : ide.textDim),
             onSelected: onPick, itemBuilder: (_) => [for (final f in secondary) PopupMenuItem(value: f,
               child: Row(children: [Icon(f.icon, size: 17), const SizedBox(width: 12), Text(f.title)]))],
@@ -1174,7 +1178,7 @@ class _PhoneTop extends StatelessWidget {
                   ),
           ),
           if (showEditor && ws.visibleTabs.length > 1)
-            PopupMenuButton<String>(
+            WorkbenchMenuButton<String>(
               tooltip: '切换标签',
               icon: Badge(label: Text('${ws.visibleTabs.length}'), child: const Icon(Icons.layers_outlined)),
               onSelected: ws.activate,
@@ -1211,15 +1215,8 @@ class _ServerSwitcher extends StatelessWidget {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final p = app.profile;
-    return Container(
+    return FloatingSurface(
       constraints: const BoxConstraints(maxHeight: 440),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: ide.surface,
-        borderRadius: BorderRadius.circular(Radii.dialog),
-        border: Border.all(color: ide.borderStrong.withValues(alpha: 0.7)),
-        boxShadow: ide.float,
-      ),
       child: Material(
         type: MaterialType.transparency,
         child: Column(

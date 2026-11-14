@@ -288,7 +288,7 @@ class _FileTreePageState extends State<_FileTreePage> {
       MenuItem('降序', () => _setSort(desc: true), icon: _desc ? Icons.check : null),
       const MenuItem.separator(),
       MenuItem('文件夹排在前面', () => _setSort(folders: !_foldersFirst), icon: _foldersFirst ? Icons.check : null),
-    ]);
+    ], anchor: ctx);
   }
 
   void _rememberExpansion() {
@@ -675,7 +675,7 @@ class _FileTreePageState extends State<_FileTreePage> {
 
   Future<String?> _askReplace(String name, bool several) {
     final ide = Ide.of(context);
-    return showDialog<String>(
+    return showWorkbenchDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('服务器上已有 $name'),
@@ -721,7 +721,7 @@ class _FileTreePageState extends State<_FileTreePage> {
   Future<ConflictChoice?> _askConflict(String name, bool isDir, {required bool more}) {
     final ide = Ide.of(context);
     var all = false;
-    return showDialog<ConflictChoice>(
+    return showWorkbenchDialog<ConflictChoice>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
@@ -1055,7 +1055,7 @@ class _FileTreePageState extends State<_FileTreePage> {
           IconBtn(Icons.note_add_outlined, '新建文件', target == null ? null : () => _newFile(target)),
           IconBtn(Icons.refresh, '刷新', _refreshAll),
           IconBtn(Icons.my_location_outlined, '定位当前文件', ws.active?.file == null ? null : _revealActive),
-          Builder(builder: (ctx) => SizedBox(width: InputMode.isTouch(context) ? 44 : 28, child: PopupMenuButton<String>(
+          Builder(builder: (ctx) => SizedBox(width: InputMode.isTouch(context) ? 44 : 28, child: WorkbenchMenuButton<String>(
             tooltip: '文件选项', padding: EdgeInsets.zero,
             icon: Icon(Icons.more_horiz, size: 17, color: _hidden || _sort != 'name' || _desc ? ide.accent : ide.textDim),
             onSelected: (value) {
@@ -1068,13 +1068,17 @@ class _FileTreePageState extends State<_FileTreePage> {
               if (value == 'collapse') _collapseAll();
             },
             itemBuilder: (_) => [
-              PopupMenuItem(value: 'folder', enabled: target != null, child: const Text('新建文件夹…')),
-              if (clip != null) PopupMenuItem(value: 'paste', enabled: _busy == null, child: const Text('粘贴到选中的文件夹（Ctrl+V）')),
-              PopupMenuItem(value: 'upload', enabled: target != null, child: const Text('上传文件…')),
-              CheckedPopupMenuItem(value: 'hidden', checked: _hidden, child: const Text('显示隐藏文件')),
-              const PopupMenuItem(value: 'collapse', child: Text('折叠所有文件夹')),
-              PopupMenuItem(value: 'sort', child: Text('排序：${const {'name': '名称', 'size': '大小', 'mtime': '修改时间', 'type': '类型'}[_sort]}${_desc ? '（降序）' : ''}')),
-              if (_canMeasure) PopupMenuItem(value: 'measure', enabled: target != null && !target.duBusy, child: const Text('计算选中文件夹大小')),
+              PopupMenuItem(value: 'folder', enabled: target != null, child: const MenuLabel('新建文件夹…', icon: Icons.create_new_folder_outlined)),
+              if (clip != null) PopupMenuItem(value: 'paste', enabled: _busy == null, child: const MenuLabel('粘贴到选中的文件夹', icon: Icons.content_paste, shortcut: 'Ctrl+V')),
+              PopupMenuItem(value: 'upload', enabled: target != null, child: const MenuLabel('上传文件…', icon: Icons.upload_file_outlined)),
+              const PopupMenuDivider(),
+              CheckedPopupMenuItem(value: 'hidden', checked: _hidden, child: const MenuLabel('显示隐藏文件', icon: Icons.visibility_outlined)),
+              const PopupMenuItem(value: 'collapse', child: MenuLabel('折叠所有文件夹', icon: Icons.unfold_less_rounded)),
+              PopupMenuItem(value: 'sort', child: MenuLabel('排序：${const {'name': '名称', 'size': '大小', 'mtime': '修改时间', 'type': '类型'}[_sort]}${_desc ? '（降序）' : ''}', icon: Icons.sort_rounded)),
+              if (_canMeasure) ...[
+                const PopupMenuDivider(),
+                PopupMenuItem(value: 'measure', enabled: target != null && !target.duBusy, child: const MenuLabel('计算选中文件夹大小', icon: Icons.data_usage_outlined)),
+              ],
             ],
           ))),
         ]),

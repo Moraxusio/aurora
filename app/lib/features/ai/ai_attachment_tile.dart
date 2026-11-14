@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
+import '../../kernel/overlays.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/ide_theme.dart';
@@ -37,7 +38,7 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
     try {
       final bytes = await (data ??= downloadAiAttachment(widget.link, widget.part.attachmentId));
       if (!mounted) return;
-      await showDialog<void>(
+      await showWorkbenchDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
           title: Text(widget.part.filename),

@@ -23,6 +23,9 @@ import 'ai_path_picker.dart';
 import 'ai_attachment_tile.dart';
 import 'ai_history.dart';
 import 'ai_transcript.dart';
+import 'ai_work.dart';
+import 'ai_workbench.dart';
+import 'ai_visuals.dart';
 
 class _AiPasteIntent extends Intent { const _AiPasteIntent(); }
 
@@ -38,25 +41,41 @@ EditorTab aiStudioTab(Workspace ws, {String? sessionId, String title = 'AI 助�
   );
 }
 
-class AiStudioView extends StatefulWidget {
+class AiStudioView extends StatelessWidget {
   final Workspace ws;
   final String? initialSessionId;
   final VoidCallback? onSessionsChanged;
   final String? tabId;
+  const AiStudioView({super.key, required this.ws, this.initialSessionId, this.onSessionsChanged, this.tabId});
+  @override
+  Widget build(BuildContext context) => AiWorkbench(sessionId: initialSessionId,
+    conversationBuilder: (work, sessionId, primary) => _AiConversation(
+      ws: ws, initialSessionId: sessionId, onSessionsChanged: onSessionsChanged,
+      tabId: primary ? tabId : null, work: work, primary: primary));
+}
 
-  const AiStudioView({
-    super.key,
+class _AiConversation extends StatefulWidget {
+  final Workspace ws;
+  final String? initialSessionId;
+  final VoidCallback? onSessionsChanged;
+  final String? tabId;
+  final AiWorkController work;
+  final bool primary;
+
+  const _AiConversation({
     required this.ws,
     this.initialSessionId,
     this.onSessionsChanged,
     this.tabId,
+    required this.work,
+    required this.primary,
   });
 
   @override
-  State<AiStudioView> createState() => _AiStudioViewState();
+  State<_AiConversation> createState() => _AiStudioViewState();
 }
 
-class _AiStudioViewState extends State<AiStudioView> {
+class _AiStudioViewState extends State<_AiConversation> {
   String? _sessionId;
   AiSession? _session;
   bool _loading = false;
@@ -97,6 +116,7 @@ class _AiStudioViewState extends State<AiStudioView> {
   Link? _streamLink;
   bool _disposed = false;
   int _loadGeneration = 0;
+  int _streamGeneration = 0;
   Timer? _eventRetry;
   String? _eventNote;
   final Map<String, Map<String, dynamic>> _activities = {};
@@ -183,6 +203,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     _eventRetry?.cancel();
     _eventRetry = null;
     _loadGeneration++;
+    _streamGeneration++;
     _stream?.reset();
     _stream = null;
     _streamLink = null;
@@ -214,6 +235,7 @@ class _AiStudioViewState extends State<AiStudioView> {
   Future<void> _loadSession(Link link, String id) async {
     if (_disposed || !mounted || !identical(link, ws.link)) return;
     final generation = ++_loadGeneration;
+    final workRevision = widget.work.revisionFor(id);
     setState(() {
       _loading = true;
       _error = null;
@@ -245,6 +267,11 @@ class _AiStudioViewState extends State<AiStudioView> {
         _loading = false;
       });
       _updateTabTitle(sess.title);
+      if (widget.primary || widget.work.revisionFor(id) == workRevision) {
+        widget.work.hydrate(sess, res['activities'] as List? ?? const [], primary: widget.primary,
+          running: running, waiting: pending != null);
+      }
+      if (widget.primary) unawaited(_recoverChildWork(link, generation));
       _replayLoadingEvents();
       _scrollToBottom();
     } on Object catch (e) {
@@ -259,11 +286,30 @@ class _AiStudioViewState extends State<AiStudioView> {
   }
 
   void _updateTabTitle(String title) {
+    if (!widget.primary) return;
     final tabId = widget.tabId ?? (widget.initialSessionId == null ? 'ai:new' : 'ai:${widget.initialSessionId}');
     ws.updateTabTitle(tabId, title);
   }
 
+  Future<void> _recoverChildWork(Link link, int generation) async {
+    final ids = widget.work.items.values.where((item) => item.sessionId != _sessionId && item.status == AiWorkStatus.interrupted)
+      .map((item) => item.sessionId).toSet();
+    for (final id in ids) {
+      if (!mounted || generation != _loadGeneration || !identical(link, ws.link)) return;
+      final revision = widget.work.revisionFor(id);
+      try {
+        final result = await loadAiHistory(link, id);
+        if (!mounted || generation != _loadGeneration || !identical(link, ws.link)) return;
+        if (revision != widget.work.revisionFor(id)) continue;
+        widget.work.hydrate(AiSession.fromJson((result['session'] as Map).cast<String, dynamic>()),
+          result['activities'] as List? ?? const [], primary: false, running: result['running'] == true,
+          waiting: result['pending_permission'] is Map);
+      } on Object { /* Keep the last output and its unconfirmed/interrupted status. */ }
+    }
+  }
+
   Future<void> _openEventStream(Link link) async {
+    final generation = _streamGeneration;
     OpStream? opened;
     try {
       final st = await link.open('ai.stream', {
@@ -271,12 +317,13 @@ class _AiStudioViewState extends State<AiStudioView> {
       });
       opened = st;
       await st.response();
-      if (_disposed || !mounted || !identical(link, ws.link) || !identical(link, _streamLink)) return;
+      if (_disposed || !mounted || generation != _streamGeneration || !identical(link, ws.link) || !identical(link, _streamLink)) return;
       _stream = st;
       if (mounted) setState(() => _eventNote = null);
       if (_sessionId != null) unawaited(_loadSession(link, _sessionId!));
       while (!_disposed) {
         final f = await st.read();
+        if (generation != _streamGeneration || !identical(st, _stream) || !identical(link, ws.link)) break;
         if (f == null) break;
         if (!f.isJson) continue;
         final ev = (f.json() as Map).cast<String, dynamic>();
@@ -287,7 +334,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     } finally {
       opened?.reset();
       if (opened != null && identical(_stream, opened)) _stream = null;
-      if (!_disposed && mounted && identical(link, ws.link) && identical(link, _streamLink)) {
+      if (!_disposed && mounted && generation == _streamGeneration && identical(link, ws.link) && identical(link, _streamLink)) {
         setState(() => _eventNote = '实时状态流中断，正在恢复；请以重新同步结果为准');
         _eventRetry?.cancel();
         _eventRetry = Timer(const Duration(seconds: 3), () {
@@ -308,6 +355,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     }
     final sid = ev['session_id'] as String? ?? '';
     if (_sessionId == null || (sid != _sessionId && ev['root_session_id'] != _sessionId)) return;
+    if (widget.primary) widget.work.event(ev);
     if (type == 'sync.required') {
       if (ws.link != null) unawaited(_loadSession(ws.link!, _sessionId!));
       return;
@@ -576,7 +624,7 @@ class _AiStudioViewState extends State<AiStudioView> {
         if (attachments.isNotEmpty) 'attachments': attachments,
         'provider': prepared.toWireJson(),
       }) as Map;
-      if (!mounted) return;
+      if (!mounted || !identical(link, ws.link)) return;
       if (quickPrompt == null && _inputCtl.text == inputBefore) _inputCtl.clear();
       setState(() => _attachments.removeWhere(sentAttachments.contains));
       for(final a in sentAttachments){_uploadedAttachments.remove(a);}
@@ -801,7 +849,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                      if(index==messages.length&&(_running||_activities.isNotEmpty||_liveReasoning.isNotEmpty||_liveText.isNotEmpty||_liveTools.isNotEmpty||_liveCompaction.isNotEmpty)){return Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Center(
                          child: ConstrainedBox(
                            constraints: const BoxConstraints(maxWidth: 760),
-                           child: Column(children: [if (_activities.isNotEmpty) _buildActivities(ide), _buildLiveStep(ide)]),
+                            child: _buildLiveStep(ide),
                          ),
                        ));}
                      return Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Center(
@@ -844,7 +892,7 @@ class _AiStudioViewState extends State<AiStudioView> {
       return Row(children: [
         IconButton(key: const ValueKey('ai-previous-message'), tooltip: '上一条消息（Alt+↑）', padding: EdgeInsets.zero, constraints: const BoxConstraints.tightFor(width: 28, height: 28),
           onPressed: at > 0 ? () => _scrollCtl.reveal(messages[at - 1].id) : null, icon: const Icon(Icons.arrow_upward, size: 15)),
-        Expanded(child: PopupMenuButton<String>(key: const ValueKey('ai-message-anchors'), tooltip: '对话锚点 · 跳转到消息', onSelected: _scrollCtl.reveal,
+        Expanded(child: WorkbenchMenuButton<String>(key: const ValueKey('ai-message-anchors'), tooltip: '对话锚点 · 跳转到消息', onSelected: _scrollCtl.reveal,
           itemBuilder: (_) => [for (var i = 0; i < messages.length; i++) PopupMenuItem(value: messages[i].id, child: SizedBox(width: 300, child: Text('${i + 1}. ${label(messages[i])}', maxLines: 2, overflow: TextOverflow.ellipsis)))],
           child: Text(messages.isEmpty ? '对话锚点' : '${at + 1}/${messages.length}  ${label(messages[at])}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: ide.textDim)))),
         IconButton(key: const ValueKey('ai-next-message'), tooltip: '下一条消息（Alt+↓）', padding: EdgeInsets.zero, constraints: const BoxConstraints.tightFor(width: 28, height: 28),
@@ -864,8 +912,11 @@ class _AiStudioViewState extends State<AiStudioView> {
     return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (widget.primary && (_session?.parentId.isNotEmpty ?? false))
+            IconBtn(Icons.subdirectory_arrow_left_rounded, '返回上级代理',
+              () => ws.openTab(aiStudioTab(ws, sessionId: _session!.parentId, title: '上级代理')), size: 16),
           // Root & Workdir badge
-          SizedBox(width:28, child:PopupMenuButton<AiPathChoice>(
+          SizedBox(width:28, child:WorkbenchMenuButton<AiPathChoice>(
             key:const ValueKey('ai-workdir-menu'),enabled:canPickDir,padding:EdgeInsets.zero,
             tooltip:'${ws.entry?.isLocal == true ? ws.app.localAgent.nativePath(_root,_workdir) : '$_root : $_workdir'}\n${canPickDir ? '选择工作目录' : '会话目录固定'}',
             onSelected:(choice){if(choice.root=='*browse*'){_pickWorkdir();}else{setState((){_root=choice.root;_workdir=choice.path;});}},
@@ -873,11 +924,11 @@ class _AiStudioViewState extends State<AiStudioView> {
               for(final folder in ws.project?.folders ?? const <WorkspacePath>[]) PopupMenuItem(value:AiPathChoice(folder.root,folder.path,folder.path),child:Text('项目：${folder.path}')),
               for(final r in _roots) PopupMenuItem(value:AiPathChoice(r['id'] as String,'/','/'),child:Text('${r['label']??r['id']} /')),
               const PopupMenuDivider(),
-              PopupMenuItem(value:const AiPathChoice('*browse*','',''),child:Row(children:[const Icon(Icons.folder_open,size:18),const SizedBox(width:8),Text(ws.entry?.isLocal == true ? '浏览本机目录…' : '浏览服务器目录…')])),
+              PopupMenuItem(value:const AiPathChoice('*browse*','',''),child:MenuLabel(ws.entry?.isLocal == true ? '浏览本机目录…' : '浏览服务器目录…',icon:Icons.folder_open_outlined)),
             ],
             icon:Icon(Icons.folder_open_outlined,size:16,color:ide.textDim),
           )),
-          SizedBox(width:28, child:PopupMenuButton<String>(key:const ValueKey('ai-chat-font'),tooltip:'对话选项',padding:EdgeInsets.zero,onSelected:(value){
+          SizedBox(width:28, child:WorkbenchMenuButton<String>(key:const ValueKey('ai-chat-font'),tooltip:'对话选项',padding:EdgeInsets.zero,onSelected:(value){
             if(value=='smaller')_setChatFontSize(_chatFontSize-1);
             if(value=='larger')_setChatFontSize(_chatFontSize+1);
             if(value=='reset')_setChatFontSize(15);
@@ -1084,7 +1135,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                 padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.m + 2),
                 decoration: BoxDecoration(
                   color: ide.sideBar,
-                  borderRadius: BorderRadius.circular(Radii.l + 2),
+                  borderRadius: AiVisuals.radius,
                   border: Border.all(color: ide.border),
                 ),
                 child: Column(
@@ -1183,6 +1234,9 @@ class _AiStudioViewState extends State<AiStudioView> {
                   isError: resultMap[p.toolCallId]?.isError ?? false,
                   running: false,
                   metadata: resultMap[p.toolCallId]?.metadata ?? const {},
+                  onOpen: p.toolName == 'shell' || p.toolName == 'subagent' ? () => _openWork(p.toolCallId,
+                    p.toolName, p.inputJson, resultMap[p.toolCallId]?.output ?? '', resultMap[p.toolCallId]?.metadata ?? const {},
+                    false, resultMap[p.toolCallId]?.isError ?? false) : null,
                 ),
               ),
           if (msg.error.isNotEmpty)
@@ -1200,36 +1254,16 @@ class _AiStudioViewState extends State<AiStudioView> {
     );
   }
 
-  Widget _buildActivities(Ide ide) {
-    return Material(color: ide.sideBar, child: Container(
-      key: const ValueKey('ai-active-work'),
-      constraints: const BoxConstraints(maxHeight: 240),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: ide.border))),
-      child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 4), child: Text('正在工作 · ${_activities.length} 项', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: ide.accent))),
-        for (final a in _activities.values) Builder(builder: (context) {
-          final name = a['tool_name'] as String? ?? '工具';
-          final child = a['session_id'] != _sessionId;
-          Map args = const {};
-          try { args = a['input'] is Map ? a['input'] as Map : jsonDecode(a['input'] as String? ?? '{}') as Map; } on Object { /* partial tool arguments */ }
-          final label = name == 'shell' ? '${args['command'] ?? '启动 shell…'}' : name == 'subagent' ? '${args['description'] ?? '子代理'}' : '$name · ${args['path'] ?? args['pattern'] ?? ''}';
-          final output = a['output'] as String? ?? '';
-          final childId = child ? a['session_id'] as String? : (a['metadata'] as Map?)?['child_session_id'] as String?;
-          final proxy = switch ((a['metadata'] as Map?)?['proxy_mode']) { 'agent' => 'Aurora agent 代理', 'system' || 'environment' => '本机 / 执行端环境代理', 'direct' => '直连', _ => '跟随执行环境' };
-          return ExpansionTile(
-            key: ValueKey('activity-${a['session_id']}-${a['tool_call_id']}'),
-            dense: true,
-            leading: Icon(name == 'shell' ? Icons.terminal : name == 'subagent' ? Icons.account_tree_outlined : Icons.build_outlined, size: 17, color: ide.accent),
-            title: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-            subtitle: Text(child ? '子代理 · ${a['session_title'] ?? ''}${name == 'shell' ? ' · $proxy' : ''}' : name == 'shell' ? 'Shell 正在执行 · $proxy' : name == 'subagent' ? '子代理运行中 · ${args['agent'] ?? 'explore'}' : '主代理正在执行', style: TextStyle(fontSize: 11, color: ide.textDim)),
-            children: [
-              if (childId != null) TextButton.icon(onPressed: () => ws.openTab(aiStudioTab(ws, sessionId: childId, title: child ? a['session_title'] as String? ?? '子代理' : args['description'] as String? ?? '子代理')), icon: const Icon(Icons.open_in_new, size: 14), label: const Text('查看子代理会话')),
-              Padding(padding: const EdgeInsets.all(12), child: Align(alignment: Alignment.centerLeft, child: SelectableText(output.isEmpty ? '等待输出…' : output, style: TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 11.5, color: ide.text)))),
-            ],
-          );
-        }),
-      ])),
-    ));
+  void _openWork(String callId, String name, String input, String output, Map<String, dynamic> metadata, bool running, bool error) {
+    final sid = _sessionId;
+    if (sid == null) return;
+    final key = '$sid:$callId';
+    if (!widget.work.items.containsKey(key)) {
+      widget.work.event({'type': running ? 'tool.running' : 'tool.done', 'session_id': sid, 'tool_call_id': callId,
+        'tool_name': name, 'input': input, 'output': output, 'metadata': metadata, 'is_error': error});
+    }
+    final item = widget.work.items[key];
+    if (item != null) widget.work.openItem(item);
   }
 
   Widget _buildLiveStep(Ide ide) {
@@ -1275,6 +1309,8 @@ class _AiStudioViewState extends State<AiStudioView> {
                 isError: t.isError,
                 running: t.running,
                 metadata: t.metadata,
+                onOpen: t.name == 'shell' || t.name == 'subagent' ? () => _openWork(t.callId, t.name, t.inputJson,
+                  t.output, t.metadata, t.running, t.isError) : null,
               ),
             ),
           if (_liveReasoning.isEmpty && _liveText.isEmpty && _liveTools.isEmpty && _liveCompaction.isEmpty && _running)
@@ -1366,11 +1402,9 @@ class _AiStudioViewState extends State<AiStudioView> {
     final narrow = box.maxWidth < 460;
     return Container(
       key: const ValueKey('ai-composer'),
-      padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
-      decoration: BoxDecoration(
-        color: ide.editor,
-        border: Border(top: BorderSide(color: ide.border)),
-      ),
+      margin: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+      padding: const EdgeInsets.fromLTRB(12, 12, 8, 6),
+      decoration: AiVisuals.surface(ide),
       child: Center(
         child: ConstrainedBox(
            constraints: const BoxConstraints(maxWidth: 760),
@@ -1455,7 +1489,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                       color: _permMode == 'auto' ? ide.ok : ide.textDim,
                       onTap: () => setState(() => _permMode = _permMode == 'auto' ? 'ask' : 'auto'),
                     ),
-                    SizedBox(width: 30, child: PopupMenuButton<String>(padding: EdgeInsets.zero, key:const ValueKey('ai-attach-menu'),tooltip:'添加图片或文件',onSelected:(v){if(v=='active')_attachActiveFile();if(v=='local')_pickLocalFiles();if(v=='paste')_paste();if(v=='remote')_attachFileByPath();},itemBuilder:(_)=>[
+                    SizedBox(width: 30, child: WorkbenchMenuButton<String>(padding: EdgeInsets.zero, key:const ValueKey('ai-attach-menu'),tooltip:'添加图片或文件',onSelected:(v){if(v=='active')_attachActiveFile();if(v=='local')_pickLocalFiles();if(v=='paste')_paste();if(v=='remote')_attachFileByPath();},itemBuilder:(_)=>[
                       if (activeFile != null) PopupMenuItem(value:'active',child:Text('附加当前文件：${activeFile.name}')),
                       const PopupMenuItem(value:'local',child:Text('选择本机图片 / 文件…')),
                       const PopupMenuItem(value:'paste',child:Text('粘贴图片 / 文件 / 文本')),
@@ -1595,8 +1629,8 @@ class _CollapsibleBlockState extends State<_CollapsibleBlock> {
     final ide = Ide.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: ide.sideBar.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(Radii.l),
+        color: ide.sideBar,
+        borderRadius: AiVisuals.radius,
         border: Border.all(color: ide.border),
       ),
       child: Column(
@@ -1639,6 +1673,7 @@ class _ToolCallCard extends StatefulWidget {
   final bool isError;
   final bool running;
   final Map<String, dynamic> metadata;
+  final VoidCallback? onOpen;
 
   const _ToolCallCard({
     required this.name,
@@ -1647,6 +1682,7 @@ class _ToolCallCard extends StatefulWidget {
     required this.isError,
     required this.running,
     this.metadata = const {},
+    this.onOpen,
   });
 
   @override
@@ -1734,8 +1770,8 @@ class _ToolCallCardState extends State<_ToolCallCard> {
 
     return Container(
       decoration: BoxDecoration(
-        color: ide.sideBar.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(Radii.m + 2),
+        color: ide.sideBar,
+        borderRadius: AiVisuals.radius,
         border: Border.all(color: widget.isError ? ide.error.withValues(alpha: 0.45) : ide.border),
       ),
       child: Column(
@@ -1748,10 +1784,7 @@ class _ToolCallCardState extends State<_ToolCallCard> {
               padding: const EdgeInsets.symmetric(horizontal: Space.m, vertical: 7),
               child: Row(
                 children: [
-                  if (widget.running)
-                    const SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 1.8))
-                  else
-                    Icon(icon, size: 15, color: statusColor),
+                  Icon(icon, size: 15, color: statusColor),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -1767,6 +1800,10 @@ class _ToolCallCardState extends State<_ToolCallCard> {
                     ),
                   ),
                   const SizedBox(width: 6),
+                  AiStatusMark(widget.running ? AiWorkStatus.running : widget.isError ? AiWorkStatus.error : AiWorkStatus.completed, label: false),
+                  if (widget.onOpen != null) IconButton(tooltip: widget.name == 'subagent' ? '查看子代理会话' : '查看命令输出',
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 26), padding: EdgeInsets.zero,
+                    onPressed: widget.onOpen, icon: const Icon(Icons.open_in_full, size: 14)),
                   Icon(_open ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 16, color: ide.textFaint),
                 ],
               ),

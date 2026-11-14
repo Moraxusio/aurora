@@ -11,6 +11,7 @@ import '../../theme/ide_theme.dart';
 import 'ai_auth.dart';
 import 'ai_oauth_client.dart';
 import 'ai_model_discovery.dart';
+import 'ai_visuals.dart';
 
 class _Preset {
   final String label;
@@ -33,7 +34,7 @@ const _presets = <_Preset>[
 ];
 
 Future<void> showAiSettingsDialog(BuildContext context, {required AppState app, Workspace? ws,AiOAuthClient Function()? localAuthFactory}) {
-  return showDialog<void>(
+  return showWorkbenchDialog<void>(
     context: context,
     builder: (_) => AiSettingsDialog(app: app, ws: ws,localAuthFactory:localAuthFactory),
   );
@@ -311,23 +312,9 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.auto_awesome_rounded, size: 20, color: ide.accent),
-                  const SizedBox(width: Space.m),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('AI 模型与 OpenCode 协议配置', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: ide.text)),
-                        Text('已有凭证保留在本机加密配置中。模型调用由当前本地 / 远程 agent 执行；模型列表可选择网络出口。',
-                            style: TextStyle(fontSize: 11.5, color: ide.textDim)),
-                      ],
-                    ),
-                  ),
-                  IconBtn(Icons.close_rounded, '关闭', () => Navigator.pop(context)),
-                ],
-              ),
+              AiSectionHeading(icon: Icons.tune_rounded, title: 'AI 模型与 OpenCode 协议配置',
+                subtitle: '管理提供商、连接与模型。凭据加密保存在本机。',
+                trailing: IconBtn(Icons.close_rounded, '关闭', () => Navigator.pop(context))),
               const SizedBox(height: Space.l),
               // Provider tabs + add preset button
               SingleChildScrollView(
@@ -349,7 +336,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                           },
                         ),
                       ),
-                    PopupMenuButton<_Preset>(
+                    WorkbenchMenuButton<_Preset>(
                       tooltip: '添加提供商预设',
                       onSelected: _addFromPreset,
                       itemBuilder: (_) => [
@@ -379,6 +366,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
               Expanded(
                 child: ListView(
                   children: [
+                    const AiSectionHeading(icon: Icons.dns_outlined, title: '提供商连接', subtitle: '模型调用由当前本地 / 远程 agent 执行'),
                     Row(
                       children: [
                         Expanded(
@@ -427,6 +415,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                       ),
                     ),
                     const SizedBox(height: Space.m + 2),
+                    const AiSectionHeading(icon: Icons.key_outlined, title: '身份与凭据'),
                     DropdownButtonFormField<String>(
                       key: ValueKey('ai-auth-$_editingId-$_authMode'),
                       isExpanded: true,
@@ -472,6 +461,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                       ],
                     ),
                     const SizedBox(height: Space.m + 2),
+                    const AiSectionHeading(icon: Icons.memory_outlined, title: '模型与上下文'),
                     TextField(
                       key:const ValueKey('ai-context-window'),
                       controller:_contextCtl, keyboardType:TextInputType.number,

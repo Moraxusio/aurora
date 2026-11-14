@@ -453,9 +453,15 @@ void main() {
     await t.tap(find.text('打开配置'));
     await t.pumpAndSettle();
 
+    await t.ensureVisible(find.text('拉取模型'));
     await t.tap(find.text('拉取模型'));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.text('已获取 2 个模型'));
     expect(find.text('已获取 2 个模型'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const ValueKey('ai-model-catalog')));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.text('gpt-5.2-codex'));
+    await t.pumpAndSettle();
     await t.tap(find.text('gpt-5.2-codex'));
     await t.pump();
 

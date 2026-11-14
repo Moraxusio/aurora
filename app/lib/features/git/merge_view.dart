@@ -129,7 +129,7 @@ class MergeViewState extends State<MergeView> {
 
   Future<bool> confirmClose() async {
     if (!_changed) return true;
-    final r = await showDialog<String>(
+    final r = await showWorkbenchDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('${widget.path.split('/').last} 的合并还没有保存'),

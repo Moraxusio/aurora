@@ -5,6 +5,7 @@
 // the Material theme is built from the same values. Sizes come from [Space]
 // and [Radii] so panels, rows and menus line up on one grid.
 import 'package:flutter/material.dart';
+import 'workbench_tokens.dart';
 
 /// The 4 px spacing grid.
 abstract final class Space {
@@ -15,7 +16,7 @@ abstract final class Space {
 }
 
 abstract final class Radii {
-  static const double s = 2, m = 3, l = 4, island = 3, dialog = 6;
+  static const double s = 2, m = 3, l = UiMetrics.controlRadius, island = 3, dialog = UiMetrics.surfaceRadius;
 }
 
 class Ide extends ThemeExtension<Ide> {
@@ -145,7 +146,8 @@ class Ide extends ThemeExtension<Ide> {
 
   /// The soft shadow of anything that floats over the islands.
   List<BoxShadow> get float => [
-        BoxShadow(color: shadow, blurRadius: 12, offset: const Offset(0, 4)),
+        BoxShadow(color: shadow.withValues(alpha: isDark ? .32 : .12), blurRadius: 18, offset: const Offset(0, 6)),
+        BoxShadow(color: shadow.withValues(alpha: isDark ? .24 : .06), blurRadius: 4, offset: const Offset(0, 1)),
       ];
 
   @override
@@ -270,7 +272,8 @@ ThemeData buildTheme(Brightness b) {
       titleTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 14, fontWeight: FontWeight.w600),
     ),
     tooltipTheme: TooltipThemeData(
-      waitDuration: const Duration(milliseconds: 450),
+      waitDuration: UiMotion.tooltipWait,
+      exitDuration: UiMotion.feedback,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.borderStrong), borderRadius: rm, boxShadow: c.float),
       textStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 12),
@@ -279,17 +282,22 @@ ThemeData buildTheme(Brightness b) {
       color: c.surface,
       surfaceTintColor: Colors.transparent,
       shadowColor: c.shadow,
-      elevation: 10,
-      menuPadding: const EdgeInsets.symmetric(vertical: 4),
-      shape: RoundedRectangleBorder(borderRadius: rl, side: BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
+      elevation: UiMetrics.menuElevation,
+      position: PopupMenuPosition.under,
+      menuPadding: UiMetrics.menuPadding,
+      shape: RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners, side: BorderSide(color: c.borderStrong.withValues(alpha: UiMetrics.surfaceBorderOpacity))),
       textStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 13),
+      labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback,
+        fontSize: 13, color: states.contains(WidgetState.disabled) ? c.textFaint : c.text)),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
       shadowColor: c.shadow,
-      elevation: 16,
-      barrierColor: Colors.black.withValues(alpha: c.isDark ? 0.5 : 0.28),
+      elevation: UiMetrics.dialogElevation,
+      barrierColor: Colors.black.withValues(alpha: c.isDark ? 0.38 : 0.18),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       shape: RoundedRectangleBorder(borderRadius: const BorderRadius.all(Radius.circular(Radii.dialog)), side: BorderSide(color: c.borderStrong.withValues(alpha: 0.6))),
       titleTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 16, fontWeight: FontWeight.w600),
       contentTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.textDim, fontSize: 13, height: 1.5),
@@ -306,8 +314,8 @@ ThemeData buildTheme(Brightness b) {
       contentTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 13),
       behavior: SnackBarBehavior.floating,
       insetPadding: const EdgeInsets.only(top: 8, bottom: 40),
-      elevation: 10,
-      shape: RoundedRectangleBorder(borderRadius: rl, side: BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
+      elevation: UiMetrics.menuElevation,
+      shape: RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners, side: BorderSide(color: c.borderStrong.withValues(alpha: UiMetrics.surfaceBorderOpacity))),
     ),
     inputDecorationTheme: InputDecorationTheme(
       isDense: true,
@@ -443,9 +451,9 @@ ThemeData buildTheme(Brightness b) {
         backgroundColor: WidgetStateProperty.all(c.surface),
         surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
         shadowColor: WidgetStateProperty.all(c.shadow),
-        elevation: WidgetStateProperty.all(10),
-        padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
-        shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: rl)),
+        elevation: WidgetStateProperty.all(UiMetrics.menuElevation),
+        padding: WidgetStateProperty.all(UiMetrics.menuPadding),
+        shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners)),
         side: WidgetStateProperty.all(BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
       ),
     ),
@@ -453,7 +461,7 @@ ThemeData buildTheme(Brightness b) {
       menuStyle: MenuStyle(
         backgroundColor: WidgetStateProperty.all(c.surface),
         surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
-        shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: rl)),
+        shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners)),
         side: WidgetStateProperty.all(BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
       ),
     ),

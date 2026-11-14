@@ -8,6 +8,7 @@ import 'kernel/shell.dart';
 import 'kernel/widgets.dart';
 import 'kernel/desktop_lifecycle.dart';
 import 'kernel/window_frame.dart';
+import 'kernel/ui_diagnostics.dart';
 import 'state/app_state.dart';
 import 'theme/ide_theme.dart';
 import 'theme/workbench_scale.dart';
@@ -15,6 +16,7 @@ import 'ui/add_server.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  UiDiagnostics.shared.install();
   final app = AppState();
   await app.init();
   await app.ensureLocalEntry();
@@ -103,9 +105,10 @@ class Home extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: app,
-      builder: (context, _) {
+      child: Shell(app: app, features: features),
+      builder: (context, child) {
         if (!app.ready) return _StoreProblem(app: app);
-        return Shell(app: app, features: features);
+        return child!;
       },
     );
   }

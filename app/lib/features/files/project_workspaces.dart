@@ -17,7 +17,7 @@ class ProjectWorkspaceBar extends StatelessWidget {
       child: Row(children: [
         Icon(current == null ? Icons.folder_outlined : Icons.folder_open_outlined, size: 15, color: ide.textDim),
         const SizedBox(width: 7),
-        Expanded(child: PopupMenuButton<String>(key: const ValueKey('project-switcher'), tooltip: '切换工作区',
+        Expanded(child: WorkbenchMenuButton<String>(key: const ValueKey('project-switcher'), tooltip: '切换工作区',
            onSelected: (id) async {
              if (id == '@create') { await createProjectWorkspace(context, ws); return; }
              if (id == '@add') { await addProjectFolder(context, ws); return; }
@@ -35,14 +35,11 @@ class ProjectWorkspaceBar extends StatelessWidget {
              ws.selectProject(id.isEmpty ? null : id);
            },
           itemBuilder: (_) => [
-            const PopupMenuItem(value: '', child: Text('浏览服务器')),
+            CheckedPopupMenuItem(value: '', checked: current == null, child: const MenuLabel('浏览服务器', icon: Icons.dns_outlined)),
             if (ws.entry?.workspaces.isNotEmpty == true) const PopupMenuDivider(),
             for (final p in ws.entry?.workspaces ?? const <ProjectWorkspace>[])
-              PopupMenuItem(value: p.id, child: Row(children: [
-                Icon(p.id == ws.projectKey ? Icons.check : Icons.workspaces_outline, size: 16), const SizedBox(width: 9),
-                Expanded(child: Text(p.name, overflow: TextOverflow.ellipsis)),
-                Text('${p.folders.length}', style: TextStyle(color: ide.textDim, fontSize: 11)),
-               ])),
+              CheckedPopupMenuItem(value: p.id, checked: p.id == ws.projectKey,
+                child: MenuLabel(p.name, icon: Icons.workspaces_outline, shortcut: '${p.folders.length}')),
              const PopupMenuDivider(),
              const PopupMenuItem(value: '@create', child: Text('新建工作区…')),
              if (current != null) ...[
@@ -62,14 +59,14 @@ class ProjectWorkspaceBar extends StatelessWidget {
 Future<void> createProjectWorkspace(BuildContext context, Workspace ws, {WorkspacePath? initial}) async {
   final name = await askText(context, title: '新建项目工作区', initial: initial?.name ?? '', hint: '工作区名称，例如 Aurora / 实验项目', ok: '下一步');
   if (name == null || name.isEmpty || !context.mounted) return;
-  final folder = initial ?? await showDialog<WorkspacePath>(context: context, builder: (_) => _FolderPicker(ws: ws));
+  final folder = initial ?? await showWorkbenchDialog<WorkspacePath>(context: context, builder: (_) => _FolderPicker(ws: ws));
   if (folder == null) return;
   await ws.createProject(name, [folder]);
 }
 
 Future<void> addProjectFolder(BuildContext context, Workspace ws) async {
   if (ws.project == null) return;
-  final folder = await showDialog<WorkspacePath>(context: context, builder: (_) => _FolderPicker(ws: ws));
+  final folder = await showWorkbenchDialog<WorkspacePath>(context: context, builder: (_) => _FolderPicker(ws: ws));
   if (folder != null) await ws.addFolder(folder);
 }
 

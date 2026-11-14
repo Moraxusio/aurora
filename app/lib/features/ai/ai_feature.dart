@@ -16,6 +16,7 @@ import '../../theme/ide_theme.dart';
 import 'ai_models.dart';
 import 'ai_settings_dialog.dart';
 import 'ai_studio_view.dart';
+import 'ai_visuals.dart';
 
 class AiFeature extends Feature {
   const AiFeature();
@@ -335,18 +336,18 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
         child: InkWell(
           key: ValueKey('ai-session-${s.id}'),
           onTap: () => _open(s.id, s.title),
-          borderRadius: BorderRadius.circular(Radii.m),
+          borderRadius: AiVisuals.radius,
           hoverColor: selected ? Colors.transparent : ide.hover,
           child: Container(
             padding: const EdgeInsets.fromLTRB(Space.m, 7, Space.s, 7),
-            decoration: selected ? BoxDecoration(color: ide.selection, borderRadius: BorderRadius.circular(Radii.m)) : null,
+            decoration: selected ? AiVisuals.surface(ide, selected: true) : null,
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               SizedBox(
                 width: 16,
                 height: 18,
                 child: Center(
                   child: s.running && s.pendingPermission == null
-                      ? const SizedBox(width: 11, height: 11, child: CircularProgressIndicator(strokeWidth: 1.6))
+                      ? const AiStatusMark(AiWorkStatus.running, label: false)
                       : (busy != null ? StatusDot(busy, size: 7) : (s.pinned ? Icon(Icons.push_pin, size: 12, color: ide.accent) : Icon(Icons.chat_bubble_outline_rounded, size: 12, color: ide.textFaint))),
                 ),
               ),
@@ -367,7 +368,7 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
                   ),
                   const SizedBox(height: 3),
                   Row(children: [
-                    _Tag(s.agent == 'plan' ? 'Plan' : 'Build', s.agent == 'plan' ? ide.warn : ide.accent),
+                    _Tag(s.parentId.isNotEmpty ? '子代理' : s.agent == 'plan' ? 'Plan' : 'Build', s.agent == 'plan' ? ide.warn : ide.textDim),
                     const SizedBox(width: 5),
                     Flexible(child: Text(s.workdir, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: ide.textFaint))),
                   ]),

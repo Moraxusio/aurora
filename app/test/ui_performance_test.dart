@@ -33,6 +33,68 @@ class _LayoutCounter extends RenderProxyBox {
 }
 
 void main() {
+  testWidgets('window metrics do not rebuild hidden document content', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(1200, 800);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.resetPhysicalSize);
+    addTearDown(t.view.resetDevicePixelRatio);
+    final app = WorkspaceApp();
+    final ws = Workspace(app, 'server');
+    final builds = <String, int>{};
+    for (var i = 0; i < 30; i++) {
+      final id = 'metrics-$i';
+      ws.openTab(
+        EditorTab(
+          id: id,
+          title: id,
+          icon: Icons.description,
+          builder: (context) {
+            final size = MediaQuery.sizeOf(context);
+            builds.update(id, (n) => n + 1, ifAbsent: () => 1);
+            return Text('$id ${size.width}');
+          },
+        ),
+      );
+    }
+    await t.pumpWidget(
+      MaterialApp(
+        theme: buildTheme(Brightness.dark),
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: ws,
+            builder: (_, _) =>
+                TabWorkspaceView(ws: ws, empty: const SizedBox()),
+          ),
+        ),
+      ),
+    );
+    await t.pumpAndSettle();
+    final before = Map.of(builds);
+    for (var i = 0; i < 24; i++) {
+      t.view.physicalSize = Size(1202 + i * 2, 800);
+      await t.pump();
+    }
+    expect(builds['metrics-29']!, greaterThan(before['metrics-29']!));
+    final hiddenBuilds = [
+      for (var i = 0; i < 29; i++)
+        builds['metrics-$i']! - before['metrics-$i']!,
+    ].fold(0, (a, b) => a + b);
+    expect(
+      hiddenBuilds,
+      0,
+      reason: 'hidden buffers must not inherit each window resize',
+    );
+    debugPrint(
+      'GUI_HIDDEN_METRICS tabs=30 resizes=24 hiddenBuilds=$hiddenBuilds',
+    );
+    await ws.flushViews();
+    await t.pumpWidget(const SizedBox());
+    ws.dispose();
+    app.dispose();
+  });
+
   testWidgets('resizing a viewport does not relayout every hidden document', (
     t,
   ) async {

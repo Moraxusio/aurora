@@ -1,12 +1,18 @@
 # Aurora
 
-核心理念：**布局服务于任务，移动位置不丢状态**。3.19.0 优化文件树显示，新增 Windows 本地监控和代理服务；本地新终端与 AI 提供商可选择本机代理、Aurora agent 节点或直连，支持 Linux／Windows NVIDIA GPU 详细监控。文档、右侧 AI 和底部终端继续保留各自状态。操作见 [标签页工作台](docs/TABS.md)。
+核心理念：**布局服务于任务，移动位置不丢状态**。3.20.0 优化工作台保活与监控刷新，增强 PDF 阅读和 AI 工作导航，统一菜单、弹窗与动效。文档、右侧 AI 和底部终端继续保留各自状态。操作见 [标签页工作台](docs/TABS.md)。
 
-**当前优先维护 Windows。** [3.19.0 Windows x64](https://github.com/Moraxusio/aurora/releases/tag/v3.19.0)，Android 构建/发行暂缓；安卓用户可继续使用既有 3.16.0。
+**当前优先维护 Windows。** [3.20.0 Windows x64](https://github.com/Moraxusio/aurora/releases/tag/v3.20.0)，Android 构建/发行暂缓；安卓用户可继续使用既有 3.16.0。
 
-**3.19.0：文件树、本地监控与代理。** 文件名保留扩展名、限制深层缩进，新增当前文件定位与折叠全部。使用说明见 [Windows 本地 agent](docs/LOCAL_AGENT.md) 和 [GPU 监控](docs/GPU_MONITOR.md)。远程完整 GPU 详情／AI 出口选择需升级 agent 至 3.19.0；原 API Key／OAuth 与旧代理设置继续保留。
+**3.20.0：工作台基础、PDF／AI 导航与统一浮层。** 共享保活视口与独立监控快照减少隐藏区域刷新；PDF 支持手形、双页、阅读历史、标记与搜索选项；AI 可在主对话、子代理和 Shell 输出间切换并保留各自状态。菜单与弹窗统一定位、键盘操作、深浅色和减少动画，保留未保存文档、撤销记录、终端连接、AI 草稿与阅读锚点。
+
+3.19.0 的文件树、本地监控与代理说明见 [Windows 本地 agent](docs/LOCAL_AGENT.md) 和 [GPU 监控](docs/GPU_MONITOR.md)。远程完整 GPU 详情／AI 出口选择需要 agent 3.19.0 或以上；3.20.0 随包两类 agent 同版本，原 API Key／OAuth 与旧代理设置继续保留。
 
 3.18.1 的修复原理与回归范围见 [GUI 交互检查](docs/GUI_AUDIT.md)。3.18.0 的设计见 [Windows 工作台](docs/WINDOWS_WORKBENCH.md) 和 [侧栏跟手与界面减法](docs/WINDOWS_SIMPLIFICATION.md)。
+
+当前 GUI 基础层重构与原生验收记录见 [GUI_FOUNDATION.md](docs/GUI_FOUNDATION.md)：共享保活视口、监控独立快照、按需详情与帧预算。
+
+菜单、弹窗、浮层及动画的统一接入规则见 [UI_SYSTEM.md](docs/UI_SYSTEM.md)。PDF 阅读与 AI 工作导航见 [READER_AI.md](docs/READER_AI.md)。
 
 3.17.0 的文档网格与阅读锚点设计见 [IDE 重设计](docs/IDE_REDESIGN.md)，3.16.0 的历史记录见 [工作台验收](docs/WORKBENCH_REVIEW.md)。
 

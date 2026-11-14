@@ -1,15 +1,10 @@
 // Read-only NVIDIA details. Null values mean unavailable, never zero utilization.
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 
 import '../../theme/ide_theme.dart';
-
-String gpuIdentity(Map g) {
-  for (final field in ['uuid', 'bus_id']) {
-    final value = g[field];
-    if (value is String && value.isNotEmpty) return value;
-  }
-  return '${g['index']}';
-}
+import 'gpu_data.dart';
+export 'gpu_data.dart';
 
 double? _number(Object? v) => v is num && v.isFinite ? v.toDouble() : null;
 String _value(Object? v, [String unit = '', int digits = 0]) {
@@ -24,18 +19,6 @@ String _memory(Object? v) {
   return n >= 1024
       ? '${(n / 1024).toStringAsFixed(1)} GiB'
       : '${n.toStringAsFixed(0)} MiB';
-}
-
-class GpuPoint {
-  final double? util, memory;
-  const GpuPoint(this.util, this.memory);
-  factory GpuPoint.fromMap(Map g) {
-    final total = _number(g['mem_total']), used = _number(g['mem_used']);
-    return GpuPoint(
-      _number(g['util']),
-      total == null || total <= 0 || used == null ? null : 100 * used / total,
-    );
-  }
 }
 
 class GpuPanel extends StatelessWidget {
@@ -260,7 +243,9 @@ class _GpuCard extends StatelessWidget {
                   .copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 key: PageStorageKey('gpu-details-${gpuIdentity(g)}'),
-                maintainState: true,
+                // Expanding a data-heavy desktop section should be immediate.
+                // Do not lay out every selectable detail while it is collapsed.
+                expansionAnimationStyle: AnimationStyle.noAnimation,
                 tilePadding: const EdgeInsets.symmetric(horizontal: Space.l),
                 childrenPadding: const EdgeInsets.fromLTRB(
                   Space.l,
@@ -273,7 +258,9 @@ class _GpuCard extends StatelessWidget {
                   '设备详情与进程${g['processes_available'] == true ? ' · ${procs.length} 个' : ''}',
                   style: TextStyle(fontSize: 12, color: ide.textDim),
                 ),
-                children: [_details(context, procs)],
+                children: [
+                  Builder(builder: (context) => _details(context, procs)),
+                ],
               ),
             ),
         ],
@@ -304,123 +291,100 @@ class _GpuCard extends StatelessWidget {
         ),
       ),
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SelectableText(
-          'UUID  ${_text(g['uuid'])}',
-          style: TextStyle(fontSize: 11.5, color: ide.textDim),
-        ),
-        const SizedBox(height: Space.m),
-        Wrap(
-          spacing: Space.l,
-          children: [
-            field('架构', _text(g['architecture'])),
-            field(
-              '图形频率 / 最高',
-              '${_value(g['clock_graphics'])} / ${_value(g['clock_graphics_max'], ' MHz')}',
-            ),
-            field(
-              '显存频率 / 最高',
-              '${_value(g['clock_memory'])} / ${_value(g['clock_memory_max'], ' MHz')}',
-            ),
-            field(
-              'SM / 视频频率',
-              '${_value(g['clock_sm'])} / ${_value(g['clock_video'], ' MHz')}',
-            ),
-            field(
-              'PCIe 当前',
-              'Gen ${_value(g['pcie_gen'])} × ${_value(g['pcie_width'])}',
-            ),
-            field(
-              'PCIe 最高',
-              'Gen ${_value(g['pcie_gen_max'])} × ${_value(g['pcie_width_max'])}',
-            ),
-            field(
-              '编码 / 解码利用率',
-              '${_value(g['encoder_util'], ' %')} / ${_value(g['decoder_util'], ' %')}',
-            ),
-            field(
-              '空闲 / 保留显存',
-              '${_memory(g['mem_free'])} / ${_memory(g['mem_reserved'])}',
-            ),
-            field(
-              '显存温度 / 降频阈值',
-              '${_value(g['mem_temp'], ' °C')} / ${_value(g['temp_limit'], ' °C')}',
-            ),
-            field('计算模式', _text(g['compute_mode'])),
-            field(
-              '持久化 / MIG',
-              '${_text(g['persistence'])} / ${_text(g['mig_mode'])}',
-            ),
-            field(
-              '易失 ECC 已纠正 / 未纠正',
-              '${_value(g['ecc_corrected'])} / ${_value(g['ecc_uncorrected'])}',
-            ),
-          ],
-        ),
-        Text(
-          '时钟限制原因  ${g['clock_reasons_available'] != true ? '—' : (reasons.isEmpty ? '无活动限制' : reasons)}',
-          style: TextStyle(fontSize: 12, color: ide.textDim),
-        ),
-        const SizedBox(height: Space.l),
-        Text(
-          'GPU 进程',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: ide.text,
-          ),
-        ),
-        const SizedBox(height: Space.s),
-        if (g['processes_available'] != true)
+    return SelectionArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            '驱动未提供进程数据。',
-            style: TextStyle(fontSize: 12, color: ide.textFaint),
-          )
-        else if (procs.isEmpty)
-          Text(
-            '当前没有 GPU 进程。',
-            style: TextStyle(fontSize: 12, color: ide.textFaint),
+            'UUID  ${_text(g['uuid'])}',
+            style: TextStyle(fontSize: 11.5, color: ide.textDim),
           ),
-        for (final p in procs)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: Space.s),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: Space.l,
-                  runSpacing: Space.s,
-                  children: [
-                    Text(
-                      'PID ${p['pid']}',
-                      style: TextStyle(fontSize: 12, color: ide.text),
-                    ),
-                    Text(
-                      '${_processType(p['type'])} · ${_memory(p['mem_used'])}',
-                      style: TextStyle(fontSize: 12, color: ide.textDim),
-                    ),
-                    if (p['gpu_instance_id'] != null)
-                      Text(
-                        'MIG ${_value(p['gpu_instance_id'])} / ${_value(p['compute_instance_id'])}',
-                        style: TextStyle(fontSize: 12, color: ide.textFaint),
-                      ),
-                  ],
-                ),
-                SelectableText(
-                  _text(p['name']),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: ide.textDim,
-                    fontFamily: Ide.mono,
-                    fontFamilyFallback: Ide.monoFallback,
-                  ),
-                ),
-              ],
+          const SizedBox(height: Space.m),
+          Wrap(
+            spacing: Space.l,
+            children: [
+              field('架构', _text(g['architecture'])),
+              field(
+                '图形频率 / 最高',
+                '${_value(g['clock_graphics'])} / ${_value(g['clock_graphics_max'], ' MHz')}',
+              ),
+              field(
+                '显存频率 / 最高',
+                '${_value(g['clock_memory'])} / ${_value(g['clock_memory_max'], ' MHz')}',
+              ),
+              field(
+                'SM / 视频频率',
+                '${_value(g['clock_sm'])} / ${_value(g['clock_video'], ' MHz')}',
+              ),
+              field(
+                'PCIe 当前',
+                'Gen ${_value(g['pcie_gen'])} × ${_value(g['pcie_width'])}',
+              ),
+              field(
+                'PCIe 最高',
+                'Gen ${_value(g['pcie_gen_max'])} × ${_value(g['pcie_width_max'])}',
+              ),
+              field(
+                '编码 / 解码利用率',
+                '${_value(g['encoder_util'], ' %')} / ${_value(g['decoder_util'], ' %')}',
+              ),
+              field(
+                '空闲 / 保留显存',
+                '${_memory(g['mem_free'])} / ${_memory(g['mem_reserved'])}',
+              ),
+              field(
+                '显存温度 / 降频阈值',
+                '${_value(g['mem_temp'], ' °C')} / ${_value(g['temp_limit'], ' °C')}',
+              ),
+              field('计算模式', _text(g['compute_mode'])),
+              field(
+                '持久化 / MIG',
+                '${_text(g['persistence'])} / ${_text(g['mig_mode'])}',
+              ),
+              field(
+                '易失 ECC 已纠正 / 未纠正',
+                '${_value(g['ecc_corrected'])} / ${_value(g['ecc_uncorrected'])}',
+              ),
+            ],
+          ),
+          Text(
+            '时钟限制原因  ${g['clock_reasons_available'] != true ? '—' : (reasons.isEmpty ? '无活动限制' : reasons)}',
+            style: TextStyle(fontSize: 12, color: ide.textDim),
+          ),
+          const SizedBox(height: Space.l),
+          Text(
+            'GPU 进程',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: ide.text,
             ),
           ),
-      ],
+          const SizedBox(height: Space.s),
+          if (g['processes_available'] != true)
+            Text(
+              '驱动未提供进程数据。',
+              style: TextStyle(fontSize: 12, color: ide.textFaint),
+            )
+          else if (procs.isEmpty)
+            Text(
+              '当前没有 GPU 进程。',
+              style: TextStyle(fontSize: 12, color: ide.textFaint),
+            ),
+          if (procs.length <= 6)
+            for (final p in procs) _GpuProcess(p)
+          else
+            SizedBox(
+              height: 320,
+              child: ListView.builder(
+                key: PageStorageKey('gpu-processes-${gpuIdentity(g)}'),
+                primary: false,
+                itemCount: procs.length,
+                itemBuilder: (_, i) => _GpuProcess(procs[i]),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -443,6 +407,51 @@ class _GpuCard extends StatelessWidget {
         'display_clock_setting': '显示频率设置',
       }[reason] ??
       reason;
+}
+
+class _GpuProcess extends StatelessWidget {
+  final Map p;
+  const _GpuProcess(this.p);
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Space.s),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: Space.l,
+            runSpacing: Space.s,
+            children: [
+              Text(
+                'PID ${p['pid']}',
+                style: TextStyle(fontSize: 12, color: ide.text),
+              ),
+              Text(
+                '${_GpuCard._processType(p['type'])} · ${_memory(p['mem_used'])}',
+                style: TextStyle(fontSize: 12, color: ide.textDim),
+              ),
+              if (p['gpu_instance_id'] != null)
+                Text(
+                  'MIG ${_value(p['gpu_instance_id'])} / ${_value(p['compute_instance_id'])}',
+                  style: TextStyle(fontSize: 12, color: ide.textFaint),
+                ),
+            ],
+          ),
+          Text(
+            _text(p['name']),
+            style: TextStyle(
+              fontSize: 12,
+              color: ide.textDim,
+              fontFamily: Ide.mono,
+              fontFamilyFallback: Ide.monoFallback,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _GpuMetric extends StatelessWidget {
@@ -541,5 +550,6 @@ class _GpuSpark extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GpuSpark oldDelegate) => true;
+  bool shouldRepaint(covariant _GpuSpark oldDelegate) =>
+      color != oldDelegate.color || !listEquals(values, oldDelegate.values);
 }

@@ -277,6 +277,51 @@ void main() {
     expect(gpuIdentity({'uuid': '', 'bus_id': '', 'index': 1}), '1');
   });
 
+  testWidgets(
+    'large GPU process lists are built only when expanded and remain scrollable',
+    (t) async {
+      final data = gpuFixture();
+      final gpu = (data['gpus'] as List).first as Map;
+      gpu['processes'] = [
+        for (var i = 0; i < 600; i++)
+          {
+            'pid': 10000 + i,
+            'name': 'synthetic worker $i',
+            'type': 'C',
+            'mem_used': null,
+          },
+      ];
+      data['gpus'] = [gpu];
+      await panel(t, data);
+      expect(
+        find.textContaining('synthetic worker', skipOffstage: false),
+        findsNothing,
+      );
+      await t.tap(find.text('设备详情与进程 · 600 个'));
+      await t.pumpAndSettle();
+      expect(find.text('synthetic worker 0'), findsOneWidget);
+      expect(
+        find.textContaining('synthetic worker').evaluate().length,
+        lessThan(20),
+      );
+      final scroll = find.descendant(
+        of: find.byKey(const PageStorageKey('gpu-processes-GPU-fixture-a')),
+        matching: find.byType(Scrollable),
+      );
+      final position = t.state<ScrollableState>(scroll).position;
+      position.jumpTo(position.maxScrollExtent);
+      await t.pumpAndSettle();
+      expect(find.text('synthetic worker 599'), findsOneWidget);
+      await t.tap(find.text('设备详情与进程 · 600 个'));
+      await t.pumpAndSettle();
+      expect(
+        find.textContaining('synthetic worker', skipOffstage: false),
+        findsNothing,
+      );
+      expect(t.takeException(), isNull);
+    },
+  );
+
   for (final brightness in Brightness.values) {
     testWidgets('GPU ${brightness.name} visual', (t) async {
       final out = Platform.environment['AURORA_GPU_SHOTS'];
@@ -286,7 +331,10 @@ void main() {
           (Ide.ui, r'C:\Windows\Fonts\SegUIVar.ttf'),
           ('Segoe UI', r'C:\Windows\Fonts\segoeui.ttf'),
           (Ide.mono, r'C:\Windows\Fonts\CascadiaMono.ttf'),
-          ('MaterialIcons', r'C:\dev\VPS\flutter\bin\cache\artifacts\material_fonts\materialicons-regular.otf'),
+          (
+            'MaterialIcons',
+            r'C:\dev\VPS\flutter\bin\cache\artifacts\material_fonts\materialicons-regular.otf',
+          ),
         ]) {
           final loader = FontLoader(family)
             ..addFont(

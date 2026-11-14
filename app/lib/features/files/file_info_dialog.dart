@@ -36,7 +36,7 @@ Future<void> showFileInfo(
   Future<DuResult> Function()? measure,
   void Function(DuResult)? onMeasured,
 }) {
-  return showDialog<void>(
+  return showWorkbenchDialog<void>(
     context: context,
     builder: (_) => _InfoDialog(root: root, path: path, entry: entry, isDir: isDir, du: du, measure: measure, onMeasured: onMeasured),
   );

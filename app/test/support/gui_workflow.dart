@@ -47,7 +47,8 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
     await click(row('workbench.dart'));
     await click(find.byKey(const ValueKey('tab-file:home:/project/src/main.dart')));
     final doc = t.state<FileEditorState>(find.byType(FileEditor));
-    final editor = t.widget<CodeEditor>(find.byType(CodeEditor)).controller;
+    final editor = t.widget<CodeEditor>(find.byType(CodeEditor)).controller!;
+    final savedText = doc.text;
     doc.text = 'const draft = "GUI state survives zoom";\n';
     await frames();
     steps.add('project switch, tree expansion, pointer-open files and retained dirty buffer');
@@ -155,10 +156,16 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
     Toast.show('GUI interaction audit complete'); await frames();
     expect(find.text('GUI interaction audit complete'), findsOneWidget);
     expect(link.terminalStreams, hasLength(1));
+    expect(editor.canUndo, isTrue);
+    editor.undo(); await frames();
+    expect(doc.text, savedText);
+    editor.redo(); await frames();
+    expect(doc.text, 'const draft = "GUI state survives zoom";\n');
+    expect(doc.dirty, isTrue);
     expect(t.takeException(), isNull);
     steps.add('command dialogs, Escape and scaled notification');
     if (capture != null) await capture();
-    return {'steps': steps, 'terminal_attaches': link.terminalStreams.length, 'dirty_buffer_retained': doc.dirty,
+    return {'steps': steps, 'terminal_attaches': link.terminalStreams.length, 'dirty_buffer_retained': doc.dirty, 'undo_redo_retained': true,
       'scales_percent': [85, 80, 100, 125, 150, 85], 'production_root': true, 'synthetic_services': true};
   } finally {
     await app.appearance.flush(); await ws.flushViews();

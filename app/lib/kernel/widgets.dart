@@ -1,12 +1,17 @@
 // Small parts every feature uses, so lists, menus and dialogs look and behave
 // the same: IDE rows, icon buttons, section headers, context menus that open
 // on right-click and on long-press, confirm and text dialogs, toasts.
+import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/ide_theme.dart';
+import '../theme/workbench_tokens.dart';
 import 'input_mode.dart';
+import 'overlays.dart';
+
+export 'overlays.dart';
 
 /// Feature commands can outlive the palette route that launched them. Use the
 /// navigator's own overlay, below the workbench transform, for their dialogs.
@@ -25,8 +30,9 @@ class Toast {
     m.hideCurrentSnackBar();
     // Let Scaffold constrain the width in its own scaled coordinate system.
     // Margins computed from View above the scale can consume the whole width.
+    final context = AppNavigation.context ?? m.context;
     m.showSnackBar(SnackBar(
-      width: 480,
+      width: math.min(480, math.max(0, MediaQuery.sizeOf(context).width - 32)),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       duration: Duration(seconds: error ? 8 : 3),
       content: Builder(builder: (context) {
@@ -37,7 +43,7 @@ class Toast {
           Expanded(child: SelectableText(msg, style: TextStyle(color: ide.text, fontSize: 13))),
         ]);
       }),
-    ));
+    ), snackBarAnimationStyle: UiMotion.notification(context));
   }
 }
 
@@ -61,13 +67,11 @@ class MenuItem {
 }
 
 /// Opens a menu at [at] (global position).
-Future<void> showMenuAt(BuildContext context, Offset at, List<MenuItem> items) async {
-  final ide = Ide.of(context);
-  final box = Overlay.of(context).context.findRenderObject() as RenderBox;
-  final picked = await showMenu<int>(
+Future<void> showMenuAt(BuildContext context, Offset at, List<MenuItem> items, {BuildContext? anchor}) async {
+  final picked = await showWorkbenchMenu<int>(
     context: context,
-    positionBuilder: (_, _) => RelativeRect.fromRect(
-      box.globalToLocal(at) & const Size(1, 1), Offset.zero & box.size),
+    anchor: anchor,
+    at: at,
     items: [
       for (var i = 0; i < items.length; i++)
         if (items[i].separator)
@@ -76,18 +80,11 @@ Future<void> showMenuAt(BuildContext context, Offset at, List<MenuItem> items) a
           PopupMenuItem<int>(
             value: i,
             enabled: items[i].onTap != null,
-            height: InputMode.isTouch(context) ? 44 : 30,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(children: [
-              SizedBox(width: 22, child: items[i].icon == null ? null : Icon(items[i].icon, size: 16, color: items[i].danger ? ide.error : ide.textDim)),
-              const SizedBox(width: 6),
-              Expanded(child: Text(items[i].label, style: TextStyle(fontSize: 13, color: items[i].danger ? ide.error : ide.text))),
-              if (items[i].hint != null) ...[const SizedBox(width: 16), Text(items[i].hint!, style: TextStyle(color: ide.textFaint, fontSize: 11.5))],
-            ]),
+            child: MenuLabel(items[i].label, icon: items[i].icon, danger: items[i].danger, shortcut: items[i].hint),
           ),
     ],
   );
-  if (picked != null) items[picked].onTap?.call();
+  if (context.mounted && picked != null) items[picked].onTap?.call();
 }
 
 /// Right-click and long-press open the same menu.
@@ -237,7 +234,7 @@ class SectionHeader extends StatelessWidget {
             if (expanded != null)
               AnimatedRotation(
                 turns: expanded! ? 0.25 : 0,
-                duration: const Duration(milliseconds: 120),
+                duration: UiMotion.reduced(context) ? Duration.zero : UiMotion.feedback,
                 child: Icon(Icons.chevron_right_rounded, size: 16, color: ide.textFaint),
               ),
             const SizedBox(width: 3),
@@ -290,25 +287,17 @@ class EmptyHint extends StatelessWidget {
 /// the window.
 Future<T?> showPicker<T>(BuildContext context, {required WidgetBuilder builder, double maxWidth = 620, double maxHeight = 460}) {
   final dark = Ide.of(context).isDark;
-  return showDialog<T>(
+  return showWorkbenchDialog<T>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: dark ? 0.38 : 0.14),
     builder: (c) {
-      final ide = Ide.of(c);
       return Align(
         alignment: const Alignment(0, -0.62),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: Space.xl),
-          child: Container(
+          child: FloatingSurface(
             constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: ide.surface,
-              borderRadius: BorderRadius.circular(Radii.dialog),
-              border: Border.all(color: ide.borderStrong.withValues(alpha: 0.7)),
-              boxShadow: ide.float,
-            ),
-            child: Material(type: MaterialType.transparency, child: builder(c)),
+            child: builder(c),
           ),
         ),
       );
@@ -614,7 +603,7 @@ class StatusDot extends StatelessWidget {
 
 Future<bool> confirmDialog(BuildContext context, {required String title, String? body, String ok = '确定', bool danger = false}) async {
   final ide = Ide.of(context);
-  final r = await showDialog<bool>(
+  final r = await showWorkbenchDialog<bool>(
     context: context,
     builder: (c) => AlertDialog(
       title: Text(title),
@@ -632,21 +621,28 @@ Future<bool> confirmDialog(BuildContext context, {required String title, String?
   return r == true;
 }
 
-Future<String?> askText(BuildContext context, {required String title, String initial = '', String? hint, String ok = '确定', bool obscure = false}) {
-  final c = TextEditingController(text: initial);
-  c.selection = TextSelection(baseOffset: 0, extentOffset: initial.contains('.') && initial.lastIndexOf('.') > 0 ? initial.lastIndexOf('.') : initial.length);
-  final ide = Ide.of(context);
-  return showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: SizedBox(width: 380, child: TextField(controller: c, autofocus: true, obscureText: obscure, decoration: InputDecoration(hintText: hint), onSubmitted: (v) => Navigator.pop(ctx, v.trim()))),
+Future<String?> askText(BuildContext context, {required String title, String initial = '', String? hint, String ok = '确定', bool obscure = false}) =>
+  showWorkbenchDialog<String>(context: context, builder: (_) => _TextPrompt(title: title, initial: initial, hint: hint, ok: ok, obscure: obscure));
+
+class _TextPrompt extends StatefulWidget {
+  final String title, initial, ok;
+  final String? hint;
+  final bool obscure;
+  const _TextPrompt({required this.title, required this.initial, required this.hint, required this.ok, required this.obscure});
+  @override State<_TextPrompt> createState() => _TextPromptState();
+}
+class _TextPromptState extends State<_TextPrompt> {
+  late final c = TextEditingController(text: widget.initial)..selection = TextSelection(baseOffset: 0,
+    extentOffset: widget.initial.lastIndexOf('.') > 0 ? widget.initial.lastIndexOf('.') : widget.initial.length);
+  @override void dispose() { c.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) => AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(width: 380, child: TextField(controller: c, autofocus: true, obscureText: widget.obscure, decoration: InputDecoration(hintText: widget.hint), onSubmitted: (v) => Navigator.pop(context, v.trim()))),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: Text('取消', style: TextStyle(color: ide.text))),
-        FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: Text(ok)),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        FilledButton(onPressed: () => Navigator.pop(context, c.text.trim()), child: Text(widget.ok)),
       ],
-    ),
-  );
+    );
 }
 
 /// Copies text and says so.

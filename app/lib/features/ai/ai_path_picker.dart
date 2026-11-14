@@ -1,5 +1,6 @@
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
+import '../../kernel/overlays.dart';
 
 import '../../theme/ide_theme.dart';
 
@@ -15,7 +16,7 @@ Future<AiPathChoice?> showAiPathPicker(
   required String root,
   required String path,
   bool directory = true,
-}) => showDialog<AiPathChoice>(
+}) => showWorkbenchDialog<AiPathChoice>(
   context: context,
   builder: (_) => _PathPicker(link: link, roots: roots, initialRoot: root, initialPath: path, directory: directory),
 );

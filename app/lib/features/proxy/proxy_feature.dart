@@ -119,7 +119,7 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
   // ---- adding and refreshing ----
 
   Future<void> _add() async {
-    final r = await showDialog<_NewSource>(context: context, builder: (_) => const _AddSourceDialog());
+    final r = await showWorkbenchDialog<_NewSource>(context: context, builder: (_) => const _AddSourceDialog());
     if (r == null || !mounted) return;
     setState(() => _busy = 'new');
     try {
@@ -170,7 +170,7 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
 
   Future<void> _remove(ProxySource s) async {
     final using = ws.app.profile.servers.where((e) => e.proxy?.source == s.id).toList();
-    final ok = await showDialog<bool>(
+    final ok = await showWorkbenchDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('删除“${s.name}”？'),
@@ -196,7 +196,7 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
       return;
     }
     if (row.node.insecure) {
-      final go = await showDialog<bool>(
+      final go = await showWorkbenchDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
           title: const Text('这个节点不校验服务器证书'),

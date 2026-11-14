@@ -8,6 +8,7 @@ import 'terminal_panel_view.dart';
 import 'workbench_geometry.dart';
 import 'workspace.dart';
 import 'assistant_panel_view.dart';
+import 'retained_pane.dart';
 
 typedef TerminalSessionsBuilder = Widget Function(VoidCallback onOpened);
 
@@ -32,27 +33,32 @@ class WorkbenchView extends StatefulWidget {
 }
 
 class _WorkbenchViewState extends State<WorkbenchView> {
-  Rect? _editorRect, _terminalRect;
-  Rect? _assistantRect;
+  late Widget _editorView;
+  Widget? _terminalView, _assistantView;
   bool _assistantVisited = false;
   bool _terminalVisited = false;
   @override
   void initState() {
     super.initState();
+    _updateViews();
     widget.ws.geometryRevision.addListener(_geometryChanged);
   }
 
   @override
   void didUpdateWidget(WorkbenchView old) {
     super.didUpdateWidget(old);
+    _updateViews();
     if (old.ws != widget.ws) {
       old.ws.geometryRevision.removeListener(_geometryChanged);
       widget.ws.geometryRevision.addListener(_geometryChanged);
-      _editorRect = _terminalRect = null;
       _terminalVisited = false;
-      _assistantRect = null;
       _assistantVisited = false;
     }
+  }
+
+  void _updateViews() {
+    _editorView = TabWorkspaceView(ws: widget.ws, empty: widget.empty);
+    _terminalView = _assistantView = null;
   }
 
   void _geometryChanged() {
@@ -82,27 +88,19 @@ class _WorkbenchViewState extends State<WorkbenchView> {
       );
       final bounds = Offset.zero & box.biggest;
       if (geometry.assistant != null) {
-        _assistantRect = geometry.assistant;
         _assistantVisited = true;
       }
-      if (geometry.editor != null) _editorRect = geometry.editor;
       if (geometry.terminal != null) {
-        _terminalRect = geometry.terminal;
         _terminalVisited = true;
       }
       Widget region(String key, Rect rect, bool shown, Widget child) =>
           Positioned.fromRect(
             key: ValueKey('$key-host'),
             rect: rect,
-            child: Offstage(
-              offstage: !shown,
-              child: ClipRect(
-                key: ValueKey(key),
-                child: TickerMode(
-                  enabled: shown,
-                  child: ExcludeFocus(excluding: !shown, child: child),
-                ),
-              ),
+            child: RetainedPane(
+              visible: shown,
+              viewportKey: ValueKey(key),
+              child: child,
             ),
           );
       return Stack(
@@ -110,16 +108,16 @@ class _WorkbenchViewState extends State<WorkbenchView> {
         children: [
           region(
             'workbench-editor',
-            _editorRect ?? bounds,
+            geometry.editor ?? bounds,
             geometry.editor != null,
-            TabWorkspaceView(ws: ws, empty: widget.empty),
+            _editorView,
           ),
           region(
             'workbench-terminal',
-            _terminalRect ?? bounds,
+            geometry.terminal ?? bounds,
             geometry.terminal != null,
             _terminalVisited
-                ? TerminalPanelView(
+                ? _terminalView ??= TerminalPanelView(
                     ws: ws,
                     onNew: widget.onNewTerminal,
                     sessionsBuilder: widget.terminalSessionsBuilder,
@@ -128,10 +126,10 @@ class _WorkbenchViewState extends State<WorkbenchView> {
           ),
           region(
             'workbench-assistant',
-            _assistantRect ?? bounds,
+            geometry.assistant ?? bounds,
             geometry.assistant != null,
             _assistantVisited
-                ? AssistantPanelView(
+                ? _assistantView ??= AssistantPanelView(
                     ws: ws,
                     onNew: widget.onNewAssistant,
                     historyBuilder: widget.assistantHistoryBuilder,

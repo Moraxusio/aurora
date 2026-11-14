@@ -99,7 +99,7 @@ class _AddServerPageState extends State<AddServerPage> {
     if (known != null) {
       if (known.fingerprint == k.fingerprint) return true;
       if (!mounted) return false;
-      await showDialog<void>(
+      await showWorkbenchDialog<void>(
           context: context,
           builder: (c) => AlertDialog(
                 title: const Text('服务器的主机密钥变了'),
@@ -112,7 +112,7 @@ class _AddServerPageState extends State<AddServerPage> {
       return false;
     }
     if (!mounted) return false;
-    final ok = await showDialog<bool>(
+    final ok = await showWorkbenchDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (c) => AlertDialog(

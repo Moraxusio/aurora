@@ -409,7 +409,7 @@ class FileEditorState extends State<FileEditor> {
   /// the editor keeps the user's text; the user decides.
   Future<void> _conflict(String why) async {
     final ide = Ide.of(context);
-    final choice = await showDialog<String>(
+    final choice = await showWorkbenchDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('服务器上的文件已被修改'),
@@ -446,7 +446,7 @@ class FileEditorState extends State<FileEditor> {
 
   Future<bool> askDiscard() async {
     final ide = Ide.of(context);
-    final r = await showDialog<String>(
+    final r = await showWorkbenchDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('${widget.path.split('/').last} 有未保存的修改'),

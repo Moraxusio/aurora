@@ -1,12 +1,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'overlays.dart';
 
 import '../theme/ide_theme.dart';
 import 'editor_tab.dart';
 import 'input_mode.dart';
 import 'tab_workspace_view.dart';
 import 'workspace.dart';
+import 'retained_pane.dart';
 
 class TerminalPanelView extends StatefulWidget {
   final Workspace ws;
@@ -24,7 +26,6 @@ class TerminalPanelView extends StatefulWidget {
 
 class _TerminalPanelViewState extends State<TerminalPanelView> {
   final Map<EditorTab, Widget> _bodies = {};
-  final Map<EditorTab, Rect> _lastRects = {};
   bool? _sessionsWanted;
   String? _active;
   int _revision = -1;
@@ -34,7 +35,6 @@ class _TerminalPanelViewState extends State<TerminalPanelView> {
     super.didUpdateWidget(old);
     if (old.ws != widget.ws) {
       _bodies.clear();
-      _lastRects.clear();
       _sessionsWanted = null;
       _active = null;
     }
@@ -49,7 +49,6 @@ class _TerminalPanelViewState extends State<TerminalPanelView> {
     }
     final live = tabs.toSet();
     _bodies.removeWhere((tab, _) => !live.contains(tab));
-    _lastRects.removeWhere((tab, _) => !live.contains(tab));
     final row = InputMode.isTouch(context) ? 44.0 : 36.0;
     return Material(
       color: ide.editor,
@@ -109,35 +108,24 @@ class _TerminalPanelViewState extends State<TerminalPanelView> {
                     key: ObjectKey(tab),
                     builder: (_) {
                       final shown = showBody && ws.terminalActiveId == tab.id;
-                      if (shown) _lastRects[tab] = terminalRect;
                       return Positioned.fromRect(
-                        rect: _lastRects.putIfAbsent(tab, () => terminalRect),
-                        child: Offstage(
-                          offstage: !shown,
-                          child: ClipRect(
-                            key: ValueKey('terminal-viewport-${tab.id}'),
-                            child: TickerMode(
-                              enabled: shown,
-                              child: ExcludeFocus(
-                                excluding: !shown,
-                                child: Listener(
-                                  behavior: HitTestBehavior.translucent,
-                                  onPointerDown: (_) => ws.focusTerminalPanel(),
-                                  child: TabFocusFrame(
-                                    request: shown && ws.terminalFocused
-                                        ? ws.terminalFocusRequest
-                                        : -1,
-                                    canFocus: () =>
-                                        ws.terminalFocused &&
-                                        ws.terminalActiveId == tab.id,
-                                    child: RepaintBoundary(
-                                      child: _bodies.putIfAbsent(
-                                        tab,
-                                        () => Builder(builder: tab.builder),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                        rect: terminalRect,
+                        child: RetainedPane(
+                          visible: shown,
+                          viewportKey: ValueKey('terminal-viewport-${tab.id}'),
+                          child: Listener(
+                            behavior: HitTestBehavior.translucent,
+                            onPointerDown: (_) => ws.focusTerminalPanel(),
+                            child: TabFocusFrame(
+                              request: shown && ws.terminalFocused
+                                  ? ws.terminalFocusRequest
+                                  : -1,
+                              canFocus: () =>
+                                  ws.terminalFocused &&
+                                  ws.terminalActiveId == tab.id,
+                              child: _bodies.putIfAbsent(
+                                tab,
+                                () => Builder(builder: tab.builder),
                               ),
                             ),
                           ),
@@ -148,18 +136,10 @@ class _TerminalPanelViewState extends State<TerminalPanelView> {
                 Positioned.fromRect(
                   key: const ValueKey('terminal-sessions-host'),
                   rect: sessionsRect,
-                  child: Offstage(
-                    offstage: !showSessions,
-                    child: ClipRect(
-                      key: const ValueKey('terminal-sessions'),
-                      child: TickerMode(
-                        enabled: showSessions,
-                        child: ExcludeFocus(
-                          excluding: !showSessions,
-                          child: sessions,
-                        ),
-                      ),
-                    ),
+                  child: RetainedPane(
+                    visible: showSessions,
+                    viewportKey: const ValueKey('terminal-sessions'),
+                    child: sessions,
                   ),
                 ),
                 if (split)
@@ -204,7 +184,7 @@ class _TerminalPanelViewState extends State<TerminalPanelView> {
                                 ? const SizedBox()
                                 : Align(
                                     alignment: Alignment.centerRight,
-                                    child: PopupMenuButton<String>(
+                                    child: WorkbenchMenuButton<String>(
                                       key: const ValueKey('terminal-selector'),
                                       tooltip: '切换终端会话',
                                       onSelected: ws.activate,

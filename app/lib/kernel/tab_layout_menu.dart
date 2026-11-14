@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'overlays.dart';
 
 import '../theme/ide_theme.dart';
 import 'tab_layout.dart';
@@ -35,7 +36,7 @@ class TabLayoutMenu extends StatelessWidget {
 Future<void> showTabLayoutDialog(
   BuildContext context,
   Workspace ws,
-) => showDialog<void>(
+) => showWorkbenchDialog<void>(
   context: context,
   builder: (context) => ListenableBuilder(
     listenable: Listenable.merge([ws, ws.geometryRevision]),

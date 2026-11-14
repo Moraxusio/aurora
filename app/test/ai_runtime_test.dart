@@ -49,6 +49,7 @@ class EventStream implements OpStream {
 
 class RuntimeLink extends FakeAiLink {
   final events = EventStream();
+  final childEvents = <String, EventStream>{};
   OpStream? firstStream;
   Completer<Object?>? rootsGate;
   int opens = 0;
@@ -56,6 +57,8 @@ class RuntimeLink extends FakeAiLink {
   bool longHistory = false;
   @override
   Future<OpStream> open(String op, [Object? args, Priority priority = Priority.interactive]) async {
+    final sid = args is Map ? args['session_id'] as String? : null;
+    if (op == 'ai.stream' && sid != null && sid != 'ses_1') return childEvents.putIfAbsent(sid, EventStream.new);
     opens++;
     return opens == 1 ? firstStream ?? events : events;
   }
@@ -63,6 +66,12 @@ class RuntimeLink extends FakeAiLink {
   Future<Object?> call(String op, [Object? args, Duration timeout = const Duration(seconds: 60)]) async {
     if (op == 'fs.roots' && rootsGate != null) return rootsGate!.future;
     final result = await super.call(op, args, timeout);
+    if (op == 'ai.get' && args is Map && args['id'] != 'ses_1') {
+      return {'running': false, 'session': {'id': args['id'], 'parent_id': 'ses_1', 'title': '检查本地项目',
+        'root': 'home', 'workdir': '/project', 'messages': [
+          {'id': 'child-message', 'role': 'assistant', 'parts': [{'type': 'text', 'text': 'child conversation reply'}]},
+        ]}};
+    }
     if (op == 'ai.get' && !legacy) {
       final session = (result as Map)['session'] as Map;
       session['runtime'] = _runtime;
@@ -142,7 +151,7 @@ void main() {
     input.dispose();
     app.dispose();
   });
-  Future<void> pump(WidgetTester t, {double width = 1000}) async {
+  Future<void> pump(WidgetTester t, {double width = 1000, Brightness brightness = Brightness.dark, String sessionId = 'ses_1'}) async {
     t.view.physicalSize = Size(width, 900);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.resetPhysicalSize);
@@ -152,11 +161,11 @@ void main() {
         key: shotKey,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          theme: buildTheme(Brightness.dark),
+          theme: buildTheme(brightness),
           home: InputMode.scope(
             mode: input,
             child: Scaffold(
-              body: AiStudioView(ws: ws, initialSessionId: 'ses_1'),
+              body: AiStudioView(ws: ws, initialSessionId: sessionId),
             ),
           ),
         ),
@@ -275,8 +284,7 @@ void main() {
     link.events.emit({'type':'tool.running','session_id':'child-1','root_session_id':'ses_1','session_title':'检查本地项目','tool_call_id':'child-shell','tool_name':'shell','input':{'command':'Get-ChildItem'},'metadata':{'proxy_mode':'environment'}});
     link.events.emit({'type':'tool.progress','session_id':'child-1','root_session_id':'ses_1','tool_call_id':'child-shell','delta':'synthetic live output'});
     await t.pump(const Duration(milliseconds: 50));
-    expect(find.byKey(const ValueKey('ai-active-work')), findsOneWidget);
-    expect(find.text('正在工作 · 2 项'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-work-navigation')), findsOneWidget);
     expect(find.text('Get-ChildItem'), findsOneWidget);
     await t.tap(find.text('Get-ChildItem'));
     await t.pump();
@@ -285,10 +293,79 @@ void main() {
     await snapshot(t, 'ai-working-agents-desktop');
     link.events.emit({'type':'tool.done','session_id':'child-1','root_session_id':'ses_1','tool_call_id':'child-shell'});
     await t.pump();
-    expect(find.text('正在工作 · 1 项'), findsOneWidget);
+    await t.pump();
+    expect(find.text('已完成'), findsOneWidget);
+    expect(find.text('synthetic live output'), findsOneWidget);
     link.events.emit({'type':'tool.done','tool_call_id':'parent-task'});
     await t.pump();
-    expect(find.byKey(const ValueKey('ai-active-work')), findsNothing);
+    expect(find.byKey(const ValueKey('ai-work-tab-ses_1:parent-task')), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('ai-work-main')));
+    await t.pump();
+    await t.tap(find.byKey(const ValueKey('ai-work-tab-child-1:child-shell')));
+    await t.pump();
+    expect(find.text('synthetic live output'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('main, child and long output keep independent drafts and reading anchors', (t) async {
+    link.longHistory = true;
+    await pump(t, width: 440);
+    await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), 'main unsent draft');
+    final main = t.widget<CustomScrollView>(find.byKey(const ValueKey('ai-transcript'))).controller! as AiTranscriptController;
+    main.reveal('msg_u1'); await t.pump(); await t.pump();
+    main.jumpTo(main.offset + 220); await t.pump();
+    final anchor = main.debugReadingAnchor!;
+    link.events.emit({'type':'tool.running','tool_call_id':'parent-task','tool_name':'subagent','input':{'description':'检查本地项目'},'metadata':{'child_session_id':'child-1'}});
+    await t.pump();
+    await t.tap(find.byKey(const ValueKey('ai-work-tab-ses_1:parent-task')));
+    for (var i = 0; i < 5; i++) { await t.pump(const Duration(milliseconds: 50)); }
+    expect(find.text('child conversation reply', findRichText: true), findsOneWidget);
+    await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), 'child unsent draft');
+    expect(link.childEvents.length, 1);
+    link.events.emit({'type':'tool.running','tool_call_id':'shell','tool_name':'shell','input':{'command':'long build'}});
+    link.events.emit({'type':'tool.progress','tool_call_id':'shell','delta': List.generate(300, (i) => 'line $i build output').join('\n')});
+    await t.pump(const Duration(milliseconds: 50));
+    await t.tap(find.byKey(const ValueKey('ai-work-tab-ses_1:shell')));
+    await t.pump(); await t.pump();
+    final output = t.widget<CustomScrollView>(find.byKey(const ValueKey('ai-transcript'))).controller! as AiTranscriptController;
+    output.reveal('0:40'); await t.pump(); await t.pump();
+    final outputAnchor = output.debugReadingAnchor!;
+    link.events.emit({'type':'tool.progress','tool_call_id':'shell','delta':'\nmore output arriving'});
+    await t.pump(); await t.pump(const Duration(milliseconds: 40));
+    expect(output.debugReadingAnchor!.$1, outputAnchor.$1);
+    expect(output.followsLatest.value, isFalse);
+    await t.tap(find.byKey(const ValueKey('ai-work-main'))); await t.pump(); await t.pump();
+    expect(t.widget<TextField>(find.byKey(const ValueKey('ai-prompt-input'))).controller!.text, 'main unsent draft');
+    expect(main.debugReadingAnchor!.$1, anchor.$1);
+    await t.tap(find.byKey(const ValueKey('ai-work-list'))); await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ai-work-row-ses_1:parent-task'))); await t.pumpAndSettle();
+    expect(t.widget<TextField>(find.byKey(const ValueKey('ai-prompt-input'))).controller!.text, 'child unsent draft');
+    expect(link.childEvents.length, 1);
+    expect(link.opens, 1, reason: 'switching panes does not replace the root stream');
+    await snapshot(t, 'ai-child-sidebar');
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('work switcher and output remain readable in a light narrow pane', (t) async {
+    await pump(t, width: 390, brightness: Brightness.light);
+    link.events.emit({'type':'tool.running','tool_call_id':'shell','tool_name':'shell','input':{'command':'pwsh -NoProfile -Command build'}});
+    link.events.emit({'type':'tool.progress','tool_call_id':'shell','delta':'Compiling project…\n42 files checked\nWaiting for build completion'});
+    await t.pump(); await t.pump(const Duration(milliseconds: 40));
+    await t.tap(find.byKey(const ValueKey('ai-work-tab-ses_1:shell'))); await t.pump(); await t.pump();
+    expect(find.text('42 files checked'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await snapshot(t, 'ai-work-light-sidebar');
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a child opened directly from history exposes its parent conversation', (t) async {
+    await pump(t, sessionId: 'child-1');
+    expect(find.text('child conversation reply', findRichText: true), findsOneWidget);
+    await t.tap(find.byTooltip('返回上级代理'));
+    await t.pump();
+    expect(ws.assistantPanel.active, 'ai:ses_1');
+    expect(ws.tab('ai:ses_1')?.taskKey, 'ses_1');
+    await t.pumpWidget(const SizedBox());
   });
   testWidgets('working activity fits phone width and sync event reloads history', (t) async {
     await pump(t, width: 390);
@@ -355,8 +432,9 @@ void main() {
     await t.pump();
     await t.pump(const Duration(milliseconds: 300));
     await t.tap(find.text('粘贴图片 / 文件 / 文本'));
-    await t.pump();
-    await t.pump(const Duration(milliseconds: 300));
+    // The conversation is still streaming, so it never globally settles.
+    // Draw the route exit, then the asynchronous clipboard result.
+    for (var i = 0; i < 4; i++) { await t.pump(const Duration(milliseconds: 100)); }
     expect(find.textContaining('示例截图.png'), findsOneWidget);
     expect(find.textContaining('README.md'), findsOneWidget);
     expect(t.takeException(), isNull);

@@ -227,8 +227,8 @@ void main() {
     await t.tap(find.byKey(const ValueKey('ai-chat-font')));
     await t.pumpAndSettle();
     await t.tap(find.text('增大字号'));
-    await t.pump();
-    expect(app.appearance.value.chatFont, 16, reason: 'preview is synchronous');
+    await t.pumpAndSettle();
+    expect(app.appearance.value.chatFont, 16, reason: 'preview updates when the menu has exited');
     await t.pump(const Duration(milliseconds: 300));
     expect(app.profile.ai.chatFontSize, 16);
   });

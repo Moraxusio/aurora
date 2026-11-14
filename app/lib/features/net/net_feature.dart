@@ -225,7 +225,7 @@ class _ForwardPanelState extends State<ForwardPanel> with VisiblePolling<Forward
     final c = TextEditingController();
     final local = TextEditingController();
     final ide = Ide.of(context);
-    final ok = await showDialog<bool>(
+    final ok = await showWorkbenchDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('转发一个端口'),

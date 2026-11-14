@@ -19,6 +19,7 @@ import 'tab_layout.dart';
 import 'widgets.dart';
 import 'workspace.dart';
 import 'editor_grid_geometry.dart';
+import 'retained_pane.dart';
 
 export 'tab_layout_menu.dart'
     show TabLayoutMenu, arrangementLabel, placementLabel;
@@ -38,7 +39,6 @@ class TabWorkspaceView extends StatefulWidget {
 
 class _TabWorkspaceViewState extends State<TabWorkspaceView> {
   final Map<EditorTab, Widget> _bodies = {};
-  final Map<EditorTab, Rect> _lastRects = {};
   final _drag = ValueNotifier<TabDragData?>(null);
   Workspace? _workspace;
   int _revision = -1;
@@ -54,7 +54,6 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
     if (old.ws != widget.ws) {
       old.ws.geometryRevision.removeListener(_reflow);
       widget.ws.geometryRevision.addListener(_reflow);
-      _lastRects.clear();
     }
   }
 
@@ -79,251 +78,262 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
     }
     final live = ws.editorTabs.toSet();
     _bodies.removeWhere((tab, _) => !live.contains(tab));
-    _lastRects.removeWhere((tab, _) => !live.contains(tab));
     final tabsById = {for (final t in live) t.id: t};
     final ide = Ide.of(context), layout = ws.tabLayout;
-    return CallbackShortcuts(bindings: {
-      const SingleActivator(LogicalKeyboardKey.escape): () { _drag.value?.cancelled = true; _drag.value = null; },
-    }, child: LayoutBuilder(
-      builder: (context, box) {
-        final grid = EditorGridGeometry(layout, box.biggest, focusMode: ws.focusMode,
-          compactWindow: MediaQuery.sizeOf(context).width < 600);
-        final rects = grid.groups, contents = <String, Rect>{};
-        final row = _rowOf(context);
-        final dividers = grid.dividers, compact = grid.compact;
-        final bounds = Offset.zero & Size(box.maxWidth, box.maxHeight);
-        final chrome = <Widget>[];
-        for (final g in layout.groups) {
-          final rect = rects[g.id];
-          if (rect == null) continue;
-          final tabs = [for (final id in g.tabs) ?tabsById[id]];
-          final requested = layout.placement;
-          final vertical =
-              (requested == TabPlacement.left ||
-                  requested == TabPlacement.right) &&
-              rect.width >= 500;
-          final placement =
-              vertical ||
-                  requested == TabPlacement.bottom ||
-                  requested == TabPlacement.wrap
-              ? requested
-              : TabPlacement.top;
-          final width = vertical
-              ? layout.tabsWidth
-                    .clamp(120.0, math.min(400.0, rect.width - 280))
-                    .toDouble()
-              : rect.width;
-          final railSpace = 92 + (compact && layout.groups.length > 1 ? 42 : 0);
-          final columns = math.max(
-            1,
-            ((rect.width - railSpace) / layout.tabWidth).floor(),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          _drag.value?.cancelled = true;
+          _drag.value = null;
+        },
+      },
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final grid = EditorGridGeometry(
+            layout,
+            box.biggest,
+            focusMode: ws.focusMode,
+            compactWindow: MediaQuery.sizeOf(context).width < 600,
           );
-          final rows = placement == TabPlacement.wrap
-              ? (tabs.length / columns).ceil().clamp(1, 3)
-              : 1;
-          final strip = math.min(row * rows, math.max(0.0, rect.height - 60));
-          var content = Rect.fromLTWH(
-            rect.left,
-            rect.top,
-            rect.width,
-            rect.height,
-          );
-          Rect tabRect;
-          if (vertical) {
-            final left = placement == TabPlacement.left;
-            tabRect = Rect.fromLTWH(
-              left ? rect.left : rect.right - width,
-              content.top,
-              width,
-              content.height,
+          final rects = grid.groups, contents = <String, Rect>{};
+          final row = _rowOf(context);
+          final dividers = grid.dividers, compact = grid.compact;
+          final bounds = Offset.zero & Size(box.maxWidth, box.maxHeight);
+          final chrome = <Widget>[];
+          for (final g in layout.groups) {
+            final rect = rects[g.id];
+            if (rect == null) continue;
+            final tabs = [for (final id in g.tabs) ?tabsById[id]];
+            final requested = layout.placement;
+            final vertical =
+                (requested == TabPlacement.left ||
+                    requested == TabPlacement.right) &&
+                rect.width >= 500;
+            final placement =
+                vertical ||
+                    requested == TabPlacement.bottom ||
+                    requested == TabPlacement.wrap
+                ? requested
+                : TabPlacement.top;
+            final width = vertical
+                ? layout.tabsWidth
+                      .clamp(120.0, math.min(400.0, rect.width - 280))
+                      .toDouble()
+                : rect.width;
+            final railSpace =
+                92 + (compact && layout.groups.length > 1 ? 42 : 0);
+            final columns = math.max(
+              1,
+              ((rect.width - railSpace) / layout.tabWidth).floor(),
             );
-            final dividerRect = Rect.fromLTWH(
-              left ? tabRect.right : tabRect.left - _gap,
-              content.top,
-              _gap,
-              content.height,
+            final rows = placement == TabPlacement.wrap
+                ? (tabs.length / columns).ceil().clamp(1, 3)
+                : 1;
+            final strip = math.min(row * rows, math.max(0.0, rect.height - 60));
+            var content = Rect.fromLTWH(
+              rect.left,
+              rect.top,
+              rect.width,
+              rect.height,
             );
-            content = Rect.fromLTWH(
-              left ? dividerRect.right : rect.left,
-              content.top,
-              math.max(0.0, rect.width - width - _gap),
-              content.height,
-            );
+            Rect tabRect;
+            if (vertical) {
+              final left = placement == TabPlacement.left;
+              tabRect = Rect.fromLTWH(
+                left ? rect.left : rect.right - width,
+                content.top,
+                width,
+                content.height,
+              );
+              final dividerRect = Rect.fromLTWH(
+                left ? tabRect.right : tabRect.left - _gap,
+                content.top,
+                _gap,
+                content.height,
+              );
+              content = Rect.fromLTWH(
+                left ? dividerRect.right : rect.left,
+                content.top,
+                math.max(0.0, rect.width - width - _gap),
+                content.height,
+              );
+              chrome.add(
+                Positioned.fromRect(
+                  rect: dividerRect,
+                  child: TabResizeHandle(
+                    key: ValueKey('tabs-resize-${g.id}'),
+                    axis: Axis.horizontal,
+                    label: '调整纵向标签宽度',
+                    value: width,
+                    reverse: !left,
+                    onChanged: ws.setTabsWidth,
+                    onReset: () => ws.setTabsWidth(180),
+                  ),
+                ),
+              );
+            } else {
+              final bottom = placement == TabPlacement.bottom;
+              tabRect = Rect.fromLTWH(
+                rect.left,
+                bottom ? rect.bottom - strip : content.top,
+                rect.width,
+                strip,
+              );
+              content = Rect.fromLTWH(
+                rect.left,
+                bottom ? content.top : content.top + strip,
+                rect.width,
+                math.max(0.0, content.height - strip),
+              );
+            }
+            contents[g.id] = content;
             chrome.add(
               Positioned.fromRect(
-                rect: dividerRect,
-                child: TabResizeHandle(
-                  key: ValueKey('tabs-resize-${g.id}'),
-                  axis: Axis.horizontal,
-                  label: '调整纵向标签宽度',
-                   value: width,
-                   reverse: !left,
-                   onChanged: ws.setTabsWidth,
-                  onReset: () => ws.setTabsWidth(180),
+                rect: tabRect,
+                child: _PaneBar(
+                  key: ValueKey('tab-list-${g.id}'),
+                  ws: ws,
+                  group: g,
+                  vertical: vertical,
+                  wrap: placement == TabPlacement.wrap,
+                  compact: compact,
+                  drag: _drag,
+                  onDrag: (data) {
+                    if (mounted) _drag.value = data;
+                  },
                 ),
               ),
             );
-          } else {
-            final bottom = placement == TabPlacement.bottom;
-            tabRect = Rect.fromLTWH(
-              rect.left,
-              bottom ? rect.bottom - strip : content.top,
-              rect.width,
-              strip,
-            );
-            content = Rect.fromLTWH(
-              rect.left,
-              bottom ? content.top : content.top + strip,
-              rect.width,
-              math.max(0.0, content.height - strip),
-            );
-          }
-          contents[g.id] = content;
-          chrome.add(
-            Positioned.fromRect(
-              rect: tabRect,
-              child: _PaneBar(
-                key: ValueKey('tab-list-${g.id}'),
-                ws: ws,
-                group: g,
-                vertical: vertical,
-                wrap: placement == TabPlacement.wrap,
-                compact: compact,
-                drag: _drag,
-                onDrag: (data) {
-                  if (mounted) _drag.value = data;
-                },
-              ),
-            ),
-          );
-          if (g.active == null &&
-              (layout.groups.length > 1 || ws.visibleTabs.isNotEmpty)) {
-            chrome.add(
-              Positioned.fromRect(
-                rect: content,
-                child: DragTarget<TabDragData>(
-                  onWillAcceptWithDetails: (d) => d.data.valid(ws),
-                  onAcceptWithDetails: (d) => ws.moveTab(d.data.tab.id, g.id),
-                  builder: (_, candidates, _) => Material(
-                    color: candidates.isNotEmpty ? ide.accentSoft : ide.editor,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          '拖入标签，或在这里打开文件',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: ide.textDim, fontSize: 12),
+            if (g.active == null &&
+                (layout.groups.length > 1 || ws.visibleTabs.isNotEmpty)) {
+              chrome.add(
+                Positioned.fromRect(
+                  rect: content,
+                  child: DragTarget<TabDragData>(
+                    onWillAcceptWithDetails: (d) => d.data.valid(ws),
+                    onAcceptWithDetails: (d) => ws.moveTab(d.data.tab.id, g.id),
+                    builder: (_, candidates, _) => Material(
+                      color: candidates.isNotEmpty
+                          ? ide.accentSoft
+                          : ide.editor,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            '拖入标签，或在这里打开文件',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: ide.textDim, fontSize: 12),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            );
+              );
+            }
           }
-        }
-        final owners = {
-          for (final group in layout.groups)
-            for (final id in group.tabs) id: group,
-        };
-        return Material(
-          color: ide.editor,
-          child: Stack(
-            children: [
-              if (ws.visibleTabs.isEmpty && layout.groups.length == 1)
-                Positioned.fromRect(
-                  rect: contents[layout.current.id]!,
-                  child: ClipRect(
-                    key: const ValueKey('editor-empty-viewport'),
-                    child: widget.empty,
+          final owners = {
+            for (final group in layout.groups)
+              for (final id in group.tabs) id: group,
+          };
+          return Material(
+            color: ide.editor,
+            child: Stack(
+              children: [
+                if (ws.visibleTabs.isEmpty && layout.groups.length == 1)
+                  Positioned.fromRect(
+                    rect: contents[layout.current.id]!,
+                    child: ClipRect(
+                      key: const ValueKey('editor-empty-viewport'),
+                      child: widget.empty,
+                    ),
                   ),
-                ),
-              for (final t in ws.editorTabs)
-                Builder(
-                  key: ObjectKey(t),
-                  builder: (_) {
-                    final group = owners[t.id];
-                    final rect = group != null && group.active == t.id
-                        ? contents[group.id]
-                        : null;
-                    final on = rect != null;
-                    if (rect != null) _lastRects[t] = rect;
-                    return Positioned.fromRect(
-                      rect: rect ?? _lastRects.putIfAbsent(t, () => bounds),
-                      child: Offstage(
-                        offstage: !on,
-                        child: ClipRect(
-                          key: ValueKey('editor-viewport-${t.id}'),
-                          child: TickerMode(
-                            enabled: on,
-                            child: ExcludeFocus(
-                              excluding: !on,
-                              child: Listener(
-                                behavior: HitTestBehavior.translucent,
-                                onPointerDown: (_) {
-                                  if (group != null) ws.focusGroup(group.id);
-                                },
-                                child: TabFocusFrame(
-                                  request:
-                                      on &&
-                                           !ws.terminalFocused && !ws.assistantFocused &&
-                                          layout.current.active == t.id
-                                      ? ws.editorFocusRequest
-                                      : -1,
-                                  canFocus: () =>
-                                       !ws.terminalFocused && !ws.assistantFocused &&
-                                      ws.editorActiveId == t.id,
-                                  child: RepaintBoundary(
-                                    child: _bodies.putIfAbsent(
-                                      t,
-                                      () => Builder(builder: t.builder),
-                                    ),
-                                  ),
-                                ),
+                for (final t in ws.editorTabs)
+                  Builder(
+                    key: ObjectKey(t),
+                    builder: (_) {
+                      final group = owners[t.id];
+                      final rect = group != null && group.active == t.id
+                          ? contents[group.id]
+                          : null;
+                      final on = rect != null;
+                      return Positioned.fromRect(
+                        rect: rect ?? bounds,
+                        child: RetainedPane(
+                          visible: on,
+                          viewportKey: ValueKey('editor-viewport-${t.id}'),
+                          child: Listener(
+                            behavior: HitTestBehavior.translucent,
+                            onPointerDown: (_) {
+                              if (group != null) ws.focusGroup(group.id);
+                            },
+                            child: TabFocusFrame(
+                              request:
+                                  on &&
+                                      !ws.terminalFocused &&
+                                      !ws.assistantFocused &&
+                                      layout.current.active == t.id
+                                  ? ws.editorFocusRequest
+                                  : -1,
+                              canFocus: () =>
+                                  !ws.terminalFocused &&
+                                  !ws.assistantFocused &&
+                                  ws.editorActiveId == t.id,
+                              child: _bodies.putIfAbsent(
+                                t,
+                                () => Builder(builder: t.builder),
                               ),
                             ),
                           ),
                         ),
+                      );
+                    },
+                  ),
+                ...chrome,
+                for (final d in dividers)
+                  Positioned.fromRect(
+                    rect: d.rect,
+                    child: TabResizeHandle(
+                      key: ValueKey('group-resize-${d.split.id}'),
+                      axis: d.split.axis == SplitAxis.horizontal
+                          ? Axis.horizontal
+                          : Axis.vertical,
+                      label: '调整编辑组大小',
+                      value:
+                          d.split.ratio.clamp(d.minRatio, d.maxRatio) *
+                          d.extent,
+                      onChanged: (extent) => ws.resizeGroup(
+                        d.split.id,
+                        extent / math.max(1, d.extent),
                       ),
-                    );
-                  },
-                ),
-              ...chrome,
-              for (final d in dividers)
-                Positioned.fromRect(
-                  rect: d.rect,
-                  child: TabResizeHandle(
-                    key: ValueKey('group-resize-${d.split.id}'),
-                    axis: d.split.axis == SplitAxis.horizontal
-                        ? Axis.horizontal
-                        : Axis.vertical,
-                    label: '调整编辑组大小',
-                    value: d.split.ratio.clamp(d.minRatio, d.maxRatio) * d.extent,
-                    onChanged: (extent) => ws.resizeGroup(d.split.id, extent / math.max(1, d.extent)),
-                    onReset: () => ws.resizeGroup(d.split.id, .5),
+                      onReset: () => ws.resizeGroup(d.split.id, .5),
+                    ),
+                  ),
+                Positioned.fill(
+                  child: ValueListenableBuilder<TabDragData?>(
+                    valueListenable: _drag,
+                    builder: (_, data, _) => data == null || !data.valid(ws)
+                        ? const SizedBox.shrink()
+                        : Stack(
+                            children: [
+                              for (final item in contents.entries)
+                                Positioned.fromRect(
+                                  rect: item.value,
+                                  child: PaneDropTarget(
+                                    ws: ws,
+                                    group: item.key,
+                                  ),
+                                ),
+                            ],
+                          ),
                   ),
                 ),
-              Positioned.fill(
-                child: ValueListenableBuilder<TabDragData?>(
-                  valueListenable: _drag,
-                  builder: (_, data, _) => data == null || !data.valid(ws)
-                      ? const SizedBox.shrink()
-                      : Stack(
-                          children: [
-                            for (final item in contents.entries)
-                              Positioned.fromRect(
-                                rect: item.value,
-                                child: PaneDropTarget(ws: ws, group: item.key),
-                              ),
-                          ],
-                        ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    ));
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -415,8 +425,11 @@ class _TabResizeHandleState extends State<TabResizeHandle> {
     final box = context.findRenderObject() as RenderBox;
     // Freeze the coordinate scale at pointer-down. The handle itself moves;
     // its changing local origin must never subtract movement from the drag.
-    final unit = widget.axis == Axis.horizontal ? const Offset(1, 0) : const Offset(0, 1);
-    _scale = (box.localToGlobal(unit) - box.localToGlobal(Offset.zero)).distance;
+    final unit = widget.axis == Axis.horizontal
+        ? const Offset(1, 0)
+        : const Offset(0, 1);
+    _scale =
+        (box.localToGlobal(unit) - box.localToGlobal(Offset.zero)).distance;
     _pointer = event.pointer;
     _origin = event.position;
     _startValue = widget.value;
@@ -428,22 +441,33 @@ class _TabResizeHandleState extends State<TabResizeHandle> {
     if (_pointer != event.pointer || _origin == null) return;
     final delta = event.position - _origin!;
     if (delta.distance > 3) _moved = true;
-    final distance = (widget.axis == Axis.horizontal ? delta.dx : delta.dy) / _scale;
+    final distance =
+        (widget.axis == Axis.horizontal ? delta.dx : delta.dy) / _scale;
     widget.onChanged(_startValue + (widget.reverse ? -distance : distance));
   }
 
   void _up(PointerUpEvent event) {
     if (_pointer != event.pointer) return;
     if (!_moved) {
-      final doubleClick = _lastClick != null && event.timeStamp - _lastClick! < const Duration(milliseconds: 300) &&
-        (_lastClickPosition! - event.position).distance < 5;
-      if (doubleClick) { widget.onReset(); _lastClick = null; }
-      else { _lastClick = event.timeStamp; _lastClickPosition = event.position; }
-    } else { _lastClick = null; }
+      final doubleClick =
+          _lastClick != null &&
+          event.timeStamp - _lastClick! < const Duration(milliseconds: 300) &&
+          (_lastClickPosition! - event.position).distance < 5;
+      if (doubleClick) {
+        widget.onReset();
+        _lastClick = null;
+      } else {
+        _lastClick = event.timeStamp;
+        _lastClickPosition = event.position;
+      }
+    } else {
+      _lastClick = null;
+    }
     _pointer = null;
     _origin = null;
     setState(() => _drag = false);
   }
+
   @override
   Widget build(BuildContext context) {
     final horizontal = widget.axis == Axis.horizontal, ide = Ide.of(context);
@@ -464,7 +488,9 @@ class _TabResizeHandleState extends State<TabResizeHandle> {
           onPointerUp: _up,
           onPointerCancel: (e) {
             if (e.pointer != _pointer) return;
-            _pointer = null; _origin = null; _lastClick = null;
+            _pointer = null;
+            _origin = null;
+            _lastClick = null;
             setState(() => _drag = false);
           },
           child: SizedBox.expand(
@@ -511,7 +537,7 @@ class _PaneBar extends StatelessWidget {
         ? SizedBox(
             width: 42,
             height: row,
-            child: PopupMenuButton<String>(
+            child: WorkbenchMenuButton<String>(
               tooltip: '切换视图',
               padding: EdgeInsets.zero,
               onSelected: ws.focusGroup,
@@ -537,7 +563,7 @@ class _PaneBar extends StatelessWidget {
     final actions = SizedBox(
       width: 32,
       height: row,
-      child: PopupMenuButton<String>(
+      child: WorkbenchMenuButton<String>(
         tooltip: '视图操作',
         padding: EdgeInsets.zero,
         icon: const Icon(Icons.more_horiz, size: 17),
@@ -588,10 +614,19 @@ class _PaneBar extends StatelessWidget {
       drag: drag,
       onDrag: onDrag,
     );
-    final splitButton = SizedBox(width: 28, height: row, child: IconButton(
-      key: ValueKey('split-editor-${group.id}'), tooltip: '新建右侧视图（Ctrl+\\）', padding: EdgeInsets.zero,
-      onPressed: layout.groups.length < TabLayout.maxGroups ? () => ws.splitGroup(SplitAxis.horizontal, group: group.id) : null,
-      icon: const Icon(Icons.vertical_split_outlined, size: 15)));
+    final splitButton = SizedBox(
+      width: 28,
+      height: row,
+      child: IconButton(
+        key: ValueKey('split-editor-${group.id}'),
+        tooltip: '新建右侧视图（Ctrl+\\）',
+        padding: EdgeInsets.zero,
+        onPressed: layout.groups.length < TabLayout.maxGroups
+            ? () => ws.splitGroup(SplitAxis.horizontal, group: group.id)
+            : null,
+        icon: const Icon(Icons.vertical_split_outlined, size: 15),
+      ),
+    );
     return Material(
       color: ide.tabBar,
       child: DecoratedBox(
@@ -663,7 +698,7 @@ class _OpenTabsMenu extends StatelessWidget {
   final TabGroup group;
   const _OpenTabsMenu({required this.ws, required this.group});
   @override
-  Widget build(BuildContext context) => PopupMenuButton<String>(
+  Widget build(BuildContext context) => WorkbenchMenuButton<String>(
     tooltip: '所有标签',
     icon: const Icon(Icons.expand_more, size: 17),
     onSelected: ws.activate,
@@ -878,17 +913,20 @@ class _TabTileState extends State<_TabTile> {
   Duration? _lastTap;
   Duration _press = Duration.zero;
   void _activate() {
-    final doubleClick = _lastTap != null && (_press - _lastTap!).inMilliseconds < 300;
+    final doubleClick =
+        _lastTap != null && (_press - _lastTap!).inMilliseconds < 300;
     _lastTap = doubleClick ? null : _press;
     widget.ws.activate(widget.tab.id);
     if (doubleClick && widget.ws.split) widget.ws.toggleFocusMode();
   }
+
   void _endDrag() {
     widget.onDrag(null);
     // Escape invalidates this gesture's payload permanently. Rebuild even if
     // the layout did not change, so the next gesture gets a fresh transaction.
     if (mounted) setState(() {});
   }
+
   @override
   Widget build(BuildContext context) {
     final ws = widget.ws,
@@ -897,7 +935,10 @@ class _TabTileState extends State<_TabTile> {
         layout = ws.tabLayout;
     final ide = Ide.of(context),
         on = group.active == tab.id,
-        focused = group.id == layout.focused && !ws.terminalFocused && !ws.assistantFocused;
+        focused =
+            group.id == layout.focused &&
+            !ws.terminalFocused &&
+            !ws.assistantFocused;
     final pin = layout.pinned.contains(tab.id);
     final tile = ContextArea(
       items: () => [
@@ -968,9 +1009,22 @@ class _TabTileState extends State<_TabTile> {
                       ? ide.hover
                       : null,
                   border: widget.vertical
-                    ? Border(left: BorderSide(color: on && focused ? ide.accent : Colors.transparent, width: 2))
-                    : Border(top: BorderSide(color: on && focused ? ide.accent : Colors.transparent),
-                        right: BorderSide(color: ide.border)),
+                      ? Border(
+                          left: BorderSide(
+                            color: on && focused
+                                ? ide.accent
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                        )
+                      : Border(
+                          top: BorderSide(
+                            color: on && focused
+                                ? ide.accent
+                                : Colors.transparent,
+                          ),
+                          right: BorderSide(color: ide.border),
+                        ),
                 ),
                 child: Row(
                   children: [
@@ -1049,7 +1103,10 @@ class _TabTileState extends State<_TabTile> {
       child: Material(
         elevation: 4,
         color: ide.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3), side: BorderSide(color: ide.accent)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(3),
+          side: BorderSide(color: ide.accent),
+        ),
         child: SizedBox(
           width: 180,
           height: _rowOf(context),
@@ -1079,7 +1136,10 @@ class _TabTileState extends State<_TabTile> {
         feedback: feedback,
         dragAnchorStrategy: pointerDragAnchorStrategy,
         maxSimultaneousDrags: 1,
-        onDragStarted: () { _lastTap = null; widget.onDrag(drag); },
+        onDragStarted: () {
+          _lastTap = null;
+          widget.onDrag(drag);
+        },
         onDragEnd: (_) => _endDrag(),
         childWhenDragging: Opacity(opacity: .35, child: tile),
         child: tile,
@@ -1091,7 +1151,10 @@ class _TabTileState extends State<_TabTile> {
       dragAnchorStrategy: pointerDragAnchorStrategy,
       allowedButtonsFilter: (buttons) => buttons == kPrimaryMouseButton,
       maxSimultaneousDrags: 1,
-      onDragStarted: () { _lastTap = null; widget.onDrag(drag); },
+      onDragStarted: () {
+        _lastTap = null;
+        widget.onDrag(drag);
+      },
       onDragEnd: (_) => _endDrag(),
       childWhenDragging: Opacity(opacity: .35, child: tile),
       child: tile,

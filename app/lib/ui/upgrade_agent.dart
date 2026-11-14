@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../kernel/overlays.dart';
 
 import '../state/app_state.dart';
 import 'add_server.dart';
@@ -9,14 +10,14 @@ Future<void> showAgentUpgrade(BuildContext context,AppState app,String id) async
   final link=app.link(id),server=app.server(id);
   if(link==null||server==null)return;
   final o=app.upgrades.offer(id,link);
-  final confirmed=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(
+  final confirmed=await showWorkbenchDialog<bool>(context:context,builder:(c)=>AlertDialog(
     title:Text('升级 agent：${o.current} → ${o.build?.manifest.version ?? '—'}'),
     content:Text(o.reason ?? (o.direct ? '校验内置发布签名后，经当前加密连接上传。等待文件传输结束及 30 秒安静窗口，再由独立进程切换和健康检查；失败自动回滚。终端进程保留，但连接会短暂中断。' : '当前 agent 不支持直连升级。将打开 SSH 兼容升级向导，核对原有主机指纹并使用内置签名版本；不会静默登录。')),
     actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('取消')),if(o.available)FilledButton(onPressed:()=>Navigator.pop(c,true),child:Text(o.direct?'确认升级':'打开 SSH 升级向导'))],
   ));
   if(confirmed!=true||!context.mounted)return;
   if(!o.direct){await Navigator.push(context,MaterialPageRoute(builder:(_)=>AddServerPage(app:app,existing:server)));return;}
-  await showDialog<void>(context:context,barrierDismissible:false,builder:(_)=>_UpgradeProgress(app:app,id:id));
+  await showWorkbenchDialog<void>(context:context,barrierDismissible:false,builder:(_)=>_UpgradeProgress(app:app,id:id));
 }
 
 class _UpgradeProgress extends StatefulWidget{

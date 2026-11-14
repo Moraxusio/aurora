@@ -156,7 +156,7 @@ class _GitPanelState extends State<GitPanel> {
 
   Future<String?> _choose(String title, String body, Map<String, String> options) {
     final ide = Ide.of(context);
-    return showDialog<String>(
+    return showWorkbenchDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(title),
@@ -225,7 +225,7 @@ class _GitPanelState extends State<GitPanel> {
       padding: const EdgeInsets.only(left: 8, right: 2),
       child: Row(children: [
         Expanded(
-          child: PopupMenuButton<GitRepo>(
+          child: WorkbenchMenuButton<GitRepo>(
             tooltip: '切换仓库',
             enabled: _git.repos.length > 1,
             onSelected: _git.select,
@@ -323,7 +323,7 @@ class _GitPanelState extends State<GitPanel> {
     if (st.stagedFiles.isEmpty && st.changedFiles.isEmpty) return ws.toast('没有可以储藏的改动', error: true);
     final msg = TextEditingController();
     var untracked = st.changedFiles.any((f) => f.untracked);
-    final ok = await showDialog<bool>(
+    final ok = await showWorkbenchDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
@@ -396,7 +396,7 @@ class _GitPanelState extends State<GitPanel> {
 
   Future<void> _newTag(GitCommit? at) async {
     final name = TextEditingController(), msg = TextEditingController();
-    final ok = await showDialog<bool>(
+    final ok = await showWorkbenchDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(at == null ? '在 HEAD 上打标签' : '在 ${at.short} 上打标签'),
@@ -452,7 +452,7 @@ class _GitPanelState extends State<GitPanel> {
 
   Future<void> _addRemote() async {
     final name = TextEditingController(text: (_git.status?.remotes.isEmpty ?? true) ? 'origin' : ''), url = TextEditingController();
-    final ok = await showDialog<bool>(
+    final ok = await showWorkbenchDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('添加远程仓库'),
@@ -657,7 +657,7 @@ class _GitPanelState extends State<GitPanel> {
             ),
           ),
           const SizedBox(width: 6),
-          PopupMenuButton<String>(
+          WorkbenchMenuButton<String>(
             tooltip: '更多',
             icon: Icon(Icons.more_vert, size: 18, color: ide.textDim),
             onSelected: (v) {

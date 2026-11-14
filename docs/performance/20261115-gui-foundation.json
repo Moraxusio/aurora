@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-15",
+  "mode": "Windows Profile",
+  "production_root": true,
+  "physical_size": [1682, 1066],
+  "device_pixel_ratio": 1.25,
+  "synthetic_services": true,
+  "gpu_fixture": "NVIDIA GeForce MX450 / 573.91, production parser, anonymized",
+  "retained_pane_source_sha256": "9a6fc99226650fb3047407245743b4b3290b7d64bc525258315daa389df26ceb",
+  "samples": [
+    {
+      "operation": "monitor + AI stream + terminal output + sidebar drag",
+      "frames": 161,
+      "build_p95_us": 6453,
+      "raster_p95_us": 3959,
+      "build_max_us": 7872,
+      "raster_max_us": 6082,
+      "over_16ms": 0
+    },
+    {
+      "operation": "retained editor switching beside AI and terminal",
+      "frames": 49,
+      "build_p95_us": 9385,
+      "raster_p95_us": 4417,
+      "build_max_us": 10422,
+      "raster_max_us": 4706,
+      "over_16ms": 0
+    },
+    {
+      "operation": "expanded GPU detail body scroll and refresh",
+      "frames": 58,
+      "build_p95_us": 1398,
+      "raster_p95_us": 3403,
+      "build_max_us": 7850,
+      "raster_max_us": 3798,
+      "over_16ms": 0
+    },
+    {
+      "operation": "30s concurrent polling and streaming soak",
+      "frames": 301,
+      "build_p95_us": 3232,
+      "raster_p95_us": 3671,
+      "build_max_us": 4321,
+      "raster_max_us": 4882,
+      "over_16ms": 0
+    }
+  ],
+  "native_window_sizes": [[1200, 800], [1000, 700], [1500, 1000]],
+  "dirty_buffer_retained": true,
+  "terminal_attaches": 1,
+  "ai_attaches": 1,
+  "ai_draft_retained": true,
+  "reading_anchor_retained": true,
+  "interaction_undo_redo_retained": true,
+  "flutter_layout_axtree_errors": 0,
+  "comparison_baseline": "No valid same-workload baseline; no speedup percentage claimed"
+}

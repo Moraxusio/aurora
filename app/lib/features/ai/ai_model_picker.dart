@@ -13,6 +13,7 @@ import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'ai_settings_dialog.dart';
 import 'ai_auth.dart';
+import 'ai_visuals.dart';
 
 /// The thinking-strength choices. The value is what `reasoning_effort` carries
 /// (OpenAI) and what the Anthropic budget is derived from; '' is the model's own default.
@@ -136,6 +137,9 @@ class _ModelPickerState extends State<_ModelPicker> {
         final typed = _filter.text.trim();
         final canUseTyped = typed.isNotEmpty && !prov.models.contains(typed) && typed != prov.model;
         return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: AiSectionHeading(
+            icon: Icons.memory_outlined, title: '选择模型', subtitle: '用于下一次调用 · ${prov.name}',
+            trailing: IconBtn(Icons.close, '关闭', () => Navigator.pop(context)))),
           if (ai.providers.length > 1)
             Padding(
               padding: const EdgeInsets.fromLTRB(Space.l, Space.l, Space.l, 0),

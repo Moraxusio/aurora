@@ -88,7 +88,7 @@ if ($LASTEXITCODE) { throw 'sign upgrade policy' }
 # 3. The client.
 Push-Location (Join-Path $repo 'app')
 try {
-    & $flutter build windows --release "--build-name=$Version" "--build-number=$BuildNumber"
+    & $flutter build windows --release --target=lib/main.dart "--build-name=$Version" "--build-number=$BuildNumber"
     if ($LASTEXITCODE) { throw 'flutter build' }
 } finally { Pop-Location }
 Copy-Item (Join-Path $repo 'app\build\windows\x64\runner\Release\*') $dir -Recurse
@@ -116,6 +116,17 @@ Aurora $Version (Windows)
   只有当前 Windows 用户能打开。
 
 本次更新（$Version）：
+- 工作台共享保活视口，隐藏区域暂停刷新；系统／GPU 使用独立快照，详情按需构建、
+  长进程列表惰性显示。保留未保存文档、撤销／重做、固定标签、终端连接与异步关闭保护。
+- PDF 支持选择／手形、空格临时拖动、Ctrl+滚轮缩放、封面独立双页、阅读前进／后退、
+  会话标记及搜索选项；按文档身份保留本次客户端会话内的阅读位置和设置。
+- AI 顶部工作导航可切换主对话、子代理与 Shell 输出，完成任务仍可查看；分别保留草稿、
+  附件、连接和阅读锚点，从历史子会话可返回上级。长输出有独立复制及回到最新入口。
+- 菜单、弹窗、选择器、提示及 AI 表面统一深浅色、间距、6px 圆角和动效；菜单支持键盘、
+  勾选、窗口边缘避让与减少动画，后续操作等待退场完成，缩放后沿用统一坐标定位。
+- 本地 GUI 异常记录有界编号／类型／代码栈，命令面板可“复制界面诊断”；不记录正文、
+  配置或网络参数。原始 GPU 灰屏的具体异常尚未捕获，不能宣称其根因已确定修复。
+此前文件树、监控与代理更新：
 - 文件树长名称保留扩展名，深层缩进封顶，大小／时间对齐并适应侧栏宽度；增加活动文件标记、
   定位当前文件及折叠全部，保留惰性列表、原文件操作与文档状态。
 - 本地 agent 提供 CPU、物理／提交内存、固定磁盘、进程监控和 Aurora 节点代理服务。

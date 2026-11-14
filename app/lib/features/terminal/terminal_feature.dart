@@ -89,7 +89,7 @@ Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
   if (ctx == null || !ctx.mounted) return null;
   // The proxy box is offered only when this agent has the proxy service on and
   // a node is chosen (D-47): a box that can only fail would be a trap.
-  final r = await showDialog<NewSession>(
+  final r = await showWorkbenchDialog<NewSession>(
     context: ctx,
     builder: (_) => NewSessionDialog(initial: suggest, proxy: proxyOffer(ws), local: ws.entry?.isLocal == true, networkChoice: ws.hasOp('session.network')),
   );

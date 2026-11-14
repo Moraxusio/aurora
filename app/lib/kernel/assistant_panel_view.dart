@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'overlays.dart';
 
 import '../theme/ide_theme.dart';
 import 'editor_tab.dart';
 import 'tab_workspace_view.dart';
 import 'workspace.dart';
+import 'retained_pane.dart';
 
 /// Secondary sidebar, not an editor group. History never reparents a chat.
 class AssistantPanelView extends StatefulWidget {
@@ -22,15 +24,16 @@ class AssistantPanelView extends StatefulWidget {
 
 class _AssistantPanelViewState extends State<AssistantPanelView> {
   final Map<EditorTab, Widget> _bodies = {};
-  final Map<EditorTab, Rect> _rects = {};
   bool _historyOpen = false;
   Widget? _historyBody;
   EditorTab? _activeTab;
   void _history() => setState(() {
     _historyOpen = !_historyOpen;
-    _historyBody ??= widget.historyBuilder?.call(() {
-      if (mounted) setState(() => _historyOpen = false);
-    }) ?? const Center(child: Text('暂无历史'));
+    _historyBody ??=
+        widget.historyBuilder?.call(() {
+          if (mounted) setState(() => _historyOpen = false);
+        }) ??
+        const Center(child: Text('暂无历史'));
   });
   @override
   Widget build(BuildContext context) {
@@ -41,7 +44,6 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
     if (!identical(active, _activeTab)) _historyOpen = false;
     _activeTab = active;
     _bodies.removeWhere((tab, _) => !tabs.contains(tab));
-    _rects.removeWhere((tab, _) => !tabs.contains(tab));
     return Material(
       color: ide.editor,
       child: Column(
@@ -59,9 +61,12 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                 Icon(Icons.auto_awesome_outlined, size: 15, color: ide.accent),
                 const SizedBox(width: 7),
                 Expanded(
-                  child: PopupMenuButton<String>(
+                  child: WorkbenchMenuButton<String>(
                     tooltip: '切换已打开的 AI 对话',
-                    onSelected: (id) { setState(() => _historyOpen = false); ws.activate(id); },
+                    onSelected: (id) {
+                      setState(() => _historyOpen = false);
+                      ws.activate(id);
+                    },
                     itemBuilder: (_) => [
                       for (final tab in tabs)
                         CheckedPopupMenuItem(
@@ -71,7 +76,10 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                         ),
                     ],
                     child: Text(
-                       _historyOpen ? '对话历史' : ws.tab(ws.assistantPanel.active ?? '')?.title ?? 'AI 助手',
+                      _historyOpen
+                          ? '对话历史'
+                          : ws.tab(ws.assistantPanel.active ?? '')?.title ??
+                                'AI 助手',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -81,10 +89,21 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                     ),
                   ),
                 ),
-                _action('新建 AI 对话', Icons.add, widget.onNew == null ? null : () {
-                  setState(() => _historyOpen = false); widget.onNew!();
-                }),
-                _action(_historyOpen ? '返回对话' : 'AI 对话历史', _historyOpen ? Icons.arrow_back : Icons.history, _history),
+                _action(
+                  '新建 AI 对话',
+                  Icons.add,
+                  widget.onNew == null
+                      ? null
+                      : () {
+                          setState(() => _historyOpen = false);
+                          widget.onNew!();
+                        },
+                ),
+                _action(
+                  _historyOpen ? '返回对话' : 'AI 对话历史',
+                  _historyOpen ? Icons.arrow_back : Icons.history,
+                  _history,
+                ),
                 _action(
                   ws.assistantPanel.maximized ? '还原 AI 侧栏' : '展开 AI 对话',
                   ws.assistantPanel.maximized
@@ -113,45 +132,30 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                     Builder(
                       key: ObjectKey(tab),
                       builder: (_) {
-                        if (tab.id == ws.assistantPanel.active && !_historyOpen) {
-                          _rects[tab] = Offset.zero & box.biggest;
-                        }
                         return Positioned.fromRect(
-                          rect: _rects.putIfAbsent(
-                            tab,
-                            () => Offset.zero & box.biggest,
-                          ),
-                          child: Offstage(
-                            offstage: _historyOpen || tab.id != ws.assistantPanel.active,
-                            child: TickerMode(
-                              enabled: !_historyOpen && tab.id == ws.assistantPanel.active,
-                              child: ExcludeFocus(
-                                excluding: _historyOpen || tab.id != ws.assistantPanel.active,
-                                child: Listener(
-                                  behavior: HitTestBehavior.translucent,
-                                  onPointerDown: (_) =>
-                                      ws.focusAssistantPanel(),
-                                  child: ClipRect(
-                                    key: ValueKey(
-                                      'assistant-viewport-${tab.id}',
-                                    ),
-                                    child: TabFocusFrame(
-                                      request:
-                                          ws.assistantFocused &&
-                                              tab.id == ws.assistantPanel.active
-                                          ? ws.assistantFocusRequest
-                                          : -1,
-                                      canFocus: () =>
-                                          ws.assistantFocused &&
-                                          tab.id == ws.assistantPanel.active,
-                                      child: RepaintBoundary(
-                                        child: _bodies.putIfAbsent(
-                                          tab,
-                                          () => Builder(builder: tab.builder),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                          rect: Offset.zero & box.biggest,
+                          child: RetainedPane(
+                            visible:
+                                !_historyOpen &&
+                                tab.id == ws.assistantPanel.active,
+                            viewportKey: ValueKey(
+                              'assistant-viewport-${tab.id}',
+                            ),
+                            child: Listener(
+                              behavior: HitTestBehavior.translucent,
+                              onPointerDown: (_) => ws.focusAssistantPanel(),
+                              child: TabFocusFrame(
+                                request:
+                                    ws.assistantFocused &&
+                                        tab.id == ws.assistantPanel.active
+                                    ? ws.assistantFocusRequest
+                                    : -1,
+                                canFocus: () =>
+                                    ws.assistantFocused &&
+                                    tab.id == ws.assistantPanel.active,
+                                child: _bodies.putIfAbsent(
+                                  tab,
+                                  () => Builder(builder: tab.builder),
                                 ),
                               ),
                             ),
@@ -159,10 +163,15 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                         );
                       },
                     ),
-                  if (_historyBody != null) Positioned.fill(key: const ValueKey('assistant-history'),
-                    child: Offstage(offstage: !_historyOpen, child: TickerMode(enabled: _historyOpen,
-                      child: ExcludeFocus(excluding: !_historyOpen, child: _historyBody!)))),
-                  ],
+                  if (_historyBody != null)
+                    Positioned.fill(
+                      key: const ValueKey('assistant-history'),
+                      child: RetainedPane(
+                        visible: _historyOpen,
+                        child: _historyBody!,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

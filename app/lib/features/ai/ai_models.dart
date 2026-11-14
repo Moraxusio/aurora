@@ -304,6 +304,7 @@ class AiMessage {
 
 class AiSession {
   final String id;
+  final String parentId;
   String title;
   String root;
   String workdir;
@@ -322,6 +323,7 @@ class AiSession {
 
   AiSession({
     required this.id,
+    this.parentId = '',
     required this.title,
     required this.root,
     required this.workdir,
@@ -342,6 +344,7 @@ class AiSession {
 
   factory AiSession.fromJson(Map<String, dynamic> j) => AiSession(
         id: j['id'] as String? ?? '',
+        parentId: j['parent_id'] as String? ?? '',
         title: j['title'] as String? ?? '新会话',
         root: j['root'] as String? ?? '',
         workdir: j['workdir'] as String? ?? '/',

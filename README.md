@@ -2,7 +2,7 @@
 
 核心理念：**布局服务于任务，移动位置不丢状态**。3.18.0 精简 Windows 工作台：侧栏按指针总位移跟手调整，文件工具栏合为一行，AI 历史原位切换；新增实时字号、整体缩放与五向停靠标记。文档、右侧 AI 和底部终端继续保留各自状态，消息阅读锚点与完成计划自动收起保持。操作见 [标签页工作台](docs/TABS.md)。
 
-**当前优先维护 Windows。** 3.18.0 按用户授权准备发布 Windows x64，Android 构建/发行暂缓，不再作为本轮 Windows 发布前置条件；安卓用户可继续使用既有 3.16.0。下载见 [GitHub Releases](https://github.com/Moraxusio/aurora/releases)。
+**当前优先维护 Windows。** [3.18.0](https://github.com/Moraxusio/aurora/releases/tag/v3.18.0) 已发布 Windows x64，Android 构建/发行暂缓，不再作为本轮 Windows 发布前置条件；安卓用户可继续使用既有 3.16.0。
 
 **3.18.0：Windows 工作台重构与界面减法。** 独立验收完成，设计与验证见 [Windows 工作台](docs/WINDOWS_WORKBENCH.md) 和 [侧栏跟手与界面减法](docs/WINDOWS_SIMPLIFICATION.md)。
 

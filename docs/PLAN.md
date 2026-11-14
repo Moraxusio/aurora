@@ -585,3 +585,10 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 用户完成 Windows 工作台/精简版验收后明确要求“编译打包发布”。本轮发布 Windows x64，客户端与 Linux/Windows 两类随包签名 agent 统一为 3.18.0，客户端 build number 31800；Android 继续暂缓。
 - 保持已验收的 989 个 Windows 生产源码/资源/本地依赖文件，复用上述定向测试、最终 17/17、分析零问题及原生 Profile 结果，不重复整轮 UI 测试。仅补发布说明与打包说明，从提交后的干净源码构建；旧正式包及五个独立预览保留。
 - 发布过程校验版本、签名、ZIP 与目录逐项一致性及 GitHub 上传资产摘要；原 profile/API Key/OAuth 不迁移、不重置。当前 GitHub 无非交互登录凭据，编译打包先行，发布授权补齐后上传。
+
+### 3.18.0 Windows 已发布（2026-11-14）
+
+- 发布：https://github.com/Moraxusio/aurora/releases/tag/v3.18.0 。源码与标签指向 `b685a45402ef5f466e619b4fefe0c32647b35973`，来自干净工作树；Windows 客户端 `3.18.0+31800`，两类签名 agent 同为 3.18.0，沿用密钥 ID `87828dfb18459372`。本轮只发布 Windows ZIP、ZIP sidecar、SHA256SUMS 共 3 项资产，Android 暂缓。
+- Windows Release 构建耗时 184.2 秒；33 个包内文件与 ZIP 逐项一致。最终 AOT `f535b0bb94ce8051630b6117e4930de68eec3f94a3ac150fabc0abd822b4d55b` 与用户验收的 Lean 预览逐字节相同，989 个生产文件摘要匹配，复用已记录的定向/分析/原生 Profile 结果，没有重复整轮回归。构建后的 Go 元数据检查原先错误地要求 `-trimpath` 产物记录 linker flags，已改为核对干净源码 revision 并运行两类二进制的 `version`；均返回 3.18.0，Windows GUI 子系统通过显式重定向读取输出。
+- 本地包 `C:\dev\VPS\release3\Aurora-3.18.0.zip`，30,477,694 字节；SHA-256 `18ddbf4d19cedac6cdcb0b50a040be7cc4e654012bd124bfc0261e70e04e1f10`。Linux agent `0c01b188439f2ee672a0c4b723de0e7f798197acffae329c2bd6d507344e1309`，Windows agent `73c910af292643cfd5f6c4557d6cd109e092b723f4b82bfbce05e6b354776258`；产品签名与版本验证通过，保留 OpenCode MIT 署名。
+- 源码及标签已推送，先上传草稿，在 3 项资产大小及 GitHub 服务端 SHA-256 全部匹配后发布为 latest；没有重复整包下载。正式包及五个预览的 9 项保护哈希匹配，v2 工作区干净、`release` 顶层仍为 13 项。正式包沿用已有加密配置，未迁移 API Key/OAuth；临时发布授权在本机 DPAPI 暂存，仅用于本次 GitHub 发布，完成后清理。

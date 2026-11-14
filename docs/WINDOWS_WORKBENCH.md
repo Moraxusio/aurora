@@ -1,6 +1,6 @@
 # Windows 工作台重构 · Astra 验收版
 
-基线：3.17.0 / `16c4b84`。本轮重新设计 Windows 界面与热路径，独立验收完成，用户已授权作为 3.18.0 编译打包发布；最终发布状态见 PLAN。Android 暂缓。
+基线：3.17.0 / `16c4b84`。本轮重新设计 Windows 界面与热路径，独立验收完成，已按用户授权随 [3.18.0](https://github.com/Moraxusio/aurora/releases/tag/v3.18.0) 正式发布；构建及发布记录见 PLAN。Android 暂缓。
 
 首轮验收后，用户反馈侧栏拖宽不跟手、栏目堆叠过多。后续调整见 [侧栏跟手与界面减法](WINDOWS_SIMPLIFICATION.md)：改为指针总位移定位，合并文件工具栏、压平 AI 控件和原位历史；以下性能表保留为首轮记录。
 

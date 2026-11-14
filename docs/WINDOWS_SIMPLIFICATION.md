@@ -1,6 +1,6 @@
 # Windows：侧栏跟手与界面减法
 
-在 Astra 首轮验收基础上，针对用户反馈继续调整。Windows 独立验收完成，用户已授权作为 3.18.0 编译打包发布；最终发布状态见 PLAN。
+在 Astra 首轮验收基础上，针对用户反馈继续调整。Windows 独立验收完成，已按用户授权随 [3.18.0](https://github.com/Moraxusio/aurora/releases/tag/v3.18.0) 正式发布；构建及发布记录见 PLAN。
 
 ## 侧栏跟手
 

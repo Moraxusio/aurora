@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"aurora3/internal/proxyroute"
 )
 
 // ToolDef matches OpenCode's tool definition schema.
@@ -139,7 +141,7 @@ func IsRetryableProviderError(err error) bool {
 }
 
 // newHTTPClient builds an HTTP client that optionally routes through Aurora's proxysvc node (px.GitEnv).
-func newHTTPClient(useProxy bool, proxyEnv func() map[string]string) *http.Client {
+func newHTTPClient(useProxy bool, proxyEnv func() map[string]string, modes ...string) *http.Client {
 	tr := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -150,7 +152,9 @@ func newHTTPClient(useProxy bool, proxyEnv func() map[string]string) *http.Clien
 		ResponseHeaderTimeout: 120 * time.Second,
 		IdleConnTimeout:       90 * time.Second,
 	}
-	if useProxy && proxyEnv != nil {
+	if len(modes) > 0 && modes[0] != "" {
+		tr.Proxy = proxyroute.HTTP(modes[0], proxyEnv)
+	} else if useProxy && proxyEnv != nil {
 		var proxyURL *url.URL
 		for k, v := range proxyEnv() {
 			if v == "" {
@@ -442,7 +446,7 @@ func fetchModelPages(cctx context.Context, cfg ProviderConfig, proxyEnv func() m
 		httpReq.Header.Set("anthropic-version", "2023-06-01")
 	}
 
-	client := newHTTPClient(cfg.UseProxy, proxyEnv)
+	client := newHTTPClient(cfg.UseProxy, proxyEnv, cfg.ProxyMode)
 	defer client.CloseIdleConnections()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	res, err := client.Do(httpReq)

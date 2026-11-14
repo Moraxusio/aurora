@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:aurora/features/files/file_tree_row.dart';
 import 'package:aurora/features/files/files_feature.dart';
 import 'package:aurora/features/files/transfers.dart';
 import 'package:aurora/kernel/input_mode.dart';
+import 'package:aurora/kernel/editor_tab.dart';
 import 'package:aurora/kernel/workspace.dart';
 import 'package:aurora/theme/ide_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/workspace_fixture.dart';
@@ -37,6 +42,85 @@ void main() {
     await treePumps(t);
   }
   Finder row(String path) => find.byWidgetPredicate((w) => w is FileTreeRow && w.path == path);
+
+  testWidgets('reveal expands deep ancestors and collapse preserves the open document', (t) async {
+    final tab = EditorTab(id: 'fixture-document', title: 'deep.txt', icon: Icons.description, file: ref('/project/src/nested/deep.txt'), builder: (_) => const Text('retained buffer'));
+    ws.openTab(tab);
+    await mount(t);
+    expect(row('/project/src/nested/deep.txt'), findsNothing);
+    await t.tap(find.byTooltip('定位当前文件'));
+    await treePumps(t);
+    final active = t.widget<FileTreeRow>(row('/project/src/nested/deep.txt'));
+    expect(active.active, isTrue);
+    expect(active.selected, isTrue);
+    await t.tap(find.byTooltip('文件选项'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('折叠所有文件夹'));
+    await treePumps(t);
+    expect(row('/project/src/nested/deep.txt'), findsNothing);
+    expect(ws.active, same(tab));
+    expect(await t.runAsync(() => ws.flushViews()), isTrue);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  for (final width in [220.0, 310.0, 520.0]) {
+    testWidgets('deep long names fit $width px and preserve their extension', (t) async {
+      await t.pumpWidget(MaterialApp(theme: buildTheme(Brightness.dark), home: InputMode.scope(mode: input,
+        child: Scaffold(body: Align(alignment: Alignment.topLeft, child: SizedBox(width: width, child: FileTreeRow(
+          name: 'very-long-component-file-name-with-many-words.dart', path: '/fixture/long.dart', depth: 24,
+          folder: false, expanded: false, loading: false, selected: false, root: false, link: false,
+          detail: '12.5 MB', modified: '11-14 12:30', onTap: () {}, menu: () => const [])))))));
+      expect(t.takeException(), isNull);
+      expect(find.text('.dart'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+    });
+  }
+
+  for (final brightness in Brightness.values) {
+    testWidgets('file tree ${brightness.name} visual', (t) async {
+      final out = Platform.environment['AURORA_FILES_SHOTS'];
+      if (out != null) {
+        for (final (family, file) in [
+          ('Microsoft YaHei UI', r'C:\Windows\Fonts\msyh.ttc'),
+          (Ide.ui, r'C:\Windows\Fonts\SegUIVar.ttf'),
+          ('Segoe UI', r'C:\Windows\Fonts\segoeui.ttf'),
+          ('MaterialIcons', r'C:\dev\VPS\flutter\bin\cache\artifacts\material_fonts\materialicons-regular.otf'),
+        ]) {
+          await (FontLoader(family)..addFont(Future.value(ByteData.sublistView(File(file).readAsBytesSync())))).load();
+        }
+      }
+      final key = GlobalKey();
+      await t.pumpWidget(MaterialApp(theme: buildTheme(brightness), home: InputMode.scope(mode: input,
+        child: Scaffold(body: RepaintBoundary(key: key, child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (final width in [260.0, 520.0]) SizedBox(width: width, child: Builder(builder: (context) => ColoredBox(color: Ide.of(context).sideBar, child: Column(children: [
+            const SizedBox(height: 12),
+            Text(width < 300 ? '紧凑侧栏' : '宽侧栏 · 文件大小与修改时间'),
+            const SizedBox(height: 12),
+            for (final (name, depth, folder, active) in [
+              ('Aurora 工作区', 0, true, false), ('app', 1, true, false), ('lib', 2, true, false),
+              ('features', 3, true, false), ('files', 4, true, false),
+              ('file_tree_row.dart', 5, false, true), ('very-long-file-management-component-name.dart', 5, false, false),
+              ('深层目录里的配置文件.json', 24, false, false), ('README.md', 1, false, false),
+            ]) FileTreeRow(name: name, path: '/fixture/$name', depth: depth, folder: folder, expanded: folder, loading: false,
+              selected: active, active: active, root: depth == 0, link: false, detail: folder ? null : '12.5 KB',
+              modified: folder ? null : '11-14 12:30', onTap: () {}, menu: () => const []),
+          ])))),
+        ]))))));
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      if (out != null) {
+        final boundary = t.renderObject<RenderRepaintBoundary>(find.byKey(key));
+        await t.runAsync(() async {
+          final image = await boundary.toImage();
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          Directory(out).createSync(recursive: true);
+          await File('$out/files-${brightness.name}.png').writeAsBytes(bytes!.buffer.asUint8List());
+          image.dispose();
+        });
+      }
+      await t.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets('restores descendants and refresh walks each visible folder once', (t) async {
     ws.rememberExpanded([ref('/project'), ref('/project/src'), ref('/project/src/nested')]);

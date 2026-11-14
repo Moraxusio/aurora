@@ -91,20 +91,22 @@ Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
   // a node is chosen (D-47): a box that can only fail would be a trap.
   final r = await showDialog<NewSession>(
     context: ctx,
-    builder: (_) => NewSessionDialog(initial: suggest, proxy: proxyOffer(ws)),
+    builder: (_) => NewSessionDialog(initial: suggest, proxy: proxyOffer(ws), local: ws.entry?.isLocal == true, networkChoice: ws.hasOp('session.network')),
   );
-  if (r == null || r.name.isEmpty) return null;
+  if (r == null || r.name.isEmpty || !identical(link, ws.link)) return null;
   final name = r.name;
   if (!_nameRe.hasMatch(name)) {
     ws.toast('会话名只能用字母、数字、点、下划线、连字符', error: true);
     return null;
   }
   final folder = ws.project?.folders.firstOrNull;
-  final res = await ws.guard(() => link.call('session.create', {'name': name, if (r.proxy) 'proxy': true, if (folder != null) 'root': folder.root, if (folder != null) 'path': folder.path}));
-  if (res == null) return null;
+  final res = await ws.guard(() => link.call('session.create', {'name': name, if (r.proxy) 'proxy': true, if (r.proxyMode != null) 'proxy_mode': r.proxyMode, if (folder != null) 'root': folder.root, if (folder != null) 'path': folder.path}));
+  if (res == null || !identical(link, ws.link)) return null;
   // A name that was already a session is opened as it is (D-48): say that it
   // was not given the proxy the box asked for, instead of letting the user think so.
-  if (r.proxy && (res as Map)['existed'] == true && res['proxy'] != true) {
+  if (r.proxyMode != null && (res as Map)['existed'] == true && res['proxy_mode'] != r.proxyMode) {
+    ws.toast('已打开现有会话“$name”；它保留创建时的代理出口');
+  } else if (r.proxy && (res as Map)['existed'] == true && res['proxy'] != true) {
     ws.toast('会话“$name”早就有了，已打开；它启动时没有代理，不会因为这次勾选而改变', error: true);
   }
   openSession(ws, name);
@@ -122,7 +124,6 @@ class ProxyOffer {
 }
 
 ProxyOffer proxyOffer(Workspace ws) {
-  if (ws.entry?.isLocal == true) return const ProxyOffer.unavailable('本地终端自动继承当前用户的环境代理 / Windows 手动系统代理');
   final s = ws.serviceInfo('proxy');
   if (s == null) return const ProxyOffer.unavailable('这台服务器的 agent 没有代理功能');
   if (s['enabled'] != true) return const ProxyOffer.unavailable('代理服务是关闭的：在“代理”页打开它');
@@ -137,13 +138,15 @@ ProxyOffer proxyOffer(Workspace ws) {
 class NewSession {
   final String name;
   final bool proxy;
-  NewSession(this.name, this.proxy);
+  final String? proxyMode;
+  NewSession(this.name, this.proxy, {this.proxyMode});
 }
 
 class NewSessionDialog extends StatefulWidget {
   final String initial;
   final ProxyOffer proxy;
-  const NewSessionDialog({super.key, required this.initial, required this.proxy});
+  final bool local, networkChoice;
+  const NewSessionDialog({super.key, required this.initial, required this.proxy, this.local = false, this.networkChoice = false});
   @override
   State<NewSessionDialog> createState() => _NewSessionDialogState();
 }
@@ -151,6 +154,7 @@ class NewSessionDialog extends StatefulWidget {
 class _NewSessionDialogState extends State<NewSessionDialog> {
   late final TextEditingController _name = TextEditingController(text: widget.initial);
   bool _proxy = false;
+  String _proxyMode = 'system';
 
   @override
   void dispose() {
@@ -158,7 +162,8 @@ class _NewSessionDialogState extends State<NewSessionDialog> {
     super.dispose();
   }
 
-  void _ok() => Navigator.pop(context, NewSession(_name.text.trim(), _proxy && widget.proxy.available));
+  void _ok() => Navigator.pop(context, NewSession(_name.text.trim(), !widget.local && _proxy && widget.proxy.available,
+    proxyMode: widget.local && widget.networkChoice ? _proxyMode : null));
 
   @override
   Widget build(BuildContext context) {
@@ -179,7 +184,22 @@ class _NewSessionDialogState extends State<NewSessionDialog> {
               onSubmitted: (_) => _ok(),
             ),
             const SizedBox(height: 10),
-            CheckboxListTile(
+            if (widget.local && widget.networkChoice) ...[
+              DropdownButtonFormField<String>(
+                key: const ValueKey('session-proxy-mode'), initialValue: _proxyMode, isExpanded: true,
+                decoration: const InputDecoration(labelText: '网络出口'),
+                items: [
+                  const DropdownMenuItem(value: 'system', child: Text('本机代理（环境 / Windows 系统代理）', overflow: TextOverflow.ellipsis)),
+                  DropdownMenuItem(value: 'agent', enabled: p.available, child: Text('Aurora agent 代理${p.available ? ' · ${p.nodeName}' : '（未就绪）'}', overflow: TextOverflow.ellipsis)),
+                  const DropdownMenuItem(value: 'direct', child: Text('直连（不注入代理）')),
+                ],
+                onChanged: (v) { if (v != null) setState(() => _proxyMode = v); },
+              ),
+              const SizedBox(height: 8),
+              Text(p.available ? '出口在创建时确定；Aurora 节点可在代理页切换。' : '${p.unavailable}；本机代理与直连仍可使用。', style: TextStyle(fontSize: 11.5, color: ide.textDim)),
+            ] else if (widget.local)
+              Text('本地终端继承本机代理；升级本地 agent 后可选择出口。', style: TextStyle(fontSize: 11.5, color: ide.textDim))
+            else CheckboxListTile(
               key: const ValueKey('session-proxy'),
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
@@ -334,7 +354,7 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
                       TreeRow(
                         leading: Icon(Icons.terminal, size: 14, color: (s['attached'] as num? ?? 0) > 0 ? ide.ok : ide.textDim),
                         label: s['name'] as String,
-                        detail: '${s['windows'] ?? 1} 个窗口${(s['attached'] as num? ?? 0) > 0 ? ' · 已连接' : ''}',
+                        detail: s['proxy_mode'] == null ? '${s['windows'] ?? 1} 个窗口${(s['attached'] as num? ?? 0) > 0 ? ' · 已连接' : ''}' : const {'system': '本机代理', 'agent': 'Aurora 代理', 'direct': '直连'}[s['proxy_mode']] ?? '',
                         selected: ws.terminalActiveId == 'term:${s['name']}',
                         onTap: () { openSession(ws, s['name'] as String); widget.onOpened?.call(); },
                         trailing: IconBtn(Icons.close, '结束会话', () => _kill(s['name'] as String)),

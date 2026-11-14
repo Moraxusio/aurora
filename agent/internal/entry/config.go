@@ -118,7 +118,16 @@ func (c *Config) Validate() error {
 
 // Save writes the config atomically with 0600 permissions (it holds secrets).
 func (c *Config) Save(path string) error {
-	b, err := json.MarshalIndent(c, "", "  ")
+	var saved any = c
+	if c.Kind == "local" {
+		// Local bootstrap identity is ephemeral. Persist only service choices;
+		// never write the per-launch direct token or restore a stale bind/root.
+		saved = struct {
+			Services map[string]bool `json:"services,omitempty"`
+			Proxy    json.RawMessage `json:"proxy,omitempty"`
+		}{c.Services, c.Proxy}
+	}
+	b, err := json.MarshalIndent(saved, "", "  ")
 	if err != nil {
 		return err
 	}

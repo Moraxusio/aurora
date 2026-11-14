@@ -117,7 +117,7 @@ func isTextualMime(m string) bool {
 }
 
 func fetchWeb(ctx context.Context, tc toolContext, target, format string) ([]byte, string, error) {
-	client := newHTTPClient(tc.provider.UseProxy, tc.env.Proxy)
+	client := newHTTPClient(tc.provider.UseProxy, tc.env.proxyFor(tc.provider), tc.provider.ProxyMode)
 	// Redirects are followed here (not silently by the transport) so every hop
 	// is validated like the first URL, as OpenCode does.
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -434,7 +434,7 @@ func exaSearch(ctx context.Context, tc toolContext, query string) ([]webResult, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("User-Agent", OpenCodeUserAgent)
-	res, err := newHTTPClient(tc.provider.UseProxy, tc.env.Proxy).Do(req)
+	res, err := newHTTPClient(tc.provider.UseProxy, tc.env.proxyFor(tc.provider), tc.provider.ProxyMode).Do(req)
 	if err != nil {
 		if errors.Is(cctx.Err(), context.DeadlineExceeded) {
 			return nil, errors.New("web_search_exa request timed out")

@@ -46,6 +46,7 @@ func (s svc) Operations() []service.Operation {
 		{Name: "ai.revert", Handle: s.opRevert},
 		{Name: "ai.compact", Handle: s.opCompact},
 		{Name: "ai.models", Handle: s.opModels},
+		{Name: "ai.network", Handle: s.opNetwork},
 		{Name: "ai.auth.begin", Handle: s.opAuthBegin},
 		{Name: "ai.auth.poll", Handle: s.opAuthPoll},
 		{Name: "ai.auth.refresh", Handle: s.opAuthRefresh},
@@ -265,7 +266,7 @@ func (s svc) opModels(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err := decodeArgs(raw, &in); err != nil {
 		return nil, err
 	}
-	models, err := FetchModels(ctx, in.Provider, s.Proxy)
+	models, err := FetchModels(ctx, in.Provider, s.proxyFor(in.Provider))
 	if err != nil {
 		return nil, wire.Errf(wire.CodeInternal, "获取模型列表失败：%v", err)
 	}

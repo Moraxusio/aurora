@@ -1,6 +1,6 @@
-// The monitor tab (service "monitor"): CPU, memory, load, disks and the top
-// processes, from sys.metrics and proc.list every 2 s. sys.metrics returns raw counters; the
-// CPU percentage comes from the difference between two samples.
+// The monitor tab (service "monitor"): system/process and GPU polling run
+// independently every 2 s while visible. CPU rates come from raw counter deltas;
+// old agents fall back to the basic GPU fields in sys.metrics.
 import 'dart:async';
 
 import 'package:aurora_wire/aurora_wire.dart';
@@ -8,10 +8,12 @@ import 'package:flutter/material.dart';
 
 import '../../kernel/editor_tab.dart';
 import '../../kernel/feature.dart';
+import '../../kernel/visible_polling.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import '../systemd/systemd_feature.dart' show systemLogTab;
+import 'gpu_panel.dart';
 
 class MonitorFeature extends Feature {
   const MonitorFeature();
@@ -40,17 +42,19 @@ class MonitorFeature extends Feature {
       ];
 }
 
-EditorTab monitorTab(Workspace ws) => EditorTab(id: 'monitor', title: '监控', icon: Icons.monitor_heart_outlined, builder: (_) => LinkGate(ws: ws, builder: (_, link) => MonitorTab(link: link)));
+EditorTab monitorTab(Workspace ws) => EditorTab(id: 'monitor', title: '监控', icon: Icons.monitor_heart_outlined, builder: (_) => LinkGate(ws: ws, builder: (_, link) => MonitorTab(link: link, gpuDetails: ws.hasOp('gpu.info'))));
 
 class MonitorTab extends StatefulWidget {
   final Link link;
-  const MonitorTab({super.key, required this.link});
+  final bool gpuDetails;
+  const MonitorTab({super.key, required this.link, this.gpuDetails = false});
   @override
   State<MonitorTab> createState() => _MonitorTabState();
 }
 
-class _MonitorTabState extends State<MonitorTab> {
-  Timer? _timer;
+class _MonitorTabState extends State<MonitorTab> with VisiblePolling {
+  bool _pollBusy = false, _gpuBusy = false, _started = false, _visible = false, _gpuUnsupported = false;
+  int _generation = 0;
   Map<String, dynamic>? _m;
   List<int>? _prevCpu;
   double? _cpu;
@@ -58,25 +62,64 @@ class _MonitorTabState extends State<MonitorTab> {
   final List<double> _memHistory = [];
   List<Map<String, dynamic>> _procs = [];
   String? _error;
+  Map<String, dynamic>? _gpu;
+  String? _gpuError;
+  final Map<String, List<GpuPoint>> _gpuHistory = {};
+  num? _gpuTS;
+
+  bool get _detailed => widget.gpuDetails && !_gpuUnsupported;
 
   @override
-  void initState() {
-    super.initState();
-    _tick();
-    _timer = Timer.periodic(const Duration(seconds: 2), (_) => _tick());
+  Duration get pollEvery => const Duration(seconds: 2);
+
+  @override
+  void poll() {
+    if (!_visible) return;
+    unawaited(_tick());
+    if (_detailed) unawaited(_tickGpu());
   }
 
   @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
+  void didChangeDependencies() {
+    _visible = TickerMode.valuesOf(context).enabled;
+    if (!_visible) _prevCpu = null;
+    super.didChangeDependencies();
+    if (!_started && _visible) {
+      _started = true;
+      poll();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MonitorTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.link == widget.link && oldWidget.gpuDetails == widget.gpuDetails) return;
+    _generation++;
+    _pollBusy = _gpuBusy = _gpuUnsupported = false;
+    _m = _gpu = null;
+    _prevCpu = null;
+    _cpu = null;
+    _error = _gpuError = null;
+    _gpuTS = null;
+    _history.clear();
+    _memHistory.clear();
+    _gpuHistory.clear();
+    _procs = [];
+    poll();
   }
 
   Future<void> _tick() async {
-    if (widget.link.isClosed) return;
+    if (_pollBusy || widget.link.isClosed) return;
+    _pollBusy = true;
+    final generation = _generation, link = widget.link;
     try {
-      final m = (await widget.link.call('sys.metrics') as Map).cast<String, dynamic>();
-      final p = await widget.link.call('proc.list', {'limit': 30}) as Map;
+      final results = await Future.wait([
+        link.call('sys.metrics', null, const Duration(seconds: 8)),
+        link.call('proc.list', {'limit': 30}, const Duration(seconds: 8)),
+      ]);
+      if (!mounted || generation != _generation) return;
+      final m = (results[0] as Map).cast<String, dynamic>();
+      final p = results[1] as Map;
       final cpu = [for (final x in m['cpu'] as List) (x as num).toInt()];
       if (_prevCpu != null && _prevCpu!.length == cpu.length && cpu.length >= 4) {
         final busy = _busy(cpu) - _busy(_prevCpu!);
@@ -98,8 +141,47 @@ class _MonitorTabState extends State<MonitorTab> {
         _procs = [for (final x in p['processes'] as List) (x as Map).cast<String, dynamic>()];
         _error = null;
       });
-    } on OpError catch (e) {
-      if (mounted) setState(() => _error = e.message);
+    } catch (e) {
+      if (mounted && generation == _generation) setState(() => _error = e is OpError ? e.message : '监控刷新失败：$e');
+    } finally {
+      if (generation == _generation) _pollBusy = false;
+    }
+  }
+
+  Future<void> _tickGpu() async {
+    if (_gpuBusy || widget.link.isClosed) return;
+    _gpuBusy = true;
+    final generation = _generation;
+    try {
+      final data = (await widget.link.call('gpu.info', null, const Duration(seconds: 8)) as Map).cast<String, dynamic>();
+      if (!mounted || generation != _generation) return;
+      final ts = data['ts'] as num?;
+      if (data['status'] == 'ok' && data['stale'] != true && ts != null && ts != _gpuTS) {
+        final ids = <String>{};
+        for (final g in (data['gpus'] as List? ?? const []).cast<Map>()) {
+          final id = gpuIdentity(g);
+          ids.add(id);
+          final h = _gpuHistory.putIfAbsent(id, () => []);
+          h.add(GpuPoint.fromMap(g));
+          if (h.length > 60) h.removeAt(0);
+        }
+        _gpuHistory.removeWhere((key, _) => !ids.contains(key));
+        _gpuTS = ts;
+      }
+      setState(() { _gpu = data; _gpuError = null; });
+    } catch (e) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        if (e is OpError && (e.code == codeNotFound || e.code == codeUnsupported)) {
+          _gpuUnsupported = true;
+          _gpu = null;
+          _gpuError = null;
+        } else {
+          _gpuError = e is OpError ? e.message : 'GPU 刷新失败：$e';
+        }
+      });
+    } finally {
+      if (generation == _generation) _gpuBusy = false;
     }
   }
 
@@ -109,12 +191,14 @@ class _MonitorTabState extends State<MonitorTab> {
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
-    if (_error != null) return EmptyHint(icon: Icons.error_outline_rounded, text: _error!);
+    if (_error != null && _m == null) return EmptyHint(icon: Icons.error_outline_rounded, text: _error!);
     final m = _m;
     if (m == null) return const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)));
     final mem = (m['memory'] as Map).cast<String, dynamic>();
     final total = (mem['MemTotal'] as num? ?? 0).toDouble(), avail = (mem['MemAvailable'] as num? ?? 0).toDouble();
     final swapT = (mem['SwapTotal'] as num? ?? 0).toDouble(), swapF = (mem['SwapFree'] as num? ?? 0).toDouble();
+    final windows = m['platform'] == 'windows';
+    final commit = (mem['CommitTotal'] as num? ?? 0).toDouble(), commitLimit = (mem['CommitLimit'] as num? ?? 0).toDouble();
     final load = [for (final x in m['load'] as List) (x as num).toDouble()];
     final cores = (m['cpu_count'] as num? ?? 1).toInt().clamp(1, 1 << 12);
     final memUsed = total == 0 ? null : (total - avail) / total;
@@ -131,6 +215,7 @@ class _MonitorTabState extends State<MonitorTab> {
           ]),
         );
     return ListView(padding: const EdgeInsets.fromLTRB(Space.xxl, Space.xl + 4, Space.xxl, Space.xxl), children: [
+      if (_error != null) Padding(padding: const EdgeInsets.only(bottom: Space.m), child: Text('$_error · 当前显示上次数据', style: TextStyle(color: ide.warn))),
       Text('${m['host']}', style: Theme.of(context).textTheme.headlineSmall),
       const SizedBox(height: Space.m),
       Wrap(spacing: Space.s, runSpacing: Space.s, children: [
@@ -164,18 +249,23 @@ class _MonitorTabState extends State<MonitorTab> {
             label: '负载',
             value: load.isEmpty ? '—' : load.first.toStringAsFixed(2),
             unit: '',
-            note: load.length < 3 ? '' : '5 分钟 ${load[1].toStringAsFixed(2)} · 15 分钟 ${load[2].toStringAsFixed(2)}',
+            note: m['load_supported'] == false ? 'Windows 不提供 Unix 负载' : load.length < 3 ? '' : '5 分钟 ${load[1].toStringAsFixed(2)} · 15 分钟 ${load[2].toStringAsFixed(2)}',
             fraction: load.isEmpty ? null : load.first / cores,
           )),
           SizedBox(width: w, child: _Metric(
-            label: '交换',
-            value: swapT <= 0 ? '—' : ((swapT - swapF) / swapT * 100).toStringAsFixed(0),
-            unit: swapT <= 0 ? '' : '%',
-            note: swapT <= 0 ? '没有交换空间' : '${_gb(swapT - swapF)} / ${_gb(swapT)}',
-            fraction: swapT <= 0 ? null : (swapT - swapF) / swapT,
+            label: windows ? '提交内存' : '交换',
+            value: windows ? (commitLimit <= 0 ? '—' : (commit / commitLimit * 100).toStringAsFixed(0)) : swapT <= 0 ? '—' : ((swapT - swapF) / swapT * 100).toStringAsFixed(0),
+            unit: (windows ? commitLimit : swapT) <= 0 ? '' : '%',
+            note: windows ? '${_gb(commit)} / ${_gb(commitLimit)}' : swapT <= 0 ? '没有交换空间' : '${_gb(swapT - swapF)} / ${_gb(swapT)}',
+            fraction: windows ? (commitLimit <= 0 ? null : commit / commitLimit) : swapT <= 0 ? null : (swapT - swapF) / swapT,
           )),
         ]);
       }),
+      const SizedBox(height: Space.xxl),
+      GpuPanel(data: _detailed ? _gpu : {
+        'gpus': m['gpus'] ?? const [], 'error': m['gpu_error'] ?? '',
+        'ts': m['gpu_ts'], 'stale': m['gpu_stale'] ?? false,
+      }, legacy: !_detailed, error: _gpuError, history: _gpuHistory),
       const SizedBox(height: Space.xxl),
       _heading('磁盘', '${disks.length} 个挂载点'),
       _Panel(children: [
@@ -204,7 +294,7 @@ class _MonitorTabState extends State<MonitorTab> {
       child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
         Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: ide.text)),
         const SizedBox(width: Space.m),
-        Text(note, style: TextStyle(fontSize: 12, color: ide.textFaint)),
+        Expanded(child: Text(note, style: TextStyle(fontSize: 12, color: ide.textFaint))),
       ]),
     );
   }
@@ -346,7 +436,7 @@ class _ProcRow extends StatelessWidget {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     final mono = style.copyWith(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 12, color: ide.textDim);
-    final cpu = head ? 0.0 : (p['cpu'] as num).toDouble();
+    final cpu = head ? 0.0 : (p['cpu'] as num?)?.toDouble() ?? 0;
     Widget cell(String s, double w) => SizedBox(width: w, child: Text(s, textAlign: TextAlign.right, style: style));
     return Container(
       height: head ? 32 : 30,
@@ -374,10 +464,10 @@ class _ProcRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: Space.s),
-                  SizedBox(width: 40, child: Text(cpu.toStringAsFixed(1), textAlign: TextAlign.right, style: style)),
+                   SizedBox(width: 40, child: Text(p['cpu'] == null ? '—' : cpu.toStringAsFixed(1), textAlign: TextAlign.right, style: style)),
                 ]),
         ),
-        cell(head ? '内存' : _MonitorTabState._gb((p['rss'] as num).toDouble()), 84),
+        cell(head ? '内存' : p['rss'] == null ? '—' : _MonitorTabState._gb((p['rss'] as num).toDouble()), 84),
         const SizedBox(width: Space.xl + 4),
         Expanded(child: Text(head ? '命令' : '${p['args']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: head ? style : mono)),
       ]),

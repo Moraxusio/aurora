@@ -258,7 +258,7 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 		httpReq.Header.Set("anthropic-beta", strings.Join(betas, ","))
 	}
 
-	client := newHTTPClient(req.Provider.UseProxy, proxyEnv)
+	client := newHTTPClient(req.Provider.UseProxy, proxyEnv, req.Provider.ProxyMode)
 	res, err := client.Do(httpReq)
 	if err != nil {
 		return LLMResponse{}, err

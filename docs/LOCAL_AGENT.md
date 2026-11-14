@@ -1,4 +1,4 @@
-# Windows 本地 agent（3.14.0）
+# Windows 本地 agent（D-108、D-119）
 
 本实现与现有 Linux **远程 agent** 分开，不把 Windows 本机伪装成需要 SSH 安装的服务器。
 
@@ -16,7 +16,7 @@
 ```
 Flutter 客户端 → 启动管道交换身份 → 127.0.0.1 随机端口上的固定指纹 TLS/yamux
                                       └─ aurora3-local-agent.exe
-                                           ├─ files / search / git / ai
+                                           ├─ files / search / git / ai / monitor / proxy
                                            └─ ConPTY → PowerShell
 ```
 
@@ -34,15 +34,27 @@ Flutter 客户端 → 启动管道交换身份 → 127.0.0.1 随机端口上的�
 - 文件变化通知暂用 800 ms 的有界目录快照，只扫描订阅目录，不递归。不是 ReadDirectoryChangesW；超大目录性能仍需实机评估。
 - 本地终端最多 32 个；每个终端有 256 KiB 的本次运行输出缓存。短暂重连回放是尽力恢复，不等同于 tmux 完整屏幕/历史持久化。暂不宣告 `session.capture` 或实时 `session.cwd`。
 - Git 使用用户已安装的 Git for Windows，不随包携带 Git；缺失时显示依赖不可用。Node、Python、编译器等也使用用户本机环境。
-- 默认只显示文件、搜索、终端、Git、AI；不实现本地 systemd、监控、端口转发或 Aurora 节点代理服务。目录大小统计、日志 tail 暂不提供，客户端按本地能力禁用相应入口。
+- 提供文件、搜索、终端、Git、AI、监控和代理入口。目录大小统计、日志 tail、systemd 和端口转发暂不提供，客户端按本地能力禁用相应入口。
 - 当前目标是 Windows x64、ConPTY 可用的系统（Windows 10 1809+）；尚无原生 ARM64 本地 agent，UNC/网络共享与可移动盘不在首版“打开文件夹”支持范围内。
 
 ## 代理
 
-- 本地终端/AI shell 继承当前用户环境代理；没有 HTTP(S)/ALL_PROXY 时读取 Windows 当前用户手动 HTTP(S) 代理，保留 NO_PROXY。交互 shell 的用户启动脚本仍可能自行覆盖环境。
-- AI 提供商开启“使用执行端代理”时，远程 shell 与子代理复用远程代理出口；本地使用本机代理。子代理延续调用时捕获的提供商设置。
+- 新建本地终端的“网络出口”、AI 提供商的“模型 API / AI 工具的网络出口”可选择：
+  - **本机代理**：优先当前用户环境 HTTP_PROXY／HTTPS_PROXY／ALL_PROXY，没有时读取 Windows 手动 HTTP(S) 代理，遵守 NO_PROXY。
+  - **Aurora agent 代理**：在本机工作区的“代理”页选择节点，复用现有 Trojan／Hysteria2／VLESS／VMess 代理服务；服务关闭或节点缺失时拒绝创建／请求。
+  - **直连**：模型与网页 HTTP 请求不用代理，终端／AI shell 清除继承的大小写代理变量。
+- 终端出口在创建时确定，重开同名会话不修改出口；已选择 Aurora 的会话可跟随代理页切换节点。交互 shell 的用户启动脚本仍可能自行覆盖环境。
+- AI 子代理、压缩、标题、模型列表、网页与 shell 工具延续提供商出口；远程 agent 的“system”指服务器环境。旧提供商未选择新模式时保持原 `use_proxy` 行为。Git 继续使用本机代理。
+- OAuth 的 client/server 授权路径独立保留；server 路径使用选择的代理模式，client 路径使用客户端网络（显式 direct 时直连）。API Key、OAuth 不迁移、不重置。
+- 服务开关和节点保存在状态目录 `local-agent.json`，重启恢复；该文件不保存本地连接 token、地址或根目录。退出 agent 关闭其代理监听。
 - 工作状态只显示代理来源，不广播代理 URL、账号、密码或完整环境。
 - 不解析 PAC-only/WPAD，不保证替第三方 CLI 解决其自身代理配置或网络限制。
+
+## 监控
+
+- CPU、物理内存、提交内存、固定磁盘、进程使用原生 Windows API，无需 PowerShell 轮询或 WMI。
+- Windows 不伪造 Unix load；进程首帧 CPU、权限不足的内存等显示未知。用户字段优先保持本地 SID，避免域账号查询阻塞采样。
+- NVIDIA 详情与 Linux 共用 `gpu.info`；优先 PATH 中的 `nvidia-smi.exe`，其次 Program Files 下 NVSMI 默认路径，隐藏命令窗口。没有工具时基础监控仍可用。字段、缓存、超时与硬件限制见 [GPU_MONITOR.md](GPU_MONITOR.md)。
 
 ## 构建与测试
 
@@ -58,4 +70,4 @@ Flutter 客户端 → 启动管道交换身份 → 127.0.0.1 随机端口上的�
 .\tools\test-local-agent.ps1
 ```
 
-成功标记为 `LOCAL_AGENT_SIGNED_CLIENT_TLS_FILES_MODELS_CONPTY_EXIT_OK`。脚本自动生成新沙箱，已有路径拒绝覆盖；临时测试私钥在 finally 中删除。`3.99.0` 仅是这项签名测试的沙箱版本，不是正式产品版本，也不会更新用户已安装的客户端或远程 agent。
+成功标记为 `LOCAL_AGENT_SIGNED_TLS_MONITOR_PROXY_ROUTES_PERSISTENCE_CONPTY_EXIT_OK`。联调包含监控、合成 VLESS 节点、模型请求出口、三种 ConPTY 环境、同名会话保持出口、不可用节点拒绝、配置重启保留及退出监听关闭。脚本自动生成新沙箱，已有路径拒绝覆盖；使用合成代理环境并在 finally 恢复，临时测试私钥同样删除。`3.99.0` 仅是这项签名测试的沙箱版本，不是正式产品版本，也不会更新用户已安装的客户端或远程 agent。

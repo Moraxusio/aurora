@@ -5,6 +5,8 @@ if (Test-Path -LiteralPath $Work) { throw 'Test sandbox already exists; refusing
 New-Item -ItemType Directory -Path $Work | Out-Null
 $oldKey = $env:AURORA3_TRUST_KEY
 $oldDir = $env:AURORA3_LOCAL_AGENT_DIR
+$oldProxy = @{}
+foreach ($name in @('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY')) { $oldProxy[$name] = [Environment]::GetEnvironmentVariable($name) }
 try {
   Push-Location (Join-Path $repo 'agent')
   try {
@@ -19,6 +21,10 @@ try {
   } finally { Pop-Location }
   $env:AURORA3_TRUST_KEY = [IO.File]::ReadAllText("$Work\fixture.pub").Trim()
   $env:AURORA3_LOCAL_AGENT_DIR = "$Work\signed"
+  $env:HTTP_PROXY = 'http://127.0.0.1:18101'
+  $env:HTTPS_PROXY = 'http://127.0.0.1:18102'
+  $env:ALL_PROXY = 'socks5://127.0.0.1:18103'
+  $env:NO_PROXY = 'system.fixture'
   Push-Location (Join-Path $repo 'app')
   try {
     & dart run tool/local_agent_smoke.dart "$Work\sandbox"
@@ -27,5 +33,6 @@ try {
 } finally {
   $env:AURORA3_TRUST_KEY = $oldKey
   $env:AURORA3_LOCAL_AGENT_DIR = $oldDir
+  foreach ($name in $oldProxy.Keys) { [Environment]::SetEnvironmentVariable($name, $oldProxy[$name]) }
   if (Test-Path -LiteralPath "$Work\fixture.key") { Remove-Item -LiteralPath "$Work\fixture.key" -Force }
 }

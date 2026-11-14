@@ -214,7 +214,7 @@ func streamOpenAIChat(ctx context.Context, req LLMRequest, proxyEnv func() map[s
 	}
 	applyOpenCodeHeaders(httpReq.Header, req)
 
-	client := newHTTPClient(req.Provider.UseProxy, proxyEnv)
+	client := newHTTPClient(req.Provider.UseProxy, proxyEnv, req.Provider.ProxyMode)
 	res, err := client.Do(httpReq)
 	if err != nil {
 		return LLMResponse{}, err

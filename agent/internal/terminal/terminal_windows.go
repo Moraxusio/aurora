@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"aurora3/internal/paths"
+	"aurora3/internal/proxyroute"
 	"aurora3/internal/service"
 	"aurora3/internal/winlocal"
 	"aurora3/internal/wire"
@@ -18,6 +19,7 @@ import (
 type Root struct{ ID, Path string }
 type Env struct {
 	Roots    []Root
+	Proxy    func() (map[string]string, error)
 	mu       sync.Mutex
 	sessions map[string]*localSession
 }
@@ -26,6 +28,7 @@ type localSession struct {
 	cwd       string
 	created   int64
 	proxy     bool
+	proxyMode string
 	mu        sync.Mutex
 	history   []byte
 	listeners map[chan []byte]struct{}
@@ -42,7 +45,10 @@ func (v svc) Switched(on bool) {
 	}
 }
 func (v svc) Operations() []service.Operation {
-	return []service.Operation{{Name: "session.list", Handle: v.e.list}, {Name: "session.create", Handle: v.e.create}, {Name: "session.kill", Handle: v.e.kill}, {Name: "terminal", Stream: v.e.attach}}
+	return []service.Operation{{Name: "session.list", Handle: v.e.list}, {Name: "session.create", Handle: v.e.create}, {Name: "session.kill", Handle: v.e.kill}, {Name: "session.network", Handle: v.e.network}, {Name: "terminal", Stream: v.e.attach}}
+}
+func (e *Env) network(context.Context, json.RawMessage) (any, error) {
+	return map[string]any{"proxy_modes": []string{"system", "agent", "direct"}}, nil
 }
 func (e *Env) Close() {
 	e.mu.Lock()
@@ -68,7 +74,7 @@ func (e *Env) list(context.Context, json.RawMessage) (any, error) {
 			continue
 		default:
 		}
-		out = append(out, map[string]any{"name": n, "windows": 1, "created": s.created, "proxy": s.proxy})
+		out = append(out, map[string]any{"name": n, "windows": 1, "created": s.created, "proxy": s.proxy, "proxy_mode": s.proxyMode})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i]["name"].(string) < out[j]["name"].(string) })
 	return map[string]any{"sessions": out, "backend": "conpty", "persistent": false}, nil
@@ -79,10 +85,17 @@ var localName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,48}$`)
 func (e *Env) create(ctx context.Context, raw json.RawMessage) (any, error) {
 	var a struct {
 		Name, Root, Path string
-		NoProfile        bool `json:"no_profile"`
+		NoProfile        bool   `json:"no_profile"`
+		ProxyMode        string `json:"proxy_mode"`
 	}
 	if json.Unmarshal(raw, &a) != nil || !localName.MatchString(a.Name) {
 		return nil, wire.Errf(wire.CodeBadRequest, "终端名称无效")
+	}
+	if a.ProxyMode == "" {
+		a.ProxyMode = "system"
+	}
+	if !proxyroute.Valid(a.ProxyMode) {
+		return nil, wire.Errf(wire.CodeBadRequest, "未知的代理出口")
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -94,7 +107,7 @@ func (e *Env) create(ctx context.Context, raw json.RawMessage) (any, error) {
 		case <-old.done:
 			delete(e.sessions, a.Name)
 		default:
-			return map[string]any{"existed": true, "proxy": old.proxy}, nil
+			return map[string]any{"existed": true, "proxy": old.proxy, "proxy_mode": old.proxyMode}, nil
 		}
 	}
 	if len(e.sessions) >= 32 {
@@ -113,17 +126,20 @@ func (e *Env) create(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, paths.WireError(err)
 	}
-	px := winlocal.ProxyEnv()
-	hasProxy := px["HTTP_PROXY"] != "" || px["HTTPS_PROXY"] != "" || px["ALL_PROXY"] != ""
+	px, err := e.sessionProxy(a.ProxyMode)
+	if err != nil {
+		return nil, wire.Errf(wire.CodeUnavailable, "%v", err)
+	}
+	hasProxy := proxyroute.HasProxy(px)
 	extra := []string{}
 	if a.NoProfile {
 		extra = append(extra, "-NoProfile")
 	}
-	con, err := winlocal.StartConsole(cwd, winlocal.Merge(os.Environ(), px), 100, 30, extra...)
+	con, err := winlocal.StartConsole(cwd, proxyroute.Replace(os.Environ(), px), 100, 30, extra...)
 	if err != nil {
 		return nil, wire.Errf(wire.CodeUnavailable, "无法启动本地 PowerShell：%v", err)
 	}
-	s := &localSession{console: con, cwd: cwd, created: time.Now().Unix(), proxy: hasProxy, listeners: map[chan []byte]struct{}{}, done: make(chan struct{})}
+	s := &localSession{console: con, cwd: cwd, created: time.Now().Unix(), proxy: hasProxy, proxyMode: a.ProxyMode, listeners: map[chan []byte]struct{}{}, done: make(chan struct{})}
 	e.sessions[a.Name] = s
 	go func() {
 		defer close(s.done)
@@ -153,7 +169,13 @@ func (e *Env) create(ctx context.Context, raw json.RawMessage) (any, error) {
 			}
 		}
 	}()
-	return map[string]any{"name": a.Name, "proxy": hasProxy, "backend": "conpty"}, nil
+	return map[string]any{"name": a.Name, "proxy": hasProxy, "proxy_mode": a.ProxyMode, "backend": "conpty"}, nil
+}
+func (e *Env) sessionProxy(mode string) (map[string]string, error) {
+	if mode == "agent" && e.Proxy != nil {
+		return e.Proxy()
+	}
+	return proxyroute.Values(mode, nil)
 }
 func (e *Env) kill(_ context.Context, raw json.RawMessage) (any, error) {
 	var a struct{ Name string }

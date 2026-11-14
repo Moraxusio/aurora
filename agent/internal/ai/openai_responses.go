@@ -185,7 +185,7 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 		applySubscriptionHeaders(httpReq.Header, req)
 	}
 
-	client := newHTTPClient(req.Provider.UseProxy, proxyEnv)
+	client := newHTTPClient(req.Provider.UseProxy, proxyEnv, req.Provider.ProxyMode)
 	if subscription {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	}

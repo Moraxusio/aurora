@@ -41,7 +41,7 @@ Go 工具链、模块、构建脚本、tmux 构建锁。
 - G2.3 git：完成，含 D-69 的代理规则。
 - G2.4 devtools。
 - G2.5 net。
-- G2.6 monitor：`sys.metrics`、`proc.list`、`log.tail` 已复制；`gpu.info` 等 terminal 的中性接口。
+- G2.6 monitor：`sys.metrics`、`proc.list`、`log.tail` 已复制；D-118 补齐独立 `gpu.info`，无需 terminal 依赖。
 - G2.7 systemd：`svc.info`、`svc.action` 已复制。
 - G2.8 proxy：完成（D-47 至 D-50、D-53、D-83 至 D-94）。agent 的代理服务、`session.create` 的 `proxy` 参数、git 跟随服务开关；客户端的订阅解析、节点列表、新建会话的“走代理”勾选。协议：Trojan、Hysteria2、VLESS、VMess（不支持的见 D-94）。
 - G2.9 入口：`aurora3-agent run`，TCP 直连监听（17710，D-76）、Hello、yamux、按服务分发，Linux TCP 调优。这是客户端联调的前提，排在 G2.1 之前。
@@ -114,7 +114,7 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 | G2.3 git | 完成 | 6fb8c8b、02d3e54、90ee666 | 9 项测试通过（5 项真实仓库，4 项代理） |
 | G2.8 proxy（agent） | 完成 | c7b7108 | VLESS、VMess、Trojan、Hysteria2 对真实 Xray 26.10.31 与 Hysteria 官方服务端互通；会话的代理变量、git 跟随开关；入口死锁一例由测试发现并修复 |
 | G2.8 proxy（客户端） | 完成 | a2e5063 | `aurora_sub`（订阅读取）、代理页、新建会话的勾选；端到端 `app/tool/proxy_e2e.ps1`：真实 agent、真实 tmux，会话里的 curl 与 git 都经节点到达（节点是另写的 Trojan 服务端，打印它被要求的目标） |
-| G2.6 monitor | 部分完成 | ff90f00 | `gpu.info` 未复制；操作未做行为测试 |
+| G2.6 monitor | 完成 | ff90f00；D-118 见后续记录 | 独立 `gpu.info` 与采集/缓存/超时行为测试已补齐 |
 | G2.7 systemd | 部分完成 | ff90f00 | 单元名检查有测试；操作未做行为测试 |
 | 内核 `internal/paths` | 完成 | 1154d1f、ff90f00 | 7 项测试通过 |
 | Aurora 源码仓库 | 完成 | 227da69 | 克隆 aurora-v3，Go 代码移入 `agent/`，设计文档汇总为 `DESIGN.md` |
@@ -610,3 +610,27 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 本地包 `C:\dev\VPS\release3\Aurora-3.18.1.zip`，30,485,625 字节，SHA-256 `a0e78ece0b3be8b64bd54b96ba297aef889e4af12be5b74a85c4c5db931ddd4a`。33 个包内文件与 ZIP 逐项一致；AOT SHA-256 `23b56cceb8226925ca32a68b0d531f5e1b7b02cc26b5dcb4ced81775bbdbcfb5`。
 - Linux agent SHA-256 `5306d3f1d73fe7e4bc2d2b7f135fb51f1f1cd6ca11e912149e39b11121319d93`；Windows 本地 agent `e2f0398168dfca9b6fc3ba46f37cc5f60f9d16e6836b3a5693ac467e7fb48854`。产品签名和许可证检查通过，保留 OpenCode MIT 署名。
 - 旧正式包与五个预览的 11 项保护摘要一致；v2 工作区干净、`release` 顶层仍 13 项。原 API Key/OAuth、服务器和配置未迁移或重置；Android 继续暂缓，远程 agent 无需为本次 GUI 修复升级。临时 GitHub 授权在发布记录推送后清理。
+
+### D-118：服务器 GPU 详细监控（2026-11-14，已实现，未发布）
+
+- 新增 NVIDIA 多卡、驱动/CUDA 上限、利用率/显存、温度/风扇、功耗、频率、PCIe、ECC、MIG 模式/进程实例、活动时钟限制原因和 GPU 进程信息。详情按卡展开，利用率与显存保留最近 60 次成功采样。
+- 新 `gpu.info` 使用有界 XML 查询，兼容旧/新驱动字段，N/A 保持未知；共享在途任务、超时退避、失败保留旧值及采样时间。`sys.metrics` 不等待 GPU，客户端 GPU 与基础监控分别去重、按可见性轮询，连接替换后丢弃旧响应；缺新操作时回退原有基础字段。
+- 该轮范围为 Linux 服务器 NVIDIA GPU；后续 D-119 扩展 Windows 本机。功能交付需升级客户端及相应 agent。详见 [GPU_MONITOR.md](GPU_MONITOR.md)。
+- 最终 Go 7 组行为测试（含 3 个故障子场景）在 WSL Linux 运行通过，`go vet ./internal/monitor` 和 Linux amd64 agent 编译通过；Flutter 新增 11/11 回归通过，完整静态分析零问题。测试发现的 ExpansionTile 背景/墨水层问题已用卡片自身 Material 修复；有界输出额外覆盖 `io.Copy`，防止内嵌 bytes.Buffer 的 ReadFrom 绕过限额。
+- 已实际查看深浅两张双卡详情截图，验证 360 px GPU 面板展开布局；数据来自合成 NVIDIA fixture。本轮没有声称全量回归或真实 GPU 服务器验收，生产版本未递增、未打包发布。
+
+### D-119：文件树与本地监控／代理（2026-11-14，已实现，未发布）
+
+- 文件树改善长文件名／扩展名保留、深目录受限缩进、大小和时间对齐、活动文档标记；支持定位当前文件和折叠全部，仍按视口惰性构建。测试覆盖 220／310／520 px、深层定位、折叠后文档保留、原文件操作与项目切换；已查看深浅主题紧凑／宽侧栏截图。
+- Windows 本地 agent 新增原生 CPU／物理与提交内存／固定磁盘／进程监控，NVIDIA 复用共享 GPU 采样；客户端开放本地监控、代理页及节点同步。
+- 新本地终端与 AI 提供商可选本机环境／系统代理、Aurora agent 节点、直连。验证同名终端保持原出口、直连清理继承变量、节点不可用拒绝回退；旧提供商字段和 API Key／OAuth 保持兼容。服务开关及节点持久化，本地启动 token／地址／根目录不写入服务配置。
+- Windows Go：`proxyroute`、`monitor`、`ai`、`proxysvc`、`entry`、本地 agent 生命周期通过，另有真实 PowerShell 三出口与缺节点拒绝测试。WSL Linux：`proxyroute`、`monitor`、`ai`、`proxysvc` 四包通过，Linux amd64 agent 编译成功。
+- Flutter 受影响界面共 **83 项**通过（首轮 79 项，随后新增 2 项文件树视觉和 2 项 AI 路由测试，定向重跑 25 项）；`aurora_profile` **33 项**通过，完整 `flutter analyze --no-pub` 零问题。首次误从 app 的 Flutter runner 调用独立 profile 包导致 `package:test` 无法解析，改在包目录运行 `dart test` 后通过，没有更改依赖。
+- `tools/test-local-agent.ps1` 使用一次性签名、临时目录和合成环境，通过真实 Dart／TLS 客户端、Windows 本地 agent、VLESS 测试节点、AI 模型出口、三种 ConPTY 环境、禁用拒绝、重启恢复和退出监听关闭联调，输出 `LOCAL_AGENT_SIGNED_TLS_MONITOR_PROXY_ROUTES_PERSISTENCE_CONPTY_EXIT_OK`。
+- 真实 NVIDIA 硬件／驱动兼容性仍待实机验证。本轮仅开发与隔离测试，未编译客户端正式分发包、未提交／推送／发布，版本仍为 3.18.1；使用说明见 [LOCAL_AGENT.md](LOCAL_AGENT.md)。
+
+### 3.19.0 Windows 发布准备（2026-11-15）
+
+- 用户已授权编译、打包及 GitHub 发布。发布范围为 Windows x64 客户端 `3.19.0+31900`、Linux amd64 远程 agent 和 Windows amd64 本地 agent；Android 继续暂缓。
+- D-118／D-119 作为本次功能版本统一提交，从干净提交构建；复用该生产代码已完成的 83 项界面、33 项 profile、Windows／Linux Go 回归和真实本地签名联调，完整静态分析零问题。
+- 使用既有发行签名密钥，产物写入全新 `release3/Aurora-3.19.0` 和同名 ZIP；核对构建来源、客户端／agent 版本、签名、ZIP 文件、许可证和上传资产 SHA-256。旧包与五个预览保护摘要、v2 只读工作区及 `release` 顶层 13 项一并核对。

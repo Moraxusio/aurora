@@ -24,6 +24,8 @@ AiProvider provider({String model = 'gpt-6.1-sol'}) => AiProvider(
 );
 
 class AuthLink extends FakeAiLink {
+  bool networkChoice = false;
+  @override AgentInfo get server => AgentInfo({'version': '3.99.0', 'caps': [if (networkChoice) 'ai.network']});
   int refreshCalls = 0, polls = 0;
   bool pending = false, expired = false, failRun = false;
   int deviceLifetimeMs = 900000;
@@ -78,6 +80,32 @@ WorkspaceApp makeApp(AuthLink link, AiProvider p) => WorkspaceApp(
 );
 
 void main() {
+  test('explicit route requires capability and preserves legacy provider settings', () async {
+    final link = AuthLink();
+    final p = AiProvider(id: 'fixture', name: 'fixture', apiKey: 'synthetic-key', useProxy: true);
+    final app = makeApp(link, p);
+    addTearDown(app.dispose);
+    expect((await prepareAiProvider(app, link, p)).useProxy, isTrue);
+    p.proxyMode = 'agent';
+    await expectLater(prepareAiProvider(app, link, p), throwsStateError);
+    link.networkChoice = true;
+    final prepared = await prepareAiProvider(app, link, p);
+    expect(prepared.toWireJson()['proxy_mode'], 'agent');
+    expect(prepared.apiKey, 'synthetic-key');
+  });
+
+  test('server OAuth refresh carries the selected route without replacing API keys', () async {
+    final link = AuthLink()..networkChoice = true;
+    final p = provider()..proxyMode = 'direct'..apiKey = 'synthetic-retained-key';
+    final app = makeApp(link, p);
+    addTearDown(app.dispose);
+    await prepareAiProvider(app, link, p);
+    final sent = link.rpcCalls.singleWhere((r) => r.$1 == 'ai.auth.refresh').$2;
+    expect(sent['proxy_mode'], 'direct');
+    expect(sent['use_proxy'], isFalse);
+    expect(app.profile.ai.activeProvider!.apiKey, 'synthetic-retained-key');
+    expect(app.profile.ai.activeProvider!.proxyMode, 'direct');
+  });
   test('concurrent refresh saves once and preserves each caller model', () async {
     final link = AuthLink()..refreshBarrier = Completer<Object?>();
     final app = makeApp(link, provider());

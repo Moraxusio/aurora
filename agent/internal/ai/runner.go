@@ -27,10 +27,11 @@ type activeRun struct {
 
 // Env is the state and dependencies of the "ai" service on the agent.
 type Env struct {
-	StateDir string
-	Roots    []Root
-	Audit    Auditor
-	Proxy    func() map[string]string
+	StateDir   string
+	Roots      []Root
+	Audit      Auditor
+	Proxy      func() map[string]string
+	AgentProxy func() map[string]string // explicit Aurora node; legacy local Proxy remains the system route
 
 	once       sync.Once
 	mu         sync.Mutex
@@ -814,7 +815,7 @@ func (e *Env) generateTitleAsync(sessionID, promptText string, cfg ProviderConfi
 		Messages:    []Message{{ID: NewID("msg"), Role: "user", Parts: []Part{{Type: "text", Text: promptText}}}},
 		MaxTokens:   80,
 		Temperature: &temp,
-	}, e.Proxy, nil)
+	}, e.proxyFor(cfg), nil)
 	if err != nil {
 		return
 	}
@@ -980,7 +981,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			Messages:       activeMsgs,
 			Tools:          tools,
 			LoadAttachment: e.loadAttachment,
-		}, e.Proxy, func(d LLMDelta) {
+		}, e.proxyFor(prov), func(d LLMDelta) {
 			switch d.Type {
 			case "text":
 				e.broadcast(StreamEvent{
@@ -1042,7 +1043,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 				ToolCallID: call.ToolCallID,
 				ToolName:   call.ToolName,
 				Input:      call.Input,
-				Metadata:   toolRuntimeMetadata(call.ToolName, prov, e.Proxy),
+				Metadata:   toolRuntimeMetadata(call.ToolName, prov, e.proxyFor(prov)),
 			})
 
 			// OpenCode 3-strike doom-loop detector
@@ -1361,7 +1362,7 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 		SessionID: sessionID,
 	})
 
-	compMsg, err := RunCompaction(ctx, &snap, prov, absWorkdir, overflow, e.Proxy, e.loadAttachment, func(delta string) {
+	compMsg, err := RunCompaction(ctx, &snap, prov, absWorkdir, overflow, e.proxyFor(prov), e.loadAttachment, func(delta string) {
 		e.broadcast(StreamEvent{
 			Type:      "compaction.delta",
 			SessionID: sessionID,

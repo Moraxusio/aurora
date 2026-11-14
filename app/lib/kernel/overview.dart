@@ -193,7 +193,8 @@ class _OverviewViewState extends State<OverviewView> {
           FormRow(title: '运行权限', value: '当前 Windows 用户，不自动提权'),
           FormRow(title: '生命周期', value: '隐藏到托盘继续运行；完全退出结束受管任务'),
           FormRow(title: '终端', value: 'ConPTY + PowerShell，不提供跨 agent 重启的持久会话'),
-          FormRow(title: '代理', value: '继承环境代理，否则使用 Windows 手动 HTTP(S) 代理；PAC-only 暂不支持'),
+          FormRow(title: '代理', value: '新终端和 AI 提供商可选择本机代理、Aurora 代理或直连；本机代理支持环境变量 / Windows 手动设置'),
+          FormRow(title: '监控', value: 'CPU、内存、磁盘、进程及 NVIDIA GPU 详情'),
           FormRow(title: '凭证', value: '继续使用原加密 profile；本地连接令牌只在本次启动内存中保存'),
         ]),
         if (!e.isLocal) FormSection(title: '连接', children: [
@@ -224,7 +225,7 @@ class _OverviewViewState extends State<OverviewView> {
           ]),
         FormSection(
           title: '服务',
-          note: e.isLocal ? '服务开关不是沙箱：本地 agent 拥有当前用户的文件和进程权限。开关本次启动有效。' : '服务开关是功能选择，不是安全边界：持有直连令牌就能取得 root 权限。每次改动都写入服务器的审计日志。',
+          note: e.isLocal ? '本地服务开关和代理节点会保留到下次启动；agent 随客户端退出。' : '服务开关是功能选择，不是安全边界：持有直连令牌就能取得 root 权限。每次改动都写入服务器的审计日志。',
           children: [
             if (ws.link == null)
               const FormRow(title: '连接后显示')

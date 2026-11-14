@@ -28,20 +28,12 @@ var (
 	physDisk    = regexp.MustCompile(`^(sd[a-z]+|vd[a-z]+|xvd[a-z]+|hd[a-z]+|nvme\d+n\d+)$`)
 	clockTicks  = 100.0
 	pageSize    = int64(os.Getpagesize())
-	gpuMu       sync.Mutex
-	gpuCache    gpuState
 	statesMu    sync.Mutex
 	statesCache struct {
 		at   time.Time
 		data map[string]int
 	}
 )
-
-type gpuState struct {
-	at, backoff time.Time
-	data        []map[string]any
-	err         string
-}
 
 func readFile(p string) string {
 	b, err := os.ReadFile(p)
@@ -138,49 +130,6 @@ func processStates() map[string]int {
 	return c
 }
 
-func gpus(ctx context.Context) ([]map[string]any, string) {
-	gpuMu.Lock()
-	defer gpuMu.Unlock()
-	now := time.Now()
-	if now.Sub(gpuCache.at) < 2500*time.Millisecond || now.Before(gpuCache.backoff) {
-		return gpuCache.data, gpuCache.err
-	}
-	gpuCache.at = now
-	exe, err := exec.LookPath("nvidia-smi")
-	if err != nil {
-		gpuCache.data, gpuCache.err = nil, ""
-		return nil, ""
-	}
-	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(cctx, exe, "--query-gpu=index,name,utilization.gpu,utilization.memory,memory.used,memory.total,temperature.gpu,power.draw,power.limit,fan.speed", "--format=csv,noheader,nounits").Output()
-	if cctx.Err() != nil {
-		gpuCache.data, gpuCache.err, gpuCache.backoff = nil, "nvidia-smi 响应超时", now.Add(time.Minute)
-		return nil, gpuCache.err
-	}
-	num := func(s string) any {
-		v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
-		if err != nil {
-			return nil
-		}
-		return v
-	}
-	rows := []map[string]any{}
-	for _, line := range strings.Split(string(out), "\n") {
-		v := strings.Split(line, ",")
-		if len(v) < 10 {
-			continue
-		}
-		idx, _ := strconv.Atoi(strings.TrimSpace(v[0]))
-		rows = append(rows, map[string]any{"index": idx, "name": strings.TrimSpace(v[1]), "util": num(v[2]), "mem_util": num(v[3]), "mem_used": num(v[4]), "mem_total": num(v[5]), "temp": num(v[6]), "power": num(v[7]), "power_limit": num(v[8]), "fan": num(v[9])})
-	}
-	gpuCache.data, gpuCache.err = rows, ""
-	if err != nil && len(rows) == 0 {
-		gpuCache.err = "nvidia-smi 执行失败"
-	}
-	return rows, gpuCache.err
-}
-
 // sysMetrics returns raw counters; the client derives rates from deltas.
 func (s *Env) sysMetrics(ctx context.Context, _ json.RawMessage) (any, error) {
 	var cpu []int64
@@ -257,11 +206,12 @@ func (s *Env) sysMetrics(ctx context.Context, _ json.RawMessage) (any, error) {
 	host, _ := os.Hostname()
 	var uts syscall.Utsname
 	_ = syscall.Uname(&uts)
-	g, gerr := gpus(ctx)
+	// Old clients still receive GPU fields, but CPU/memory never wait for a driver.
+	g, _ := s.gpuSampler().snapshot(ctx, false)
 	return map[string]any{"ts": float64(time.Now().UnixNano()) / 1e9, "host": host, "kernel": utsString(uts.Release[:]), "os": osName(),
 		"cpu_model": model, "cpu_count": max(1, len(cores)), "cpu": cpu, "cores": cores, "load": load, "threads": threads,
 		"states": processStates(), "uptime": uptime, "memory": mem, "disks": LocalMounts(), "diskio": diskio, "net": net,
-		"gpus": g, "gpu_error": gerr}, nil
+		"gpus": g.GPUs, "gpu_error": g.Error, "gpu_status": g.Status, "gpu_ts": g.TS, "gpu_stale": g.Stale}, nil
 }
 
 func utsString(a []int8) string {
@@ -442,8 +392,6 @@ func (s *Env) procList(ctx context.Context, raw json.RawMessage) (any, error) {
 	}
 	return map[string]any{"processes": list, "tasks": map[string]int{"total": len(rows), "running": running}, "source": "proc"}, nil
 }
-
-
 
 func (s *Env) logTail(ctx context.Context, raw json.RawMessage) (any, error) {
 	var a struct {

@@ -1215,7 +1215,7 @@ class _AiStudioViewState extends State<AiStudioView> {
           final label = name == 'shell' ? '${args['command'] ?? '启动 shell…'}' : name == 'subagent' ? '${args['description'] ?? '子代理'}' : '$name · ${args['path'] ?? args['pattern'] ?? ''}';
           final output = a['output'] as String? ?? '';
           final childId = child ? a['session_id'] as String? : (a['metadata'] as Map?)?['child_session_id'] as String?;
-          final proxy = switch ((a['metadata'] as Map?)?['proxy_mode']) { 'agent' => '执行端代理', 'environment' => '继承环境 / 系统代理', 'direct' => '未发现代理变量', _ => '跟随执行环境' };
+          final proxy = switch ((a['metadata'] as Map?)?['proxy_mode']) { 'agent' => 'Aurora agent 代理', 'system' || 'environment' => '本机 / 执行端环境代理', 'direct' => '直连', _ => '跟随执行环境' };
           return ExpansionTile(
             key: ValueKey('activity-${a['session_id']}-${a['tool_call_id']}'),
             dense: true,

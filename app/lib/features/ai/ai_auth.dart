@@ -19,6 +19,9 @@ Future<AiProvider> prepareAiProvider(
   AiOAuthClient Function()? localFactory,
 }) async {
   final p = AiProvider.fromJson(provider.toJson());
+  if (p.proxyMode.isNotEmpty && !link.server.caps.contains('ai.network')) {
+    throw StateError('当前 agent 尚不支持选择代理出口，请升级 agent 或沿用旧设置');
+  }
   if (!p.isSubscription) return p;
   if (p.oauth == null || p.oauth!.refresh.isEmpty) throw StateError('请先在 AI 设置中使用 OpenAI 设备码登录');
   if (!p.oauth!.needsRefresh) return p;
@@ -48,7 +51,7 @@ Future<AiProvider> _refreshProvider(
   if (previous.transport == 'client') {
     final local = (localFactory ?? AiOAuthClient.new)();
     try {
-      await local.configureProxy();
+      if (p.proxyMode == 'direct') { local.useDirect(); } else { await local.configureProxy(); }
       credential = await local.refresh(previous);
     } finally {
       local.close();
@@ -57,7 +60,8 @@ Future<AiProvider> _refreshProvider(
     final res = await link.call('ai.auth.refresh', {
       'refresh': previous.refresh,
       'account_id': previous.accountId,
-      'use_proxy': p.useProxy,
+      'use_proxy': p.usesProxy,
+      if (p.proxyMode.isNotEmpty) 'proxy_mode': p.proxyMode,
     }) as Map;
     credential = AiOAuthCredential.fromJson({
       ...((res['credential'] as Map).cast<String, dynamic>()),
@@ -85,21 +89,23 @@ Future<AiOAuthCredential?> showAiDeviceLogin(
   BuildContext context,
   Link? link, {
   required bool useProxy,
+  String proxyMode = '',
   String initialTransport = 'client',
   AiOAuthClient Function()? localFactory,
 }) => showDialog<AiOAuthCredential>(
   context: context,
   barrierDismissible: false,
   builder: (_) =>
-      _DeviceLogin(link: link, useProxy: useProxy, initialTransport: initialTransport, localFactory: localFactory),
+      _DeviceLogin(link: link, useProxy: useProxy, proxyMode: proxyMode, initialTransport: initialTransport, localFactory: localFactory),
 );
 
 class _DeviceLogin extends StatefulWidget {
   final Link? link;
   final bool useProxy;
+  final String proxyMode;
   final String initialTransport;
   final AiOAuthClient Function()? localFactory;
-  const _DeviceLogin({required this.link, required this.useProxy, required this.initialTransport, this.localFactory});
+  const _DeviceLogin({required this.link, required this.useProxy, required this.proxyMode, required this.initialTransport, this.localFactory});
   @override
   State<_DeviceLogin> createState() => _DeviceLoginState();
 }
@@ -147,11 +153,12 @@ class _DeviceLoginState extends State<_DeviceLogin> {
       if (_transport == 'client') {
         final local = (widget.localFactory ?? AiOAuthClient.new)();
         _local = local;
-        await local.configureProxy();
+        if (widget.proxyMode == 'direct') { local.useDirect(); } else { await local.configureProxy(); }
         r = await local.begin();
       } else {
         if (widget.link == null) throw StateError('服务器未连接，请使用本机网络');
-        r = await widget.link!.call('ai.auth.begin', {'use_proxy': widget.useProxy}) as Map;
+        if (widget.proxyMode.isNotEmpty && !widget.link!.server.caps.contains('ai.network')) throw StateError('请升级 agent 后选择代理出口');
+        r = await widget.link!.call('ai.auth.begin', {'use_proxy': widget.useProxy, if (widget.proxyMode.isNotEmpty) 'proxy_mode': widget.proxyMode}) as Map;
       }
       if (!mounted || _finished || generation != _generation) return;
       _deviceId = r['device_auth_id'] as String? ?? '';
@@ -197,6 +204,7 @@ class _DeviceLoginState extends State<_DeviceLogin> {
               'device_auth_id': _deviceId,
               'user_code': _code,
               'use_proxy': widget.useProxy,
+              if (widget.proxyMode.isNotEmpty) 'proxy_mode': widget.proxyMode,
             }) as Map;
       if (!mounted || _finished || generation != _generation) return;
       if (r['status'] == 'authorized') {

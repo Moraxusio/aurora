@@ -43,21 +43,21 @@ type deviceCode struct {
 }
 
 // No redirect may forward an OAuth body or a ChatGPT account header elsewhere.
-func subscriptionClient(useProxy bool, proxy func() map[string]string) *http.Client {
-	c := newHTTPClient(useProxy, proxy)
+func subscriptionClient(useProxy bool, proxy func() map[string]string, modes ...string) *http.Client {
+	c := newHTTPClient(useProxy, proxy, modes...)
 	c.Timeout = 35 * time.Second
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return c
 }
 
-func oauthRequest(ctx context.Context, proxy func() map[string]string, useProxy bool, route, contentType string, body []byte, out any) (int, error) {
+func oauthRequest(ctx context.Context, proxy func() map[string]string, useProxy bool, route, contentType string, body []byte, out any, modes ...string) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, openAIIssuer+route, bytes.NewReader(body))
 	if err != nil {
 		return 0, errors.New("无法创建 OpenAI 授权请求")
 	}
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("User-Agent", OpenCodeUserAgent)
-	c := subscriptionClient(useProxy, proxy)
+	c := subscriptionClient(useProxy, proxy, modes...)
 	defer c.CloseIdleConnections()
 	res, err := c.Do(req)
 	if err != nil {
@@ -84,14 +84,14 @@ func oauthStatus(status int) error {
 	return fmt.Errorf("OpenAI 授权失败（HTTP %d），请检查网络、订阅资格及账号的设备码登录设置", status)
 }
 
-func beginOpenAIDevice(ctx context.Context, useProxy bool, proxy func() map[string]string) (deviceCode, error) {
+func beginOpenAIDevice(ctx context.Context, useProxy bool, proxy func() map[string]string, modes ...string) (deviceCode, error) {
 	var raw struct {
 		DeviceAuthID string          `json:"device_auth_id"`
 		UserCode     string          `json:"user_code"`
 		Interval     json.RawMessage `json:"interval"`
 	}
 	body, _ := json.Marshal(map[string]string{"client_id": OpenAIDeviceClientID})
-	status, err := oauthRequest(ctx, proxy, useProxy, "/api/accounts/deviceauth/usercode", "application/json", body, &raw)
+	status, err := oauthRequest(ctx, proxy, useProxy, "/api/accounts/deviceauth/usercode", "application/json", body, &raw, modes...)
 	if err != nil {
 		return deviceCode{}, err
 	}
@@ -183,10 +183,10 @@ func credentialFromTokens(t tokenResponse, previous *OAuthCredential) (OAuthCred
 	return OAuthCredential{t.Access, refresh, time.Now().Add(time.Duration(t.ExpiresIn) * time.Second).UnixMilli(), account}, nil
 }
 
-func exchangeOpenAIToken(ctx context.Context, useProxy bool, proxy func() map[string]string, form url.Values, previous *OAuthCredential) (OAuthCredential, error) {
+func exchangeOpenAIToken(ctx context.Context, useProxy bool, proxy func() map[string]string, form url.Values, previous *OAuthCredential, modes ...string) (OAuthCredential, error) {
 	form.Set("client_id", OpenAIDeviceClientID)
 	var t tokenResponse
-	status, err := oauthRequest(ctx, proxy, useProxy, "/oauth/token", "application/x-www-form-urlencoded", []byte(form.Encode()), &t)
+	status, err := oauthRequest(ctx, proxy, useProxy, "/oauth/token", "application/x-www-form-urlencoded", []byte(form.Encode()), &t, modes...)
 	if err != nil {
 		return OAuthCredential{}, err
 	}
@@ -196,13 +196,13 @@ func exchangeOpenAIToken(ctx context.Context, useProxy bool, proxy func() map[st
 	return credentialFromTokens(t, previous)
 }
 
-func pollOpenAIDevice(ctx context.Context, useProxy bool, proxy func() map[string]string, deviceID, userCode string) (*OAuthCredential, error) {
+func pollOpenAIDevice(ctx context.Context, useProxy bool, proxy func() map[string]string, deviceID, userCode string, modes ...string) (*OAuthCredential, error) {
 	body, _ := json.Marshal(map[string]string{"device_auth_id": deviceID, "user_code": userCode})
 	var auth struct {
 		Code     string `json:"authorization_code"`
 		Verifier string `json:"code_verifier"`
 	}
-	status, err := oauthRequest(ctx, proxy, useProxy, "/api/accounts/deviceauth/token", "application/json", body, &auth)
+	status, err := oauthRequest(ctx, proxy, useProxy, "/api/accounts/deviceauth/token", "application/json", body, &auth, modes...)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +217,7 @@ func pollOpenAIDevice(ctx context.Context, useProxy bool, proxy func() map[strin
 	}
 	c, err := exchangeOpenAIToken(ctx, useProxy, proxy, url.Values{
 		"grant_type": {"authorization_code"}, "code": {auth.Code}, "code_verifier": {auth.Verifier}, "redirect_uri": {openAIIssuer + "/deviceauth/callback"},
-	}, nil)
+	}, nil, modes...)
 	return &c, err
 }
 

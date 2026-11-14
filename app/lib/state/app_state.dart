@@ -259,7 +259,7 @@ class AppState extends ChangeNotifier implements ProfileAccess {
       _conns[id] = c;
       _subs[id] = c.changes.listen((st) {
         final freshLink = link(id);
-        if (!s.isLocal && st.state == ConnState.connected && freshLink != null) unawaited(proxies.connected(id, freshLink));
+        if (st.state == ConnState.connected && freshLink != null) unawaited(proxies.connected(id, freshLink));
         if (!s.isLocal && st.state == ConnState.connected && freshLink != null) unawaited(upgrades.connected(id, freshLink));
         if (!s.isLocal && st.state == ConnState.connected && st.addr != null && st.addr != s.direct?.goodAddr) {
           unawaited(update((p) {

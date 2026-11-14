@@ -39,6 +39,8 @@ class AiOAuthClient {
         : 'DIRECT';
   }
 
+  void useDirect() { _http.findProxy = (_) => 'DIRECT'; }
+
   void close() {
     _closed = true;
     _http.close(force: true);

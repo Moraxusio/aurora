@@ -585,6 +585,9 @@ class AiProvider {
   int maxTokens;
   /// Route LLM & shell traffic on the server through its configured proxy node (proxysvc).
   bool useProxy;
+  /// Empty preserves the pre-selection behavior; otherwise system/agent/direct.
+  String proxyMode;
+  bool get usesProxy => proxyMode.isEmpty ? useProxy : proxyMode != 'direct';
   Map<String, String> headers;
 
   AiProvider({
@@ -602,6 +605,7 @@ class AiProvider {
     Map<String, int>? modelContextWindows,
     this.maxTokens = 0,
     this.useProxy = false,
+    this.proxyMode = '',
     Map<String, String>? headers,
   })  : modelContextWindows = modelContextWindows ?? {},
         models = models ?? [],
@@ -654,6 +658,7 @@ class AiProvider {
       },
       maxTokens: (j['max_tokens'] as num?)?.toInt() ?? 0,
       useProxy: j['use_proxy'] == true,
+      proxyMode: const ['system', 'agent', 'direct'].contains(j['proxy_mode']) ? j['proxy_mode'] as String : '',
       headers: hdrs,
     );
   }
@@ -673,6 +678,7 @@ class AiProvider {
         if (modelContextWindows.isNotEmpty) 'model_context_windows': modelContextWindows,
         if (maxTokens > 0) 'max_tokens': maxTokens,
         if (useProxy) 'use_proxy': true,
+        if (proxyMode.isNotEmpty) 'proxy_mode': proxyMode,
         if (headers.isNotEmpty) 'headers': headers,
       };
 
@@ -692,7 +698,8 @@ class AiProvider {
         if (reasoningEffort.isNotEmpty) 'reasoning_effort': reasoningEffort,
         if (effectiveContextWindow(modelOverride) > 0) 'context_window': effectiveContextWindow(modelOverride),
         if (!isSubscription && maxTokens > 0) 'max_tokens': maxTokens,
-        'use_proxy': useProxy,
+        'use_proxy': usesProxy,
+        if (proxyMode.isNotEmpty) 'proxy_mode': proxyMode,
         if (!isSubscription && headers.isNotEmpty) 'headers': headers,
       };
 

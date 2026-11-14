@@ -50,6 +50,7 @@ type ProviderConfig struct {
 	ReasoningEffort string            `json:"reasoning_effort,omitempty"` // "low" | "medium" | "high"
 	Headers         map[string]string `json:"headers,omitempty"`
 	UseProxy        bool              `json:"use_proxy"`
+	ProxyMode       string            `json:"proxy_mode,omitempty"` // absent: legacy; system | agent | direct
 }
 
 // Usage follows OpenCode's inclusive + breakdown token contract.

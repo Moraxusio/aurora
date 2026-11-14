@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"aurora3/internal/paths"
+	"aurora3/internal/proxyroute"
 )
 
 // Root mirrors files.Root so ai never imports another service (D-40).
@@ -1004,8 +1005,15 @@ func execShellTool(ctx context.Context, tc toolContext, rawInput json.RawMessage
 		"GIT_TERMINAL_PROMPT=0",
 		"DEBIAN_FRONTEND=noninteractive",
 	)
-	if tc.provider.UseProxy && tc.env.Proxy != nil {
-		for k, v := range tc.env.Proxy() {
+	proxy := tc.env.proxyFor(tc.provider)
+	if tc.provider.ProxyMode != "" {
+		values, err := proxyroute.Values(tc.provider.ProxyMode, proxy)
+		if err != nil {
+			return ToolExecResult{Output: err.Error(), IsError: true}
+		}
+		env = proxyroute.Replace(env, values)
+	} else if tc.provider.UseProxy && proxy != nil {
+		for k, v := range proxy() {
 			if k != "" && v != "" {
 				env = append(env, k+"="+v)
 			}
@@ -1115,6 +1123,9 @@ type cappedBuffer struct {
 func toolRuntimeMetadata(name string, cfg ProviderConfig, proxy func() map[string]string) map[string]any {
 	if name != "shell" {
 		return nil
+	}
+	if cfg.ProxyMode != "" {
+		return map[string]any{"proxy_mode": cfg.ProxyMode, "platform": runtime.GOOS}
 	}
 	mode := "direct"
 	hasProxy := func(env []string) bool {

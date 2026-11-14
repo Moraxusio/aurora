@@ -66,6 +66,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   String _authMode = '';
   String _reasoningEffort = '';
   bool _useProxy = false;
+  String _proxyMode = '';
   bool _obscureKey = true;
   bool _fetchingModels = false;
   List<String> _fetchedModels = [];
@@ -118,6 +119,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     p.model = _modelCtl.text.trim();
     p.reasoningEffort = _reasoningEffort;
     p.useProxy = _useProxy;
+    p.proxyMode = _proxyMode;
     p.contextWindow = int.tryParse(_contextCtl.text.trim()) ?? 0;
     p.models = {..._fetchedModels, if (p.model.isNotEmpty) p.model}.toList();
   }
@@ -133,6 +135,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _authMode = p.authMode;
     _reasoningEffort = p.reasoningEffort;
     _useProxy = p.useProxy;
+    _proxyMode = p.proxyMode;
     _fetchedModels = List.of(p.models);
     _fetchNote = null;
     _modelSearchCtl.clear();
@@ -182,6 +185,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     try {
       final Map res;
       if (_modelsViaClient) {
+        if (current.proxyMode == 'agent') throw StateError('Aurora 代理由 agent 提供，请选择“当前 agent 网络”拉取模型');
         res = {'models': await discoverAiModels(current)};
       } else {
         final prepared = await prepareAiProvider(widget.app, link!, current);
@@ -220,7 +224,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _saveCurrentToMemory();
     final current = _ai.providers.firstWhere((p) => p.id == _editingId);
     final baseline = widget.app.profile.ai.providers.where((p) => p.id == current.id).firstOrNull;
-    final c = await showAiDeviceLogin(context, link, useProxy:_useProxy,localFactory:widget.localAuthFactory);
+    final c = await showAiDeviceLogin(context, link, useProxy:current.usesProxy, proxyMode: _proxyMode, initialTransport: _proxyMode == 'agent' ? 'server' : 'client', localFactory:widget.localAuthFactory);
     if (!mounted || c == null || current.id != _editingId || !current.isSubscription) return;
     try {
       await widget.app.update((profile) {
@@ -561,31 +565,19 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                       ],
                     ),
                     const SizedBox(height: Space.m),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: Space.m + 2, vertical: Space.s + 2),
-                      decoration: BoxDecoration(
-                        color: ide.sideBar,
-                        borderRadius: BorderRadius.circular(Radii.l),
-                        border: Border.all(color: ide.border),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.public_rounded, size: 17, color: ide.textDim),
-                          const SizedBox(width: Space.m),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('使用执行端代理访问模型 API 与 AI shell', style: TextStyle(fontSize: 12.5, color: ide.text)),
-                                Text('远程 agent 使用其代理出口；本地 agent 使用本机代理。shell 也继承执行端环境代理。',
-                                    style: TextStyle(fontSize: 11.5, color: ide.textFaint)),
-                              ],
-                            ),
-                          ),
-                          SmallSwitch(value: _useProxy, onChanged: (v) => setState(() => _useProxy = v)),
-                        ],
-                      ),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('ai-proxy-mode-$_editingId-$_proxyMode'), initialValue: _proxyMode, isExpanded: true,
+                      decoration: const InputDecoration(labelText: '模型 API / AI 工具的网络出口'),
+                      items: [
+                        DropdownMenuItem(value: '', child: Text('沿用旧设置（${_useProxy ? '使用执行端代理' : 'API 直连，shell 继承环境'}）', overflow: TextOverflow.ellipsis)),
+                        const DropdownMenuItem(value: 'system', child: Text('本机代理 / 执行端环境代理', overflow: TextOverflow.ellipsis)),
+                        const DropdownMenuItem(value: 'agent', child: Text('Aurora agent 配置的代理节点', overflow: TextOverflow.ellipsis)),
+                        const DropdownMenuItem(value: 'direct', child: Text('直连（API 和工具不注入代理）', overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (v) => setState(() { _proxyMode = v ?? ''; if (_proxyMode == 'agent') _modelsViaClient = false; }),
                     ),
+                    const SizedBox(height: Space.s),
+                    Text('本地 agent 的“本机代理”读取环境变量 / Windows 手动代理；远程 agent 读取服务器环境。Aurora 节点在对应工作区的“代理”页配置。', style: TextStyle(fontSize: 11.5, color: ide.textFaint)),
                   ],
                 ),
               ),

@@ -74,7 +74,8 @@ Future<List<Map<String, dynamic>>> discoverAiModels(
   client.connectionTimeout = const Duration(seconds: 15);
   try {
     String? system;
-    if (provider.useProxy) {
+    if (provider.proxyMode == 'agent') throw StateError('Aurora 代理需要通过当前 agent 拉取模型');
+    if (provider.usesProxy) {
       try {
         system = await const MethodChannel('aurora3/input')
             .invokeMethod<String>('authProxy');
@@ -82,7 +83,7 @@ Future<List<Map<String, dynamic>>> discoverAiModels(
         /* environment proxy */
       }
     }
-    client.findProxy = (uri) => !provider.useProxy
+    client.findProxy = (uri) => !provider.usesProxy
         ? 'DIRECT'
         : HttpClient.findProxyFromEnvironment(uri) != 'DIRECT'
         ? HttpClient.findProxyFromEnvironment(uri)

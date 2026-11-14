@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 
 	"aurora3/internal/wire"
 )
@@ -17,6 +18,8 @@ type Env struct {
 	Roots   []Root
 	Audit   Auditor
 	sampler *procSampler
+	gpuOnce sync.Once
+	gpu     *gpuCollector
 }
 
 // Root is one folder a client may browse.

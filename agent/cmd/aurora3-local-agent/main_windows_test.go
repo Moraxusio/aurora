@@ -101,7 +101,7 @@ func TestLocalAgentLifecycleAndServices(t *testing.T) {
 	for _, s := range services.Services {
 		seen[s.ID] = true
 	}
-	for _, id := range []string{"files", "git", "terminal", "ai"} {
+	for _, id := range []string{"files", "git", "terminal", "ai", "monitor", "proxy"} {
 		if !seen[id] {
 			t.Fatal("missing service", id)
 		}
@@ -118,7 +118,16 @@ func TestLocalAgentLifecycleAndServices(t *testing.T) {
 		t.Fatal("file round trip failed")
 	}
 	call("fs.write", map[string]any{"root": volume, "path": rel + "/fixture.txt", "content": "updated synthetic content"}, nil)
-	call("session.create", map[string]any{"name": "fixture", "root": volume, "path": rel}, nil)
+	call("session.create", map[string]any{"name": "fixture", "root": volume, "path": rel, "no_profile": true, "proxy_mode": "direct"}, nil)
+	var metrics struct {
+		Platform string
+		CPU      []uint64
+		Memory   map[string]uint64
+	}
+	call("sys.metrics", nil, &metrics)
+	if metrics.Platform != "windows" || len(metrics.CPU) != 8 || metrics.Memory["MemTotal"] == 0 {
+		t.Fatal("native monitor unavailable")
+	}
 	var sessions struct {
 		Persistent bool
 		Sessions   []struct{ Name string }

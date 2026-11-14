@@ -643,7 +643,7 @@ class _ActivityBar extends StatelessWidget {
       ),
     );
     final visibleFeatures = [for (final f in features.all)
-      if (ws.entry?.isLocal != true || const ['files', 'terminal', 'search', 'git', 'ai'].contains(f.id)) f];
+      if (ws.entry?.isLocal != true || const ['files', 'terminal', 'search', 'git', 'ai', 'monitor', 'proxy'].contains(f.id)) f];
     final primary = [for (final id in const ['files', 'search', 'git', 'terminal', 'ai'])
       ...visibleFeatures.where((f) => f.id == id)];
     final secondary = visibleFeatures.where((f) => !primary.contains(f)).toList();
@@ -704,7 +704,7 @@ class _ActivityBar extends StatelessWidget {
             children: [
               ListTile(leading: const Icon(Icons.keyboard_command_key), title: const Text('命令面板'), onTap: () => go(c, onPalette)),
               for (final f in features.all.where((f) => !const ['files', 'search', 'git', 'terminal', 'ai'].contains(f.id)))
-                if (ws.entry?.isLocal != true) ListTile(leading: Icon(f.icon), title: Text(f.title), onTap: () => go(c, () => onPick(f))),
+                if (ws.entry?.isLocal != true || const ['monitor', 'proxy'].contains(f.id)) ListTile(leading: Icon(f.icon), title: Text(f.title), onTap: () => go(c, () => onPick(f))),
               ListTile(leading: const Icon(Icons.dns_outlined), title: const Text('服务器'), onTap: () => go(c, onServers)),
               ListTile(leading: const Icon(Icons.tune_rounded), title: const Text('服务器概览'), onTap: () => go(c, onOverview)),
               ListTile(leading: const Icon(Icons.settings_outlined), title: const Text('设置'), onTap: () => go(c, () => ws.openTab(settingsTab(ws.app)))),

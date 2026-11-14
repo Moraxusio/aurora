@@ -1,0 +1,36 @@
+<?xml version="1.0" ?>
+<!DOCTYPE nvidia_smi_log SYSTEM "nvsmi_device_v12.dtd">
+<nvidia_smi_log>
+  <driver_version>580.95.05</driver_version><cuda_version>13.0</cuda_version><attached_gpus>2</attached_gpus>
+  <gpu id="00000000:01:00.0">
+    <product_name>NVIDIA RTX A6000</product_name><product_architecture>Ampere</product_architecture><uuid>GPU-fixture-a</uuid>
+    <pci><pci_bus_id>00000000:01:00.0</pci_bus_id><pci_gpu_link_info>
+      <pcie_gen><max_link_gen>4</max_link_gen><current_link_gen>3</current_link_gen></pcie_gen>
+      <link_widths><max_link_width>16x</max_link_width><current_link_width>16x</current_link_width></link_widths>
+    </pci_gpu_link_info></pci>
+    <fan_speed>40 %</fan_speed><performance_state>P2</performance_state>
+    <fb_memory_usage><total>49140 MiB</total><reserved>256 MiB</reserved><used>24576 MiB</used><free>24308 MiB</free></fb_memory_usage>
+    <utilization><gpu_util>82 %</gpu_util><memory_util>63 %</memory_util><encoder_util>0 %</encoder_util><decoder_util>4 %</decoder_util></utilization>
+    <temperature><gpu_temp>68 C</gpu_temp><memory_temp>N/A</memory_temp><gpu_temp_slow_threshold>93 C</gpu_temp_slow_threshold></temperature>
+    <power_readings><power_draw>238.52 W</power_draw><enforced_power_limit>300.00 W</enforced_power_limit></power_readings>
+    <clocks><graphics_clock>1695 MHz</graphics_clock><sm_clock>1695 MHz</sm_clock><mem_clock>8001 MHz</mem_clock><video_clock>1470 MHz</video_clock></clocks>
+    <max_clocks><graphics_clock>1800 MHz</graphics_clock><mem_clock>8001 MHz</mem_clock></max_clocks>
+    <compute_mode>Default</compute_mode><persistence_mode>Enabled</persistence_mode><mig_mode><current_mig>N/A</current_mig></mig_mode>
+    <ecc_errors><volatile><single_bit><total>2</total></single_bit><double_bit><total>0</total></double_bit></volatile></ecc_errors>
+    <clocks_throttle_reasons><clocks_throttle_reason_gpu_idle>Not Active</clocks_throttle_reason_gpu_idle><clocks_throttle_reason_sw_power_cap>Active</clocks_throttle_reason_sw_power_cap></clocks_throttle_reasons>
+    <processes><process_info><pid>4123</pid><type>C</type><process_name>/opt/train, eval/python &amp; worker</process_name><used_memory>24000 MiB</used_memory><gpu_instance_id>N/A</gpu_instance_id><compute_instance_id>N/A</compute_instance_id></process_info>
+      <process_info><pid>5000</pid><type>G</type><process_name>/usr/lib/Xorg</process_name><used_memory>128 MiB</used_memory></process_info></processes>
+    <future_driver_field>ignored</future_driver_field>
+  </gpu>
+  <gpu id="00000000:81:00.0">
+    <product_name>NVIDIA H100 PCIe</product_name><product_architecture>Hopper</product_architecture><uuid>GPU-fixture-b</uuid>
+    <pci><pci_bus_id>00000000:81:00.0</pci_bus_id></pci><fan_speed>N/A</fan_speed><performance_state>P0</performance_state>
+    <fb_memory_usage><total>80 GiB</total><used>1024 MiB</used><free>79 GiB</free></fb_memory_usage>
+    <utilization><gpu_util>N/A</gpu_util><memory_util>0 %</memory_util><encoder_util>[Not Supported]</encoder_util></utilization>
+    <temperature><gpu_temp>41 C</gpu_temp><memory_temp>43 C</memory_temp></temperature>
+    <gpu_power_readings><instant_power_draw>N/A</instant_power_draw><average_power_draw>95.25 W</average_power_draw><current_power_limit>350 W</current_power_limit></gpu_power_readings>
+    <mig_mode><current_mig>Enabled</current_mig></mig_mode>
+    <clocks_event_reasons><clocks_event_reason_gpu_idle>Active</clocks_event_reason_gpu_idle></clocks_event_reasons>
+    <processes><process_info><pid>6123</pid><type>C</type><process_name>python</process_name><used_memory>N/A</used_memory><gpu_instance_id>1</gpu_instance_id><compute_instance_id>0</compute_instance_id></process_info></processes>
+  </gpu>
+</nvidia_smi_log>

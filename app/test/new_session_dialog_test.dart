@@ -12,6 +12,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final mode in ['system', 'agent', 'direct']) {
+    testWidgets('local terminal returns explicit $mode route', (t) async {
+      NewSession? result;
+      await t.pumpWidget(MaterialApp(theme: buildTheme(Brightness.dark), home: Builder(builder: (context) => Scaffold(
+        body: TextButton(onPressed: () async => result = await showDialog<NewSession>(context: context, builder: (_) => const NewSessionDialog(
+          initial: 'local', local: true, networkChoice: true, proxy: ProxyOffer.available('fixture-node'))), child: const Text('open'))))));
+      await t.tap(find.text('open'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('session-proxy-mode')));
+      await t.pumpAndSettle();
+      final label = {'system': '本机代理（环境 / Windows 系统代理）', 'agent': 'Aurora agent 代理 · fixture-node', 'direct': '直连（不注入代理）'}[mode]!;
+      await t.tap(find.text(label).last);
+      await t.pumpAndSettle();
+      await t.tap(find.text('创建'));
+      await t.pumpAndSettle();
+      expect(result!.proxyMode, mode);
+      expect(t.takeException(), isNull);
+    });
+  }
   testWidgets('with a node chosen the box can be ticked, and the answer carries it', (t) async {
     NewSession? r;
     await t.pumpWidget(MaterialApp(

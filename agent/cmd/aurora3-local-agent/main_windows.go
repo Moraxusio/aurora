@@ -7,6 +7,8 @@ import (
 	"aurora3/internal/entry"
 	"aurora3/internal/files"
 	gitservice "aurora3/internal/git"
+	"aurora3/internal/monitor"
+	"aurora3/internal/proxysvc"
 	"aurora3/internal/service"
 	"aurora3/internal/terminal"
 	"aurora3/internal/winlocal"
@@ -14,6 +16,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"golang.org/x/sys/windows"
 	"io"
@@ -81,13 +84,49 @@ func run() error {
 	}
 	token := wire.NewToken()
 	cfg := &entry.Config{Kind: "local", Name: "本机 Windows", Listen: "127.0.0.1:0", StateDir: boot.StateDir, Token: token, Roots: roots}
+	// Only durable service choices are restored. Listener identity, auth token,
+	// roots and loopback binding are freshly derived for this client-owned run.
+	configPath := filepath.Join(boot.StateDir, "local-agent.json")
+	if raw, err := os.ReadFile(configPath); err == nil {
+		var saved struct {
+			Services map[string]bool `json:"services"`
+			Proxy    json.RawMessage `json:"proxy"`
+		}
+		if err := json.Unmarshal(raw, &saved); err != nil {
+			return fmt.Errorf("本地 agent 服务配置格式无效：%w", err)
+		}
+		cfg.Services, cfg.Proxy = saved.Services, saved.Proxy
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("读取本地 agent 服务配置失败：%w", err)
+	}
 	if err = cfg.Validate(); err != nil {
 		return err
 	}
 	fe := &files.Env{UploadMaxBytes: 64 << 30, Audit: entry.NewAudit("")}
+	var srv *entry.Server
+	px := &proxysvc.Env{
+		Load: func() proxysvc.State {
+			var state proxysvc.State
+			if srv != nil {
+				_ = json.Unmarshal(srv.ProxyRaw(), &state)
+			}
+			return state
+		},
+		Save: func(state proxysvc.State) error {
+			raw, err := json.Marshal(state)
+			if err != nil {
+				return err
+			}
+			return srv.SaveProxyRaw(raw)
+		},
+		Enabled: func() bool { return srv != nil && srv.ServiceEnabled("proxy") },
+		Audit:   fe.Audit, Log: log.New(os.Stderr, "", log.LstdFlags),
+	}
+	defer px.Close()
 	ge := &gitservice.Env{Audit: fe.Audit, Proxy: winlocal.ProxyEnv}
-	ae := &ai.Env{StateDir: boot.StateDir, Audit: fe.Audit, Proxy: winlocal.ProxyEnv}
-	te := &terminal.Env{}
+	ae := &ai.Env{StateDir: boot.StateDir, Audit: fe.Audit, Proxy: winlocal.ProxyEnv, AgentProxy: px.GitEnv}
+	te := &terminal.Env{Proxy: px.SessionEnv}
+	me := &monitor.Env{Audit: fe.Audit}
 	for _, r := range roots {
 		fe.Roots = append(fe.Roots, files.Root{ID: r.ID, Label: r.Label, Path: r.Path})
 		ge.Roots = append(ge.Roots, gitservice.Root{ID: r.ID, Label: r.Label, Path: r.Path})
@@ -97,10 +136,11 @@ func run() error {
 	fe.Repos = gitservice.Repos{Proxy: winlocal.ProxyEnv}
 	defer te.Close()
 	defer ae.StopAll()
-	srv, err := entry.New(cfg, "", Version, []service.Service{fe.Service(), ge.Service(), te.Service(), ae.Service()}, func(s string) error { _, err := exec.LookPath(s); return err }, nil, log.New(os.Stderr, "", log.LstdFlags))
+	srv, err = entry.New(cfg, configPath, Version, []service.Service{fe.Service(), ge.Service(), te.Service(), ae.Service(), me.Service(), px.Service()}, func(s string) error { _, err := exec.LookPath(s); return err }, nil, log.New(os.Stderr, "", log.LstdFlags))
 	if err != nil {
 		return err
 	}
+	px.Start()
 	ready := make(chan struct{})
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx, ready) }()

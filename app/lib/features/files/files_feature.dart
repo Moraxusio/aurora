@@ -171,6 +171,7 @@ class _FileTreePageState extends State<_FileTreePage> {
   String _sort = 'name';
   bool _desc = false;
   bool _foldersFirst = true;
+  String? _activeFile;
 
   Workspace get ws => widget.ws;
 
@@ -212,6 +213,9 @@ class _FileTreePageState extends State<_FileTreePage> {
 
   String _shape() => ws.entry?.workspace(widget.projectId)?.folders.map((f) => '${f.root}:${f.path}').join('|') ?? '';
   void _onWorkspace() {
+    final active = ws.active?.file;
+    final activeKey = active == null ? null : '${active.root}:${active.path}';
+    if (_activeFile != activeKey) { _activeFile = activeKey; if (mounted) setState(() {}); }
     if (_syncSort() && mounted) setState(_resortAll);
     final shape = _shape();
     if (shape == _folderShape) return;
@@ -396,6 +400,42 @@ class _FileTreePageState extends State<_FileTreePage> {
     on ? _expanded.add(path) : _expanded.remove(path);
     if (remember) _rememberExpansion();
     if (on && n.children == null) await _load(n);
+  }
+
+  Future<void> _revealActive() async {
+    final file = ws.active?.file;
+    if (file == null) return;
+    final height = InputMode.row(context) + 2;
+    final link = ws.link, generation = _generation;
+    bool current() => mounted && generation == _generation && identical(link, ws.link) && ws.active?.file == file && ws.projectKey == widget.projectId;
+    final roots = _roots.where((n) => n.root == file.root && isSameOrInside(file.path, n.path)).toList()
+      ..sort((a, b) => b.path.length.compareTo(a.path.length));
+    if (roots.isEmpty) { ws.toast('当前文件不在此工作区的文件夹中'); return; }
+    if (!_hidden && file.path.split('/').any((s) => s.startsWith('.'))) {
+      setState(() => _hidden = true);
+      await _refreshAll();
+      if (!current()) return;
+    }
+    var node = roots.first;
+    while (node.path != file.path) {
+      await _expand(node, true);
+      if (!current()) return;
+      final next = node.children?.where((n) => isSameOrInside(file.path, n.path)).firstOrNull;
+      if (next == null) { ws.toast('当前文件已移动或暂时无法读取', error: true); return; }
+      node = next;
+    }
+    setState(() => _selectOnly(node));
+    final rows = [for (final r in _roots) ..._rows(r, 0)];
+    final index = rows.indexWhere((r) => identical(r.node, node) && r.note == null);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!current() || !_scroll.hasClients || index < 0) return;
+      _scroll.jumpTo((index * height - _scroll.position.viewportDimension / 3).clamp(0.0, _scroll.position.maxScrollExtent));
+    });
+  }
+
+  void _collapseAll() {
+    setState(() { for (final n in _allNodes()) { n.expanded = false; } _expanded.clear(); });
+    _rememberExpansion();
   }
 
   Future<void> _refreshAll() {
@@ -942,14 +982,13 @@ class _FileTreePageState extends State<_FileTreePage> {
     } else {
       parts.add(formatSize(n.fileSize));
     }
-    if (_sort == 'mtime' && n.mtime > 0) parts.add(formatShortTime(n.mtime));
     return parts.isEmpty ? null : parts.join('  ');
   }
 
   String _tooltip(_Node n) {
     final e = n.entry;
     if (e == null) return n.location ?? n.path;
-    final lines = [n.path];
+    final lines = [ws.entry?.isLocal == true ? ws.app.localAgent.nativePath(n.root, n.path) : n.path];
     if (!n.isDir) {
       lines.add('大小 ${formatSize(n.fileSize)}（${n.fileSize} 字节）');
     } else if (n.du != null) {
@@ -1015,6 +1054,7 @@ class _FileTreePageState extends State<_FileTreePage> {
       ProjectWorkspaceBar(ws: ws, actions: [
           IconBtn(Icons.note_add_outlined, '新建文件', target == null ? null : () => _newFile(target)),
           IconBtn(Icons.refresh, '刷新', _refreshAll),
+          IconBtn(Icons.my_location_outlined, '定位当前文件', ws.active?.file == null ? null : _revealActive),
           Builder(builder: (ctx) => SizedBox(width: InputMode.isTouch(context) ? 44 : 28, child: PopupMenuButton<String>(
             tooltip: '文件选项', padding: EdgeInsets.zero,
             icon: Icon(Icons.more_horiz, size: 17, color: _hidden || _sort != 'name' || _desc ? ide.accent : ide.textDim),
@@ -1025,12 +1065,14 @@ class _FileTreePageState extends State<_FileTreePage> {
               if (value == 'hidden') { setState(() => _hidden = !_hidden); _refreshAll(); }
               if (value == 'sort') _sortMenu(ctx);
               if (value == 'measure' && target != null) _measure([target]);
+              if (value == 'collapse') _collapseAll();
             },
             itemBuilder: (_) => [
               PopupMenuItem(value: 'folder', enabled: target != null, child: const Text('新建文件夹…')),
               if (clip != null) PopupMenuItem(value: 'paste', enabled: _busy == null, child: const Text('粘贴到选中的文件夹（Ctrl+V）')),
               PopupMenuItem(value: 'upload', enabled: target != null, child: const Text('上传文件…')),
               CheckedPopupMenuItem(value: 'hidden', checked: _hidden, child: const Text('显示隐藏文件')),
+              const PopupMenuItem(value: 'collapse', child: Text('折叠所有文件夹')),
               PopupMenuItem(value: 'sort', child: Text('排序：${const {'name': '名称', 'size': '大小', 'mtime': '修改时间', 'type': '类型'}[_sort]}${_desc ? '（降序）' : ''}')),
               if (_canMeasure) PopupMenuItem(value: 'measure', enabled: target != null && !target.duBusy, child: const Text('计算选中文件夹大小')),
             ],
@@ -1046,13 +1088,16 @@ class _FileTreePageState extends State<_FileTreePage> {
           : Focus(
               focusNode: _focus,
               onKeyEvent: _onKey,
-              child: ListView.builder(controller: _scroll, itemCount: rows.length, itemBuilder: (context, i) {
+              child: ListView.builder(controller: _scroll, itemExtent: InputMode.row(context) + 2, itemCount: rows.length, itemBuilder: (context, i) {
                 final row = rows[i], n = rows[i].node;
-                if (row.note != null) { return Padding(padding: EdgeInsets.only(left: 30 + row.depth * 18.0, top: 5, bottom: 5),
-                  child: Text(row.note!, style: TextStyle(fontSize: 11, color: n.error == null ? ide.textDim : ide.error))); }
+                if (row.note != null) { return Tooltip(message: row.note!, child: Padding(padding: EdgeInsets.only(left: 30 + math.min(row.depth * 14.0, 60), right: 8),
+                  child: Align(alignment: Alignment.centerLeft, child: Text(row.note!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: n.error == null ? ide.textDim : ide.error))))); }
                 return FileTreeRow(key: ObjectKey(n), name: n.name, path: n.path, depth: row.depth,
                   folder: n.isDir, expanded: n.expanded, loading: n.loading, selected: _picked.contains(n.key),
                   root: n.entry == null, location: n.location, link: n.entry?['type'] == 'link',
+                  active: ws.active?.file == WorkspacePath(root: n.root, path: n.path),
+                  modified: n.mtime > 0 ? formatShortTime(n.mtime) : null, preferModified: _sort == 'mtime',
+                  onExpand: n.isDir ? () => _expand(n, !n.expanded) : null,
                   dimmed: clip != null && clip.cut && clip.contains(n.root, n.path),
                   tooltip: _tooltip(n), detail: _detail(n), onTap: () => _tap(n),
                   menu: () {

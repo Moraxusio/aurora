@@ -387,6 +387,19 @@ void main() {
   });
 
   group('AI settings (D-104)', () {
+    test('explicit routes round-trip without changing credentials or legacy behavior', () {
+      for (final mode in ['', 'system', 'agent', 'direct']) {
+        final original = AiProvider(id: 'fixture', name: 'fixture', apiKey: 'synthetic-api-key', useProxy: true, proxyMode: mode,
+          oauth: const AiOAuthCredential(access: 'synthetic-access', refresh: 'synthetic-refresh', expires: 123));
+        final copy = AiProvider.fromJson(original.toJson());
+        expect(copy.proxyMode, mode);
+        expect(copy.apiKey, original.apiKey);
+        expect(copy.oauth!.toJson(), original.oauth!.toJson());
+        expect(copy.useProxy, isTrue);
+        expect(copy.toWireJson()['use_proxy'], mode != 'direct');
+        expect(copy.toWireJson()['proxy_mode'], mode.isEmpty ? isNull : mode);
+      }
+    });
     test('round-trips providers, OpenCode protocols, and seals API keys on disk', () async {
       final store = await ProfileStore.open(path, XorSealer());
       const secretKey = 'sk-opencode-secret-key-998877';

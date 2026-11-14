@@ -26,4 +26,4 @@
 - `integration_test/gui_interaction_test.dart`：同一工作流运行于 Windows Profile 原生引擎，保留 JSON 与 PNG。使用内存服务及测试输入事件，不接入用户 profile、凭据、服务器或真实模型。
 - 原生复现命令：`powershell -NoProfile -File app/tool/gui_audit.ps1`（Flutter/NASM 在 PATH 中）。脚本隔离实例/配置并检查 Windows AXTree 日志；Dart 断言通过但引擎拒绝语义更新时仍判失败。
 
-Windows 原生运行的最终尺寸、DPI、结果及发行产物见 PLAN。组件 DPI 矩阵不等同于实际多屏拖动、屏幕阅读器或 Android 真机验收。
+最终 Windows Profile 工作流在 1682×1066 物理像素、DPR 1.25 下运行 78 秒，全部通过；AXTree 错误为 0，终端只连接一次，未保存内容保留。最后局部浮层改动的定向回归 18/18，分析零问题。[3.18.1 已发布](https://github.com/Moraxusio/aurora/releases/tag/v3.18.1)，构建与摘要见 PLAN。组件 DPI 矩阵不等同于实际多屏拖动、屏幕阅读器或 Android 真机验收。

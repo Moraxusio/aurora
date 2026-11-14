@@ -601,3 +601,12 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 原生日志进一步发现 settings Slider 的 OverlayPortal 语义节点 137 未被 Windows AXTree 接受。语义快照定位到 slider 的跨滚动子树 traversal parent；单独语义边界、关闭数值提示均不足以修复，最终改为同子树局部 Overlay 后，完整原生工作流及 AXTree 日志检查通过。相同修复覆盖标签宽度滑块，并按真实 %/px 朗读数值。关联 Flutter 上游 #182444/#190344；保留全应用语义、Tooltip 和数值提示。
 - 发布版本采用 3.18.1，客户端 build number 31801、两类随包签名 agent 同版本；从提交后的干净源码构建，旧正式包/五个预览保护项增为 11 项。GitHub 授权仅本机 DPAPI 临时保存，发行后清理。
 - 全量回归 329 项通过、20 项按既有条件跳过；最终局部 Overlay/布局滑块改动后定向回归 18/18，通过包含语义开启的正式根节点工作流；最终静态分析零问题。原生脚本把 AXTree 日志拒绝也视为失败，避免仅依据 Dart 的 `All tests passed` 发行。
+
+### 3.18.1 Windows 已发布（2026-11-14）
+
+- 发布：https://github.com/Moraxusio/aurora/releases/tag/v3.18.1 。源码与标签指向干净提交 `e20225e8e9f7cb93c714237cad53677f55796a7a`；客户端 `3.18.1+31801`，两类签名 agent 同为 3.18.1，发布密钥 ID `87828dfb18459372`。Windows ZIP、ZIP sidecar、SHA256SUMS 共 3 项资产已发布为 latest，服务端 SHA-256 与大小逐项匹配。
+- 最终 Windows Profile 原生工作流 78 秒通过，1682×1066 物理像素、DPR 1.25；连续 85/80/100/125/150/85% 缩放、菜单/输入/历史/终端/分隔线/停靠/未保存取消、布局宽度滑块及命令弹窗全部通过，AXTree 错误为 0。证据保存在本机 `aurora-gui-native-release` 的 JSON/PNG/log；使用内存服务与测试输入，未读取真实 profile 或连接真实账号。
+- Release 构建 174.2 秒，明确使用 `lib/main.dart`。构建前后核对 1413 个仓库文件摘要；两类 agent 的 Go 元数据均记录该 revision、`vcs.modified=false`，实际 `version` 均返回 3.18.1。校验脚本最初把 CMake 的 Windows 转义路径当作正斜杠路径，修正匹配规则后仅重跑产物校验，未重复构建。
+- 本地包 `C:\dev\VPS\release3\Aurora-3.18.1.zip`，30,485,625 字节，SHA-256 `a0e78ece0b3be8b64bd54b96ba297aef889e4af12be5b74a85c4c5db931ddd4a`。33 个包内文件与 ZIP 逐项一致；AOT SHA-256 `23b56cceb8226925ca32a68b0d531f5e1b7b02cc26b5dcb4ced81775bbdbcfb5`。
+- Linux agent SHA-256 `5306d3f1d73fe7e4bc2d2b7f135fb51f1f1cd6ca11e912149e39b11121319d93`；Windows 本地 agent `e2f0398168dfca9b6fc3ba46f37cc5f60f9d16e6836b3a5693ac467e7fb48854`。产品签名和许可证检查通过，保留 OpenCode MIT 署名。
+- 旧正式包与五个预览的 11 项保护摘要一致；v2 工作区干净、`release` 顶层仍 13 项。原 API Key/OAuth、服务器和配置未迁移或重置；Android 继续暂缓，远程 agent 无需为本次 GUI 修复升级。临时 GitHub 授权在发布记录推送后清理。

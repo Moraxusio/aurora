@@ -2,7 +2,7 @@
 
 核心理念：**布局服务于任务，移动位置不丢状态**。3.18.1 修复整体缩放后的点击死区、右键菜单偏移、命令弹窗及终端快捷键路由，并修正文件预览焦点与 AI 历史导航。文档、右侧 AI 和底部终端继续保留各自状态，消息阅读锚点与完成计划自动收起保持。操作见 [标签页工作台](docs/TABS.md)。
 
-**当前优先维护 Windows。** [3.18.0](https://github.com/Moraxusio/aurora/releases/tag/v3.18.0) 已发布 Windows x64，Android 构建/发行暂缓，不再作为本轮 Windows 发布前置条件；安卓用户可继续使用既有 3.16.0。
+**当前优先维护 Windows。** [3.18.1](https://github.com/Moraxusio/aurora/releases/tag/v3.18.1) 已发布 Windows x64，Android 构建/发行暂缓，不再作为本轮 Windows 发布前置条件；安卓用户可继续使用既有 3.16.0。
 
 **3.18.1：GUI 交互修复。** 修复原理与回归范围见 [GUI 交互检查](docs/GUI_AUDIT.md)。3.18.0 的设计见 [Windows 工作台](docs/WINDOWS_WORKBENCH.md) 和 [侧栏跟手与界面减法](docs/WINDOWS_SIMPLIFICATION.md)。
 

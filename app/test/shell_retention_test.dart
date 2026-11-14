@@ -68,6 +68,10 @@ void main() {
       await t.pumpAndSettle();
       final before = Map<String, int>.from(builds);
       for (var i = 0; i < 4; i++) {
+        await t.tap(find.byTooltip('显示或隐藏侧栏（Ctrl+B）'));
+        await t.pumpAndSettle();
+      }
+      for (var i = 0; i < 4; i++) {
         ws.activate(i.isEven ? 'one' : 'two');
         await t.pumpAndSettle();
         await t.tap(
@@ -119,8 +123,9 @@ void main() {
     t.view.physicalSize = const Size(620, 800); await t.pumpAndSettle();
     expect(t.takeException(), isNull);
     await t.tap(find.byTooltip('显示或隐藏侧栏（Ctrl+B）')); await t.pumpAndSettle();
-    expect(find.byKey(const ValueKey('drawer-resize')), findsOneWidget);
-    await t.drag(find.byKey(const ValueKey('drawer-resize')), const Offset(-30, 0)); await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('sidebar-resize')), findsOneWidget);
+    expect(t.getRect(find.byKey(const ValueKey('main-sidebar'))).overlaps(t.getRect(find.byKey(const ValueKey('editor-slot')))), isFalse);
+    await t.drag(find.byKey(const ValueKey('sidebar-resize')), const Offset(-30, 0)); await t.pumpAndSettle();
     expect(ws.tabLayout.sideWidth, lessThan(preferred));
     t.view.physicalSize = const Size(390, 800); await t.pumpAndSettle();
     expect(t.takeException(), isNull);
@@ -158,6 +163,8 @@ class _App extends AppState {
   final _entry = ServerEntry(id: 'fixture', name: 'fixture');
   final _link = _Link();
   int wholeProfileReads = 0;
+  @override EditorSettings get editorSettings => EditorSettings();
+  @override AiSettings get aiSettings => AiSettings();
   @override
   bool get ready => true;
   @override

@@ -60,6 +60,8 @@ void main() {
         }
       }
     }
+    final narrowColumn = EditorGridGeometry(layout, const Size(550, 500), compactWindow: false);
+    expect(narrowColumn.groups, hasLength(3), reason: 'a narrow desktop column beside AI is not a phone window');
   });
   test(
     'drop policy rejects stale structural transactions and task panels',
@@ -94,6 +96,14 @@ void main() {
         ),
         TabDropEdge.right,
       );
+      final compass = TabDropPolicy.compass(const Size(900, 700));
+      for (final edge in TabDropEdge.values.where((e) => e != TabDropEdge.center)) {
+        expect(TabDropPolicy.resolve(drag, ws, ws.tabLayout.focused,
+          const Size(900, 700), compass[edge]!.center), edge);
+      }
+      expect(TabDropPolicy.resolve(drag, ws, ws.tabLayout.focused,
+        const Size(900, 700), const Offset(220, 4)), TabDropEdge.top,
+        reason: 'the old x-third rule incorrectly chose left near the top');
       ws.arrangeEditors(EditorArrangement.rows);
       expect(drag.valid(ws), isFalse);
       ws.openTab(tab('ai:new'));

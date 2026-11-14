@@ -10,6 +10,7 @@ import 'kernel/desktop_lifecycle.dart';
 import 'kernel/window_frame.dart';
 import 'state/app_state.dart';
 import 'theme/ide_theme.dart';
+import 'theme/workbench_scale.dart';
 import 'ui/add_server.dart';
 
 Future<void> main() async {
@@ -36,30 +37,35 @@ class _AuroraAppState extends State<AuroraApp> {
     super.initState();
     DesktopLifecycle.start();
     widget.app.addListener(_onApp);
+    widget.app.appearance.addListener(_onApp);
   }
 
   @override
   void dispose() {
     widget.app.removeListener(_onApp);
+    widget.app.appearance.removeListener(_onApp);
     DesktopLifecycle.stop();
     _features.dispose();
     _input.dispose();
     super.dispose();
   }
 
-  ThemeMode get _themeMode => switch (widget.app.ready ? widget.app.profile.editor.theme : 'system') {
+  ThemeMode get _themeMode => switch (widget.app.appearance.value.theme) {
         'light' => ThemeMode.light,
         'dark' => ThemeMode.dark,
         _ => ThemeMode.system,
       };
 
   late ThemeMode _theme = _themeMode;
+  late double _scale = widget.app.appearance.value.uiScale;
+  final _light = buildTheme(Brightness.light), _dark = buildTheme(Brightness.dark);
 
   // The theme follows the settings page. The app notifies on every connection
   // change; only a different theme rebuilds the MaterialApp.
   void _onApp() {
     final t = _themeMode;
-    if (t != _theme && mounted) setState(() => _theme = t);
+    final scale = widget.app.appearance.value.uiScale;
+    if ((t != _theme || scale != _scale) && mounted) setState(() { _theme = t; _scale = scale; });
   }
 
   @override
@@ -73,11 +79,12 @@ class _AuroraAppState extends State<AuroraApp> {
         title: 'Aurora 3',
         debugShowCheckedModeBanner: false,
         scaffoldMessengerKey: Toast.key,
-        theme: buildTheme(Brightness.light),
-        darkTheme: buildTheme(Brightness.dark),
+        theme: _light,
+        darkTheme: _dark,
+        themeAnimationDuration: Duration.zero,
         themeMode: _theme,
         builder: (context, child) => ValueListenableBuilder<bool>(valueListenable: DesktopLifecycle.visible,
-          child: InputMode.scope(mode: _input, child: WindowChrome(child: child!)),
+          child: WorkbenchScale(scale: _scale, child: InputMode.scope(mode: _input, child: WindowChrome(child: child!))),
           builder: (_, visible, child) => ExcludeFocus(excluding: !visible,
             child: Offstage(offstage: !visible, child: TickerMode(enabled: visible, child: child!)))),
         home: Home(app: widget.app, features: _features),

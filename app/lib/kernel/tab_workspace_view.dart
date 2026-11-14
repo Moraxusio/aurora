@@ -86,7 +86,8 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
       const SingleActivator(LogicalKeyboardKey.escape): () { _drag.value?.cancelled = true; _drag.value = null; },
     }, child: LayoutBuilder(
       builder: (context, box) {
-        final grid = EditorGridGeometry(layout, box.biggest, focusMode: ws.focusMode);
+        final grid = EditorGridGeometry(layout, box.biggest, focusMode: ws.focusMode,
+          compactWindow: MediaQuery.sizeOf(context).width < 600);
         final rects = grid.groups, contents = <String, Rect>{};
         final row = _rowOf(context);
         final dividers = grid.dividers, compact = grid.compact;
@@ -155,13 +156,9 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                   key: ValueKey('tabs-resize-${g.id}'),
                   axis: Axis.horizontal,
                   label: '调整纵向标签宽度',
-                  onDelta: (delta) => ws.setTabsWidth(
-                    layout.tabsWidth.clamp(
-                          120.0,
-                          math.min(400.0, rect.width - 280),
-                        ) +
-                        (left ? delta : -delta),
-                  ),
+                   value: width,
+                   reverse: !left,
+                   onChanged: ws.setTabsWidth,
                   onReset: () => ws.setTabsWidth(180),
                 ),
               ),
@@ -301,11 +298,8 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                         ? Axis.horizontal
                         : Axis.vertical,
                     label: '调整编辑组大小',
-                    onDelta: (delta) => ws.resizeGroup(
-                      d.split.id,
-                      d.split.ratio.clamp(d.minRatio, d.maxRatio) +
-                          delta / math.max(1, d.extent),
-                    ),
+                    value: d.split.ratio.clamp(d.minRatio, d.maxRatio) * d.extent,
+                    onChanged: (extent) => ws.resizeGroup(d.split.id, extent / math.max(1, d.extent)),
                     onReset: () => ws.resizeGroup(d.split.id, .5),
                   ),
                 ),
@@ -391,13 +385,17 @@ class _TabFocusFrameState extends State<TabFocusFrame> {
 class TabResizeHandle extends StatefulWidget {
   final Axis axis;
   final String label;
-  final ValueChanged<double> onDelta;
+  final double value;
+  final bool reverse;
+  final ValueChanged<double> onChanged;
   final VoidCallback onReset;
   const TabResizeHandle({
     super.key,
     required this.axis,
     required this.label,
-    required this.onDelta,
+    required this.value,
+    required this.onChanged,
+    this.reverse = false,
     required this.onReset,
   });
   @override
@@ -406,46 +404,69 @@ class TabResizeHandle extends StatefulWidget {
 
 class _TabResizeHandleState extends State<TabResizeHandle> {
   bool _hover = false, _drag = false;
+  int? _pointer;
+  Offset? _origin, _lastClickPosition;
+  Duration? _lastClick;
+  double _startValue = 0, _scale = 1;
+  bool _moved = false;
+
+  void _down(PointerDownEvent event) {
+    if (event.buttons != kPrimaryMouseButton || _pointer != null) return;
+    final box = context.findRenderObject() as RenderBox;
+    // Freeze the coordinate scale at pointer-down. The handle itself moves;
+    // its changing local origin must never subtract movement from the drag.
+    final unit = widget.axis == Axis.horizontal ? const Offset(1, 0) : const Offset(0, 1);
+    _scale = (box.localToGlobal(unit) - box.localToGlobal(Offset.zero)).distance;
+    _pointer = event.pointer;
+    _origin = event.position;
+    _startValue = widget.value;
+    _moved = false;
+    setState(() => _drag = true);
+  }
+
+  void _move(PointerMoveEvent event) {
+    if (_pointer != event.pointer || _origin == null) return;
+    final delta = event.position - _origin!;
+    if (delta.distance > 3) _moved = true;
+    final distance = (widget.axis == Axis.horizontal ? delta.dx : delta.dy) / _scale;
+    widget.onChanged(_startValue + (widget.reverse ? -distance : distance));
+  }
+
+  void _up(PointerUpEvent event) {
+    if (_pointer != event.pointer) return;
+    if (!_moved) {
+      final doubleClick = _lastClick != null && event.timeStamp - _lastClick! < const Duration(milliseconds: 300) &&
+        (_lastClickPosition! - event.position).distance < 5;
+      if (doubleClick) { widget.onReset(); _lastClick = null; }
+      else { _lastClick = event.timeStamp; _lastClickPosition = event.position; }
+    } else { _lastClick = null; }
+    _pointer = null;
+    _origin = null;
+    setState(() => _drag = false);
+  }
   @override
   Widget build(BuildContext context) {
     final horizontal = widget.axis == Axis.horizontal, ide = Ide.of(context);
     return Semantics(
       label: widget.label,
-      onIncrease: () => widget.onDelta(16),
-      onDecrease: () => widget.onDelta(-16),
+      onIncrease: () => widget.onChanged(widget.value + 16),
+      onDecrease: () => widget.onChanged(widget.value - 16),
       child: MouseRegion(
         cursor: horizontal
             ? SystemMouseCursors.resizeColumn
             : SystemMouseCursors.resizeRow,
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
-        child: GestureDetector(
+        child: Listener(
           behavior: HitTestBehavior.opaque,
-          onDoubleTap: widget.onReset,
-          onHorizontalDragStart: horizontal
-              ? (_) => setState(() => _drag = true)
-              : null,
-          onHorizontalDragUpdate: horizontal
-              ? (d) => widget.onDelta(d.delta.dx)
-              : null,
-          onHorizontalDragEnd: horizontal
-              ? (_) => setState(() => _drag = false)
-              : null,
-          onHorizontalDragCancel: horizontal
-              ? () => setState(() => _drag = false)
-              : null,
-          onVerticalDragStart: !horizontal
-              ? (_) => setState(() => _drag = true)
-              : null,
-          onVerticalDragUpdate: !horizontal
-              ? (d) => widget.onDelta(d.delta.dy)
-              : null,
-          onVerticalDragEnd: !horizontal
-              ? (_) => setState(() => _drag = false)
-              : null,
-          onVerticalDragCancel: !horizontal
-              ? () => setState(() => _drag = false)
-              : null,
+          onPointerDown: _down,
+          onPointerMove: _move,
+          onPointerUp: _up,
+          onPointerCancel: (e) {
+            if (e.pointer != _pointer) return;
+            _pointer = null; _origin = null; _lastClick = null;
+            setState(() => _drag = false);
+          },
           child: SizedBox.expand(
             child: Center(
               child: SizedBox(
@@ -854,6 +875,14 @@ class _TabTile extends StatefulWidget {
 
 class _TabTileState extends State<_TabTile> {
   bool _hover = false;
+  Duration? _lastTap;
+  Duration _press = Duration.zero;
+  void _activate() {
+    final doubleClick = _lastTap != null && (_press - _lastTap!).inMilliseconds < 300;
+    _lastTap = doubleClick ? null : _press;
+    widget.ws.activate(widget.tab.id);
+    if (doubleClick && widget.ws.split) widget.ws.toggleFocusMode();
+  }
   void _endDrag() {
     widget.onDrag(null);
     // Escape invalidates this gesture's payload permanently. Rebuild even if
@@ -917,6 +946,7 @@ class _TabTileState extends State<_TabTile> {
       ],
       child: Listener(
         onPointerDown: (e) {
+          _press = e.timeStamp;
           if (e.buttons == kMiddleMouseButton) ws.closeTab(tab.id);
         },
         child: MouseRegion(
@@ -925,13 +955,11 @@ class _TabTileState extends State<_TabTile> {
           child: Tooltip(
             message: tab.tooltip ?? tab.title,
             child: GestureDetector(
-              onTap: () => ws.activate(tab.id),
+              onTap: _activate,
               child: Container(
                 key: ValueKey('tab-${tab.id}'),
                 height: _rowOf(context),
-                margin: widget.vertical
-                    ? const EdgeInsets.symmetric(horizontal: 5, vertical: 1)
-                    : EdgeInsets.zero,
+                margin: EdgeInsets.zero,
                 padding: const EdgeInsets.only(left: 12, right: 5),
                 decoration: BoxDecoration(
                   color: on
@@ -939,18 +967,10 @@ class _TabTileState extends State<_TabTile> {
                       : _hover
                       ? ide.hover
                       : null,
-                  borderRadius: widget.vertical
-                      ? BorderRadius.circular(5)
-                      : null,
-                  border: on && focused
-                      ? (widget.vertical
-                            ? Border(
-                                left: BorderSide(color: ide.accent, width: 2),
-                              )
-                            : Border(
-                                top: BorderSide(color: ide.accent, width: 2),
-                              ))
-                      : null,
+                  border: widget.vertical
+                    ? Border(left: BorderSide(color: on && focused ? ide.accent : Colors.transparent, width: 2))
+                    : Border(top: BorderSide(color: on && focused ? ide.accent : Colors.transparent),
+                        right: BorderSide(color: ide.border)),
                 ),
                 child: Row(
                   children: [
@@ -1029,7 +1049,7 @@ class _TabTileState extends State<_TabTile> {
       child: Material(
         elevation: 4,
         color: ide.surface,
-        borderRadius: BorderRadius.circular(6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3), side: BorderSide(color: ide.accent)),
         child: SizedBox(
           width: 180,
           height: _rowOf(context),
@@ -1059,7 +1079,7 @@ class _TabTileState extends State<_TabTile> {
         feedback: feedback,
         dragAnchorStrategy: pointerDragAnchorStrategy,
         maxSimultaneousDrags: 1,
-        onDragStarted: () => widget.onDrag(drag),
+        onDragStarted: () { _lastTap = null; widget.onDrag(drag); },
         onDragEnd: (_) => _endDrag(),
         childWhenDragging: Opacity(opacity: .35, child: tile),
         child: tile,
@@ -1071,7 +1091,7 @@ class _TabTileState extends State<_TabTile> {
       dragAnchorStrategy: pointerDragAnchorStrategy,
       allowedButtonsFilter: (buttons) => buttons == kPrimaryMouseButton,
       maxSimultaneousDrags: 1,
-      onDragStarted: () => widget.onDrag(drag),
+      onDragStarted: () { _lastTap = null; widget.onDrag(drag); },
       onDragEnd: (_) => _endDrag(),
       childWhenDragging: Opacity(opacity: .35, child: tile),
       child: tile,

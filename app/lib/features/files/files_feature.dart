@@ -24,6 +24,7 @@ import '../../kernel/feature.dart';
 import '../../kernel/input_mode.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
+import '../../kernel/retained_pages.dart';
 import '../../theme/ide_theme.dart';
 import 'file_editor.dart';
 import 'file_info_dialog.dart';
@@ -134,13 +135,10 @@ class _FileTreeState extends State<FileTree> {
         if (mounted && ws.projectKey == key) ws.restoreFiles((f) => fileEditorTab(ws, root: f.root, path: f.path));
       });
     }
-    return Column(children: [
-      ProjectWorkspaceBar(ws: ws),
-      Expanded(child: IndexedStack(index: keys.indexOf(key), children: [
+    return RetainedPages(index: keys.indexOf(key), children: [
         for (final id in keys) TickerMode(key: ValueKey(id), enabled: id == key,
           child: ExcludeFocus(excluding: id != key, child: RepaintBoundary(child: _pages.putIfAbsent(id, () => _FileTreePage(ws: ws, transfers: widget.transfers, projectId: id))))),
-      ])),
-    ]);
+      ]);
   }
 }
 
@@ -224,7 +222,7 @@ class _FileTreePageState extends State<_FileTreePage> {
   /// Reads the sort choice from the profile; true when it changed.
   bool _syncSort() {
     if (!ws.app.ready) return false;
-    final e = ws.app.profile.editor;
+    final e = ws.app.editorSettings;
     final changed = e.fileSort != _sort || e.fileSortDesc != _desc || e.foldersFirst != _foldersFirst;
     _sort = e.fileSort;
     _desc = e.fileSortDesc;
@@ -1010,32 +1008,27 @@ class _FileTreePageState extends State<_FileTreePage> {
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
-    if (_error != null) return EmptyHint(icon: Icons.error_outline, text: _error!, actionLabel: '重试', onAction: _loadRoots);
-    if (_loadingRoots) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
     final target = _target;
     final rows = [for (final r in _roots) ..._rows(r, 0)];
     final clip = ws.fileClipboard.value;
     return Column(children: [
-      Container(
-        height: InputMode.isTouch(context) ? 44 : 30,
-        color: ide.sideBar,
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: Row(children: [
+      ProjectWorkspaceBar(ws: ws, actions: [
           IconBtn(Icons.note_add_outlined, '新建文件', target == null ? null : () => _newFile(target)),
-          IconBtn(Icons.create_new_folder_outlined, '新建文件夹', target == null ? null : () => _mkdir(target)),
-          if (clip != null) IconBtn(Icons.content_paste, '粘贴到选中的文件夹（Ctrl+V）', _busy != null ? null : () => _paste(), color: ide.accent),
-          const Spacer(),
           IconBtn(Icons.refresh, '刷新', _refreshAll),
           Builder(builder: (ctx) => SizedBox(width: InputMode.isTouch(context) ? 44 : 28, child: PopupMenuButton<String>(
             tooltip: '文件选项', padding: EdgeInsets.zero,
             icon: Icon(Icons.more_horiz, size: 17, color: _hidden || _sort != 'name' || _desc ? ide.accent : ide.textDim),
             onSelected: (value) {
+              if (value == 'folder' && target != null) _mkdir(target);
+              if (value == 'paste') _paste();
               if (value == 'upload' && target != null) _upload(target);
               if (value == 'hidden') { setState(() => _hidden = !_hidden); _refreshAll(); }
               if (value == 'sort') _sortMenu(ctx);
               if (value == 'measure' && target != null) _measure([target]);
             },
             itemBuilder: (_) => [
+              PopupMenuItem(value: 'folder', enabled: target != null, child: const Text('新建文件夹…')),
+              if (clip != null) PopupMenuItem(value: 'paste', enabled: _busy == null, child: const Text('粘贴到选中的文件夹（Ctrl+V）')),
               PopupMenuItem(value: 'upload', enabled: target != null, child: const Text('上传文件…')),
               CheckedPopupMenuItem(value: 'hidden', checked: _hidden, child: const Text('显示隐藏文件')),
               PopupMenuItem(value: 'sort', child: Text('排序：${const {'name': '名称', 'size': '大小', 'mtime': '修改时间', 'type': '类型'}[_sort]}${_desc ? '（降序）' : ''}')),
@@ -1043,11 +1036,10 @@ class _FileTreePageState extends State<_FileTreePage> {
             ],
           ))),
         ]),
-      ),
-      const Divider(),
-      if (_selected != null) FileLocation(root: _selected!.root, path: _selected!.path),
       Expanded(
-        child: _roots.isEmpty
+        child: _error != null ? EmptyHint(icon: Icons.error_outline, text: _error!, actionLabel: '重试', onAction: _loadRoots)
+          : _loadingRoots ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+          : _roots.isEmpty
           ? EmptyHint(icon: Icons.folder_open_outlined, text: widget.projectId.isEmpty ? '服务器没有可用的根目录' : '工作区里还没有文件夹',
               actionLabel: widget.projectId.isEmpty ? '刷新' : '添加远程文件夹',
               onAction: widget.projectId.isEmpty ? _loadRoots : () => addProjectFolder(context, ws))

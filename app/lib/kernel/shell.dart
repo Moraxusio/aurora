@@ -1,13 +1,5 @@
-// The window: the IDE layout (docs/DESIGN.md D-79, D-103).
-//
-//   wide    title bar / rail | side bar island | editor island / status bar
-//   medium  title bar / rail | editor island (side bar floats over it) / status bar
-//   narrow  one pane at a time: the side bar, or the editor; bottom bar
-//
-// The rail, title bar and status bar sit on the window frame; the side bar
-// and the editor are islands on it (rounded, a gap between them). Widths are
-// decided from the window, not the device, so a resized desktop window and a
-// tablet in portrait both end up in the layout that fits.
+// One continuous workbench. Desktop sidebars resize beside the editor, never
+// over it; narrow windows show one region at a time. All bodies retain identity.
 import 'dart:async';
 import 'dart:io';
 
@@ -36,6 +28,7 @@ import 'workspace.dart';
 import 'tab_layout.dart';
 import 'tab_workspace_view.dart';
 import 'workbench_view.dart';
+import 'retained_pages.dart';
 
 const double _wide = 900, _narrow = 600;
 
@@ -71,9 +64,8 @@ class _ShellState extends State<Shell> {
     super.didChangeDependencies();
     final w = MediaQuery.sizeOf(context).width;
     final mode = w >= _wide ? 2 : (w >= _narrow ? 1 : 0);
-    // Entering the medium layout (a window made narrower, a tablet turned) the
-    // side bar starts closed: left open it would become a drawer that dims
-    // the editor the moment the window changes.
+    // Medium windows start with more room for content. Reopening the sidebar
+    // divides the space directly, without a floating drawer or dimming layer.
     if (mode == 1 && _mode != 1) _sideOpen = false;
     _mode = mode;
   }
@@ -89,6 +81,11 @@ class _ShellState extends State<Shell> {
   }
 
   Future<bool> _beforeExit() async {
+    if (!mounted) return false;
+    if (!await app.appearance.flush()) {
+      Toast.show('设置尚未保存，请在设置页重试', error: true);
+      return false;
+    }
     if (!mounted) return false;
     if (widget.features.transfers.active > 0) {
       final ok = await confirmDialog(context, title: '还有文件正在传输',
@@ -166,6 +163,9 @@ class _ShellState extends State<Shell> {
     final out = <Command>[
       if (Platform.isWindows) Command(id: 'local.open', title: '打开本机文件夹…', group: '本机', icon: Icons.folder_open, run: () => openLocalFolder(app)),
       Command(id: 'server.add', title: '添加服务器…', group: '服务器', icon: Icons.add, run: _addServer),
+      Command(id: 'view.zoomIn', title: '放大界面', group: '外观', shortcut: 'Ctrl++', run: () => _zoom(.1)),
+      Command(id: 'view.zoomOut', title: '缩小界面', group: '外观', shortcut: 'Ctrl+-', run: () => _zoom(-.1)),
+      Command(id: 'view.zoomReset', title: '还原界面缩放', group: '外观', shortcut: 'Ctrl+0', run: () => app.appearance.set('uiScale', 1.0)),
       for (final s in app.servers)
         Command(id: 'server.go.${s.id}', title: '切换到 ${s.name}', group: '服务器', icon: Icons.dns_outlined, run: () => app.select(s.id)),
     ];
@@ -218,6 +218,7 @@ class _ShellState extends State<Shell> {
   }
 
   void _toggleSide() => setState(() => _sideOpen = !_sideOpen);
+  void _zoom(double delta) => app.appearance.set('uiScale', ((app.appearance.value.uiScale + delta) * 100).round() / 100);
 
   bool _usable(Workspace ws, String id) {
     final f = widget.features.byId(id);
@@ -262,6 +263,11 @@ class _ShellState extends State<Shell> {
     final mode = size.width >= _wide ? 2 : (size.width >= _narrow ? 1 : 0);
     return CallbackShortcuts(
       bindings: {
+        const SingleActivator(LogicalKeyboardKey.equal, control: true): () => _zoom(.1),
+        const SingleActivator(LogicalKeyboardKey.equal, control: true, shift: true): () => _zoom(.1),
+        const SingleActivator(LogicalKeyboardKey.minus, control: true): () => _zoom(-.1),
+        const SingleActivator(LogicalKeyboardKey.digit0, control: true): () => app.appearance.set('uiScale', 1.0),
+        if (ws != null) const SingleActivator(LogicalKeyboardKey.comma, control: true): () => ws.openTab(settingsTab(app)),
         const SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true): () => showPalette(context, _commands(ws)),
         const SingleActivator(LogicalKeyboardKey.keyB, control: true): _toggleSide,
         if (ws != null)
@@ -302,7 +308,7 @@ class _ShellState extends State<Shell> {
           body: SafeArea(
             child: ws == null
                 ? _EmptyShell(app: app, onAdd: _addServer)
-                : ListenableBuilder(listenable: Listenable.merge([ws, ws.geometryRevision]), builder: (context, _) => _layout(context, ws, mode, ide)),
+                : ListenableBuilder(listenable: ws, builder: (context, _) => _layout(context, ws, mode, ide)),
           ),
         ),
       ),
@@ -311,10 +317,8 @@ class _ShellState extends State<Shell> {
 
   Widget _layout(BuildContext context, Workspace ws, int mode, Ide ide) {
     final narrow = mode == 0;
-    final wide = mode == 2;
-    const gap = 0.0;
     final side = _SideBar(ws: ws, features: widget.features, feature: _feature, onPickFeature: (f) => _pick(ws, f));
-    final editor = IndexedStack(index: _spaces.values.toList().indexOf(ws), children: [
+    final editor = RetainedPages(index: _spaces.values.toList().indexOf(ws), children: [
       for (final space in _spaces.values)
         TickerMode(key: ObjectKey(space), enabled: identical(space, ws),
           child: ExcludeFocus(excluding: !identical(space, ws), child: _editorViews.putIfAbsent(space, () => ListenableBuilder(listenable: space,
@@ -324,9 +328,6 @@ class _ShellState extends State<Shell> {
     void servers() => setState(() => _serversOpen = !_serversOpen);
     final status = _StatusBar(ws: ws, app: app, onTapConn: () => app.connect(ws.serverId));
     final showEditor = !narrow || (ws.compactEditor && (ws.visibleTabs.isNotEmpty || ws.terminalPanel.visible || ws.assistantPanel.visible));
-    final sideShown = _sideOpen && wide;
-    final sideWidth = ws.tabLayout.sideWidth.clamp(180.0, (MediaQuery.sizeOf(context).width - 340).clamp(180.0, 640.0));
-    final drawerWidth = ws.tabLayout.sideWidth.clamp(180.0, MediaQuery.sizeOf(context).width * .7);
 
     final body = Column(
       children: [
@@ -346,10 +347,9 @@ class _ShellState extends State<Shell> {
         AgentUpgradeNotice(app: app, id: ws.serverId),
         Expanded(
           key: const ValueKey('main-content'),
-          child: Row(
-            children: [
-              if (!narrow)
-                _ActivityBar(
+          child: _ShellBody(ws: ws, mode: mode, sideOpen: _sideOpen,
+            showEditor: showEditor, side: side, editor: editor,
+            activity: _ActivityBar(
                   ws: ws,
                   features: widget.features,
                   current: _sideOpen ? _featureId : null,
@@ -359,56 +359,6 @@ class _ShellState extends State<Shell> {
                    onPalette: () => showPalette(context, _commands(ws)),
                   onOverview: () => ws.openTab(overviewTab(ws, widget.features)),
                 ),
-              if (sideShown) ...[
-                SizedBox(key: const ValueKey('main-sidebar'), width: sideWidth, child: _Island(child: side)),
-                SizedBox(width: 5, child: TabResizeHandle(key: const ValueKey('sidebar-resize'), axis: Axis.horizontal, label: '调整侧栏宽度',
-                  onDelta: (dx) => ws.setSideWidth(ws.tabLayout.sideWidth.clamp(180.0, (MediaQuery.sizeOf(context).width - 340).clamp(180.0, 640.0)) + dx), onReset: () => ws.setSideWidth(300))),
-              ],
-              Expanded(
-                key: const ValueKey('editor-slot'),
-                child: Padding(
-                  padding: EdgeInsets.only(right: gap),
-                  child: _Island(
-                    flat: narrow,
-                    child: Stack(
-                      children: [
-                        // Keep this subtree at the same keyed position for every
-                        // width/server. A narrow side bar must not unmount dirty
-                        // editors or disconnect terminal streams.
-                        Positioned.fill(key: const ValueKey('editor-fill'),
-                          child: ExcludeFocus(excluding: !showEditor, child: Offstage(offstage: !showEditor,
-                            child: TickerMode(enabled: showEditor, child: editor)))),
-                        if (narrow && !showEditor) Positioned.fill(child: side),
-                        // medium: the side bar floats over the editor
-                        if (_sideOpen && mode == 1) ...[
-                          Positioned.fill(
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () => setState(() => _sideOpen = false),
-                              child: ColoredBox(color: Colors.black.withValues(alpha: ide.isDark ? 0.35 : 0.12)),
-                            ),
-                          ),
-                          Positioned(
-                            left: 0,
-                            top: 0,
-                            bottom: 0,
-                            width: drawerWidth,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(color: ide.sideBar, border: Border(right: BorderSide(color: ide.border)), boxShadow: ide.float),
-                              child: Material(color: ide.sideBar, child: Row(children: [
-                                Expanded(child: side),
-                                SizedBox(width: 6, child: TabResizeHandle(key: const ValueKey('drawer-resize'), axis: Axis.horizontal, label: '调整浮动侧栏宽度',
-                                  onDelta: (dx) => ws.setSideWidth(ws.tabLayout.sideWidth.clamp(180.0, MediaQuery.sizeOf(context).width * .7) + dx), onReset: () => ws.setSideWidth(300))),
-                              ])),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
         if (narrow && !showEditor) _ActivityBar(ws: ws, features: widget.features, current: _featureId, vertical: false,
@@ -433,17 +383,47 @@ class _ShellState extends State<Shell> {
   }
 }
 
-/// A rounded panel on the window frame; [flat] (phones) fills the space.
-class _Island extends StatelessWidget {
-  final Widget child;
-  final bool flat;
-  const _Island({required this.child, this.flat = false});
-
+/// Sidebar and document workspace never change parents. Geometry signals
+/// rebuild just these slots; hidden bodies keep their last constraints.
+class _ShellBody extends StatefulWidget {
+  final Workspace ws;
+  final int mode;
+  final bool sideOpen, showEditor;
+  final Widget side, editor, activity;
+  const _ShellBody({required this.ws, required this.mode, required this.sideOpen,
+    required this.showEditor, required this.side, required this.editor,
+    required this.activity});
   @override
-  Widget build(BuildContext context) {
-    final ide = Ide.of(context);
-    return ColoredBox(color: ide.editor, child: ClipRect(child: child));
-  }
+  State<_ShellBody> createState() => _ShellBodyState();
+}
+
+class _ShellBodyState extends State<_ShellBody> {
+  Rect? _sideRect, _editorRect;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(listenable: widget.ws.geometryRevision,
+    builder: (context, _) => LayoutBuilder(builder: (_, box) {
+      final ws = widget.ws;
+      final narrow = widget.mode == 0;
+      final docked = !narrow && widget.sideOpen;
+      final rail = narrow ? 0.0 : 48.0;
+      final sideVisible = docked || (narrow && !widget.showEditor);
+      final width = narrow ? box.maxWidth : ws.tabLayout.sideWidth.clamp(180.0,
+        (box.maxWidth - 340).clamp(180.0, 640.0));
+      if (sideVisible) _sideRect = Rect.fromLTWH(rail, 0, width, box.maxHeight);
+      final left = rail + (docked ? width + 5 : 0);
+      if (widget.showEditor) _editorRect = Rect.fromLTWH(left, 0, box.maxWidth-left, box.maxHeight);
+      Widget host(String id, Rect rect, bool visible, Widget child) => Positioned.fromRect(key: ValueKey(id), rect: rect,
+        child: Offstage(offstage: !visible, child: TickerMode(enabled: visible,
+          child: ExcludeFocus(excluding: !visible, child: ClipRect(child: RepaintBoundary(child: child))))));
+      return Stack(children: [
+        host('editor-slot', _editorRect ?? Offset.zero & box.biggest, widget.showEditor, widget.editor),
+        host('main-sidebar', _sideRect ?? Rect.fromLTWH(rail, 0, width, box.maxHeight), sideVisible, widget.side),
+        if (docked) Positioned(left: rail+width, top: 0, bottom: 0, width: 5,
+          child: TabResizeHandle(key: const ValueKey('sidebar-resize'), axis: Axis.horizontal,
+            label: '调整侧栏宽度', value: width, onChanged: ws.setSideWidth, onReset: () => ws.setSideWidth(300))),
+        if (!narrow) Positioned(left: 0, top: 0, bottom: 0, width: rail, child: widget.activity),
+      ]);
+    }));
 }
 
 /// The gap between the side bar and the editor; drag it to resize. A line
@@ -471,15 +451,35 @@ class _TitleBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final project = ws.project;
-    return SizedBox(
+    return Container(
       height: WindowFrame.height,
+      decoration: BoxDecoration(color: ide.frame, border: Border(bottom: BorderSide(color: ide.border))),
       child: Stack(children: [
         // the empty parts of the bar move the window
         const Positioned.fill(child: WindowDragArea(child: SizedBox.expand())),
         Row(children: [
         SizedBox(
           width: 48,
-          child: Center(child: Image.asset('assets/branding/aurora3-256.png', width: 18, height: 18, semanticLabel: 'Aurora 3')),
+          child: PopupMenuButton<String>(tooltip: '工作台菜单', padding: EdgeInsets.zero,
+            icon: Image.asset('assets/branding/aurora3-256.png', width: 18, height: 18, semanticLabel: 'Aurora 3'),
+            onSelected: (action) {
+              if (action == 'find') onFind();
+              if (action == 'commands') onPalette();
+              if (action == 'folder') openLocalFolder(ws.app);
+              if (action == 'settings') ws.openTab(settingsTab(ws.app));
+              if (action == 'terminal') ws.showTerminalPanel();
+              if (action == 'ai') openNewAiSession(ws);
+            },
+            itemBuilder: (_) => [
+              if (Platform.isWindows) const PopupMenuItem(value: 'folder', child: Text('打开本机文件夹…')),
+              const PopupMenuItem(value: 'find', child: Text('快速打开文件…        Ctrl+P')),
+              const PopupMenuItem(value: 'commands', child: Text('命令面板…        Ctrl+Shift+P')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'terminal', child: Text('终端')),
+              const PopupMenuItem(value: 'ai', child: Text('新建 AI 对话')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'settings', child: Text('设置…        Ctrl+,')),
+            ]),
         ),
          ConstrainedBox(constraints: BoxConstraints(maxWidth: (MediaQuery.sizeOf(context).width * .25).clamp(140.0, 300.0)), child: Tooltip(
           message: '切换服务器',
@@ -512,10 +512,6 @@ class _TitleBar extends StatelessWidget {
           ),
         ),
          IconBtn(sideOpen ? Icons.view_sidebar : Icons.view_sidebar_outlined, '显示或隐藏侧栏（Ctrl+B）', onToggleSide),
-         IconBtn(Icons.terminal, '显示或隐藏终端面板（Ctrl+J）', ws.toggleTerminalPanel,
-           color: ws.terminalPanel.visible ? ide.accent : null),
-         IconBtn(Icons.auto_awesome_outlined, '显示或隐藏 AI 侧栏（Ctrl+Alt+I）', ws.toggleAssistantPanel,
-           color: ws.assistantPanel.visible ? ide.accent : null),
          SizedBox(width: 28, height: 28, child: TabLayoutMenu(ws: ws)),
         const SizedBox(width: Space.s),
         const WindowButtonsGap(),
@@ -610,12 +606,12 @@ class _ActivityBar extends StatelessWidget {
         child: InkWell(
           onTap: tap,
           hoverColor: on ? Colors.transparent : ide.hover,
-          borderRadius: BorderRadius.circular(Radii.l),
+          borderRadius: BorderRadius.zero,
           child: Container(
-            width: touch ? 44 : 36,
-            height: touch ? 44 : 36,
-            decoration: BoxDecoration(color: on ? ide.accent.withValues(alpha: .1) : null, borderRadius: BorderRadius.circular(Radii.m)),
-            child: Icon(icon, size: 20, color: on ? ide.accent : (dim ? ide.textFaint.withValues(alpha: 0.6) : ide.textDim)),
+            width: 48,
+            height: touch ? 48 : 44,
+            decoration: BoxDecoration(border: Border(left: BorderSide(color: on ? ide.accent : Colors.transparent, width: 2))),
+            child: Icon(icon, size: 22, color: on ? ide.text : (dim ? ide.textFaint.withValues(alpha: 0.6) : ide.textDim)),
           ),
         ),
       ),
@@ -664,8 +660,9 @@ class _ActivityBar extends StatelessWidget {
         ),
     ];
     if (vertical) {
-      return SizedBox(
+      return Container(
         width: 48,
+        decoration: BoxDecoration(color: ide.activityBar, border: Border(right: BorderSide(color: ide.border))),
         child: Column(children: [
           Expanded(child: SingleChildScrollView(child: Column(children: feats))),
           if (secondary.isNotEmpty) SizedBox(width: 40, height: 40, child: PopupMenuButton<Feature>(
@@ -673,16 +670,7 @@ class _ActivityBar extends StatelessWidget {
             onSelected: onPick, itemBuilder: (_) => [for (final f in secondary) PopupMenuItem(value: f,
               child: Row(children: [Icon(f.icon, size: 17), const SizedBox(width: 12), Text(f.title)]))],
           )),
-          SizedBox(width: 40, height: 40, child: PopupMenuButton<String>(tooltip: '设置与连接',
-            icon: Icon(Icons.settings_outlined, size: 19, color: ide.textDim),
-            onSelected: (value) {
-              if (value == 'settings') ws.openTab(settingsTab(ws.app));
-              if (value == 'overview') onOverview();
-              if (value == 'commands') onPalette();
-            },
-            itemBuilder: (_) => const [PopupMenuItem(value: 'settings', child: Text('工作台设置')),
-              PopupMenuItem(value: 'overview', child: Text('连接与服务')), PopupMenuItem(value: 'commands', child: Text('命令面板'))],
-          )),
+           rail(Icons.settings_outlined, '设置（Ctrl+,）', tap: () => ws.openTab(settingsTab(ws.app))),
           const SizedBox(height: Space.xs),
         ]),
       );
@@ -839,7 +827,7 @@ class _SideBarState extends State<_SideBar> {
             ),
           ),
           Expanded(
-            child: IndexedStack(
+            child: RetainedPages(
               index: index,
               children: [
                 for (var k = 0; k < children.length; k++)
@@ -905,7 +893,7 @@ class _EditorAreaState extends State<_EditorArea> {
     return WorkbenchView(ws: ws,
       empty: _Welcome(ws: ws, features: features, onPalette: widget.onPalette, onFind: widget.onFind),
       onNewAssistant: () => openNewAiSession(ws),
-      assistantHistoryBuilder: (onOpened) => LinkGate(ws: ws, builder: (_, _) => AiSessionSidebar(ws: ws, onOpened: onOpened)),
+      assistantHistoryBuilder: (onOpened) => LinkGate(ws: ws, builder: (_, _) => AiSessionSidebar(ws: ws, onOpened: onOpened, showNewButton: false)),
       onNewTerminal: ws.link != null && terminal != null && ws.stateOf(terminal) == FeatureState.available
         ? () => createSession(ws, context: context) : null,
       terminalSessionsBuilder: (onOpened) => LinkGate(ws: ws, builder: (_, _) {
@@ -1104,8 +1092,8 @@ class _StatusBar extends StatelessWidget {
     };
     final style = TextStyle(color: ide.statusText, fontSize: 12);
     return Container(
-      height: InputMode.isTouch(context) ? 32 : 26,
-      color: ide.statusBar,
+      height: InputMode.isTouch(context) ? 32 : 23,
+      decoration: BoxDecoration(color: ide.statusBar, border: Border(top: BorderSide(color: ide.border))),
       padding: const EdgeInsets.symmetric(horizontal: Space.s),
       child: Row(
         children: [
@@ -1136,6 +1124,9 @@ class _StatusBar extends StatelessWidget {
                   ? const SizedBox.shrink()
                   : Padding(padding: const EdgeInsets.symmetric(horizontal: Space.s), child: Text(v, style: style, maxLines: 1, overflow: TextOverflow.ellipsis)),
             )),
+          ListenableBuilder(listenable: app.appearance, builder: (_, _) => Tooltip(message: '界面缩放 · 点击打开设置（Ctrl+,）',
+            child: InkWell(onTap: () => ws.openTab(settingsTab(app)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text('${(app.appearance.value.uiScale * 100).round()}%', style: style))))),
         ],
       ),
     );

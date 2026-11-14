@@ -23,38 +23,14 @@ class AssistantPanelView extends StatefulWidget {
 class _AssistantPanelViewState extends State<AssistantPanelView> {
   final Map<EditorTab, Widget> _bodies = {};
   final Map<EditorTab, Rect> _rects = {};
-  Future<void> _history() => showDialog<void>(
-    context: context,
-    builder: (context) => Dialog(
-      child: SizedBox(
-        width: 460,
-        height: MediaQuery.sizeOf(context).height * .75,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 16, right: 4),
-              child: Row(
-                children: [
-                  const Expanded(child: Text('对话历史')),
-                  IconButton(
-                    tooltip: '关闭历史',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, size: 18),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child:
-                  widget.historyBuilder?.call(() => Navigator.pop(context)) ??
-                  const Center(child: Text('暂无历史')),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
+  bool _historyOpen = false;
+  Widget? _historyBody;
+  void _history() => setState(() {
+    _historyOpen = !_historyOpen;
+    _historyBody ??= widget.historyBuilder?.call(() {
+      if (mounted) setState(() => _historyOpen = false);
+    }) ?? const Center(child: Text('暂无历史'));
+  });
   @override
   Widget build(BuildContext context) {
     final ws = widget.ws, ide = Ide.of(context), tabs = ws.assistantTabs;
@@ -79,7 +55,7 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                 Expanded(
                   child: PopupMenuButton<String>(
                     tooltip: '切换已打开的 AI 对话',
-                    onSelected: ws.activate,
+                    onSelected: (id) { setState(() => _historyOpen = false); ws.activate(id); },
                     itemBuilder: (_) => [
                       for (final tab in tabs)
                         CheckedPopupMenuItem(
@@ -89,7 +65,7 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                         ),
                     ],
                     child: Text(
-                      ws.tab(ws.assistantPanel.active ?? '')?.title ?? 'AI 助手',
+                       _historyOpen ? '对话历史' : ws.tab(ws.assistantPanel.active ?? '')?.title ?? 'AI 助手',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -99,8 +75,10 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                     ),
                   ),
                 ),
-                _action('新建 AI 对话', Icons.add, widget.onNew),
-                _action('AI 对话历史', Icons.history, _history),
+                _action('新建 AI 对话', Icons.add, widget.onNew == null ? null : () {
+                  setState(() => _historyOpen = false); widget.onNew!();
+                }),
+                _action(_historyOpen ? '返回对话' : 'AI 对话历史', _historyOpen ? Icons.arrow_back : Icons.history, _history),
                 _action(
                   ws.assistantPanel.maximized ? '还原 AI 侧栏' : '展开 AI 对话',
                   ws.assistantPanel.maximized
@@ -117,7 +95,7 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
               builder: (_, box) => Stack(
                 clipBehavior: Clip.hardEdge,
                 children: [
-                  if (tabs.isEmpty)
+                  if (tabs.isEmpty && !_historyOpen)
                     Center(
                       child: TextButton.icon(
                         onPressed: widget.onNew,
@@ -129,7 +107,7 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                     Builder(
                       key: ObjectKey(tab),
                       builder: (_) {
-                        if (tab.id == ws.assistantPanel.active) {
+                        if (tab.id == ws.assistantPanel.active && !_historyOpen) {
                           _rects[tab] = Offset.zero & box.biggest;
                         }
                         return Positioned.fromRect(
@@ -138,11 +116,11 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                             () => Offset.zero & box.biggest,
                           ),
                           child: Offstage(
-                            offstage: tab.id != ws.assistantPanel.active,
+                            offstage: _historyOpen || tab.id != ws.assistantPanel.active,
                             child: TickerMode(
-                              enabled: tab.id == ws.assistantPanel.active,
+                              enabled: !_historyOpen && tab.id == ws.assistantPanel.active,
                               child: ExcludeFocus(
-                                excluding: tab.id != ws.assistantPanel.active,
+                                excluding: _historyOpen || tab.id != ws.assistantPanel.active,
                                 child: Listener(
                                   behavior: HitTestBehavior.translucent,
                                   onPointerDown: (_) =>
@@ -175,7 +153,10 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                         );
                       },
                     ),
-                ],
+                  if (_historyBody != null) Positioned.fill(key: const ValueKey('assistant-history'),
+                    child: Offstage(offstage: !_historyOpen, child: TickerMode(enabled: _historyOpen,
+                      child: ExcludeFocus(excluding: !_historyOpen, child: _historyBody!)))),
+                  ],
               ),
             ),
           ),

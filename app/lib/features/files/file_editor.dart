@@ -208,7 +208,10 @@ class FileEditorState extends State<FileEditor> {
   TextLineBreak _lineBreak = TextLineBreak.lf;
   int _indent = 4;
 
-  EditorSettings get _settings => widget.ws.app.profile.editor;
+  EditorSettings get _settings {
+    final p = widget.ws.app.appearance.value;
+    return EditorSettings(fontSize: p.editorFont, wordWrap: p.wordWrap, tabSize: p.tabSize);
+  }
 
   /// Replaces the controller when the line break or indent differ: both are
   /// fixed when a controller is made. Only before the text is loaded, so no
@@ -277,23 +280,33 @@ class FileEditorState extends State<FileEditor> {
     _controller.addListener(_onChanged);
     _unwatch = widget.ws.watch.watch(widget.root, widget.path, _checkOutside);
     _shownSettings = _settingsKey;
-    widget.ws.app.addListener(_onSettings);
+    widget.ws.app.appearance.addListener(_onSettings);
     _load();
   }
 
   String _shownSettings = '';
+  bool _visible = true;
   String get _settingsKey => '${_settings.fontSize}/${_settings.wordWrap}';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _visible = TickerMode.valuesOf(context).enabled;
+    // Revealing a retained page already schedules its build. Apply the latest
+    // preference then, instead of re-laying out every hidden code buffer.
+    if (_visible) _shownSettings = _settingsKey;
+  }
 
   /// Font size and word wrap apply to open editors at once. (A new indent
   /// size applies to files opened after the change.)
   void _onSettings() {
     final k = _settingsKey;
-    if (k != _shownSettings && mounted) setState(() => _shownSettings = k);
+    if (_visible && k != _shownSettings && mounted) setState(() => _shownSettings = k);
   }
 
   @override
   void dispose() {
-    widget.ws.app.removeListener(_onSettings);
+    widget.ws.app.appearance.removeListener(_onSettings);
     _unwatch?.call();
     _controller.removeListener(_onChanged);
     _controller.dispose();

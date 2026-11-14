@@ -363,9 +363,9 @@ void main() {
     expect(app.profile.ai.activeProvider!.model, 'gpt-5.2-codex');
     expect(app.profile.ai.activeProvider!.models, contains('claude-sonnet-4-5'));
 
-    // The composer now names the new model and the strength.
+    // One model line; the full choice, including strength, stays in its tooltip.
     expect(find.text('OpenCode Gateway / gpt-5.2-codex'), findsOneWidget);
-    expect(find.text('深度'), findsOneWidget);
+    expect(find.byTooltip('OpenCode Gateway / gpt-5.2-codex · 深度'), findsOneWidget);
 
     // And what is sent to the agent carries both.
     await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), 'hi');

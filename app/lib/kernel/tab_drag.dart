@@ -36,9 +36,19 @@ class TabDragData {
       ws.tabLayout.owner(tab.id) != null;
 }
 
-/// VS Code's editor drop contract: center moves, outer 10% splits. Direction
-/// selection is normalized, so corner behavior is not biased by pane aspect.
+/// Explicit docking compass plus generous edge targets. The central area
+/// moves an editor; direction is chosen by the closest normalized edge.
 class TabDropPolicy {
+  static Map<TabDropEdge, Rect> compass(Size size) {
+    if (size.width < 220 || size.height < 190) return const {};
+    final center = size.center(Offset.zero);
+    return {for (final (edge, delta) in const [
+      (TabDropEdge.center, Offset.zero),
+      (TabDropEdge.left, Offset(-42, 0)), (TabDropEdge.right, Offset(42, 0)),
+      (TabDropEdge.top, Offset(0, -42)), (TabDropEdge.bottom, Offset(0, 42)),
+    ]) edge: Rect.fromCenter(center: center + delta, width: 36, height: 36)};
+  }
+
   static TabDropEdge? resolve(
     TabDragData data,
     Workspace ws,
@@ -54,7 +64,10 @@ class TabDropPolicy {
     }
     final source = ws.tabLayout.owner(data.tab.id)!;
     final x = p.dx / size.width, y = p.dy / size.height;
-    if (x > .1 && x < .9 && y > .1 && y < .9) {
+    final dock = compass(size).entries.where((e) => e.value.contains(p)).firstOrNull?.key;
+    final edgeX = (size.width * .18).clamp(36.0, 110.0) / size.width;
+    final edgeY = (size.height * .18).clamp(36.0, 90.0) / size.height;
+    if (dock == TabDropEdge.center || (dock == null && x > edgeX && x < 1-edgeX && y > edgeY && y < 1-edgeY)) {
       return source.id == group ? null : TabDropEdge.center;
     }
     if (source.id == group && source.tabs.length == 1) return null;
@@ -62,16 +75,12 @@ class TabDropPolicy {
         source.tabs.length > 1) {
       return null;
     }
-    final edge = x < 1 / 3
-        ? TabDropEdge.left
-        : x > 2 / 3
-        ? TabDropEdge.right
-        : y < .5
-        ? TabDropEdge.top
-        : TabDropEdge.bottom;
+    final distances = {TabDropEdge.left: x, TabDropEdge.right: 1-x,
+      TabDropEdge.top: y, TabDropEdge.bottom: 1-y};
+    final edge = dock ?? distances.entries.reduce((a,b) => a.value < b.value ? a : b).key;
     final horizontal = edge == TabDropEdge.left || edge == TabDropEdge.right;
     if ((horizontal ? size.width < 420 : size.height < 280)) {
-      return source.id == group ? null : TabDropEdge.center;
+      return dock != null || source.id == group ? null : TabDropEdge.center;
     }
     return edge;
   }
@@ -124,12 +133,10 @@ class _PaneDropTargetState extends State<PaneDropTarget> {
     },
     builder: (_, _, _) => SizedBox.expand(
       key: ValueKey('pane-drop-${widget.group}'),
-      child: _edge == null
-          ? null
-          : RepaintBoundary(
+      child: RepaintBoundary(
               child: CustomPaint(
-                key: ValueKey('drop-preview-${widget.group}'),
-                painter: _PanePreview(_edge!, Ide.of(context)),
+                key: _edge == null ? null : ValueKey('drop-preview-${widget.group}'),
+                painter: _PanePreview(_edge, Ide.of(context)),
               ),
             ),
     ),
@@ -137,7 +144,7 @@ class _PaneDropTargetState extends State<PaneDropTarget> {
 }
 
 class _PanePreview extends CustomPainter {
-  final TabDropEdge edge;
+  final TabDropEdge? edge;
   final Ide ide;
   const _PanePreview(this.edge, this.ide);
   @override
@@ -159,19 +166,40 @@ class _PanePreview extends CustomPainter {
         size.height / 2,
       ),
       TabDropEdge.center => full,
+      null => null,
     };
-    final shape = RRect.fromRectAndRadius(
-      rect.deflate(5),
-      const Radius.circular(7),
-    );
-    canvas.drawRRect(shape, Paint()..color = ide.accent.withValues(alpha: .13));
-    canvas.drawRRect(
-      shape,
+    if (rect != null) {
+    canvas.drawRect(rect.deflate(2), Paint()..color = ide.accent.withValues(alpha: .15));
+    canvas.drawRect(
+      rect.deflate(2),
       Paint()
         ..color = ide.accent.withValues(alpha: .65)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5,
     );
+    }
+    for (final target in TabDropPolicy.compass(size).entries) {
+      final selected = edge == target.key;
+      final r = RRect.fromRectAndRadius(target.value, const Radius.circular(3));
+      canvas.drawRRect(r, Paint()..color = selected ? ide.accent : ide.surface);
+      canvas.drawRRect(r, Paint()..color = selected ? ide.accent : ide.borderStrong..style = PaintingStyle.stroke);
+      final text = switch(target.key) {
+        TabDropEdge.left => '←', TabDropEdge.right => '→',
+        TabDropEdge.top => '↑', TabDropEdge.bottom => '↓', TabDropEdge.center => '＋',
+      };
+      final label = TextPainter(text: TextSpan(text: text, style: TextStyle(
+        fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 20,
+        color: selected ? ide.onAccent : ide.text)), textDirection: TextDirection.ltr)..layout();
+      label.paint(canvas, target.value.center - Offset(label.width/2, label.height/2));
+    }
+    if (rect != null && size.height >= 220) {
+      final label = TextPainter(text: TextSpan(text: edge == TabDropEdge.center ? '移入此视图' : '松开鼠标以分屏 · Esc 取消',
+        style: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 12, color: ide.text)),
+        textDirection: TextDirection.ltr)..layout(maxWidth: size.width - 24);
+      final at = Offset((size.width-label.width)/2, size.height/2 + 78);
+      canvas.drawRRect(RRect.fromRectAndRadius((at & label.size).inflate(7), const Radius.circular(3)), Paint()..color = ide.surface);
+      label.paint(canvas, at);
+    }
   }
 
   @override

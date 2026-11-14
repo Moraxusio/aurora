@@ -1,6 +1,3 @@
-// The settings page: this client's appearance and editor choices. They are
-// kept in the sealed profile with the servers, and apply to every server.
-import 'package:aurora_profile/aurora_profile.dart';
 import 'package:flutter/material.dart';
 
 import '../features/ai/ai_settings_dialog.dart';
@@ -9,196 +6,186 @@ import '../kernel/widgets.dart';
 import '../state/app_state.dart';
 import '../theme/ide_theme.dart';
 
-EditorTab settingsTab(AppState app) =>
-    EditorTab(id: 'settings', title: '设置', icon: Icons.settings_outlined, builder: (_) => SettingsPage(app: app));
+EditorTab settingsTab(AppState app) => EditorTab(id: 'settings', title: '设置',
+  icon: Icons.settings_outlined, builder: (_) => SettingsPage(app: app));
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   final AppState app;
   const SettingsPage({super.key, required this.app});
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
 
-  Future<void> _set(void Function(EditorSettings s) f) async {
-    if (!app.ready) return Toast.show('配置文件不可用，设置无法保存', error: true);
-    try {
-      await app.update((p) => f(p.editor));
-    } on Object catch (e) {
-      Toast.show('保存设置失败：$e', error: true);
-    }
-  }
+class _SettingsPageState extends State<SettingsPage> {
+  String _section = '外观', _query = '';
+  final _scroll = ScrollController();
+  final _search = TextEditingController();
+  @override
+  void dispose() { _scroll.dispose(); _search.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
-    final ide = Ide.of(context);
-    return ListenableBuilder(
-      listenable: app,
-      builder: (context, _) {
-        final s = app.ready ? app.profile.editor : EditorSettings();
-        return FormPage(
-          title: '设置',
-          subtitle: '只保存在这台电脑上，对所有服务器生效。',
-          children: [
-            FormSection(title: '外观', children: [
-              Padding(
-                padding: const EdgeInsets.all(Space.l + 2),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('主题', style: TextStyle(fontSize: 13, color: ide.text)),
-                  const SizedBox(height: Space.m + 2),
-                  Wrap(spacing: Space.l, runSpacing: Space.l, children: [
-                    for (final (v, label) in const [('system', '跟随系统'), ('light', '浅色'), ('dark', '深色')])
-                      _ThemeCard(value: v, label: label, selected: s.theme == v, onTap: () => _set((e) => e.theme = v)),
-                  ]),
-                ]),
-              ),
-            ]),
-            FormSection(title: '编辑器', children: [
-              FormRow(
-                title: '字号',
-                subtitle: '编辑器和终端的文字大小',
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  SizedBox(
-                    width: 200,
-                    child: Slider(
-                      value: s.fontSize,
-                      min: EditorSettings.minFont,
-                      max: EditorSettings.maxFont,
-                      divisions: ((EditorSettings.maxFont - EditorSettings.minFont) * 2).round(),
-                      onChanged: (v) => _set((e) => e.fontSize = v),
-                    ),
-                  ),
-                  Container(
-                    width: 52,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: ide.input, borderRadius: BorderRadius.circular(Radii.s), border: Border.all(color: ide.border)),
-                    child: Text('${s.fontSize.toStringAsFixed(s.fontSize % 1 == 0 ? 0 : 1)} px', style: TextStyle(fontSize: 12, color: ide.text)),
-                  ),
-                ]),
-              ),
-              FormRow(
-                title: '自动换行',
-                subtitle: '长行折到下一行显示，不改变文件内容。单个文件可以用 Alt+Z 切换。',
-                trailing: SmallSwitch(value: s.wordWrap, onChanged: (v) => _set((e) => e.wordWrap = v)),
-              ),
-              FormRow(
-                title: '缩进空格数',
-                subtitle: '按 Tab 插入的空格数。之后打开的文件生效。',
-                trailing: SegmentedButton<int>(
-                  showSelectedIcon: false,
-                  segments: const [ButtonSegment(value: 2, label: Text('2')), ButtonSegment(value: 4, label: Text('4')), ButtonSegment(value: 8, label: Text('8'))],
-                  selected: {s.tabSize},
-                  onSelectionChanged: (v) => _set((e) => e.tabSize = v.first),
-                ),
-              ),
-            ]),
-            FormSection(title: 'AI 智能体 (OpenCode 协议)', children: [
-              FormRow(
-                icon: Icons.auto_awesome_rounded,
-                title: '模型提供商与 API Key',
-                subtitle: app.ready && app.profile.ai.activeProvider != null
-                    ? '当前启用：${app.profile.ai.activeProvider!.name} · ${app.profile.ai.activeProvider!.model} (${app.profile.ai.activeProvider!.protocol})'
-                    : '未配置模型密钥（加密保存在本机，按次经固定指纹 TLS 传至服务器内存）',
-                trailing: OutlinedButton(
-                  onPressed: () => showAiSettingsDialog(context, app: app),
-                  child: const Text('管理密钥与协议'),
-                ),
-              ),
-            ]),
-            FormSection(title: '快捷键', children: [
-              for (final (k, v) in const [
-                ('Ctrl+P', '按文件名打开'),
-                ('Ctrl+Shift+F', '在文件中搜索'),
-                ('Ctrl+Shift+P', '命令面板'),
-                ('Ctrl+S', '保存'),
-                ('Ctrl+F', '查找'),
-                ('Ctrl+H', '替换'),
-                ('Ctrl+G', '转到行'),
-                ('Alt+Z', '切换自动换行'),
-                ('Ctrl+\\', '向右拆分编辑器'),
-                ('Ctrl+W', '关闭标签'),
-                ('Ctrl+Tab', '下一个标签'),
-                ('Ctrl+B', '显示或隐藏侧栏'),
-              ])
-                FormRow(title: v, trailing: KeyCaps(k)),
-            ]),
+    final ide = Ide.of(context), preferences = widget.app.appearance;
+    return ListenableBuilder(listenable: preferences, builder: (context, _) {
+      final p = preferences.value;
+      final sections = <String, List<Widget>>{
+        '外观': [
+          _setting('颜色主题', '整个工作台即时切换。', Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final (id, title, icon) in const [('system', '跟随系统', Icons.brightness_auto_outlined),
+              ('dark', '深色', Icons.dark_mode_outlined), ('light', '浅色', Icons.light_mode_outlined)])
+              OutlinedButton.icon(onPressed: () => preferences.set('theme', id),
+                style: OutlinedButton.styleFrom(backgroundColor: p.theme == id ? ide.accentSoft : null,
+                  side: BorderSide(color: p.theme == id ? ide.accent : ide.borderStrong)),
+                icon: Icon(icon, size: 16), label: Text(title)),
+          ])),
+          _setting('界面缩放', '菜单、标签、文件树和面板同步缩放。Ctrl + / −，Ctrl+0 还原。',
+            NumberSetting(id: 'uiScale', value: p.uiScale * 100, min: 80, max: 150, step: 5, unit: '%',
+              onChanged: (v) => preferences.set('uiScale', v / 100), onEnd: preferences.flush)),
+          _setting('实时预览', '拖动字号控件即可看到变化；停止调整后自动保存。',
+            Container(width: double.infinity, padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: ide.sideBar, border: Border.all(color: ide.border)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Aurora · 专注于工作', style: TextStyle(color: ide.text, fontSize: 14)),
+                const SizedBox(height: 8),
+                Text('const ready = true;  // 编辑器预览', style: TextStyle(color: ide.accent,
+                  fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: p.editorFont)),
+                const SizedBox(height: 8),
+                Text('PS C:\\project> 终端已就绪', style: TextStyle(color: ide.textDim,
+                  fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: p.terminalFont)),
+              ]))),
+        ],
+        '文字与编辑器': [
+          _setting('编辑器字号', '已打开的文件即时生效，保留光标、未保存内容与撤销记录。',
+            NumberSetting(id: 'editorFont', value: p.editorFont, onChanged: (v) => preferences.set('editorFont', v), onEnd: preferences.flush)),
+          _setting('终端字号', '直接调整现有终端，不重新连接。',
+            NumberSetting(id: 'terminalFont', value: p.terminalFont, onChanged: (v) => preferences.set('terminalFont', v), onEnd: preferences.flush)),
+          _setting('AI 对话字号', '对话正文与输入框同步变化，保持当前阅读位置。',
+            NumberSetting(id: 'chatFont', value: p.chatFont, onChanged: (v) => preferences.set('chatFont', v), onEnd: preferences.flush)),
+          _setting('自动换行', '长行折到下一行。单个文件可用 Alt+Z 切换。',
+            Align(alignment: Alignment.centerLeft, child: SmallSwitch(value: p.wordWrap, onChanged: (v) => preferences.set('wordWrap', v)))),
+          _setting('缩进空格数', '之后打开的文件生效。',
+            Wrap(spacing: 8, children: [for (final n in [2, 4, 8]) ChoiceChip(label: Text('$n'),
+              selected: p.tabSize == n, onSelected: (_) => preferences.set('tabSize', n))])),
+        ],
+        'AI 助手': [
+          _setting('模型与提供商', '管理模型、协议、API Key 和推理强度。',
+            Align(alignment: Alignment.centerLeft, child: OutlinedButton.icon(
+              onPressed: () => showAiSettingsDialog(context, app: widget.app),
+              icon: const Icon(Icons.tune, size: 16), label: const Text('管理模型与密钥')))),
+          _setting('AI 对话字号', '所有已打开的对话即时更新。', NumberSetting(id: 'chatFont', value: p.chatFont,
+            onChanged: (v) => preferences.set('chatFont', v), onEnd: preferences.flush)),
+        ],
+        '操作与快捷键': [
+          _setting('鼠标拖放', '拖动标签重排；拖到另一栏移入；正文方向标记或边缘创建分屏。Escape 取消。',
+            const Text('中键关闭标签 · 双击标签放大 / 还原视图\n拖动分隔线调整大小 · 双击分隔线均分', style: TextStyle(height: 1.8))),
+          for (final (keys, title) in const [
+            ('Ctrl+P', '快速打开文件'), ('Ctrl+Shift+P', '命令面板'), ('Ctrl+,', '设置'),
+            ('Ctrl+S', '保存'), ('Ctrl+F', '查找'), ('Ctrl+H', '替换'),
+            ('Ctrl+\\', '向右分屏'), ('Ctrl+Shift+\\', '向下分屏'),
+            ('Ctrl+W', '关闭标签'), ('Ctrl+Tab', '下一个标签'), ('Ctrl+B', '切换文件侧栏'),
+            ('Ctrl+J', '切换终端'), ('Ctrl+Alt+I', '切换 AI'), ('Alt+↑ / ↓', '上一条 / 下一条消息'),
+            ('Ctrl+ / Ctrl−', '界面缩放'), ('Ctrl+0', '还原缩放'),
+          ]) _setting(title, keys, Align(alignment: Alignment.centerLeft, child: KeyCaps(keys))),
+        ],
+      };
+      return LayoutBuilder(builder: (_, box) {
+        final wide = box.maxWidth >= 720;
+        final groups = _query.isEmpty ? [_section] : sections.keys.toList();
+        final content = ListView(controller: _scroll, padding: const EdgeInsets.fromLTRB(28, 20, 28, 36), children: [
+          for (final group in groups) ...[
+            Padding(padding: const EdgeInsets.only(bottom: 16), child: Text(group,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: ide.text))),
+            ...sections[group]!,
           ],
-        );
-      },
-    );
+        ]);
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: ide.border))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [Text('设置', style: TextStyle(fontSize: 22, color: ide.text, fontWeight: FontWeight.w500)),
+                const Spacer(), Text(preferences.error ?? (preferences.unsaved ? '正在保存…' : '本机 · 自动保存'),
+                  style: TextStyle(fontSize: 11, color: preferences.error == null ? ide.textDim : ide.error)),
+                if (preferences.error != null) TextButton(onPressed: preferences.flush, child: const Text('重试'))]),
+              const SizedBox(height: 14),
+              TextField(key: const ValueKey('settings-search'), controller: _search, onChanged: (q) => setState(() => _query = q.trim().toLowerCase()),
+                decoration: const InputDecoration(hintText: '搜索设置', prefixIcon: Icon(Icons.search, size: 18))),
+              if (!wide) ...[const SizedBox(height: 12), SingleChildScrollView(scrollDirection: Axis.horizontal,
+                child: Row(children: [for (final section in sections.keys) _category(section)]))],
+            ])),
+          Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (wide) Container(width: 172, padding: const EdgeInsets.only(top: 16),
+              decoration: BoxDecoration(border: Border(right: BorderSide(color: ide.border))),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final section in sections.keys) _category(section)])),
+            Expanded(child: content),
+          ])),
+        ]);
+      });
+    });
+  }
+
+  Widget _category(String name) {
+    final ide = Ide.of(context), selected = name == _section;
+    return InkWell(onTap: () { setState(() { _section = name; _query = ''; _search.clear(); }); if (_scroll.hasClients) _scroll.jumpTo(0); },
+      child: Container(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: BoxDecoration(color: selected ? ide.selection : null,
+          border: Border(left: BorderSide(color: selected ? ide.accent : Colors.transparent, width: 2))),
+        child: Text(name, style: TextStyle(fontSize: 13, color: selected ? ide.text : ide.textDim))));
+  }
+
+  Widget _setting(String title, String detail, Widget control) {
+    if (_query.isNotEmpty && !'$title $detail'.toLowerCase().contains(_query)) return const SizedBox.shrink();
+    final ide = Ide.of(context);
+    return Padding(padding: const EdgeInsets.only(bottom: 26), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ide.text)),
+      const SizedBox(height: 5), Text(detail, style: TextStyle(fontSize: 12, color: ide.textDim, height: 1.5)),
+      const SizedBox(height: 12), control,
+    ]));
   }
 }
 
-/// A theme choice drawn as a small picture of the window in that theme.
-class _ThemeCard extends StatelessWidget {
-  final String value, label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _ThemeCard({required this.value, required this.label, required this.selected, required this.onTap});
-
-  Widget _mini(Ide c) => Container(
-        color: c.frame,
-        padding: const EdgeInsets.all(5),
-        child: Row(children: [
-          Column(children: [
-            for (var i = 0; i < 4; i++)
-              Container(width: 8, height: 8, margin: const EdgeInsets.only(bottom: 4), decoration: BoxDecoration(color: i == 0 ? c.accent : c.textFaint.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(2))),
-          ]),
-          const SizedBox(width: 5),
-          Container(
-            width: 34,
-            decoration: BoxDecoration(color: c.sideBar, borderRadius: BorderRadius.circular(3), border: Border.all(color: c.border)),
-            padding: const EdgeInsets.all(4),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              for (final w in [20.0, 14.0, 22.0, 12.0])
-                Container(width: w, height: 3, margin: const EdgeInsets.only(bottom: 4), color: c.textFaint.withValues(alpha: 0.6)),
-            ]),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(color: c.editor, borderRadius: BorderRadius.circular(3), border: Border.all(color: c.border)),
-              padding: const EdgeInsets.all(5),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                for (final (w, col) in [(30.0, c.accent), (44.0, c.textDim), (22.0, c.ok), (36.0, c.textDim)])
-                  Container(width: w, height: 3, margin: const EdgeInsets.only(bottom: 5), color: col.withValues(alpha: 0.8)),
-              ]),
-            ),
-          ),
-        ]),
-      );
-
+/// Precise typing, arrow buttons and dragging all share the same live value.
+class NumberSetting extends StatefulWidget {
+  final String id, unit;
+  final double value, min, max, step;
+  final ValueChanged<double> onChanged;
+  final VoidCallback? onEnd;
+  const NumberSetting({super.key, required this.id, required this.value, required this.onChanged,
+    this.onEnd, this.min = 9, this.max = 28, this.step = .5, this.unit = 'px'});
   @override
-  Widget build(BuildContext context) {
-    final ide = Ide.of(context);
-    final picture = switch (value) {
-      'light' => _mini(Ide.light),
-      'dark' => _mini(Ide.dark),
-      _ => Row(children: [
-          Expanded(child: ClipRect(child: OverflowBox(alignment: Alignment.centerLeft, maxWidth: 136, minWidth: 136, child: _mini(Ide.light)))),
-          Expanded(child: ClipRect(child: OverflowBox(alignment: Alignment.centerRight, maxWidth: 136, minWidth: 136, child: _mini(Ide.dark)))),
-        ]),
-    };
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Column(children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width: 136,
-            height: 84,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(Radii.l + 2),
-              border: Border.all(color: selected ? ide.accent : ide.border, width: selected ? 2 : 1),
-            ),
-            child: picture,
-          ),
-          const SizedBox(height: Space.s + 1),
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            if (selected) ...[Icon(Icons.check_circle_rounded, size: 14, color: ide.accent), const SizedBox(width: 4)],
-            Text(label, style: TextStyle(fontSize: 12.5, color: selected ? ide.text : ide.textDim, fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
-          ]),
-        ]),
-      ),
-    );
+  State<NumberSetting> createState() => _NumberSettingState();
+}
+
+class _NumberSettingState extends State<NumberSetting> {
+  late final _text = TextEditingController(text: _label(widget.value));
+  final _focus = FocusNode();
+  String _label(double value) => value.toStringAsFixed(value % 1 == 0 ? 0 : 1);
+  @override
+  void didUpdateWidget(NumberSetting old) {
+    super.didUpdateWidget(old);
+    if (old.id != widget.id || (!_focus.hasFocus && old.value != widget.value)) _text.text = _label(widget.value);
   }
+  void _commit() {
+    final n = double.tryParse(_text.text);
+    if (n != null && n.isFinite) widget.onChanged(n.clamp(widget.min, widget.max));
+    _focus.unfocus();
+    _text.text = _label(n == null || !n.isFinite ? widget.value : n.clamp(widget.min, widget.max));
+    widget.onEnd?.call();
+  }
+  @override
+  void dispose() { _text.dispose(); _focus.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(constraints: const BoxConstraints(maxWidth: 460),
+    child: Row(children: [
+      IconButton(tooltip: '减小${widget.unit == '%' ? '缩放' : '字号'}', icon: const Icon(Icons.remove, size: 16),
+        onPressed: widget.value > widget.min ? () => widget.onChanged((widget.value - widget.step).clamp(widget.min, widget.max)) : null),
+      Expanded(child: Slider(key: ValueKey('setting-${widget.id}'), value: widget.value.clamp(widget.min, widget.max), min: widget.min, max: widget.max,
+        divisions: ((widget.max - widget.min) / widget.step).round(),
+        onChanged: widget.onChanged, onChangeEnd: (_) => widget.onEnd?.call())),
+      IconButton(tooltip: '增大${widget.unit == '%' ? '缩放' : '字号'}', icon: const Icon(Icons.add, size: 16),
+        onPressed: widget.value < widget.max ? () => widget.onChanged((widget.value + widget.step).clamp(widget.min, widget.max)) : null),
+      SizedBox(width: 76, child: TextField(key: ValueKey('setting-input-${widget.id}'), controller: _text, focusNode: _focus,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true), textAlign: TextAlign.center,
+        onSubmitted: (_) => _commit(), onTapOutside: (_) { if (_focus.hasFocus) _commit(); },
+        decoration: InputDecoration(suffixText: widget.unit, contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8)))),
+    ]));
 }

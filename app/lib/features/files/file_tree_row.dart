@@ -27,13 +27,12 @@ class FileTreeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final type = fileGlyph(name, ide);
-    final height = InputMode.row(context) + (root ? 18 : 2);
+    final height = InputMode.row(context) + 2;
     final row = ContextArea(items: menu, child: Tooltip(message: tooltip ?? location ?? path, waitDuration: const Duration(milliseconds: 700),
       child: InkWell(onTap: onTap, hoverColor: ide.hover,
-        child: Container(height: height, margin: EdgeInsets.only(top: root ? 9 : 0),
-          decoration: BoxDecoration(color: selected ? ide.selection : (root ? ide.tabBar.withValues(alpha: 0.7) : null),
-            border: Border(left: BorderSide(color: selected ? ide.accent : Colors.transparent, width: 2),
-              bottom: BorderSide(color: root ? ide.border : Colors.transparent))),
+        child: Container(height: height,
+          decoration: BoxDecoration(color: selected ? ide.selection : null,
+            border: Border(left: BorderSide(color: selected ? ide.accent : Colors.transparent, width: 2))),
           child: Stack(children: [
             if (depth > 0) Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _Guides(depth, ide.border)))),
             Padding(padding: EdgeInsets.only(left: 7 + depth * 18.0, right: 8), child: Row(children: [
@@ -49,7 +48,6 @@ class FileTreeRow extends StatelessWidget {
               Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12.5, fontWeight: root ? FontWeight.w600 : FontWeight.w400, color: link ? ide.accent : ide.text)),
-                if (root && location != null) Text(location!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: ide.textDim)),
               ])),
               if (detail != null) Padding(padding: const EdgeInsets.only(left: 8), child: Text(detail!, style: TextStyle(fontSize: 10.5, color: ide.textDim, fontFeatures: const [FontFeature.tabularFigures()]))),
             ])),

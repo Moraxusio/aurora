@@ -62,7 +62,8 @@ void openNewAiSession(Workspace ws) {
 class AiSessionSidebar extends StatefulWidget {
   final Workspace ws;
   final VoidCallback? onOpened;
-  const AiSessionSidebar({super.key, required this.ws, this.onOpened});
+  final bool showNewButton;
+  const AiSessionSidebar({super.key, required this.ws, this.onOpened, this.showNewButton = true});
 
   @override
   State<AiSessionSidebar> createState() => _AiSessionSidebarState();
@@ -442,13 +443,13 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
           return EmptyHint(
             icon: Icons.auto_awesome_outlined,
             text: '还没有 AI 会话。\n它能在这台服务器上读写代码、运行命令、联网查资料，每一步都能一键回退。',
-            actionLabel: '新建 AI 会话',
-            onAction: _new,
+            actionLabel: widget.showNewButton ? '新建 AI 会话' : null,
+            onAction: widget.showNewButton ? _new : null,
           );
         }
         final searching = _hits != null;
         return Column(children: [
-          newButton,
+          if (widget.showNewButton) newButton,
           _searchBox(ide),
           Expanded(
             child: searching

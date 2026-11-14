@@ -1,8 +1,5 @@
-// The client's look (docs/DESIGN.md D-79, D-103). The window is a frame with
-// islands on it: the side bar and the editor are rounded panels with a gap
-// between them, the activity rail, title bar and status bar sit on the frame
-// itself and have no borders. One accent colour carries every action and
-// selection; all other colour is left to file icons, diffs and the terminal.
+// Windows workbench: continuous surfaces, precise rules, quiet neutral chrome.
+// Blue marks focus and actions; content, not decoration, carries the hierarchy.
 //
 // Colours live in [Ide], a ThemeExtension, so every widget reads one palette;
 // the Material theme is built from the same values. Sizes come from [Space]
@@ -14,11 +11,11 @@ abstract final class Space {
   static const double xs = 4, s = 6, m = 8, l = 12, xl = 16, xxl = 24;
 
   /// The gap around and between islands.
-  static const double gap = 6;
+  static const double gap = 0;
 }
 
 abstract final class Radii {
-  static const double s = 4, m = 6, l = 8, island = 10, dialog = 12;
+  static const double s = 2, m = 3, l = 4, island = 3, dialog = 6;
 }
 
 class Ide extends ThemeExtension<Ide> {
@@ -70,28 +67,28 @@ class Ide extends ThemeExtension<Ide> {
   });
 
   static const dark = Ide(
-    frame: Color(0xFF181A1D),
-    editor: Color(0xFF202226),
-    sideBar: Color(0xFF1B1D21),
-    activityBar: Color(0xFF181A1D),
-    panel: Color(0xFF202226),
-    tabBar: Color(0xFF1B1D21),
-    tabActive: Color(0xFF2B2D32),
-    border: Color(0xFF2C3036),
-    borderStrong: Color(0xFF3A3D44),
-    text: Color(0xFFE4E6EA),
-    textDim: Color(0xFFA0A6B0),
-    textFaint: Color(0xFF7E8793),
-    accent: Color(0xFF8AA4F8),
-    accentSoft: Color(0x1F8AA4F8),
+    frame: Color(0xFF181818),
+    editor: Color(0xFF1F1F1F),
+    sideBar: Color(0xFF181818),
+    activityBar: Color(0xFF181818),
+    panel: Color(0xFF1F1F1F),
+    tabBar: Color(0xFF181818),
+    tabActive: Color(0xFF1F1F1F),
+    border: Color(0xFF2B2B2B),
+    borderStrong: Color(0xFF454545),
+    text: Color(0xFFCCCCCC),
+    textDim: Color(0xFF9D9D9D),
+    textFaint: Color(0xFF858585),
+    accent: Color(0xFF3794FF),
+    accentSoft: Color(0x243794FF),
     onAccent: Color(0xFFFFFFFF),
-    selection: Color(0xFF2E3C59),
-    hover: Color(0xFF282C33),
-    surface: Color(0xFF252930),
-    input: Color(0xFF181B20),
+    selection: Color(0xFF04395E),
+    hover: Color(0xFF2A2D2E),
+    surface: Color(0xFF252526),
+    input: Color(0xFF313131),
     shadow: Color(0x99000000),
-    statusBar: Color(0xFF181A1D),
-    statusText: Color(0xFF929BA7),
+    statusBar: Color(0xFF181818),
+    statusText: Color(0xFFACACAC),
     error: Color(0xFFF2616F),
     warn: Color(0xFFE7B04B),
     ok: Color(0xFF52C48A),
@@ -102,27 +99,27 @@ class Ide extends ThemeExtension<Ide> {
   );
 
   static const light = Ide(
-    frame: Color(0xFFF4F5F7),
+    frame: Color(0xFFF8F8F8),
     editor: Color(0xFFFFFFFF),
-    sideBar: Color(0xFFF6F7F9),
-    activityBar: Color(0xFFF4F5F7),
+    sideBar: Color(0xFFF8F8F8),
+    activityBar: Color(0xFFF8F8F8),
     panel: Color(0xFFFFFFFF),
-    tabBar: Color(0xFFF4F5F7),
-    tabActive: Color(0xFFECEEF2),
-    border: Color(0xFFE7E9ED),
-    borderStrong: Color(0xFFD2D5DB),
-    text: Color(0xFF1D2025),
-    textDim: Color(0xFF5F6670),
-    textFaint: Color(0xFF7A838F),
-    accent: Color(0xFF3A62E3),
-    accentSoft: Color(0x243A62E3),
+    tabBar: Color(0xFFF8F8F8),
+    tabActive: Color(0xFFFFFFFF),
+    border: Color(0xFFE5E5E5),
+    borderStrong: Color(0xFFCECECE),
+    text: Color(0xFF333333),
+    textDim: Color(0xFF616161),
+    textFaint: Color(0xFF767676),
+    accent: Color(0xFF006AB1),
+    accentSoft: Color(0x18006AB1),
     onAccent: Color(0xFFFFFFFF),
-    selection: Color(0xFFDDE6FD),
-    hover: Color(0xFFF0F2F5),
+    selection: Color(0xFFCDE5F8),
+    hover: Color(0xFFE8E8E8),
     surface: Color(0xFFFFFFFF),
-    input: Color(0xFFF5F6F8),
+    input: Color(0xFFFFFFFF),
     shadow: Color(0x2E101828),
-    statusBar: Color(0xFFF4F5F7),
+    statusBar: Color(0xFFF8F8F8),
     statusText: Color(0xFF5F6670),
     error: Color(0xFFD43447),
     warn: Color(0xFFA66A00),
@@ -148,8 +145,7 @@ class Ide extends ThemeExtension<Ide> {
 
   /// The soft shadow of anything that floats over the islands.
   List<BoxShadow> get float => [
-        BoxShadow(color: shadow, blurRadius: 28, offset: const Offset(0, 10)),
-        BoxShadow(color: shadow.withValues(alpha: shadow.a * 0.5), blurRadius: 4, offset: const Offset(0, 1)),
+        BoxShadow(color: shadow, blurRadius: 12, offset: const Offset(0, 4)),
       ];
 
   @override
@@ -334,7 +330,7 @@ ThemeData buildTheme(Brightness b) {
     textSelectionTheme: TextSelectionThemeData(cursorColor: c.accent, selectionColor: c.selection, selectionHandleColor: c.accent),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: c.accent,
+        backgroundColor: c.isDark ? const Color(0xFF0078D4) : c.accent,
         foregroundColor: c.onAccent,
         disabledBackgroundColor: c.hover,
         disabledForegroundColor: c.textFaint,

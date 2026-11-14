@@ -4,6 +4,18 @@ import 'package:aurora/kernel/workbench_geometry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('normal desktop with AI keeps terminal below a 420-600px editor column', () {
+    for (final width in [880.0, 950.0, 1007.0]) {
+      final g = WorkbenchGeometry(size: Size(width, 750), panelVisible: true,
+        panelFocused: false, panelMaximized: false, preferredHeight: 260,
+        assistantVisible: true, assistantWidth: 420);
+      expect(g.editor, isNotNull);
+      expect(g.terminal, isNotNull);
+      expect(g.assistant, isNotNull);
+      expect(g.editor!.width, inInclusiveRange(420, 600));
+      expect(g.terminal!.top, greaterThan(g.editor!.bottom));
+    }
+  });
   test('three workbench hosts stay disjoint through narrow, short and maximized layouts', () {
     for (final width in [390.0, 879.0, 880.0, 1000.0, 1440.0]) {
       for (final height in [240.0, 360.0, 700.0]) {

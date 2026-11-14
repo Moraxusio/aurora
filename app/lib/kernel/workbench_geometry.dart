@@ -26,11 +26,14 @@ class WorkbenchGeometry {
     bool assistantFocused = false,
     bool assistantMaximized = false,
     double assistantWidth = 420,
+    bool besideAssistant = false,
   }) {
     final width = size.width.isFinite ? math.max(0.0, size.width) : 0.0;
     final height = size.height.isFinite ? math.max(0.0, size.height) : 0.0;
     final bounds = Rect.fromLTWH(0, 0, width, height);
-    final compact = width < 600 || height < 360;
+    // A desktop editor column beside AI is not a phone. The assistant already
+    // reserves >=420px for it, enough for vertically stacked editor/terminal.
+    final compact = (!besideAssistant && width < 600) || height < 360;
     if (assistantVisible) {
       if (assistantMaximized || width < 880) {
         if (assistantFocused || assistantMaximized) {
@@ -46,6 +49,7 @@ class WorkbenchGeometry {
           panelFocused: panelFocused,
           panelMaximized: panelMaximized,
           preferredHeight: preferredHeight,
+          besideAssistant: true,
         );
         return WorkbenchGeometry._(
           rest.editor,

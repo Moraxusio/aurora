@@ -12,7 +12,7 @@ abstract final class WindowFrame {
   static const double buttons = 46.0 * 3;
 
   /// Height of the window buttons, and of the app's title bars.
-  static const double height = 40;
+  static const double height = 35;
 
   static bool get on => DesktopLifecycle.frameless.value;
 }

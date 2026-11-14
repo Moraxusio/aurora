@@ -145,8 +145,9 @@ class _WorkbenchViewState extends State<WorkbenchView> {
                 key: const ValueKey('assistant-panel-resize'),
                 axis: Axis.horizontal,
                 label: '调整 AI 侧栏宽度',
-                onDelta: (dx) =>
-                    ws.setAssistantWidth(geometry.assistant!.width - dx),
+                value: geometry.assistant!.width,
+                reverse: true,
+                onChanged: ws.setAssistantWidth,
                 onReset: () => ws.setAssistantWidth(420),
               ),
             ),
@@ -157,15 +158,9 @@ class _WorkbenchViewState extends State<WorkbenchView> {
                 key: const ValueKey('terminal-panel-resize'),
                 axis: Axis.vertical,
                 label: '调整终端面板高度',
-                onDelta: (dy) => ws.setTerminalHeight(
-                  panel.height.clamp(
-                        120.0,
-                        box.maxHeight -
-                            WorkbenchGeometry.minimumEditorHeight -
-                            WorkbenchGeometry.dividerSize,
-                      ) -
-                      dy,
-                ),
+                value: geometry.terminal!.height,
+                reverse: true,
+                onChanged: ws.setTerminalHeight,
                 onReset: () =>
                     ws.setTerminalHeight(TerminalPanelState.defaultHeight),
               ),

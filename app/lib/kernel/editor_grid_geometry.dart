@@ -24,10 +24,10 @@ class EditorGridGeometry {
   final Map<String, Rect> groups = {};
   final List<EditorDivider> dividers = [];
   late final bool compact;
-  EditorGridGeometry(TabLayout layout, Size size, {bool focusMode = false}) {
+  EditorGridGeometry(TabLayout layout, Size size, {bool focusMode = false, bool? compactWindow}) {
     final bounds =
         Offset.zero & Size(math.max(0, size.width), math.max(0, size.height));
-    compact = focusMode || size.width < 600 || size.height < 260;
+    compact = focusMode || (compactWindow ?? (size.width < 600 || size.height < 260)) || size.width < 240 || size.height < 120;
     if (compact) {
       groups[layout.focused] = bounds;
     } else {

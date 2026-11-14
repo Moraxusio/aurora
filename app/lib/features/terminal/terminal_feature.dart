@@ -404,6 +404,7 @@ class _SessionViewState extends State<SessionView> {
       _t?.resize(cols, rows);
     };
     ws.addListener(_onWs);
+    ws.app.appearance.addListener(_onAppearance);
     // After the first frame the view has its real size, so the attach asks
     // tmux for it at once instead of drawing at 80x24 and redrawing.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -414,6 +415,12 @@ class _SessionViewState extends State<SessionView> {
   void _onWs() {
     // The link came back: attach again if we lost the stream.
     if (_t == null && !_attaching && ws.link != null && _state.startsWith('连接已断开')) _attach();
+  }
+
+  double? _fontSize;
+  void _onAppearance() {
+    final size = ws.app.appearance.value.terminalFont;
+    if (mounted && size != _fontSize && TickerMode.valuesOf(context).enabled) setState(() => _fontSize = size);
   }
 
   Future<void> _attach() async {
@@ -471,6 +478,7 @@ class _SessionViewState extends State<SessionView> {
   void dispose() {
     _disposed = true;
     ws.removeListener(_onWs);
+    ws.app.appearance.removeListener(_onAppearance);
     _out?.cancel();
     _t?.close();
     if (ws.entry?.isLocal == true && ws.link != null) unawaited(ws.link!.call('session.kill', {'name': widget.session}).catchError((Object _) => null));
@@ -537,7 +545,7 @@ class _SessionViewState extends State<SessionView> {
                     focusNode: _focus,
                     autofocus: false,
                     theme: theme,
-                    textStyle: const TerminalStyle(fontSize: 14, fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback),
+                    textStyle: TerminalStyle(fontSize: _fontSize = ws.app.appearance.value.terminalFont, fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback),
                     padding: const EdgeInsets.fromLTRB(10, 6, 4, 4),
                     onSecondaryTapDown: (d, _) {
                       final sel = _controller.selection;

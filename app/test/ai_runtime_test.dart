@@ -169,7 +169,7 @@ void main() {
 
   String text(WidgetTester t, String key) => t.widget<Text>(find.byKey(ValueKey(key))).data!;
   Future<void> expandDetails(WidgetTester t) async {
-    await t.tap(find.byTooltip('模型与上下文详情'));
+    await t.tap(find.byKey(const ValueKey('ai-context-indicator')));
     await t.pump();
   }
   testWidgets('failed event handshake releases stream before retrying the healthy link', (t) async {
@@ -393,6 +393,13 @@ void main() {
     t.view.physicalSize = const Size(420, 900); await t.pump();
     expect(controller.debugReadingAnchor!.$1, anchor.$1);
     expect(t.getTopLeft(find.byKey(const ValueKey('ai-message-navigation'))).dy, navigationTop);
+    for (final font in [20.0, 12.0, 18.0, 15.0]) {
+      app.appearance.set('chatFont', font);
+      await t.pump();
+      expect(controller.debugReadingAnchor!.$1, anchor.$1);
+      expect(controller.followsLatest.value, isFalse);
+      expect(t.widget<TextField>(find.byKey(const ValueKey('ai-prompt-input'))).style!.fontSize, font);
+    }
     final before = controller.offset;
     link.events.emit({'type':'sync.required'});
     await t.pump(); await t.pump(); await t.pump(const Duration(milliseconds: 100));
@@ -404,6 +411,7 @@ void main() {
     await t.tap(find.byKey(const ValueKey('ai-previous-message'))); await t.pump(); await t.pump();
     expect(find.byKey(const ValueKey('msg_u1')), findsOneWidget);
     expect(t.takeException(), isNull);
+    await t.pump(const Duration(milliseconds: 300));
     await t.pumpWidget(const SizedBox());
   });
   testWidgets('short windows retain a usable composer without chrome overflowing the conversation', (t) async {

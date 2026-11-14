@@ -85,6 +85,9 @@ class _AiStudioViewState extends State<AiStudioView> {
   bool _planExpanded = false;
   Timer? _paintTimer;
   double _chatFontSize=15;
+  AiProvider? _provider;
+  String? _editorId;
+  bool _visible = true;
   final Map<AiMessage,(Ide,bool,double,Link?,Widget)> _messageCache={};
   final _inputCtl = TextEditingController();
   final _inputFocus = FocusNode();
@@ -107,12 +110,16 @@ class _AiStudioViewState extends State<AiStudioView> {
     super.initState();
     _sessionId = widget.initialSessionId;
     if (ws.app.ready) {
-      _agentMode = ws.app.profile.ai.defaultAgent;
-      _permMode = ws.app.profile.ai.permissionMode;
-      _chatFontSize = ws.app.profile.ai.chatFontSize;
+      final ai = ws.app.aiSettings;
+      _agentMode = ai.defaultAgent;
+      _permMode = ai.permissionMode;
+      _provider = ai.activeProvider;
     }
+    _chatFontSize = ws.app.appearance.value.chatFont;
+    _editorId = ws.editorActiveId;
     ws.addListener(_onWorkspaceChanged);
     ws.app.addListener(_onAppChanged);
+    ws.app.appearance.addListener(_onAppearance);
     _initConnection();
   }
 
@@ -121,6 +128,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     _disposed = true;
     ws.removeListener(_onWorkspaceChanged);
     ws.app.removeListener(_onAppChanged);
+    ws.app.appearance.removeListener(_onAppearance);
     _closeStream();
     _paintTimer?.cancel();
     _inputCtl.dispose();
@@ -130,14 +138,28 @@ class _AiStudioViewState extends State<AiStudioView> {
   }
 
   void _onAppChanged() {
-    if (mounted) setState(() {if(ws.app.ready)_chatFontSize=ws.app.profile.ai.chatFontSize;});
+    if (mounted) setState(() { _provider = ws.app.ready ? ws.app.aiSettings.activeProvider : null; });
+  }
+
+  void _onAppearance() {
+    final size = ws.app.appearance.value.chatFont;
+    if (!mounted || size == _chatFontSize) return;
+    if (_visible) { setState(() => _chatFontSize = size); }
+    else { _chatFontSize = size; }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _visible = TickerMode.valuesOf(context).enabled;
   }
 
   void _onWorkspaceChanged() {
     if (_disposed || !mounted) return;
     if (!identical(ws.link, _streamLink)) {
       _initConnection();
-    } else {
+    } else if (_editorId != ws.editorActiveId) {
+      _editorId = ws.editorActiveId;
       setState(() {});
     }
   }
@@ -300,7 +322,7 @@ class _AiStudioViewState extends State<AiStudioView> {
       }
       final live = _liveTools.where((t) => t.callId == ev['tool_call_id']).firstOrNull;
       if (live != null && sid == _sessionId) live.output = _activities[activityKey]?['output'] as String? ?? '';
-      _paintTimer ??= Timer(const Duration(milliseconds: 33), () { _paintTimer = null; if (mounted) setState(() {}); });
+      _paintTimer ??= Timer(const Duration(milliseconds: 33), () { _paintTimer = null; if (mounted && _visible) setState(() {}); });
       return;
     }
     if (type == 'tool.done') _activities.remove(activityKey);
@@ -319,7 +341,7 @@ class _AiStudioViewState extends State<AiStudioView> {
       if(type=='text.delta')_liveText+=delta;
       if(type=='reasoning.delta')_liveReasoning+=delta;
       if(type=='compaction.delta'){if(_liveCompaction=='正在压缩上下文摘要…')_liveCompaction='';_liveCompaction+=delta;}
-      _paintTimer??=Timer(const Duration(milliseconds:33),(){_paintTimer=null;if(mounted){setState((){});_scrollToBottom();}});
+      _paintTimer??=Timer(const Duration(milliseconds:33),(){_paintTimer=null;if(mounted && _visible){setState((){});_scrollToBottom();}});
       return;
     }
 
@@ -506,7 +528,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     if (force) _scrollCtl.followLatest();
   }
 
-  AiProvider? get _activeProvider => ws.app.ready ? ws.app.profile.ai.activeProvider : null;
+  AiProvider? get _activeProvider => _provider;
   bool _sending = false;
 
   Future<void> _send([String? quickPrompt]) async {
@@ -715,9 +737,8 @@ class _AiStudioViewState extends State<AiStudioView> {
     }on Object catch(e){_attachmentError(e);}
   }
 
-  Future<void> _setChatFontSize(double size) async {
-    if(!ws.app.ready){setState(()=>_chatFontSize=size);return;}
-    try{await ws.app.update((p)=>p.ai.chatFontSize=size);}on Object{if(mounted)ws.toast('对话字号保存失败',error:true);}
+  void _setChatFontSize(double size) {
+    ws.app.appearance.set('chatFont', size);
   }
   Widget _cachedMessageItem(Ide ide,AiMessage message){
     final old=_messageCache[message];
@@ -756,14 +777,12 @@ class _AiStudioViewState extends State<AiStudioView> {
       const SingleActivator(LogicalKeyboardKey.end, control: true): () => _scrollCtl.followLatest(),
     }, child: DefaultTextStyle.merge(style:const TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback),child:Column(
       children: [
-        if (!short) _buildTopBar(ide, prov),
         _buildMessageNavigation(ide, messages),
         if (_loading) const LinearProgressIndicator(minHeight: 2),
         if (_eventNote != null || _error != null) MaterialBanner(
           content: Text(_error ?? _eventNote!, style: const TextStyle(fontSize: 12)),
           actions: [TextButton(onPressed: () { if (_sessionId != null && ws.link != null) unawaited(_loadSession(ws.link!, _sessionId!)); }, child: const Text('重新同步'))],
         ),
-        const Divider(height: 1),
         Expanded(
           child: messages.isEmpty && !_running
               ? _buildEmptyWelcome(ide, prov)
@@ -834,22 +853,21 @@ class _AiStudioViewState extends State<AiStudioView> {
           key: const ValueKey('ai-jump-latest'), tooltip: follows ? '已在最新消息' : '回到最新消息', padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(width: 28, height: 28), onPressed: () => _scrollToBottom(force: true),
           icon: Icon(Icons.vertical_align_bottom, size: 16, color: follows ? ide.textFaint : ide.accent))),
+        _buildConversationActions(ide),
       ]);
     }),
   );
 
-  Widget _buildTopBar(Ide ide, AiProvider? prov) {
+  Widget _buildConversationActions(Ide ide) {
     final canPickDir = !_sending&&(_session == null || _session!.messages.isEmpty);
 
-    return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: Space.m),
-      color: ide.editor,
-      child: Row(
+    return Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Root & Workdir badge
-          Expanded(child:PopupMenuButton<AiPathChoice>(
-            key:const ValueKey('ai-workdir-menu'),enabled:canPickDir,tooltip:canPickDir?'选择会话工作目录':'已有会话的目录固定；请新建会话选择其他目录',
+          SizedBox(width:28, child:PopupMenuButton<AiPathChoice>(
+            key:const ValueKey('ai-workdir-menu'),enabled:canPickDir,padding:EdgeInsets.zero,
+            tooltip:'${ws.entry?.isLocal == true ? ws.app.localAgent.nativePath(_root,_workdir) : '$_root : $_workdir'}\n${canPickDir ? '选择工作目录' : '会话目录固定'}',
             onSelected:(choice){if(choice.root=='*browse*'){_pickWorkdir();}else{setState((){_root=choice.root;_workdir=choice.path;});}},
             itemBuilder:(_)=>[
               for(final folder in ws.project?.folders ?? const <WorkspacePath>[]) PopupMenuItem(value:AiPathChoice(folder.root,folder.path,folder.path),child:Text('项目：${folder.path}')),
@@ -857,23 +875,30 @@ class _AiStudioViewState extends State<AiStudioView> {
               const PopupMenuDivider(),
               PopupMenuItem(value:const AiPathChoice('*browse*','',''),child:Row(children:[const Icon(Icons.folder_open,size:18),const SizedBox(width:8),Text(ws.entry?.isLocal == true ? '浏览本机目录…' : '浏览服务器目录…')])),
             ],
-            child:Padding(padding:const EdgeInsets.symmetric(horizontal:6,vertical:8),child:Row(children:[Icon(Icons.folder_open_rounded,size:16,color:ide.accent),const SizedBox(width:7),Expanded(child:Text(ws.entry?.isLocal == true ? ws.app.localAgent.nativePath(_root,_workdir) : '${_root.isEmpty?'默认根目录':_root} : $_workdir',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:13,color:ide.text,fontWeight:FontWeight.w500))),Icon(canPickDir?Icons.expand_more:Icons.lock_outline,size:15,color:ide.textDim)])),
+            icon:Icon(Icons.folder_open_outlined,size:16,color:ide.textDim),
           )),
-          PopupMenuButton<double>(key:const ValueKey('ai-chat-font'),tooltip:'对话字号（保存在本机）',initialValue:_chatFontSize,onSelected:_setChatFontSize,itemBuilder:(_)=>const[PopupMenuItem(value:13.5,child:Text('紧凑 · 13.5')),PopupMenuItem(value:15.0,child:Text('标准 · 15')),PopupMenuItem(value:17.0,child:Text('舒适 · 17'))],icon:Icon(Icons.text_fields,size:17,color:ide.textDim)),
-          if (_sessionId != null && (_session?.messages.isNotEmpty ?? false))
-            IconBtn(Icons.compress_rounded, '压缩上下文 (/compact)', _running ? null : _compactManual, size: 15),
-          IconBtn(
-            Icons.tune_rounded,
-            '配置 OpenCode 模型与 API Key',
-            () => showAiSettingsDialog(context, app: ws.app, ws: ws),
-            size: 15,
-          ),
+          SizedBox(width:28, child:PopupMenuButton<String>(key:const ValueKey('ai-chat-font'),tooltip:'对话选项',padding:EdgeInsets.zero,onSelected:(value){
+            if(value=='smaller')_setChatFontSize(_chatFontSize-1);
+            if(value=='larger')_setChatFontSize(_chatFontSize+1);
+            if(value=='reset')_setChatFontSize(15);
+            if(value=='compact')_compactManual();
+            if(value=='details')setState(()=>_runtimeExpanded=!_runtimeExpanded);
+            if(value=='models')showAiSettingsDialog(context,app:ws.app,ws:ws);
+          },itemBuilder:(_)=>[
+            const PopupMenuItem(value:'models',child:Text('模型与 API Key…')),
+            const PopupMenuItem(value:'details',child:Text('模型与上下文详情')),
+            PopupMenuItem(value:'compact',enabled:!_running && (_session?.messages.isNotEmpty??false),child:const Text('压缩上下文')),
+            const PopupMenuDivider(),
+            const PopupMenuItem(value:'smaller',child:Text('缩小字号')),
+            const PopupMenuItem(value:'larger',child:Text('增大字号')),
+            const PopupMenuItem(value:'reset',child:Text('还原字号 · 15 px')),
+          ],icon:Icon(Icons.more_horiz,size:17,color:ide.textDim))),
         ],
-      ),
     );
   }
 
   Widget _buildRuntimeBar(Ide ide, AiProvider? prov) {
+    if (!_runtimeExpanded) return const SizedBox.shrink(key: ValueKey('ai-runtime-bar'));
     final runtime = _session?.runtime;
     final ctx = _session?.context;
     final usage = _session?.totalUsage;
@@ -1341,7 +1366,7 @@ class _AiStudioViewState extends State<AiStudioView> {
     final narrow = box.maxWidth < 460;
     return Container(
       key: const ValueKey('ai-composer'),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
       decoration: BoxDecoration(
         color: ide.editor,
         border: Border(top: BorderSide(color: ide.border)),
@@ -1349,13 +1374,8 @@ class _AiStudioViewState extends State<AiStudioView> {
       child: Center(
         child: ConstrainedBox(
            constraints: const BoxConstraints(maxWidth: 760),
-          child: Container(
-            decoration: BoxDecoration(
-              color: ide.sideBar,
-              borderRadius: BorderRadius.circular(Radii.island),
-              border: Border.all(color: ide.borderStrong.withValues(alpha: 0.7)),
-            ),
-            padding: const EdgeInsets.fromLTRB(Space.m + 2, Space.s + 2, Space.m, Space.s),
+           child: Padding(
+             padding: EdgeInsets.zero,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1398,7 +1418,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                     focusNode: _inputFocus,
                     minLines: compact ? 1 : 2,
                     maxLines: compact ? 2 : box.maxWidth<600?3:6,
-                    style: TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback,fontSize:15,color:ide.text,height:1.6),
+                    style: TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback,fontSize:_chatFontSize,color:ide.text,height:1.5),
                     contentInsertionConfiguration:ContentInsertionConfiguration(allowedMimeTypes:const ['image/png','image/jpeg','image/gif','image/webp','application/pdf','text/plain'],onContentInserted:(c)=>unawaited(_insertContent(c))),
                     contextMenuBuilder:(context,state)=>AdaptiveTextSelectionToolbar.buttonItems(anchors:state.contextMenuAnchors,buttonItems:[
                       for(final item in state.contextMenuButtonItems) if(item.type!=ContextMenuButtonType.paste)item,
@@ -1417,9 +1437,9 @@ class _AiStudioViewState extends State<AiStudioView> {
                   ),
                 ))),
                 const SizedBox(height: Space.s + 2),
-                SizedBox(height: 30, child: _buildModelChoice(ide, prov)),
-                SizedBox(height: 32, child: Row(
-                  children: [
+                 SizedBox(height: 32, child: Row(
+                   children: [
+                     Expanded(child: _buildModelChoice(ide, prov)),
                     // Build / Plan switcher
                     _ModePill(
                       label: _agentMode == 'plan' ? (narrow ? 'Plan' : 'Plan 规划') : (narrow ? 'Build' : 'Build 构建'),
@@ -1435,7 +1455,6 @@ class _AiStudioViewState extends State<AiStudioView> {
                       color: _permMode == 'auto' ? ide.ok : ide.textDim,
                       onTap: () => setState(() => _permMode = _permMode == 'auto' ? 'ask' : 'auto'),
                     ),
-                    const Spacer(),
                     SizedBox(width: 30, child: PopupMenuButton<String>(padding: EdgeInsets.zero, key:const ValueKey('ai-attach-menu'),tooltip:'添加图片或文件',onSelected:(v){if(v=='active')_attachActiveFile();if(v=='local')_pickLocalFiles();if(v=='paste')_paste();if(v=='remote')_attachFileByPath();},itemBuilder:(_)=>[
                       if (activeFile != null) PopupMenuItem(value:'active',child:Text('附加当前文件：${activeFile.name}')),
                       const PopupMenuItem(value:'local',child:Text('选择本机图片 / 文件…')),
@@ -1497,19 +1516,19 @@ class _AiStudioViewState extends State<AiStudioView> {
     });
   }
 
-  Widget _buildModelChoice(Ide ide, AiProvider? prov) => InkWell(
+  Widget _buildModelChoice(Ide ide, AiProvider? prov) => Row(children:[Expanded(child:Tooltip(
+    message:prov==null?'选择模型':'${prov.name} / ${prov.model}${prov.reasoningEffort.isEmpty?'':' · ${aiEffortLabel(prov.reasoningEffort)}'}',child:InkWell(
     key: const ValueKey('ai-model-btn'), onTap: () => showAiModelPicker(context, ws),
     borderRadius: BorderRadius.circular(4),
     child: Row(children: [
       Icon(Icons.expand_more, size: 14, color: ide.textDim), const SizedBox(width: 4),
       Expanded(child: Text(prov == null || prov.model.isEmpty ? '选择模型…' : '${prov.name} / ${prov.model}',
         maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: prov == null ? ide.warn : ide.textDim))),
-      if (prov != null && prov.reasoningEffort.isNotEmpty) ...[
-        const SizedBox(width: 6), Icon(Icons.psychology_outlined, size: 13, color: ide.textDim),
-        const SizedBox(width: 3), Text(aiEffortLabel(prov.reasoningEffort), style: TextStyle(fontSize: 11, color: ide.textDim)),
-      ],
-    ]),
-  );
+     ]),
+  ))), Tooltip(message:'模型与上下文详情',child:InkWell(onTap:()=>setState(()=>_runtimeExpanded=!_runtimeExpanded),
+    child:Padding(padding:const EdgeInsets.symmetric(horizontal:4,vertical:6),child:Text(
+      _session?.context?.ratio==null?'ⓘ':'${(_session!.context!.ratio!*100).round()}%',
+      key:const ValueKey('ai-context-indicator'),style:TextStyle(fontSize:11,color:(_session?.context?.ratio??0)>=.85?ide.warn:ide.textDim))))) ]);
 
   String _fmtTokens(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
@@ -1531,11 +1550,10 @@ class _ModePill extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(Radii.m),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
         decoration: BoxDecoration(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(Radii.m),
-          border: Border.all(color: Ide.of(context).border),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1979,10 +1997,10 @@ class _MarkdownText extends StatelessWidget {
     final mono = TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: fontSize-1, color: ide.text,height:1.5);
     return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
       p: body,
-      h1: TextStyle(color: ide.text, fontSize: 18, fontWeight: FontWeight.w700, height: 1.5),
-      h2: TextStyle(color: ide.text, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
-      h3: TextStyle(color: ide.text, fontSize: 14.5, fontWeight: FontWeight.w600, height: 1.5),
-      h4: TextStyle(color: ide.text, fontSize: 13.5, fontWeight: FontWeight.w600, height: 1.5),
+      h1: body.copyWith(fontSize: fontSize * 1.35, fontWeight: FontWeight.w600, height: 1.5),
+      h2: body.copyWith(fontSize: fontSize * 1.2, fontWeight: FontWeight.w600, height: 1.5),
+      h3: body.copyWith(fontSize: fontSize * 1.1, fontWeight: FontWeight.w600, height: 1.5),
+      h4: body.copyWith(fontWeight: FontWeight.w600, height: 1.5),
       strong: TextStyle(color: ide.text, fontWeight: FontWeight.w700),
       em: TextStyle(color: ide.text, fontStyle: FontStyle.italic),
       listBullet: body.copyWith(color:ide.textDim),
@@ -1991,7 +2009,7 @@ class _MarkdownText extends StatelessWidget {
       blockquoteDecoration: BoxDecoration(color: ide.hover.withValues(alpha: 0.4), border: Border(left: BorderSide(color: ide.accent, width: 3))),
       a: TextStyle(color: ide.accent),
       tableBorder: TableBorder.all(color: ide.border),
-      tableHead: TextStyle(color: ide.text, fontWeight: FontWeight.w600, fontSize: 13),
+      tableHead: body.copyWith(fontWeight: FontWeight.w600),
       tableBody: body.copyWith(fontSize:fontSize-1),
       horizontalRuleDecoration: BoxDecoration(border: Border(top: BorderSide(color: ide.border))),
     );

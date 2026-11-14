@@ -17,6 +17,7 @@ import 'package:aurora/kernel/tab_layout.dart';
 import 'package:aurora/kernel/workspace.dart';
 import 'package:aurora/kernel/window_frame.dart';
 import 'package:aurora/theme/ide_theme.dart';
+import 'package:aurora/ui/settings_page.dart';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
@@ -96,10 +97,10 @@ class _VisualTerminalStream extends MemoryTerminalStream {
   }
 }
 
-class _VisualLink extends FakeAiLink {
+class VisualWorkbenchLink extends FakeAiLink {
   final Features features;
   final List<MemoryTerminalStream> terminalStreams = [];
-  _VisualLink(this.features) {
+  VisualWorkbenchLink(this.features) {
     pendingPermission = null;
     directories['/project'] = [
       FileTreeLink.dir('src'),
@@ -259,7 +260,7 @@ void main() {
       final features = Features(), input = InputMode(touch: false);
       DesktopLifecycle.frameless.value = true;
       addTearDown(() => DesktopLifecycle.frameless.value = false);
-      final link = _VisualLink(features);
+      final link = VisualWorkbenchLink(features);
       final app = WorkspaceApp(
         wire: link,
         profile: Profile(
@@ -361,6 +362,17 @@ void main() {
       expect(ws.tabLayout.groups, hasLength(2));
       expect(t.takeException(), isNull);
       await snapshot(t, 'workbench-documents-ai-terminal');
+      await t.tap(find.byTooltip('AI 对话历史'));
+      // A running fixture session intentionally animates its history spinner.
+      await t.pump(const Duration(milliseconds: 300));
+      await t.pump();
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byKey(const ValueKey('ai-session-ses_1')), findsOneWidget);
+      expect(find.text('新建 AI 会话'), findsNothing);
+      expect(find.byTooltip('新建 AI 对话'), findsOneWidget);
+      await snapshot(t, 'workbench-history-inline');
+      await t.tap(find.byTooltip('返回对话'));
+      await t.pumpAndSettle();
       await show(Brightness.light);
       await snapshot(t, 'workbench-documents-ai-terminal-light');
       await show(Brightness.dark);
@@ -384,6 +396,15 @@ void main() {
       expect(t.takeException(), isNull);
       await snapshot(t, 'workbench-layout-menu');
       await t.tap(find.text('完成'));
+      await t.pumpAndSettle();
+      ws.hideAssistantPanel();
+      ws.openTab(settingsTab(app));
+      await t.pumpAndSettle();
+      await snapshot(t, 'workbench-settings');
+      await t.tap(find.text('文字与编辑器').first);
+      await t.pumpAndSettle();
+      await snapshot(t, 'workbench-typography');
+      await ws.closeTab('settings');
       await t.pumpAndSettle();
       DesktopLifecycle.frameless.value = false;
       t.view.physicalSize = const Size(390, 760);

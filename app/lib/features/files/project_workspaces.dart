@@ -7,7 +7,8 @@ import '../../theme/ide_theme.dart';
 
 class ProjectWorkspaceBar extends StatelessWidget {
   final Workspace ws;
-  const ProjectWorkspaceBar({super.key, required this.ws});
+  final List<Widget> actions;
+  const ProjectWorkspaceBar({super.key, required this.ws, this.actions = const []});
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context), current = ws.project;
@@ -17,7 +18,22 @@ class ProjectWorkspaceBar extends StatelessWidget {
         Icon(current == null ? Icons.folder_outlined : Icons.folder_open_outlined, size: 15, color: ide.textDim),
         const SizedBox(width: 7),
         Expanded(child: PopupMenuButton<String>(key: const ValueKey('project-switcher'), tooltip: '切换工作区',
-          onSelected: (id) => ws.selectProject(id.isEmpty ? null : id),
+           onSelected: (id) async {
+             if (id == '@create') { await createProjectWorkspace(context, ws); return; }
+             if (id == '@add') { await addProjectFolder(context, ws); return; }
+             if (id == '@rename') {
+               final name = await askText(context, title: '重命名工作区', initial: current!.name);
+               if (name != null && name.isNotEmpty) await ws.renameProject(name);
+               return;
+             }
+             if (id == '@delete') {
+               final ok = await confirmDialog(context, title: '删除工作区“${current!.name}”？',
+                 body: '只删除本机分组，不删除文件。已打开文件、未保存内容、终端和传输保留。', ok: '删除工作区');
+               if (ok) await ws.deleteProject();
+               return;
+             }
+             ws.selectProject(id.isEmpty ? null : id);
+           },
           itemBuilder: (_) => [
             const PopupMenuItem(value: '', child: Text('浏览服务器')),
             if (ws.entry?.workspaces.isNotEmpty == true) const PopupMenuDivider(),
@@ -26,36 +42,19 @@ class ProjectWorkspaceBar extends StatelessWidget {
                 Icon(p.id == ws.projectKey ? Icons.check : Icons.workspaces_outline, size: 16), const SizedBox(width: 9),
                 Expanded(child: Text(p.name, overflow: TextOverflow.ellipsis)),
                 Text('${p.folders.length}', style: TextStyle(color: ide.textDim, fontSize: 11)),
-              ])),
+               ])),
+             const PopupMenuDivider(),
+             const PopupMenuItem(value: '@create', child: Text('新建工作区…')),
+             if (current != null) ...[
+               const PopupMenuItem(value: '@add', child: Text('添加文件夹…')),
+               const PopupMenuItem(value: '@rename', child: Text('重命名工作区…')),
+               const PopupMenuItem(value: '@delete', child: Text('删除工作区…')),
+             ],
           ],
           child: Row(children: [Expanded(child: Text(current?.name ?? '文件', maxLines: 1, overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5))), Icon(Icons.expand_more, size: 15, color: ide.textDim)]),
         )),
-        PopupMenuButton<String>(tooltip: '工作区选项', padding: EdgeInsets.zero,
-          icon: Icon(Icons.more_horiz, size: 18, color: ide.textDim),
-          onSelected: (action) async {
-            if (action == 'create') { await createProjectWorkspace(context, ws); return; }
-            if (action == 'add') { await addProjectFolder(context, ws); return; }
-            if (action == 'rename') {
-              final name = await askText(context, title: '重命名工作区', initial: current!.name);
-              if (name != null && name.isNotEmpty) await ws.renameProject(name);
-              return;
-            }
-            if (action == 'delete' && context.mounted) {
-              final ok = await confirmDialog(context, title: '删除工作区“${current!.name}”？',
-                body: '只删除本机的工作区分组，不删除远程文件。已打开的文件会移到“浏览服务器”；未保存内容、终端和传输保留。', ok: '删除工作区');
-              if (ok) await ws.deleteProject();
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'create', child: Text('新建工作区…')),
-            if (current != null) ...[
-              const PopupMenuItem(value: 'add', child: Text('添加远程文件夹…')),
-              const PopupMenuItem(value: 'rename', child: Text('重命名工作区…')),
-              const PopupMenuDivider(), const PopupMenuItem(value: 'delete', child: Text('删除工作区…')),
-            ],
-          ],
-        ),
+         ...actions,
       ]));
   }
 }

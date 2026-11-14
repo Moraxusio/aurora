@@ -89,6 +89,9 @@ class ProfileStore {
   /// Small defensive snapshots for UI hot paths. Reading a server name or a
   /// tab's connection state must not clone every node in every subscription.
   String? get selected => _p.selected;
+  EditorSettings get editorSettings => EditorSettings.fromJson(_p.editor.toJson());
+  double get chatFontSize => _p.ai.chatFontSize;
+  AiSettings get aiSettings => AiSettings.fromJson(_p.ai.toJson());
   ServerEntry? server(String id) {
     final value = _p.server(id);
     return value == null ? null : ServerEntry.fromJson(value.toJson());

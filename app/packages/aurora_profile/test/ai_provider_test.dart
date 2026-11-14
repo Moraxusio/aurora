@@ -27,9 +27,21 @@ void main() {
     expect(AiSettings().isDefault,isTrue);
     expect(AiSettings().toJson().containsKey('chat_font_size'),isFalse);
     expect(AiSettings.fromJson(AiSettings(chatFontSize:17).toJson()).chatFontSize,17);
-    expect(AiSettings.fromJson({'chat_font_size':999}).chatFontSize,22);
+    expect(AiSettings.fromJson({'chat_font_size':999}).chatFontSize,28);
+    expect(AiSettings.fromJson({'chat_font_size':0}).chatFontSize,9);
+    expect(AiSettings.fromJson({'chat_font_size':double.nan}).chatFontSize,15);
     expect(AiSettings.fromJson({}).chatFontSize,15);
     expect(AiOAuthCredential.fromJson({'access':'fixture','refresh':'fixture','expires':1}).transport,'client');
+  });
+  test('workbench appearance fields are optional, bounded, and survive round trip', () {
+    expect(EditorSettings().toJson().containsKey('terminal_font_size'), isFalse);
+    expect(EditorSettings().toJson().containsKey('ui_scale'), isFalse);
+    final old = EditorSettings.fromJson({'font_size': 17});
+    expect((old.fontSize, old.terminalFontSize, old.uiScale), (17, 14, 1));
+    final next = EditorSettings.fromJson(EditorSettings(terminalFontSize: 20, uiScale: 1.25).toJson());
+    expect((next.terminalFontSize, next.uiScale), (20, 1.25));
+    expect(EditorSettings.fromJson({'ui_scale': double.infinity}).uiScale, 1);
+    expect(EditorSettings.fromJson({'terminal_font_size': -1}).terminalFontSize, 9);
   });
   test('subscription wire uses access only and refuses custom routing', () {
     final p = subscription();

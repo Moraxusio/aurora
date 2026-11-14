@@ -15,6 +15,7 @@ import 'android_agent.dart';
 import 'profile_access.dart';
 import 'upgrade_model.dart';
 import 'local_agent.dart';
+import 'appearance.dart';
 
 /// Where the signed agent builds are: `agent/` next to the executable in a
 /// release folder (M1.7), or AURORA3_AGENT_DIR for development.
@@ -27,6 +28,41 @@ String agentDir() {
 }
 
 class AppState extends ChangeNotifier implements ProfileAccess {
+  AppearanceController? _appearance;
+  AppearanceController get appearance => _appearance ??= AppearanceController(
+    read: () {
+      final e = editorSettings;
+      return AppearanceValues(theme: e.theme, editorFont: e.fontSize,
+        terminalFont: e.terminalFontSize, uiScale: e.uiScale,
+        chatFont: _store?.chatFontSize ?? aiSettings.chatFontSize,
+        wordWrap: e.wordWrap, tabSize: e.tabSize);
+    },
+    save: saveAppearance,
+  );
+  EditorSettings get editorSettings => _store?.editorSettings ?? profile.editor;
+  AiSettings get aiSettings => _store?.aiSettings ?? profile.ai;
+
+  Future<void> saveAppearance(Map<String, Object> patch) async {
+    void apply(Profile p) {
+      for (final entry in patch.entries) {
+        switch (entry.key) {
+          case 'theme': p.editor.theme = entry.value as String;
+          case 'editorFont': p.editor.fontSize = (entry.value as num).toDouble();
+          case 'terminalFont': p.editor.terminalFontSize = (entry.value as num).toDouble();
+          case 'chatFont': p.ai.chatFontSize = (entry.value as num).toDouble();
+          case 'uiScale': p.editor.uiScale = (entry.value as num).toDouble();
+          case 'wordWrap': p.editor.wordWrap = entry.value as bool;
+          case 'tabSize': p.editor.tabSize = entry.value as int;
+        }
+      }
+    }
+    if (_store == null) {
+      // In-memory AppState implementations can supply their own storage.
+      await update(apply);
+    } else {
+      await _store!.update(apply);
+    }
+  }
   final localAgent = LocalAgent();
   ConnStatus? _localFailure;
   String? localEntryError;
@@ -163,6 +199,7 @@ class AppState extends ChangeNotifier implements ProfileAccess {
   @override
   Future<void> update(FutureOr<void> Function(Profile p) fn) async {
     await _store!.update(fn);
+    _appearance?.reload();
     notifyListeners();
   }
 
@@ -303,6 +340,7 @@ class AppState extends ChangeNotifier implements ProfileAccess {
 
   @override
   void dispose() {
+    _appearance?.dispose();
     unawaited(localAgent.stop());
     for (final s in _subs.values) {
       s.cancel();

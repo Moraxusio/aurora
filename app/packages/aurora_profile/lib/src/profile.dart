@@ -441,6 +441,7 @@ class EditorSettings {
   /// 'system' | 'light' | 'dark'.
   String theme;
   double fontSize;
+  double terminalFontSize, uiScale;
   bool wordWrap;
   /// Spaces that Tab inserts (the editor indents with spaces only).
   int tabSize;
@@ -453,6 +454,8 @@ class EditorSettings {
   EditorSettings({
     this.theme = 'system',
     this.fontSize = 13.5,
+    this.terminalFontSize = 14,
+    this.uiScale = 1,
     this.wordWrap = false,
     this.tabSize = 4,
     this.fileSort = 'name',
@@ -472,6 +475,8 @@ class EditorSettings {
     return EditorSettings(
       theme: themes.contains(t) ? t! : 'system',
       fontSize: f.isFinite ? f.clamp(minFont, maxFont).toDouble() : 13.5,
+      terminalFontSize: _displayNumber(j['terminal_font_size'], 14, minFont, maxFont),
+      uiScale: _displayNumber(j['ui_scale'], 1, .8, 1.5),
       wordWrap: j['word_wrap'] == true,
       tabSize: const [2, 4, 8].contains(ts) ? ts : 4,
       fileSort: fileSorts.contains(fs) ? fs! : 'name',
@@ -483,6 +488,8 @@ class EditorSettings {
   Map<String, dynamic> toJson() => {
         'theme': theme,
         'font_size': fontSize,
+        if (terminalFontSize != 14) 'terminal_font_size': terminalFontSize,
+        if (uiScale != 1) 'ui_scale': uiScale,
         'word_wrap': wordWrap,
         'tab_size': tabSize,
         if (fileSort != 'name') 'file_sort': fileSort,
@@ -491,7 +498,12 @@ class EditorSettings {
       };
 
   bool get isDefault =>
-      theme == 'system' && fontSize == 13.5 && !wordWrap && tabSize == 4 && fileSort == 'name' && !fileSortDesc && foldersFirst;
+      theme == 'system' && fontSize == 13.5 && terminalFontSize == 14 && uiScale == 1 && !wordWrap && tabSize == 4 && fileSort == 'name' && !fileSortDesc && foldersFirst;
+
+  static double _displayNumber(Object? raw, double fallback, double min, double max) {
+    final n = raw is num ? raw.toDouble() : fallback;
+    return n.isFinite ? n.clamp(min, max) : fallback;
+  }
 }
 
 /// Client-side LLM Agent settings (D-104). Sealed at rest inside profile.bin;
@@ -538,7 +550,7 @@ class AiSettings {
       selectedProviderId: j['selected_provider_id'] as String?,
       permissionMode: permissionModes.contains(pm) ? pm! : 'ask',
       defaultAgent: agentModes.contains(da) ? da! : 'build',
-      chatFontSize: j['chat_font_size'] is num && (j['chat_font_size'] as num).isFinite ? (j['chat_font_size'] as num).toDouble().clamp(12,22) : 15,
+      chatFontSize: j['chat_font_size'] is num && (j['chat_font_size'] as num).isFinite ? (j['chat_font_size'] as num).toDouble().clamp(9,28) : 15,
     );
   }
 

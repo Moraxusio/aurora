@@ -37,6 +37,7 @@ class WorkspaceApp extends AppState {
     if (result is Future<void>) await result;
     if (failChanges) throw StateError('synthetic write failure');
     data = next;
+    appearance.reload();
     notifications++;
     notifyListeners();
   }

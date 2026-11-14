@@ -146,7 +146,7 @@ class TreeRow extends StatelessWidget {
     );
     Widget row = Container(
       constraints: BoxConstraints(minHeight: InputMode.row(context) + (subtitle == null ? 0 : 14)),
-      decoration: selected ? BoxDecoration(color: ide.selection, borderRadius: BorderRadius.circular(Radii.m)) : null,
+      decoration: selected ? BoxDecoration(color: ide.selection) : null,
       padding: EdgeInsets.only(left: 6.0 + depth * 14, right: 4, top: subtitle == null ? 0 : 3, bottom: subtitle == null ? 0 : 3),
       child: Row(children: [
         if (leading != null) ...[SizedBox(width: 18, child: Center(child: leading)), const SizedBox(width: 6)],
@@ -163,11 +163,11 @@ class TreeRow extends StatelessWidget {
       ]),
     );
     row = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Space.xs),
+      padding: EdgeInsets.zero,
       child: InkWell(
         onTap: onTap,
         onDoubleTap: onDoubleTap,
-        borderRadius: BorderRadius.circular(Radii.m),
+        borderRadius: BorderRadius.zero,
         hoverColor: selected ? Colors.transparent : ide.hover,
         child: row,
       ),

@@ -192,7 +192,7 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('ai-select-directory')));
     await t.pumpAndSettle();
-    expect(find.textContaining('/project/src'), findsOneWidget);
+    expect(find.byTooltip(RegExp('/project/src')), findsOneWidget);
     await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), 'hello');
     await t.tap(find.byKey(const ValueKey('ai-send-btn')));
     await t.pump(const Duration(milliseconds: 300));
@@ -226,8 +226,10 @@ void main() {
     await pump(t);
     await t.tap(find.byKey(const ValueKey('ai-chat-font')));
     await t.pumpAndSettle();
-    await t.tap(find.text('舒适 · 17'));
-    await t.pumpAndSettle();
-    expect(app.profile.ai.chatFontSize, 17);
+    await t.tap(find.text('增大字号'));
+    await t.pump();
+    expect(app.appearance.value.chatFont, 16, reason: 'preview is synchronous');
+    await t.pump(const Duration(milliseconds: 300));
+    expect(app.profile.ai.chatFontSize, 16);
   });
 }

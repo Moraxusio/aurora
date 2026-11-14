@@ -100,6 +100,16 @@ void main() {
         await t.pumpAndSettle();
       }
       expect(controllers['ai:one']!.text, 'unsent prompt');
+      final chatState = t.state(find.byKey(const ValueKey('input-ai:one')));
+      await t.tap(find.byTooltip('AI 对话历史'));
+      await t.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byKey(const ValueKey('input-ai:one')), findsNothing);
+      expect(find.byKey(const ValueKey('input-doc')), findsOneWidget);
+      await t.tap(find.byTooltip('返回对话'));
+      await t.pumpAndSettle();
+      expect(t.state(find.byKey(const ValueKey('input-ai:one'))), same(chatState));
+      expect(controllers['ai:one']!.text, 'unsent prompt');
       ws.focusGroupAt(0);
       await t.pumpAndSettle();
       expect(ws.focusedId, 'doc');

@@ -2,6 +2,8 @@
 
 核心理念：**布局服务于任务，移动位置不丢状态**。3.17.0 重整工作台交互：文档网格、右侧 AI 与底部终端各有独立宿主；拖放采用可取消的事务，AI 按消息/文字锚点保持阅读位置，完成的计划自动收起。已通过独立验收，按用户授权统一打包发布。操作见 [标签页工作台](docs/TABS.md)，参考实现、设计与验证范围见 [IDE 重设计](docs/IDE_REDESIGN.md)。3.16.0 的历史记录保留在 [工作台验收](docs/WORKBENCH_REVIEW.md)。
 
+**当前优先维护 Windows。** [3.17.0](https://github.com/Moraxusio/aurora/releases/tag/v3.17.0) 先发布 Windows x64，Android 构建/发行暂缓，不再作为本轮 Windows 发布前置条件；安卓用户可继续使用既有 3.16.0。
+
 3.14.0 增加 Windows 本地模式：直接打开本机文件夹，使用 PowerShell、Git 和 AI；本地 agent 随客户端运行，与 Linux 远程 agent 分开。设计、构建和限制见 [Windows 本地 agent](docs/LOCAL_AGENT.md)。
 
 Aurora is a remote server management tool that aims to go beyond what plain SSH offers.

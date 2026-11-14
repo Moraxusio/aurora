@@ -551,3 +551,11 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 用户验收 D-113/D-114 独立预览后明确授权打包发布。文档网格、AI 右侧栏、底部终端独立，包含可取消的拖放事务、固定消息锚点、稳定缩放阅读和完成计划自动收起；Windows、三 ABI Android 与两类 agent 统一为 3.17.0，客户端 build number 31700，沿用原发布签名与 Android 发行证书。
 - 验收后的 998 个生产文件哈希不变，复用刚完成的 Flutter 313 通过、20 个既有条件跳过、0 失败及完整分析零问题结果，不重复 UI/原生长期测试。仅更新发布说明和 Windows 打包脚本的显式 build number，使其与 Android 一致；必要验证限于版本、构建、签名、包内文件及服务端上传摘要，不重复全量下载。
 - 先从本地干净提交构建，不覆盖正式安装、旧归档或三个独立预览。GitHub 授权只临时加密保存并限定本仓库发布用途，不进入源码、包或日志，完成后清理；原 profile/API Key/OAuth 不迁移、不重置。构建与发布结果完成后补记。
+
+### 3.17.0 Windows 已发布（2026-11-14）
+
+- 发布：https://github.com/Moraxusio/aurora/releases/tag/v3.17.0 。源码及版本标签指向 `b8feba43b0ee44a6a891f284177109b1ef501687`；Windows 包由该干净提交构建，客户端版本 `3.17.0+31700`，两类签名 agent 同为 3.17.0，沿用发布密钥 ID `87828dfb18459372`。
+- 用户补充要求主要维护 Windows、Android 可以暂缓，已停止本轮 Android 构建，并只清理与本次来源哈希一致的 8 个 Android 暂存资源；**本 Release 仅含 Windows ZIP、ZIP sidecar 和 SHA256SUMS 共 3 个资产，不提供 3.17.0 APK**。后续 Windows 维护不再默认等待 Android 三 ABI 构建，安卓既有 3.16.0 保留不动。
+- Windows Release 编译 183.1 秒，包内 33 个文件与 ZIP 逐项一致，产品签名、版本、许可证和敏感文件/字符串检查通过；保留 OpenCode MIT 署名。AOT SHA-256 `dc5e4bed1f5ae14d8971fd423c2feba022a1d0185733a045f2797444d3fced1a` 与已验收预览逐字节相同，998 个生产文件哈希一致，复用 Flutter 313 通过、20 个既有条件跳过、零分析问题结果，没有重复整轮 UI/原生/真实服务测试。
+- 本地归档 `release3\Aurora-3.17.0` 及 ZIP/sidecar。ZIP 30,461,852 字节，SHA-256 `5ca41970183e95b784ded1bb1545efe26eb2ab8c840840c2614b140d56ab796e`；Linux agent `dee6f4a4d73991a420f7293332f4162315e1e4cdf4de311f0e5c9aa0d6f82fa3`，Windows 本地 agent `38531348ac0a0788ed00878d5474149ccf10d448a853b55df675237334f8404f`。先上传草稿，3 个资产的大小与 GitHub 服务端 SHA-256 全部匹配后才发布；公开 latest API 已确认 v3.17.0、非草稿、非预发布，未重复全量下载。
+- 正式 3.16.0 与三个旧预览的 5 项保护哈希不变，v2 工作区仍干净、`release` 顶层仍为 13 项；未覆盖运行中的客户端或服务器，未迁移原 profile/API Key/OAuth。发布授权仅临时使用并在全部推送后清理；长期原生拖放、多屏 DPI、触摸/输入法/可访问性及真实模型账号仍保留实机验收边界。

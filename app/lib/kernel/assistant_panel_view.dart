@@ -25,6 +25,7 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
   final Map<EditorTab, Rect> _rects = {};
   bool _historyOpen = false;
   Widget? _historyBody;
+  EditorTab? _activeTab;
   void _history() => setState(() {
     _historyOpen = !_historyOpen;
     _historyBody ??= widget.historyBuilder?.call(() {
@@ -34,6 +35,11 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
   @override
   Widget build(BuildContext context) {
     final ws = widget.ws, ide = Ide.of(context), tabs = ws.assistantTabs;
+    final active = ws.tab(ws.assistantPanel.active ?? '');
+    // Commands/activity navigation may open a chat while history is visible.
+    // Compare document identity: background draft-ID promotion isn't navigation.
+    if (!identical(active, _activeTab)) _historyOpen = false;
+    _activeTab = active;
     _bodies.removeWhere((tab, _) => !tabs.contains(tab));
     _rects.removeWhere((tab, _) => !tabs.contains(tab));
     return Material(

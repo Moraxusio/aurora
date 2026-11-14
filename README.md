@@ -1,10 +1,10 @@
 # Aurora
 
-核心理念：**布局服务于任务，移动位置不丢状态**。3.18.0 精简 Windows 工作台：侧栏按指针总位移跟手调整，文件工具栏合为一行，AI 历史原位切换；新增实时字号、整体缩放与五向停靠标记。文档、右侧 AI 和底部终端继续保留各自状态，消息阅读锚点与完成计划自动收起保持。操作见 [标签页工作台](docs/TABS.md)。
+核心理念：**布局服务于任务，移动位置不丢状态**。3.18.1 修复整体缩放后的点击死区、右键菜单偏移、命令弹窗及终端快捷键路由，并修正文件预览焦点与 AI 历史导航。文档、右侧 AI 和底部终端继续保留各自状态，消息阅读锚点与完成计划自动收起保持。操作见 [标签页工作台](docs/TABS.md)。
 
 **当前优先维护 Windows。** [3.18.0](https://github.com/Moraxusio/aurora/releases/tag/v3.18.0) 已发布 Windows x64，Android 构建/发行暂缓，不再作为本轮 Windows 发布前置条件；安卓用户可继续使用既有 3.16.0。
 
-**3.18.0：Windows 工作台重构与界面减法。** 独立验收完成，设计与验证见 [Windows 工作台](docs/WINDOWS_WORKBENCH.md) 和 [侧栏跟手与界面减法](docs/WINDOWS_SIMPLIFICATION.md)。
+**3.18.1：GUI 交互修复。** 修复原理与回归范围见 [GUI 交互检查](docs/GUI_AUDIT.md)。3.18.0 的设计见 [Windows 工作台](docs/WINDOWS_WORKBENCH.md) 和 [侧栏跟手与界面减法](docs/WINDOWS_SIMPLIFICATION.md)。
 
 3.17.0 的文档网格与阅读锚点设计见 [IDE 重设计](docs/IDE_REDESIGN.md)，3.16.0 的历史记录见 [工作台验收](docs/WORKBENCH_REVIEW.md)。
 

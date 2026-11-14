@@ -178,9 +178,13 @@ class _NumberSettingState extends State<NumberSetting> {
     child: Row(children: [
       IconButton(tooltip: '减小${widget.unit == '%' ? '缩放' : '字号'}', icon: const Icon(Icons.remove, size: 16),
         onPressed: widget.value > widget.min ? () => widget.onChanged((widget.value - widget.step).clamp(widget.min, widget.max)) : null),
-      Expanded(child: Slider(key: ValueKey('setting-${widget.id}'), value: widget.value.clamp(widget.min, widget.max), min: widget.min, max: widget.max,
-        divisions: ((widget.max - widget.min) / widget.step).round(),
-        onChanged: widget.onChanged, onChangeEnd: (_) => widget.onEnd?.call())),
+      // Keep the indicator's traversal parent and overlay in the same scroll
+      // subtree; grafting it to the root overlay can poison Windows' AX tree.
+      Expanded(child: Overlay.wrap(alwaysSizeToContent: true, clipBehavior: Clip.none,
+        child: Slider(key: ValueKey('setting-${widget.id}'), value: widget.value.clamp(widget.min, widget.max), min: widget.min, max: widget.max,
+          divisions: ((widget.max - widget.min) / widget.step).round(),
+          semanticFormatterCallback: (value) => '${_label(value)}${widget.unit}',
+          onChanged: widget.onChanged, onChangeEnd: (_) => widget.onEnd?.call()))),
       IconButton(tooltip: '增大${widget.unit == '%' ? '缩放' : '字号'}', icon: const Icon(Icons.add, size: 16),
         onPressed: widget.value < widget.max ? () => widget.onChanged((widget.value + widget.step).clamp(widget.min, widget.max)) : null),
       SizedBox(width: 76, child: TextField(key: ValueKey('setting-input-${widget.id}'), controller: _text, focusNode: _focus,

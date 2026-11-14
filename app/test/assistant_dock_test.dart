@@ -185,6 +185,19 @@ void main() {
     restored.dispose();
   });
 
+  testWidgets('an externally opened AI tab leaves history and keeps the old draft', (t) async {
+    open('doc'); open('ai:one');
+    await pump(t);
+    await t.enterText(find.byKey(const ValueKey('input-ai:one')), 'keep first draft');
+    await t.tap(find.byTooltip('AI 对话历史')); await t.pumpAndSettle();
+    open('ai:two'); await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('input-ai:two')), findsOneWidget);
+    ws.activate('ai:one'); await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('input-ai:one')), findsOneWidget);
+    expect(controllers['ai:one']!.text, 'keep first draft');
+    await t.pumpWidget(const SizedBox());
+  });
+
   test('explicit terminal navigation exits a maximized assistant instead of focusing a hidden host', () {
     open('doc');
     open('term:one');

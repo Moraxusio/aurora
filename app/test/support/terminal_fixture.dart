@@ -11,6 +11,7 @@ class MemoryTerminalStream implements OpStream {
   final ready = Completer<void>();
   final Queue<Frame> frames = Queue();
   final controls = <Map>[];
+  final input = <List<int>>[];
   Completer<Frame?>? pending;
   int closes = 0;
   MemoryTerminalStream({bool hold = false}) {
@@ -47,7 +48,7 @@ class MemoryTerminalStream implements OpStream {
   }
 
   @override
-  Future<void> sendData(List<int> data) async {}
+  Future<void> sendData(List<int> data) async { input.add(List<int>.of(data)); }
   @override
   Future<void> close() async {
     closes++;

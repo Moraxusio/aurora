@@ -560,44 +560,47 @@ class FileEditorState extends State<FileEditor> {
             if (_outside == 'changed') TextButton(onPressed: () => setState(() => _outside = null), child: const Text('保留我的修改')),
           ]),
         ),
-      // Keys: without them the Column matches this new child to the editor's
-      // slot and rebuilds the editor (scroll position, cursor and focus lost).
-      if (_preview && pk != PreviewKind.none)
-        Expanded(
-          key: const ValueKey('preview'),
-          child: pk == PreviewKind.markdown
-              ? MarkdownPreview(text: _controller.text)
-              : CsvPreview(text: _controller.text, tabSeparated: extOf(widget.path) == 'tsv'),
-        ),
+      // One viewport, two stable layers. An offstage Expanded sibling still
+      // consumes half the height and can retain keyboard focus behind preview.
       Expanded(
-        key: const ValueKey('editor'),
-        // kept alive while the preview shows: unsaved text and undo survive
-        child: Offstage(
-          offstage: _preview && pk != PreviewKind.none,
-          child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.keyS, control: true): save,
-            const SingleActivator(LogicalKeyboardKey.keyG, control: true): goToLine,
-            const SingleActivator(LogicalKeyboardKey.keyZ, alt: true): toggleWrap,
-          },
-          child: CodeEditor(
-            controller: _controller,
-            style: style,
-            readOnly: _readOnly,
-            wordWrap: _wrap ?? _settings.wordWrap,
-            autofocus: true,
-            findBuilder: (context, controller, readOnly) => _FindPanel(controller: controller, readOnly: readOnly),
-            indicatorBuilder: (context, editingController, chunkController, notifier) => Row(children: [
-              DefaultCodeLineNumber(controller: editingController, notifier: notifier),
-              DefaultCodeChunkIndicator(width: 18, controller: chunkController, notifier: notifier),
-            ]),
-            chunkAnalyzer: const DefaultCodeChunkAnalyzer(),
-            padding: const EdgeInsets.only(left: 4, right: 12),
-            verticalScrollbarWidth: 10,
-            horizontalScrollbarHeight: 10,
+        child: Stack(fit: StackFit.expand, children: [
+          Offstage(
+            key: const ValueKey('editor'),
+            offstage: _preview && pk != PreviewKind.none,
+            child: TickerMode(enabled: !_preview || pk == PreviewKind.none,
+              child: ExcludeFocus(excluding: _preview && pk != PreviewKind.none,
+                child: CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.keyS, control: true): save,
+                    const SingleActivator(LogicalKeyboardKey.keyG, control: true): goToLine,
+                    const SingleActivator(LogicalKeyboardKey.keyZ, alt: true): toggleWrap,
+                  },
+                  child: CodeEditor(
+                    controller: _controller,
+                    style: style,
+                    readOnly: _readOnly,
+                    wordWrap: _wrap ?? _settings.wordWrap,
+                    autofocus: true,
+                    findBuilder: (context, controller, readOnly) => _FindPanel(controller: controller, readOnly: readOnly),
+                    indicatorBuilder: (context, editingController, chunkController, notifier) => Row(children: [
+                      DefaultCodeLineNumber(controller: editingController, notifier: notifier),
+                      DefaultCodeChunkIndicator(width: 18, controller: chunkController, notifier: notifier),
+                    ]),
+                    chunkAnalyzer: const DefaultCodeChunkAnalyzer(),
+                    padding: const EdgeInsets.only(left: 4, right: 12),
+                    verticalScrollbarWidth: 10,
+                    horizontalScrollbarHeight: 10,
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
+          if (_preview && pk != PreviewKind.none)
+            Positioned.fill(key: const ValueKey('preview'),
+              child: pk == PreviewKind.markdown
+                  ? MarkdownPreview(text: _controller.text)
+                  : CsvPreview(text: _controller.text, tabSeparated: extOf(widget.path) == 'tsv')),
+        ]),
       ),
     ]);
   }

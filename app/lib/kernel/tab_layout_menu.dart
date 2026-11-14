@@ -117,14 +117,16 @@ Future<void> showTabLayoutDialog(
                     style: TextStyle(fontSize: 12, color: ide.textDim),
                   ),
                   children: [
-                    Slider(
+                    // Keep the value-indicator portal in this scroll subtree.
+                    Overlay.wrap(alwaysSizeToContent: true, clipBehavior: Clip.none, child: Slider(
                       value: ws.tabLayout.tabWidth,
                       min: 100,
                       max: 260,
                       divisions: 32,
                       label: '${ws.tabLayout.tabWidth.round()} px',
+                      semanticFormatterCallback: (value) => '${value.round()} px',
                       onChanged: ws.setTabWidth,
-                    ),
+                    )),
                     Row(
                       children: [
                         Text(

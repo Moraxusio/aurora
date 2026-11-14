@@ -8,6 +8,13 @@ import 'package:flutter/services.dart';
 import '../theme/ide_theme.dart';
 import 'input_mode.dart';
 
+/// Feature commands can outlive the palette route that launched them. Use the
+/// navigator's own overlay, below the workbench transform, for their dialogs.
+abstract final class AppNavigation {
+  static final key = GlobalKey<NavigatorState>();
+  static BuildContext? get context => key.currentState?.overlay?.context;
+}
+
 /// Messages at the bottom of the window. The key goes to MaterialApp.
 class Toast {
   static final key = GlobalKey<ScaffoldMessengerState>();
@@ -16,14 +23,10 @@ class Toast {
     final m = key.currentState;
     if (m == null) return;
     m.hideCurrentSnackBar();
-    // Sized from the window: 480 wide at most, and lifted above the status bar
-    // (in the narrow layout also above the bottom bar) so it covers neither.
-    final view = View.of(m.context);
-    final w = view.physicalSize.width / view.devicePixelRatio;
-    final narrow = w < 600;
-    final side = narrow ? 12.0 : (w - 480) / 2;
+    // Let Scaffold constrain the width in its own scaled coordinate system.
+    // Margins computed from View above the scale can consume the whole width.
     m.showSnackBar(SnackBar(
-      margin: EdgeInsets.fromLTRB(side, 0, side, narrow ? 100 : 40),
+      width: 480,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       duration: Duration(seconds: error ? 8 : 3),
       content: Builder(builder: (context) {
@@ -63,7 +66,8 @@ Future<void> showMenuAt(BuildContext context, Offset at, List<MenuItem> items) a
   final box = Overlay.of(context).context.findRenderObject() as RenderBox;
   final picked = await showMenu<int>(
     context: context,
-    position: RelativeRect.fromRect(at & const Size(1, 1), Offset.zero & box.size),
+    positionBuilder: (_, _) => RelativeRect.fromRect(
+      box.globalToLocal(at) & const Size(1, 1), Offset.zero & box.size),
     items: [
       for (var i = 0; i < items.length; i++)
         if (items[i].separator)

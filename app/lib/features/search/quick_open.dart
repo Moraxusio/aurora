@@ -52,7 +52,7 @@ Future<List<QuickOpenItem>> findFiles(Link link, List<SearchFolder> folders, Str
 }
 
 Future<void> showQuickOpen(Workspace ws, {BuildContext? context}) async {
-  final ctx = context ?? Toast.key.currentContext;
+  final ctx = context ?? AppNavigation.context;
   if (ctx == null || ws.link == null) return;
   final folders = await searchFolders(ws);
   if (!ctx.mounted) return;

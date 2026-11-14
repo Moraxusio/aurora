@@ -20,6 +20,7 @@ import '../../kernel/input_mode.dart';
 import '../../kernel/visible_polling.dart';
 import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
+import '../../kernel/workbench_shortcuts.dart';
 import '../../theme/ide_theme.dart';
 import 'terminal_colors.dart';
 
@@ -67,7 +68,7 @@ final _nameRe = RegExp(r'^[A-Za-z0-9._-]{1,64}$');
 
 /// Asks for a name, creates the session, opens it. Returns the name or null.
 Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
-  final ctx = context ?? Toast.key.currentContext;
+  final ctx = context ?? AppNavigation.context;
   final link = ws.link;
   if (link == null) {
     ws.toast('未连接', error: true);
@@ -544,6 +545,7 @@ class _SessionViewState extends State<SessionView> {
                     controller: _controller,
                     focusNode: _focus,
                     autofocus: false,
+                    onKeyEvent: (_, event) => WorkbenchShortcuts.handle(context, event),
                     theme: theme,
                     textStyle: TerminalStyle(fontSize: _fontSize = ws.app.appearance.value.terminalFont, fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback),
                     padding: const EdgeInsets.fromLTRB(10, 6, 4, 4),

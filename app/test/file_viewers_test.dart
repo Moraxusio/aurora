@@ -91,13 +91,17 @@ void main() {
 
     key.currentState!.text = '# Changed\n\nunsaved\n';
     final editorState = t.state(find.byType(CodeEditor)); // must survive the round trip
+    await t.tap(find.byType(CodeEditor)); await t.pump();
+    final editorFocus = FocusManager.instance.primaryFocus!;
     await t.tap(find.text('预览'));
     await t.pump();
     expect(find.byType(MarkdownPreview), findsOneWidget);
+    expect(t.getSize(find.byType(MarkdownPreview)).height, greaterThan(500), reason: 'the hidden editor must not consume half the viewport');
     expect(find.byType(Markdown), findsOneWidget);
     expect(find.text('Changed', findRichText: true), findsOneWidget);
     expect(find.text('Title', findRichText: true), findsNothing); // the saved text is not what shows
     expect(key.currentState!.dirty, isTrue);
+    expect(editorFocus.canRequestFocus, isFalse, reason: 'the hidden source editor must not receive traversal or typing');
 
     await t.tap(find.text('编辑'));
     await t.pump();

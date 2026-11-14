@@ -10,13 +10,23 @@ class WorkbenchScale extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
     final size = box.biggest / scale;
-    return ClipRect(child: Transform.scale(
-      scale: scale, alignment: Alignment.topLeft,
-      child: OverflowBox(alignment: Alignment.topLeft,
-        minWidth: size.width, maxWidth: size.width,
-        minHeight: size.height, maxHeight: size.height,
-        child: MediaQuery(data: MediaQuery.of(context).copyWith(size: size), child: child),
+    final media = MediaQuery.of(context);
+    // The viewport owns hit testing; its child owns the unscaled layout size.
+    // Transform + OverflowBox paints outside the latter's hit-test bounds when
+    // zooming out, leaving the visible right/bottom of the app unclickable.
+    // FittedBox shares one transform for painting, hits, semantics and overlays.
+    return FittedBox(
+      fit: BoxFit.fill, alignment: Alignment.topLeft, clipBehavior: Clip.hardEdge,
+      child: SizedBox(width: size.width, height: size.height,
+        child: MediaQuery(data: media.copyWith(
+          size: size,
+          devicePixelRatio: media.devicePixelRatio * scale,
+          padding: media.padding / scale,
+          viewPadding: media.viewPadding / scale,
+          viewInsets: media.viewInsets / scale,
+          systemGestureInsets: media.systemGestureInsets / scale,
+        ), child: child),
       ),
-    ));
+    );
   });
 }

@@ -305,6 +305,7 @@ ThemeData buildTheme(Brightness b) {
       backgroundColor: c.surface,
       contentTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 13),
       behavior: SnackBarBehavior.floating,
+      insetPadding: const EdgeInsets.only(top: 8, bottom: 40),
       elevation: 10,
       shape: RoundedRectangleBorder(borderRadius: rl, side: BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
     ),

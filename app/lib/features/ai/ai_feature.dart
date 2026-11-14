@@ -48,7 +48,7 @@ class AiFeature extends Feature {
           group: 'AI 助手',
           icon: Icons.key_rounded,
           run: () {
-            final ctx = Toast.key.currentContext;
+            final ctx = AppNavigation.context;
             if (ctx != null) showAiSettingsDialog(ctx, app: ws.app, ws: ws);
           },
         ),

@@ -79,6 +79,7 @@ class _AuroraAppState extends State<AuroraApp> {
         title: 'Aurora 3',
         debugShowCheckedModeBanner: false,
         scaffoldMessengerKey: Toast.key,
+        navigatorKey: AppNavigation.key,
         theme: _light,
         darkTheme: _dark,
         themeAnimationDuration: Duration.zero,

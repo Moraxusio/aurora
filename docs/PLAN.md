@@ -592,3 +592,12 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - Windows Release 构建耗时 184.2 秒；33 个包内文件与 ZIP 逐项一致。最终 AOT `f535b0bb94ce8051630b6117e4930de68eec3f94a3ac150fabc0abd822b4d55b` 与用户验收的 Lean 预览逐字节相同，989 个生产文件摘要匹配，复用已记录的定向/分析/原生 Profile 结果，没有重复整轮回归。构建后的 Go 元数据检查原先错误地要求 `-trimpath` 产物记录 linker flags，已改为核对干净源码 revision 并运行两类二进制的 `version`；均返回 3.18.0，Windows GUI 子系统通过显式重定向读取输出。
 - 本地包 `C:\dev\VPS\release3\Aurora-3.18.0.zip`，30,477,694 字节；SHA-256 `18ddbf4d19cedac6cdcb0b50a040be7cc4e654012bd124bfc0261e70e04e1f10`。Linux agent `0c01b188439f2ee672a0c4b723de0e7f798197acffae329c2bd6d507344e1309`，Windows agent `73c910af292643cfd5f6c4557d6cd109e092b723f4b82bfbce05e6b354776258`；产品签名与版本验证通过，保留 OpenCode MIT 署名。
 - 源码及标签已推送，先上传草稿，在 3 项资产大小及 GitHub 服务端 SHA-256 全部匹配后发布为 latest；没有重复整包下载。正式包及五个预览的 9 项保护哈希匹配，v2 工作区干净、`release` 顶层仍为 13 项。正式包沿用已有加密配置，未迁移 API Key/OAuth；临时发布授权在本机 DPAPI 暂存，仅用于本次 GitHub 发布，完成后清理。
+
+### 3.18.1 GUI 检查与发布准备（2026-11-14）
+
+- 用户在 85% 缩放发现按钮失效，随后授权完整 GUI 检查、端到端测试和直接编译发布。D-117 统一缩放绘制/命中与 Overlay 坐标；修复命令弹窗 Navigator 上下文、通知宽度、终端保留快捷键、文件预览的焦点/半屏及 AI 历史激活。具体失败回归与覆盖见 [GUI_AUDIT.md](GUI_AUDIT.md)。
+- 正式 `AuroraApp` 根节点新增连续缩放工作流，覆盖菜单遮罩、输入、历史、终端、分隔线、拖放及未保存关闭取消。缩放命中矩阵 80–150% 每 5% 一档 × DPR 1/1.25/1.5/2，窗口标题按钮另测 5 档缩放 × 4 档 DPR；语义开启下也执行完整组件流程。
+- Windows Profile 测试的首次失败分别定位为测试 IME 未注册（Profile 拒绝 debug 专用 client ID -1）、模拟键盘未显式传入 physicalKey（Profile 无 debugName）和触摸点击后直接发鼠标拖动；修正测试输入注册、显式键码及统一鼠标手势后，完整交互工作流通过。原生窗口为 1682×1066 物理像素、DPR 1.25，内存服务和测试输入，不连接真实账号/服务器。
+- 原生日志进一步发现 settings Slider 的 OverlayPortal 语义节点 137 未被 Windows AXTree 接受。语义快照定位到 slider 的跨滚动子树 traversal parent；单独语义边界、关闭数值提示均不足以修复，最终改为同子树局部 Overlay 后，完整原生工作流及 AXTree 日志检查通过。相同修复覆盖标签宽度滑块，并按真实 %/px 朗读数值。关联 Flutter 上游 #182444/#190344；保留全应用语义、Tooltip 和数值提示。
+- 发布版本采用 3.18.1，客户端 build number 31801、两类随包签名 agent 同版本；从提交后的干净源码构建，旧正式包/五个预览保护项增为 11 项。GitHub 授权仅本机 DPAPI 临时保存，发行后清理。
+- 全量回归 329 项通过、20 项按既有条件跳过；最终局部 Overlay/布局滑块改动后定向回归 18/18，通过包含语义开启的正式根节点工作流；最终静态分析零问题。原生脚本把 AXTree 日志拒绝也视为失败，避免仅依据 Dart 的 `All tests passed` 发行。

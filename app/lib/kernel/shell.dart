@@ -29,6 +29,7 @@ import 'tab_layout.dart';
 import 'tab_workspace_view.dart';
 import 'workbench_view.dart';
 import 'retained_pages.dart';
+import 'workbench_shortcuts.dart';
 
 const double _wide = 900, _narrow = 600;
 
@@ -261,7 +262,7 @@ class _ShellState extends State<Shell> {
     final ide = Ide.of(context);
     final size = MediaQuery.sizeOf(context);
     final mode = size.width >= _wide ? 2 : (size.width >= _narrow ? 1 : 0);
-    return CallbackShortcuts(
+    return WorkbenchShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.equal, control: true): () => _zoom(.1),
         const SingleActivator(LogicalKeyboardKey.equal, control: true, shift: true): () => _zoom(.1),

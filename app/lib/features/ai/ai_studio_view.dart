@@ -22,17 +22,19 @@ import 'ai_attachments.dart';
 import 'ai_path_picker.dart';
 import 'ai_attachment_tile.dart';
 import 'ai_history.dart';
+import 'ai_transcript.dart';
 
 class _AiPasteIntent extends Intent { const _AiPasteIntent(); }
 
 EditorTab aiStudioTab(Workspace ws, {String? sessionId, String title = 'AI 助手'}) {
-  final tabId = sessionId == null ? 'ai:new' : 'ai:$sessionId';
+  final tabId = sessionId == null ? 'ai:draft:${newId()}' : 'ai:$sessionId';
   return EditorTab(
     id: tabId,
+    taskKey: sessionId,
     title: title,
     icon: Icons.auto_awesome_rounded,
     tooltip: 'AI 智能体 · $title',
-    builder: (_) => AiStudioView(key: ValueKey('${ws.serverId}/$tabId'), ws: ws, initialSessionId: sessionId),
+    builder: (_) => AiStudioView(key: ValueKey('${ws.serverId}/$tabId'), ws: ws, initialSessionId: sessionId, tabId: tabId),
   );
 }
 
@@ -40,12 +42,14 @@ class AiStudioView extends StatefulWidget {
   final Workspace ws;
   final String? initialSessionId;
   final VoidCallback? onSessionsChanged;
+  final String? tabId;
 
   const AiStudioView({
     super.key,
     required this.ws,
     this.initialSessionId,
     this.onSessionsChanged,
+    this.tabId,
   });
 
   @override
@@ -78,13 +82,13 @@ class _AiStudioViewState extends State<AiStudioView> {
   final Map<AiAttachment,(Link,Map<String,dynamic>)> _uploadedAttachments={};
   bool _pasteBusy=false;
   String? _attachmentNote;
-  bool _followTail=true;
+  bool _planExpanded = false;
   Timer? _paintTimer;
   double _chatFontSize=15;
   final Map<AiMessage,(Ide,bool,double,Link?,Widget)> _messageCache={};
   final _inputCtl = TextEditingController();
   final _inputFocus = FocusNode();
-  final _scrollCtl = ScrollController();
+  final _scrollCtl = AiTranscriptController();
 
   OpStream? _stream;
   Link? _streamLink;
@@ -108,7 +112,6 @@ class _AiStudioViewState extends State<AiStudioView> {
       _chatFontSize = ws.app.profile.ai.chatFontSize;
     }
     ws.addListener(_onWorkspaceChanged);
-    _scrollCtl.addListener(_onScroll);
     ws.app.addListener(_onAppChanged);
     _initConnection();
   }
@@ -234,7 +237,7 @@ class _AiStudioViewState extends State<AiStudioView> {
   }
 
   void _updateTabTitle(String title) {
-    final tabId = widget.initialSessionId == null ? 'ai:new' : 'ai:${widget.initialSessionId}';
+    final tabId = widget.tabId ?? (widget.initialSessionId == null ? 'ai:new' : 'ai:${widget.initialSessionId}');
     ws.updateTabTitle(tabId, title);
   }
 
@@ -497,24 +500,10 @@ class _AiStudioViewState extends State<AiStudioView> {
     finally { _replayingEvents = false; }
   }
 
-  void _onScroll(){
-    if(!_scrollCtl.hasClients)return;
-    final near=_scrollCtl.position.maxScrollExtent-_scrollCtl.position.pixels<120;
-    if(near!=_followTail&&mounted)setState(()=>_followTail=near);
-  }
-
   void _scrollToBottom({bool force=false}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollCtl.hasClients) return;
-      final pos = _scrollCtl.position;
-      if (force || _followTail) {
-        _scrollCtl.animateTo(
-          pos.maxScrollExtent,
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    // Ordinary events/reloads never change reading intent. The transcript
+    // applies geometry and tail corrections during layout, not animations.
+    if (force) _scrollCtl.followLatest();
   }
 
   AiProvider? get _activeProvider => ws.app.ready ? ws.app.profile.ai.activeProvider : null;
@@ -538,7 +527,8 @@ class _AiStudioViewState extends State<AiStudioView> {
     final sentAttachments = List<AiAttachment>.of(_attachments);
     final sentRoot=_root, sentWorkdir=_workdir, sentAgent=_agentMode, sentPermission=_permMode;
     final inputBefore = _inputCtl.text;
-    setState(() { _sending = true; _followTail=true; });
+    setState(() { _sending = true; });
+    _scrollCtl.followLatest();
 
     try {
       final prepared = await prepareAiProvider(ws.app, link, prov);
@@ -571,6 +561,8 @@ class _AiStudioViewState extends State<AiStudioView> {
       final sum = AiSessionSummary.fromJson((res['session'] as Map).cast<String, dynamic>());
       final isNew = _sessionId == null;
       _sessionId = sum.id;
+      final currentTab = ws.tab(widget.tabId ?? '');
+      if (currentTab != null) currentTab.taskKey = sum.id;
       if (isNew) {
         _stream?.sendJson({'type': 'filter', 'session_id': sum.id}).ignore();
         await _loadSession(link, sum.id);
@@ -660,7 +652,7 @@ class _AiStudioViewState extends State<AiStudioView> {
 
   Future<void> _attachActiveFile() async {
     final link = ws.link;
-    final activeFile = ws.active?.file;
+    final activeFile = ws.tab(ws.editorActiveId ?? '')?.file;
     if (link == null || activeFile == null) {
       ws.toast('请先在编辑器中打开一个文件，或使用「浏览服务器文件」');
       return;
@@ -756,55 +748,95 @@ class _AiStudioViewState extends State<AiStudioView> {
     final messages = (_session?.messages ?? const <AiMessage>[]).where((m) => !m.isSystemReminder).toList();
     final todos = _session?.todos ?? const <AiTodoItem>[];
 
-    return DefaultTextStyle.merge(style:const TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback),child:Column(
+    return LayoutBuilder(builder: (_, constraints) {
+    final short = constraints.maxHeight < 420;
+    return CallbackShortcuts(bindings: {
+      const SingleActivator(LogicalKeyboardKey.arrowUp, alt: true): () => _navigateMessage(messages, -1),
+      const SingleActivator(LogicalKeyboardKey.arrowDown, alt: true): () => _navigateMessage(messages, 1),
+      const SingleActivator(LogicalKeyboardKey.end, control: true): () => _scrollCtl.followLatest(),
+    }, child: DefaultTextStyle.merge(style:const TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback),child:Column(
       children: [
-        _buildTopBar(ide, prov),
-        _buildRuntimeBar(ide, prov),
+        if (!short) _buildTopBar(ide, prov),
+        _buildMessageNavigation(ide, messages),
         if (_loading) const LinearProgressIndicator(minHeight: 2),
         if (_eventNote != null || _error != null) MaterialBanner(
           content: Text(_error ?? _eventNote!, style: const TextStyle(fontSize: 12)),
           actions: [TextButton(onPressed: () { if (_sessionId != null && ws.link != null) unawaited(_loadSession(ws.link!, _sessionId!)); }, child: const Text('重新同步'))],
         ),
-        if (_activities.isNotEmpty) _buildActivities(ide),
         const Divider(height: 1),
-        if (todos.isNotEmpty) _buildTodoBanner(ide, todos),
         Expanded(
           child: messages.isEmpty && !_running
               ? _buildEmptyWelcome(ide, prov)
-              : ListView.builder(
-                  controller: _scrollCtl,
-                  padding: const EdgeInsets.fromLTRB(Space.xl, Space.l, Space.xl, Space.xl),
-                  itemCount:messages.length+((_running||_liveReasoning.isNotEmpty||_liveText.isNotEmpty||_liveTools.isNotEmpty||_liveCompaction.isNotEmpty)?1:0)+(_pendingPerm!=null?1:0),
-                  itemBuilder:(context,index){
-                    if(index<messages.length){final msg=messages[index];return Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 900),
-                          child: RepaintBoundary(key:ValueKey(msg.id),child:_cachedMessageItem(ide, msg)),
-                        ),
-                      );}
-                    if(index==messages.length&&(_running||_liveReasoning.isNotEmpty||_liveText.isNotEmpty||_liveTools.isNotEmpty||_liveCompaction.isNotEmpty)){return Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 900),
-                          child: _buildLiveStep(ide),
-                        ),
-                      );}
-                    return Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 900),
+              : AiTranscript(
+                   controller: _scrollCtl,
+                   ids: [for (final message in messages) message.id,
+                     if (_running||_activities.isNotEmpty||_liveReasoning.isNotEmpty||_liveText.isNotEmpty||_liveTools.isNotEmpty||_liveCompaction.isNotEmpty) '@live',
+                     if (_pendingPerm != null) '@permission'],
+                   itemBuilder:(context,index){
+                     if(index<messages.length){final msg=messages[index];return Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Center(
+                         child: ConstrainedBox(
+                           constraints: const BoxConstraints(maxWidth: 760),
+                           child: RepaintBoundary(key:ValueKey(msg.id),child:_cachedMessageItem(ide, msg)),
+                         ),
+                       ));}
+                     if(index==messages.length&&(_running||_activities.isNotEmpty||_liveReasoning.isNotEmpty||_liveText.isNotEmpty||_liveTools.isNotEmpty||_liveCompaction.isNotEmpty)){return Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Center(
+                         child: ConstrainedBox(
+                           constraints: const BoxConstraints(maxWidth: 760),
+                           child: Column(children: [if (_activities.isNotEmpty) _buildActivities(ide), _buildLiveStep(ide)]),
+                         ),
+                       ));}
+                     return Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Center(
+                         child: ConstrainedBox(
+                           constraints: const BoxConstraints(maxWidth: 760),
                           child: Padding(
                             padding: const EdgeInsets.only(top: Space.m),
                             child: _buildPermissionCard(ide, _pendingPerm!),
                           ),
                         ),
-                      );
+                       ));
                   },
                 ),
         ),
-        if(!_followTail) TextButton.icon(key:const ValueKey('ai-jump-latest'),onPressed:(){setState(()=>_followTail=true);_scrollToBottom(force:true);},icon:const Icon(Icons.arrow_downward,size:16),label:const Text('回到最新消息')),
-        _buildComposer(ide, prov),
+        if (!short && todos.any((t) => t.status != 'completed' && t.status != 'cancelled')) _buildTodoBanner(ide, todos),
+        if (!short) _buildRuntimeBar(ide, prov),
+        _buildComposer(ide, prov, compact: short),
       ],
-    ));
+    )));
+    });
   }
+
+  void _navigateMessage(List<AiMessage> messages, int step) {
+    if (messages.isEmpty) return;
+    final index = messages.indexWhere((m) => m.id == _scrollCtl.currentMessage.value);
+    final at = index < 0 ? messages.length - 1 : index;
+    _scrollCtl.reveal(messages[(at + step).clamp(0, messages.length - 1)].id);
+  }
+
+  Widget _buildMessageNavigation(Ide ide, List<AiMessage> messages) => Container(
+    key: const ValueKey('ai-message-navigation'), height: 32,
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    child: ValueListenableBuilder<String?>(valueListenable: _scrollCtl.currentMessage, builder: (_, current, _) {
+      final index = messages.indexWhere((m) => m.id == current);
+      final at = index < 0 ? messages.length - 1 : index;
+      String label(AiMessage m) {
+        final text = m.parts.where((p) => p.type == 'text').map((p) => p.text).join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+        return '${m.role == 'user' ? '你' : m.role == 'assistant' ? 'AI' : '检查点'} · ${text.isEmpty ? '工具与执行记录' : text}';
+      }
+      return Row(children: [
+        IconButton(key: const ValueKey('ai-previous-message'), tooltip: '上一条消息（Alt+↑）', padding: EdgeInsets.zero, constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          onPressed: at > 0 ? () => _scrollCtl.reveal(messages[at - 1].id) : null, icon: const Icon(Icons.arrow_upward, size: 15)),
+        Expanded(child: PopupMenuButton<String>(key: const ValueKey('ai-message-anchors'), tooltip: '对话锚点 · 跳转到消息', onSelected: _scrollCtl.reveal,
+          itemBuilder: (_) => [for (var i = 0; i < messages.length; i++) PopupMenuItem(value: messages[i].id, child: SizedBox(width: 300, child: Text('${i + 1}. ${label(messages[i])}', maxLines: 2, overflow: TextOverflow.ellipsis)))],
+          child: Text(messages.isEmpty ? '对话锚点' : '${at + 1}/${messages.length}  ${label(messages[at])}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: ide.textDim)))),
+        IconButton(key: const ValueKey('ai-next-message'), tooltip: '下一条消息（Alt+↓）', padding: EdgeInsets.zero, constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          onPressed: at >= 0 && at < messages.length - 1 ? () => _scrollCtl.reveal(messages[at + 1].id) : null, icon: const Icon(Icons.arrow_downward, size: 15)),
+        ValueListenableBuilder<bool>(valueListenable: _scrollCtl.followsLatest, builder: (_, follows, _) => IconButton(
+          key: const ValueKey('ai-jump-latest'), tooltip: follows ? '已在最新消息' : '回到最新消息', padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 28, height: 28), onPressed: () => _scrollToBottom(force: true),
+          icon: Icon(Icons.vertical_align_bottom, size: 16, color: follows ? ide.textFaint : ide.accent))),
+      ]);
+    }),
+  );
 
   Widget _buildTopBar(Ide ide, AiProvider? prov) {
     final canPickDir = !_sending&&(_session == null || _session!.messages.isEmpty);
@@ -880,7 +912,8 @@ class _AiStudioViewState extends State<AiStudioView> {
     final done = todos.where((t) => t.status == 'completed').length;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: Space.xl, vertical: Space.s + 2),
+      key: const ValueKey('ai-active-plan'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: ide.sideBar.withValues(alpha: 0.7),
         border: Border(bottom: BorderSide(color: ide.border)),
@@ -891,21 +924,20 @@ class _AiStudioViewState extends State<AiStudioView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              InkWell(onTap: () => setState(() => _planExpanded = !_planExpanded), child: SizedBox(height: 28, child: Row(
                 children: [
                   Icon(Icons.checklist_rounded, size: 15, color: ide.accent),
                   const SizedBox(width: 6),
                   Text('任务进度 ($done/${todos.length})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ide.text)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(todos.where((t) => t.status == 'in_progress').firstOrNull?.content ?? '计划进行中', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: ide.textDim))),
+                  Icon(_planExpanded ? Icons.expand_less : Icons.expand_more, size: 16, color: ide.textDim),
                 ],
-              ),
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: Space.m,
-                runSpacing: 4,
+              ))),
+              if (_planExpanded) ConstrainedBox(constraints: const BoxConstraints(maxHeight: 140), child: SingleChildScrollView(child: Column(
                 children: [
                   for (final t in todos)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                      Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(
                       children: [
                         Icon(
                           t.status == 'completed'
@@ -921,18 +953,18 @@ class _AiStudioViewState extends State<AiStudioView> {
                                   : ide.textFaint,
                         ),
                         const SizedBox(width: 4),
-                        Text(
+                        Expanded(child: Text(
                           t.content,
                           style: TextStyle(
                             fontSize: 12,
                             color: t.status == 'completed' ? ide.textDim : ide.text,
                             decoration: t.status == 'completed' ? TextDecoration.lineThrough : null,
                           ),
-                        ),
+                        )),
                       ],
-                    ),
+                    )),
                 ],
-              ),
+              ))),
             ],
           ),
         ),
@@ -1038,11 +1070,11 @@ class _AiStudioViewState extends State<AiStudioView> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                           decoration: BoxDecoration(
-                            color: msg.agent == 'plan' ? ide.warn.withValues(alpha: 0.14) : ide.accentSoft,
+                            color: Colors.transparent,
                             borderRadius: BorderRadius.circular(Radii.s),
                           ),
                           child: Text(
-                            msg.agent == 'plan' ? 'PLAN' : 'BUILD',
+                            '你',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
@@ -1303,17 +1335,20 @@ class _AiStudioViewState extends State<AiStudioView> {
     );
   }
 
-  Widget _buildComposer(Ide ide, AiProvider? prov) {
-    final activeFile = ws.active?.file;
+  Widget _buildComposer(Ide ide, AiProvider? prov, {bool compact = false}) {
+    final activeFile = ws.tab(ws.editorActiveId ?? '')?.file;
+    return LayoutBuilder(builder: (_, box) {
+    final narrow = box.maxWidth < 460;
     return Container(
-      padding: const EdgeInsets.fromLTRB(Space.l, Space.s + 2, Space.l, Space.m + 2),
+      key: const ValueKey('ai-composer'),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
         color: ide.editor,
         border: Border(top: BorderSide(color: ide.border)),
       ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 820),
+           constraints: const BoxConstraints(maxWidth: 760),
           child: Container(
             decoration: BoxDecoration(
               color: ide.sideBar,
@@ -1361,8 +1396,8 @@ class _AiStudioViewState extends State<AiStudioView> {
                     key: const ValueKey('ai-prompt-input'),
                     controller: _inputCtl,
                     focusNode: _inputFocus,
-                    minLines: 1,
-                    maxLines: MediaQuery.sizeOf(context).width<600?3:6,
+                    minLines: compact ? 1 : 2,
+                    maxLines: compact ? 2 : box.maxWidth<600?3:6,
                     style: TextStyle(fontFamily:Ide.ui,fontFamilyFallback:Ide.uiFallback,fontSize:15,color:ide.text,height:1.6),
                     contentInsertionConfiguration:ContentInsertionConfiguration(allowedMimeTypes:const ['image/png','image/jpeg','image/gif','image/webp','application/pdf','text/plain'],onContentInserted:(c)=>unawaited(_insertContent(c))),
                     contextMenuBuilder:(context,state)=>AdaptiveTextSelectionToolbar.buttonItems(anchors:state.contextMenuAnchors,buttonItems:[
@@ -1371,8 +1406,8 @@ class _AiStudioViewState extends State<AiStudioView> {
                     ]),
                     decoration: InputDecoration(
                       hintText: _running
-                          ? '正在运行… 输入补充指令并回车可实时引导 (Steer)'
-                          : (_agentMode == 'plan' ? 'Plan 只读规划模式：探索代码库并制定方案（Shift+Enter 换行）' : '描述需要编写、修复或排查的任务…（Shift+Enter 换行）'),
+                          ? '补充指令…'
+                          : (_agentMode == 'plan' ? '规划任务，不修改文件…' : '向 AI 提问，或描述要完成的任务…'),
                       filled: false,
                       isCollapsed: true,
                       border: InputBorder.none,
@@ -1382,66 +1417,31 @@ class _AiStudioViewState extends State<AiStudioView> {
                   ),
                 ))),
                 const SizedBox(height: Space.s + 2),
-                Wrap(
-                  spacing: Space.s,
-                  runSpacing: Space.s,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                SizedBox(height: 30, child: _buildModelChoice(ide, prov)),
+                SizedBox(height: 32, child: Row(
                   children: [
                     // Build / Plan switcher
                     _ModePill(
-                      label: _agentMode == 'plan' ? 'Plan 规划' : 'Build 构建',
+                      label: _agentMode == 'plan' ? (narrow ? 'Plan' : 'Plan 规划') : (narrow ? 'Build' : 'Build 构建'),
                       icon: _agentMode == 'plan' ? Icons.architecture_rounded : Icons.build_circle_outlined,
                       color: _agentMode == 'plan' ? ide.warn : ide.accent,
                       onTap: () => setState(() => _agentMode = _agentMode == 'plan' ? 'build' : 'plan'),
                     ),
-                    const SizedBox(width: Space.s),
+                    const SizedBox(width: 4),
                     // Ask / Auto permission switcher
                     _ModePill(
-                      label: _permMode == 'auto' ? 'Auto 自动执行' : 'Ask 询问确认',
+                      label: _permMode == 'auto' ? (narrow ? 'Auto' : 'Auto 自动执行') : (narrow ? 'Ask' : 'Ask 询问确认'),
                       icon: _permMode == 'auto' ? Icons.bolt_rounded : Icons.verified_user_outlined,
                       color: _permMode == 'auto' ? ide.ok : ide.textDim,
                       onTap: () => setState(() => _permMode = _permMode == 'auto' ? 'ask' : 'auto'),
                     ),
-                    const SizedBox(width: Space.s),
-                    // Model + thinking strength: one click opens the quick picker.
-                    InkWell(
-                      key: const ValueKey('ai-model-btn'),
-                      onTap: () => showAiModelPicker(context, ws),
-                      borderRadius: BorderRadius.circular(Radii.s + 2),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.memory_rounded, size: 13, color: ide.textDim),
-                            const SizedBox(width: 4),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 180),
-                              child: Text(
-                                prov == null || prov.model.isEmpty ? '选择模型…' : '${prov.name} / ${prov.model}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 11.5, color: prov == null || prov.model.isEmpty ? ide.warn : ide.textDim),
-                              ),
-                            ),
-                            if (prov != null && prov.reasoningEffort.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Icon(Icons.psychology_outlined, size: 13, color: ide.accent),
-                              const SizedBox(width: 2),
-                              Text(aiEffortLabel(prov.reasoningEffort), style: TextStyle(fontSize: 11.5, color: ide.accent)),
-                            ],
-                            Icon(Icons.expand_more_rounded, size: 14, color: ide.textFaint),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (activeFile != null)
-                      IconBtn(Icons.attach_file_rounded, '附加当前打开文件 (${activeFile.name})', _attachActiveFile, size: 15),
-                    PopupMenuButton<String>(key:const ValueKey('ai-attach-menu'),tooltip:'添加图片或文件',onSelected:(v){if(v=='local')_pickLocalFiles();if(v=='paste')_paste();if(v=='remote')_attachFileByPath();},itemBuilder:(_)=>[
+                    const Spacer(),
+                    SizedBox(width: 30, child: PopupMenuButton<String>(padding: EdgeInsets.zero, key:const ValueKey('ai-attach-menu'),tooltip:'添加图片或文件',onSelected:(v){if(v=='active')_attachActiveFile();if(v=='local')_pickLocalFiles();if(v=='paste')_paste();if(v=='remote')_attachFileByPath();},itemBuilder:(_)=>[
+                      if (activeFile != null) PopupMenuItem(value:'active',child:Text('附加当前文件：${activeFile.name}')),
                       const PopupMenuItem(value:'local',child:Text('选择本机图片 / 文件…')),
                       const PopupMenuItem(value:'paste',child:Text('粘贴图片 / 文件 / 文本')),
                       PopupMenuItem(value:'remote',child:Text(ws.entry?.isLocal == true ? '浏览本机项目文件…' : '浏览服务器文件…')),
-                    ],icon:Icon(Icons.add_photo_alternate_outlined,size:19,color:ide.accent)),
+                    ],icon:Icon(Icons.add,size:18,color:ide.textDim))),
                     if (_running) ...[
                       const SizedBox(width: 4),
                       Tooltip(
@@ -1451,7 +1451,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                           onTap: _stop,
                           borderRadius: BorderRadius.circular(Radii.m),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
                             decoration: BoxDecoration(
                               color: ide.error.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(Radii.m),
@@ -1462,7 +1462,7 @@ class _AiStudioViewState extends State<AiStudioView> {
                               children: [
                                 Icon(Icons.stop_rounded, size: 15, color: ide.error),
                                 const SizedBox(width: 3),
-                                Text('停止', style: TextStyle(fontSize: 12, color: ide.error, fontWeight: FontWeight.w600)),
+                                if (!narrow) Text('停止', style: TextStyle(fontSize: 12, color: ide.error, fontWeight: FontWeight.w600)),
                               ],
                             ),
                           ),
@@ -1482,19 +1482,34 @@ class _AiStudioViewState extends State<AiStudioView> {
                         children: [
                           Icon(_running ? Icons.subdirectory_arrow_left_rounded : Icons.arrow_upward_rounded, size: 15),
                           const SizedBox(width: 4),
-                          Text(_sending ? '准备中' : _running ? '引导' : '发送', style: const TextStyle(fontSize: 12.5)),
+                          if (!narrow) Text(_sending ? '准备中' : _running ? '引导' : '发送', style: const TextStyle(fontSize: 12.5)),
                         ],
                       ),
                     ),
                   ],
-                ),
+                )),
               ],
             ),
           ),
         ),
       ),
     );
+    });
   }
+
+  Widget _buildModelChoice(Ide ide, AiProvider? prov) => InkWell(
+    key: const ValueKey('ai-model-btn'), onTap: () => showAiModelPicker(context, ws),
+    borderRadius: BorderRadius.circular(4),
+    child: Row(children: [
+      Icon(Icons.expand_more, size: 14, color: ide.textDim), const SizedBox(width: 4),
+      Expanded(child: Text(prov == null || prov.model.isEmpty ? '选择模型…' : '${prov.name} / ${prov.model}',
+        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: prov == null ? ide.warn : ide.textDim))),
+      if (prov != null && prov.reasoningEffort.isNotEmpty) ...[
+        const SizedBox(width: 6), Icon(Icons.psychology_outlined, size: 13, color: ide.textDim),
+        const SizedBox(width: 3), Text(aiEffortLabel(prov.reasoningEffort), style: TextStyle(fontSize: 11, color: ide.textDim)),
+      ],
+    ]),
+  );
 
   String _fmtTokens(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
@@ -1518,9 +1533,9 @@ class _ModePill extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(Radii.m),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          border: Border.all(color: Ide.of(context).border),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

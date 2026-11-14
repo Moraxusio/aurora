@@ -16,19 +16,66 @@ class TabDragData {
   final String project;
   final int generation;
   final EditorTab tab;
+  final TabLayout layout;
+  final int revision;
+  bool cancelled = false;
   TabDragData(this.workspace, this.tab)
     : project = workspace.projectKey,
-      generation = workspace.projectGeneration;
+      generation = workspace.projectGeneration,
+      layout = workspace.tabLayout,
+      revision = workspace.tabLayout.revision;
   bool valid(Workspace ws) =>
       identical(workspace, ws) &&
       project == ws.projectKey &&
       generation == ws.projectGeneration &&
       identical(ws.tab(tab.id), tab) &&
-      !tab.isTerminal &&
+      !cancelled &&
+      identical(layout, ws.tabLayout) &&
+      revision == layout.revision &&
+      tab.isEditor &&
       ws.tabLayout.owner(tab.id) != null;
 }
 
-enum _Edge { center, left, right, top, bottom }
+/// VS Code's editor drop contract: center moves, outer 10% splits. Direction
+/// selection is normalized, so corner behavior is not biased by pane aspect.
+class TabDropPolicy {
+  static TabDropEdge? resolve(
+    TabDragData data,
+    Workspace ws,
+    String group,
+    Size size,
+    Offset p,
+  ) {
+    if (!data.valid(ws) ||
+        ws.tabLayout.group(group) == null ||
+        !(Offset.zero & size).contains(p) ||
+        size.isEmpty) {
+      return null;
+    }
+    final source = ws.tabLayout.owner(data.tab.id)!;
+    final x = p.dx / size.width, y = p.dy / size.height;
+    if (x > .1 && x < .9 && y > .1 && y < .9) {
+      return source.id == group ? null : TabDropEdge.center;
+    }
+    if (source.id == group && source.tabs.length == 1) return null;
+    if (ws.tabLayout.groups.length >= TabLayout.maxGroups &&
+        source.tabs.length > 1) {
+      return null;
+    }
+    final edge = x < 1 / 3
+        ? TabDropEdge.left
+        : x > 2 / 3
+        ? TabDropEdge.right
+        : y < .5
+        ? TabDropEdge.top
+        : TabDropEdge.bottom;
+    final horizontal = edge == TabDropEdge.left || edge == TabDropEdge.right;
+    if ((horizontal ? size.width < 420 : size.height < 280)) {
+      return source.id == group ? null : TabDropEdge.center;
+    }
+    return edge;
+  }
+}
 
 class PaneDropTarget extends StatefulWidget {
   final Workspace ws;
@@ -39,27 +86,16 @@ class PaneDropTarget extends StatefulWidget {
 }
 
 class _PaneDropTargetState extends State<PaneDropTarget> {
-  _Edge? _edge;
-  _Edge? _intent(TabDragData data, Offset global) {
-    if (!data.valid(widget.ws) ||
-        widget.ws.tabLayout.group(widget.group) == null) {
-      return null;
-    }
+  TabDropEdge? _edge;
+  TabDropEdge? _intent(TabDragData data, Offset global) {
     final box = context.findRenderObject() as RenderBox;
-    final p = box.globalToLocal(global), size = box.size;
-    if (!(Offset.zero & size).contains(p)) return null;
-    final distances = [p.dx, size.width - p.dx, p.dy, size.height - p.dy];
-    final closest = distances.reduce(math.min);
-    final threshold = math.min(80.0, math.min(size.width, size.height) * .23);
-    if (closest >= threshold) {
-      return widget.ws.tabLayout.owner(data.tab.id)?.id == widget.group
-          ? null
-          : _Edge.center;
-    }
-    if (widget.ws.tabLayout.groups.length >= TabLayout.maxGroups) return null;
-    return [_Edge.left, _Edge.right, _Edge.top, _Edge.bottom][distances.indexOf(
-      closest,
-    )];
+    return TabDropPolicy.resolve(
+      data,
+      widget.ws,
+      widget.group,
+      box.size,
+      box.globalToLocal(global),
+    );
   }
 
   void _move(DragTargetDetails<TabDragData> d) {
@@ -72,6 +108,8 @@ class _PaneDropTargetState extends State<PaneDropTarget> {
     hitTestBehavior: HitTestBehavior.opaque,
     onWillAcceptWithDetails: (d) {
       _move(d);
+      // Acceptance is stable for the gesture. A drag can enter at the center
+      // (no-op here) and later move to a valid edge without re-entering.
       return d.data.valid(widget.ws);
     },
     onMove: _move,
@@ -80,19 +118,9 @@ class _PaneDropTargetState extends State<PaneDropTarget> {
     },
     onAcceptWithDetails: (d) {
       final edge = _intent(d.data, d.offset);
+      setState(() => _edge = null);
       if (edge == null) return;
-      if (edge == _Edge.center) {
-        widget.ws.moveTab(d.data.tab.id, widget.group);
-      } else {
-        widget.ws.splitGroup(
-          edge == _Edge.left || edge == _Edge.right
-              ? SplitAxis.horizontal
-              : SplitAxis.vertical,
-          group: widget.group,
-          tabId: d.data.tab.id,
-          before: edge == _Edge.left || edge == _Edge.top,
-        );
-      }
+      widget.ws.dropEditorTab(d.data.tab.id, widget.group, edge);
     },
     builder: (_, _, _) => SizedBox.expand(
       key: ValueKey('pane-drop-${widget.group}'),
@@ -109,28 +137,28 @@ class _PaneDropTargetState extends State<PaneDropTarget> {
 }
 
 class _PanePreview extends CustomPainter {
-  final _Edge edge;
+  final TabDropEdge edge;
   final Ide ide;
   const _PanePreview(this.edge, this.ide);
   @override
   void paint(Canvas canvas, Size size) {
     final full = Offset.zero & size;
     final rect = switch (edge) {
-      _Edge.left => Rect.fromLTWH(0, 0, size.width / 2, size.height),
-      _Edge.right => Rect.fromLTWH(
+      TabDropEdge.left => Rect.fromLTWH(0, 0, size.width / 2, size.height),
+      TabDropEdge.right => Rect.fromLTWH(
         size.width / 2,
         0,
         size.width / 2,
         size.height,
       ),
-      _Edge.top => Rect.fromLTWH(0, 0, size.width, size.height / 2),
-      _Edge.bottom => Rect.fromLTWH(
+      TabDropEdge.top => Rect.fromLTWH(0, 0, size.width, size.height / 2),
+      TabDropEdge.bottom => Rect.fromLTWH(
         0,
         size.height / 2,
         size.width,
         size.height / 2,
       ),
-      _Edge.center => full,
+      TabDropEdge.center => full,
     };
     final shape = RRect.fromRectAndRadius(
       rect.deflate(5),
@@ -300,7 +328,12 @@ class _TabStripDropTargetState extends State<TabStripDropTarget>
       final slot = _slot.value;
       _clear();
       if (slot != null && d.data.valid(widget.ws)) {
-        widget.ws.moveTab(d.data.tab.id, widget.group.id, index: slot);
+        widget.ws.dropEditorTab(
+          d.data.tab.id,
+          widget.group.id,
+          TabDropEdge.center,
+          index: slot,
+        );
       }
     },
     builder: (_, _, _) => Stack(

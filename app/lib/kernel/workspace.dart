@@ -19,6 +19,7 @@ import 'file_watch.dart';
 import 'widgets.dart';
 import 'tab_layout.dart';
 import 'terminal_panel_state.dart';
+import 'assistant_panel_state.dart';
 
 class Workspace extends ChangeNotifier {
   final AppState app;
@@ -28,6 +29,11 @@ class Workspace extends ChangeNotifier {
   final Map<String, Future<bool>> _closingTabs = {};
   int editorFocusRequest = 0;
   int terminalFocusRequest = 0;
+  int assistantFocusRequest = 0;
+  bool _assistantFocused = false;
+  late final AssistantPanelState assistantPanel = _loadAssistantPanel();
+  bool get assistantFocused => _assistantFocused && assistantPanel.visible;
+  List<EditorTab> get assistantTabs => [for (final id in assistantPanel.ids) ?tab(id)];
   bool _terminalFocused = false;
   late final TerminalPanelState terminalPanel = _loadTerminalPanel();
   bool get terminalFocused => _terminalFocused && terminalPanel.visible;
@@ -37,8 +43,8 @@ class Workspace extends ChangeNotifier {
     final byId = {for (final tab in tabs) if (tab.isTerminal) tab.id: tab};
     return [for (final id in terminalPanel.ids) ?byId[id]];
   }
-  List<EditorTab> get editorTabs => tabs.where((tab) => !tab.isTerminal).toList();
-  List<EditorTab> get navigationTabs => terminalFocused ? terminalTabs : tabsInGroup(tabLayout.focused);
+  List<EditorTab> get editorTabs => tabs.where((tab) => tab.isEditor).toList();
+  List<EditorTab> get navigationTabs => assistantFocused ? assistantTabs : terminalFocused ? terminalTabs : tabsInGroup(tabLayout.focused);
   String? get activeId => tabLayout.groups.first.active;
   set activeId(String? id) => tabLayout.groups.first.active = id;
   String? _projectId;
@@ -145,6 +151,8 @@ class Workspace extends ChangeNotifier {
       _projectId = selected;
       focusMode = false;
       _terminalFocused = false;
+      _assistantFocused = false;
+      assistantPanel.maximized = false;
       terminalPanel.maximized = false;
       editorFocusRequest++;
       _syncLayout(projectKey);
@@ -254,16 +262,23 @@ class Workspace extends ChangeNotifier {
 
   /// Opens [t], or brings the open tab with the same id to the front.
   void openTab(EditorTab t) {
-    final existing = tab(t.id);
+    final existing = tab(t.id) ?? (t.isAssistant && t.taskKey != null ? assistantTabs.where((other) => other.taskKey == t.taskKey).firstOrNull : null);
     if (existing != null) {
       if (existing.file != null) existing.projects.add(projectKey);
       _syncLayout(projectKey);
       if (!identical(t, existing)) t.dispose();
-      activate(t.id);
+      activate(existing.id);
       return;
     }
     tabs.add(t);
+    if (t.isAssistant) {
+      assistantPanel.activate(t.id);
+      showAssistantPanel();
+      return;
+    }
     if (t.isTerminal) {
+      _assistantFocused = false;
+      assistantPanel.maximized = false;
       terminalPanel.activate(t.id);
       _terminalFocused = true;
       terminalFocusRequest++;
@@ -282,7 +297,14 @@ class Workspace extends ChangeNotifier {
   void activate(String id) {
     final t = tab(id);
     if (t == null) return;
+    if (t.isAssistant) {
+      assistantPanel.activate(t.id);
+      showAssistantPanel();
+      return;
+    }
     if (t.isTerminal) {
+      _assistantFocused = false;
+      assistantPanel.maximized = false;
       terminalPanel.activate(id);
       _terminalFocused = true;
       terminalFocusRequest++;
@@ -300,6 +322,8 @@ class Workspace extends ChangeNotifier {
 
   /// Reveals [id] in its group, or adds a new tab to the focused group.
   void _show(String id) {
+    _assistantFocused = false;
+    assistantPanel.maximized = false;
     _terminalFocused = false;
     terminalPanel.maximized = false;
     tabLayout.add(id);
@@ -316,6 +340,8 @@ class Workspace extends ChangeNotifier {
   }
 
   void showTerminalPanel() {
+    _assistantFocused = false;
+    assistantPanel.maximized = false;
     terminalPanel.visible = true;
     _terminalFocused = true;
     terminalFocusRequest++;
@@ -326,6 +352,8 @@ class Workspace extends ChangeNotifier {
   void focusTerminalPanel() {
     if (!terminalPanel.visible) return showTerminalPanel();
     if (_terminalFocused) return;
+    _assistantFocused = false;
+    assistantPanel.maximized = false;
     _terminalFocused = true;
     terminalFocusRequest++;
     notifyListeners();
@@ -345,6 +373,8 @@ class Workspace extends ChangeNotifier {
   }
 
   void toggleTerminalMaximized() {
+    _assistantFocused = false;
+    assistantPanel.maximized = false;
     terminalPanel.maximized = !terminalPanel.maximized;
     terminalPanel.visible = true;
     _terminalFocused = true;
@@ -361,6 +391,42 @@ class Workspace extends ChangeNotifier {
   }
 
   // ---- editor groups ----
+  AssistantPanelState _loadAssistantPanel() {
+    final value = _viewForKey('').tabLayout['assistant_width'];
+    return AssistantPanelState(width: value is num && value.isFinite ? value.toDouble().clamp(320.0, 800.0) : 420);
+  }
+  void showAssistantPanel() {
+    assistantPanel.visible = true;
+    _assistantFocused = true;
+    _terminalFocused = false;
+    terminalPanel.maximized = false;
+    assistantFocusRequest++;
+    compactEditor = true;
+    notifyListeners();
+  }
+  void focusAssistantPanel() {
+    if (!assistantFocused) showAssistantPanel();
+  }
+  void hideAssistantPanel() {
+    assistantPanel.visible = false;
+    assistantPanel.maximized = false;
+    if (_assistantFocused) { _assistantFocused = false; editorFocusRequest++; }
+    notifyListeners();
+  }
+  void toggleAssistantPanel() {
+    if (assistantPanel.visible && assistantFocused) { hideAssistantPanel(); } else { showAssistantPanel(); }
+  }
+  void toggleAssistantMaximized() {
+    assistantPanel.maximized = !assistantPanel.maximized;
+    showAssistantPanel();
+  }
+  void setAssistantWidth(double width) {
+    if (!width.isFinite) return;
+    final next = width.clamp(320.0, 800.0);
+    if (assistantPanel.width == next) return;
+    assistantPanel.width = next;
+    _geometryChanged(key: '');
+  }
   // The layout owns groups and geometry, not document state. The older
   // sideId/sideFocused/splitActive API remains only for dual-pane callers.
 
@@ -373,7 +439,7 @@ class Workspace extends ChangeNotifier {
   bool get split => tabLayout.groups.length > 1;
 
   /// The tab the user is working in: the right one when that side has focus.
-  String? get focusedId => terminalFocused ? terminalActiveId : editorActiveId;
+  String? get focusedId => assistantFocused ? assistantPanel.active : terminalFocused ? terminalActiveId : editorActiveId;
 
   /// Legacy dual-pane toggle; the shell's Ctrl+\ uses splitGroup instead.
   void splitActive() {
@@ -403,7 +469,9 @@ class Workspace extends ChangeNotifier {
   void focusGroup(String id) {
     if (tabLayout.group(id) == null) return;
     final changed = tabLayout.focused != id;
-    if (!changed && !terminalFocused) return;
+    if (!changed && !terminalFocused && !assistantFocused) return;
+    _assistantFocused = false;
+    assistantPanel.maximized = false;
     _terminalFocused = false;
     terminalPanel.maximized = false;
     tabLayout.focus(id);
@@ -415,23 +483,34 @@ class Workspace extends ChangeNotifier {
     if (index >= 0 && index < tabLayout.groups.length) focusGroup(tabLayout.groups[index].id);
   }
 
-  void arrangeEditors(EditorArrangement arrangement) { focusMode = false; _terminalFocused = false; terminalPanel.maximized = false; editorFocusRequest++; tabLayout.arrange(arrangement); _layoutChanged(); }
+  void arrangeEditors(EditorArrangement arrangement) { focusMode = false; _assistantFocused = false; assistantPanel.maximized = false; _terminalFocused = false; terminalPanel.maximized = false; editorFocusRequest++; tabLayout.arrange(arrangement); _layoutChanged(); }
   void splitGroup(SplitAxis axis, {String? group, String? tabId, bool before = false}) {
-    if (tabId != null && (tab(tabId) == null || tab(tabId)!.isTerminal)) return;
+    if (tabId != null && tab(tabId)?.isEditor != true) return;
     final from = group ?? tabLayout.focused;
-    if (tabLayout.split(from, axis, tab: tabId ?? tabLayout.group(from)?.active, before: before) == null) {
+    if (tabLayout.split(from, axis, tab: tabId, before: before) == null) {
       toast('最多同时显示 4 个编辑组；可将标签拖入已有分组');
       return;
     }
     focusMode = false;
+    _assistantFocused = false;
+    assistantPanel.maximized = false;
     _terminalFocused = false;
     editorFocusRequest++;
     _layoutChanged();
   }
-  void mergeGroup(String id) { focusMode = false; _terminalFocused = false; editorFocusRequest++; tabLayout.mergeGroup(id); _layoutChanged(); }
+  void mergeGroup(String id) { focusMode = false; _assistantFocused = false; assistantPanel.maximized = false; _terminalFocused = false; editorFocusRequest++; tabLayout.mergeGroup(id); _layoutChanged(); }
   void moveTab(String id, String group, {int? index}) {
-    if (tab(id) == null || tab(id)!.isTerminal) return;
-    if (tabLayout.move(id, group, index: index)) { _terminalFocused = false; editorFocusRequest++; _layoutChanged(); }
+    if (tab(id)?.isEditor != true) return;
+    if (tabLayout.move(id, group, index: index)) { _assistantFocused = false; assistantPanel.maximized = false; _terminalFocused = false; editorFocusRequest++; _layoutChanged(); }
+  }
+  bool dropEditorTab(String id, String group, TabDropEdge edge, {int? index}) {
+    if (tab(id)?.isEditor != true || !tabLayout.drop(id, group, edge, index: index)) return false;
+    _assistantFocused = _terminalFocused = false;
+    assistantPanel.maximized = false;
+    focusMode = false;
+    editorFocusRequest++;
+    _layoutChanged();
+    return true;
   }
   void reorderActive(int delta) {
     final id = focusedId;
@@ -446,7 +525,7 @@ class Workspace extends ChangeNotifier {
     final i = g.tabs.indexOf(id);
     moveTab(id, g.id, index: (i + (delta > 0 ? 2 : -1)).clamp(0, g.tabs.length));
   }
-  void pinTab(String id) { if (tab(id)?.isTerminal == true) return; tabLayout.togglePin(id); _layoutChanged(); }
+  void pinTab(String id) { if (tab(id)?.isEditor != true) return; tabLayout.togglePin(id); _layoutChanged(); }
   void setTabPlacement(TabPlacement placement) { tabLayout.placement = placement; _layoutChanged(); }
   void setSideWidth(double width) {
     if (!width.isFinite) return;
@@ -471,7 +550,7 @@ class Workspace extends ChangeNotifier {
   }
   void toggleFocusMode() {
     if (!split) { focusMode = false; return; }
-    if (terminalFocused) focusGroup(tabLayout.focused);
+    if (terminalFocused || assistantFocused) focusGroup(tabLayout.focused);
     focusMode = !focusMode;
     _scheduleGeometryFrame();
   }
@@ -517,17 +596,26 @@ class Workspace extends ChangeNotifier {
 
   /// Closes a tab; asks first when it has unsaved changes. Returns whether it closed.
   Future<bool> closeTab(String id) {
-    final key = '${tab(id)?.isTerminal == true ? '@terminal' : projectKey}\u0000$id';
+    final key = '${tab(id)?.isEditor == false ? '@task' : projectKey}\u0000$id';
     return _closingTabs[key] ??= _closeTab(id, projectKey).whenComplete(() { _closingTabs.remove(key); });
   }
 
   Future<bool> _closeTab(String id, String key) async {
     final t = tab(id);
     if (t == null) return true;
-    if (!t.isTerminal && !visibleTabs.contains(t)) return false;
+    if (t.isEditor && !visibleTabs.contains(t)) return false;
     final shared = t.file != null && t.projects.length > 1;
     if (!shared && t.confirmClose != null && !await t.confirmClose!()) return false;
     if (_disposed || !tabs.contains(t)) return true;
+    if (t.isAssistant) {
+      tabs.remove(t);
+      assistantPanel.remove(id);
+      if (_assistantFocused && assistantPanel.active == null) { _assistantFocused = false; editorFocusRequest++; }
+      else if (_assistantFocused) { assistantFocusRequest++; }
+      t.dispose();
+      notifyListeners();
+      return true;
+    }
     if (t.isTerminal) {
       tabs.remove(t);
       final previous = terminalPanel.active;
@@ -563,6 +651,7 @@ class Workspace extends ChangeNotifier {
     for (final t in gone) {
       tabs.remove(t);
       if (t.isTerminal) terminalPanel.remove(t.id);
+      if (t.isAssistant) assistantPanel.remove(t.id);
       for (final layout in _layouts.values) { layout.remove(t.id); }
       if (t.file != null) {
         for (final key in t.projects) {
@@ -574,6 +663,7 @@ class Workspace extends ChangeNotifier {
       }
       t.dispose();
     }
+    if (_assistantFocused && assistantPanel.active == null) { _assistantFocused = false; editorFocusRequest++; }
     if (_terminalFocused && terminalBefore != terminalPanel.active) {
       if (terminalPanel.active == null) { _terminalFocused = false; editorFocusRequest++; }
       else { terminalFocusRequest++; }
@@ -714,7 +804,7 @@ class Workspace extends ChangeNotifier {
   WorkspaceView viewForCurrent() => _viewForKey(projectKey);
   WorkspaceView viewForProject(String key) => _viewForKey(key);
 
-  List<EditorTab> _tabsFor(String key) => tabs.where((t) => !t.isTerminal && (t.file == null || t.projects.contains(key))).toList();
+  List<EditorTab> _tabsFor(String key) => tabs.where((t) => t.isEditor && (t.file == null || t.projects.contains(key))).toList();
 
   void rememberFiles() => _rememberFilesFor(projectKey);
 
@@ -731,8 +821,10 @@ class Workspace extends ChangeNotifier {
     final allowed = {for (final file in next) 'file:${file.root}:${file.path}'};
     final defaults = layout.groups.length == 1 && layout.placement == TabPlacement.top && layout.sideWidth == 300 && layout.tabsWidth == 180 && layout.tabWidth == 160 && !layout.pinned.any(allowed.contains);
     final panelHeight = key.isEmpty ? terminalPanel.height : TerminalPanelState.defaultHeight;
-    final snapshot = next.isEmpty && defaults && panelHeight == TerminalPanelState.defaultHeight ? <String, dynamic>{} : layout.toJson(allowed: allowed);
+    final assistantWidth = key.isEmpty ? assistantPanel.width : 420.0;
+    final snapshot = next.isEmpty && defaults && panelHeight == TerminalPanelState.defaultHeight && assistantWidth == 420 ? <String, dynamic>{} : layout.toJson(allowed: allowed);
     if (panelHeight != TerminalPanelState.defaultHeight) snapshot['panel_height'] = panelHeight;
+    if (assistantWidth != 420) snapshot['assistant_width'] = assistantWidth;
     final nextActive = _restored.contains(key) || activeFile != null ? activeFile : view.activeFile;
     if (listEquals(view.files, next) && view.activeFile == nextActive && jsonEncode(view.tabLayout) == jsonEncode(snapshot)) return;
     view.files = next;

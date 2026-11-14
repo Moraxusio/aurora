@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:aurora_profile/aurora_profile.dart';
 
-enum TabArea { editor, terminal }
+enum TabArea { editor, terminal, assistant }
 
 class EditorTab {
   /// Unique within a workspace, e.g. "term:main" or "file:home:/etc/hosts".
@@ -18,7 +18,12 @@ class EditorTab {
   final WidgetBuilder builder;
   final WorkspacePath? file;
   final TabArea area;
+  /// Canonical runtime identity once a draft becomes a saved AI conversation.
+  /// Does not replace the host key or enter profile snapshots.
+  String? taskKey;
   bool get isTerminal => area == TabArea.terminal;
+  bool get isAssistant => area == TabArea.assistant;
+  bool get isEditor => area == TabArea.editor;
   // File buffers are unique per server/path. Membership, rather than copying
   // editors, gives each project its own tab list without divergent dirty text.
   final Set<String> projects = {};
@@ -36,8 +41,8 @@ class EditorTab {
   /// Set by editors; the tab may already be open when it is called.
   void Function(int line, int col)? reveal;
 
-  EditorTab({required this.id, required this.title, required this.icon, required this.builder, this.iconColor, this.tooltip, this.file, TabArea? area})
-    : area = area ?? (id.startsWith('term:') ? TabArea.terminal : TabArea.editor);
+  EditorTab({required this.id, required this.title, required this.icon, required this.builder, this.iconColor, this.tooltip, this.file, this.taskKey, TabArea? area})
+    : area = area ?? (id.startsWith('term:') ? TabArea.terminal : id.startsWith('ai:') ? TabArea.assistant : TabArea.editor);
 
   void dispose() {
     dirty.dispose();

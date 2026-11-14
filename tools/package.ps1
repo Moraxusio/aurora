@@ -25,6 +25,9 @@ $repo = Split-Path -Parent $PSScriptRoot
 $go = 'go'
 $flutter = 'flutter'
 if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw "version must be MAJOR.MINOR.PATCH: $Version" }
+$parts = $Version.Split('.')
+if ([int]$parts[1] -gt 99 -or [int]$parts[2] -gt 99) { throw 'MINOR and PATCH must be 0-99 for the shared client build number' }
+$BuildNumber = [int]$parts[0] * 10000 + [int]$parts[1] * 100 + [int]$parts[2]
 if (-not $Key -or -not (Test-Path $Key)) { throw "release key not found: $Key" }
 $dir = Join-Path $Out "Aurora-$Version"
 $zip = Join-Path $Out "Aurora-$Version.zip"
@@ -85,7 +88,7 @@ if ($LASTEXITCODE) { throw 'sign upgrade policy' }
 # 3. The client.
 Push-Location (Join-Path $repo 'app')
 try {
-    & $flutter build windows --release "--build-name=$Version"
+    & $flutter build windows --release "--build-name=$Version" "--build-number=$BuildNumber"
     if ($LASTEXITCODE) { throw 'flutter build' }
 } finally { Pop-Location }
 Copy-Item (Join-Path $repo 'app\build\windows\x64\runner\Release\*') $dir -Recurse
@@ -113,16 +116,19 @@ Aurora $Version (Windows)
   只有当前 Windows 用户能打开。
 
 本次更新（$Version）：
-- 稳定双区工作台：文件、AI 和工具页在主编辑区，终端及会话列表独立放到底部，不替换文件树。
-  终端支持调整高度、隐藏、最大化及还原，隐藏不结束连接或本地任务。
-- 修复右侧标签和相邻分屏被正文覆盖，欢迎页也遵守正文边界；每个正文独立裁剪。
-  布局预设只改几何，不重新分配标签；新增格子为空，减少格子才合并，保留未保存缓冲及 AI 状态。
-- 文档与终端分别维护活动项和焦点，异步连接不抢文件或弹窗焦点。
-  Ctrl+J 显示/隐藏终端，Ctrl+反引号聚焦，Ctrl+Shift+反引号新建，Ctrl+1-4 返回文档视图。
-  旧连接的会话刷新/结束结果不会误关当前视图，结束失败保留视图。
-- 终端不参与文档分屏、拖放和批量关闭。仅额外记忆面板高度，不保存会话 ID、终端输入或未保存正文。
-  隐藏正文保持最后约束；240 次高度更新的回归为 0 次业务通知、1 次几何通知、0 次隐藏终端布局，
-  这是工作量计数，不是实际设备 FPS 保证。真实长期拖放、多屏 DPI、触摸及 Android 真机仍待实机验证。
+- 三区工作台：文档网格在中间，AI 对话独立放到右侧，终端及会话列表在底部，不替换文件树。
+  各区域独立维护活动项、焦点及保活宿主；隐藏、展开、缩放不清空未保存文字、终端连接或 AI 草稿。
+- 重新设计分屏与拖放：按钮及快捷键新建空视图，拖放才移动文档；正文中央移入、外侧 10% 拆分。
+  先预览、松手提交，Escape 取消后可重新拖动；唯一标签不能拆到自己，跨组最后标签不留下空旧组。
+  小幅缩放先压缩网格，真正窄屏才切单视图；正文独立裁剪，布局预设不重新分配标签。
+- AI 固定消息导航：上一条、下一条、消息锚点列表、回到最新；Alt+上下导航、Ctrl+End 回最新，
+  Ctrl+Alt+I 聚焦/隐藏 AI，Ctrl+1-4 返回文档；AI 放大后切换终端会先退出 AI 放大。
+- AI 缩放保持可见文字的阅读位置，流式输出和后台同步不抢回底部，不排队自动滚动动画。
+  活动计划默认一行，全部完成/取消后自动退出固定区域，不擅自切换 Build/Plan 或批准策略。
+  新建对话不删除旧草稿，保存后从历史打开复用原宿主，重命名和删除也关联同一对话。
+- AI 与终端均不参与文档分组、拖放或批量关闭；额外只记忆 AI 宽度与终端高度，不保存对话 ID、
+  输入或未保存正文。Ctrl+J 显示/隐藏终端，Ctrl+反引号聚焦，Ctrl+Shift+反引号新建。
+  异步连接不抢文件/弹窗焦点，旧连接结果不误关重开的视图；长期原生拖放、多屏 DPI、触摸及真机仍待实测。
 - 不新增依赖，原加密 API Key/OAuth、服务器和项目文件布局不迁移、不重置，保留 OpenCode MIT 署名。
 - Windows 可直接打开本机文件夹，使用本地 PowerShell、Git 和 AI，无需远程服务器。
   本地 agent 随客户端更新；隐藏到托盘继续运行，完全退出结束受管任务，不提供 tmux 持久会话。
@@ -144,7 +150,7 @@ Aurora $Version (Windows)
   使用 zstd。尚未移植 WebSocket、browser callback 或 token-sharing。
 - 自动化测试与宽屏/手机组件截图通过；真实 ChatGPT 授权/对话、Windows 原生剪贴板
   和 Android 真机尚未验证。令牌仍加密保存在本机，长任务到期需客户端下次调用刷新。
-- 本轮工作台修正不要求升级已有 3.14.0/3.15.0 远程 agent；随包 agent 统一为 $Version，可由用户确认后升级。
+- 本轮客户端重设计不要求升级已有 3.14.0-3.16.0 远程 agent；随包 agent 统一为 $Version，可由用户确认后升级。
   长历史/执行活动能力仍要求 agent 至少 3.14.0，本地 agent 随客户端提供。
 代理功能：
 - 在“代理”页添加 Clash 订阅 URL，或粘贴节点链接；选用节点后，新建终端时勾选

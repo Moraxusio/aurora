@@ -6,6 +6,8 @@ enum EditorArrangement { single, columns, rows, threeColumns, grid }
 
 enum SplitAxis { horizontal, vertical }
 
+enum TabDropEdge { center, left, right, top, bottom }
+
 class TabGroup {
   final String id;
   final List<String> tabs;
@@ -39,6 +41,7 @@ class TabLayout {
   TabPlacement placement = TabPlacement.top;
   double sideWidth = 300, tabsWidth = 180, tabWidth = 160;
   int _serial = 1;
+  int revision = 0;
 
   TabGroup get current =>
       groups.firstWhere((g) => g.id == focused, orElse: () => groups.first);
@@ -58,6 +61,7 @@ class TabLayout {
   }
 
   void reconcile(Iterable<String> valid, {bool collapseEmpty = false}) {
+    final before = ordered;
     final allowed = valid.toSet(), seen = <String>{};
     pinned.removeWhere((id) => !allowed.contains(id));
     for (final g in groups) {
@@ -76,6 +80,11 @@ class TabLayout {
         if (g.tabs.isEmpty && groups.length > 1) mergeGroup(g.id);
       }
     }
+    final after = ordered;
+    if (before.length != after.length ||
+        Iterable<int>.generate(before.length).any((i) => before[i] != after[i])) {
+      revision++;
+    }
   }
 
   void add(String tab) {
@@ -87,6 +96,7 @@ class TabLayout {
     final g = owner(tab);
     if (g == null) return;
     if (!pinned.remove(tab)) pinned.add(tab);
+    revision++;
     _sortPins(g);
   }
 
@@ -126,7 +136,53 @@ class TabLayout {
     to.active = tab;
     focused = to.id;
     if (!identical(from, to) && from.tabs.isEmpty) mergeGroup(from.id);
+    revision++;
     return true;
+  }
+
+  /// A drop is one transaction, distinct from the explicit "new group" command.
+  /// The sole editor cannot split onto itself. Moving another group's final
+  /// editor reuses that group rather than leaving an empty leaf behind.
+  bool drop(String tab, String targetId, TabDropEdge edge, {int? index}) {
+    final source = owner(tab), target = group(targetId);
+    if (source == null || target == null) return false;
+    if (edge == TabDropEdge.center) return move(tab, targetId, index: index);
+    if (identical(source, target) && source.tabs.length == 1) return false;
+    final horizontal = edge == TabDropEdge.left || edge == TabDropEdge.right;
+    final before = edge == TabDropEdge.left || edge == TabDropEdge.top;
+    if (source.tabs.length == 1 && !identical(source, target)) {
+      root = _without(root, source.id)!;
+      final branch = TabSplit(
+        's${++_serial}',
+        horizontal ? SplitAxis.horizontal : SplitAxis.vertical,
+        TabLeaf(before ? source.id : target.id),
+        TabLeaf(before ? target.id : source.id),
+      );
+      root = _replace(root, target.id, branch);
+      focused = source.id;
+      final order = <String>[];
+      void visit(TabNode node) {
+        if (node is TabLeaf) {
+          order.add(node.group);
+        } else {
+          visit((node as TabSplit).first);
+          visit(node.second);
+        }
+      }
+
+      visit(root);
+      groups.sort((a, b) => order.indexOf(a.id).compareTo(order.indexOf(b.id)));
+      revision++;
+      return true;
+    }
+    if (groups.length >= maxGroups) return false;
+    return split(
+          targetId,
+          horizontal ? SplitAxis.horizontal : SplitAxis.vertical,
+          tab: tab,
+          before: before,
+        ) !=
+        null;
   }
 
   void remove(String tab) {
@@ -134,6 +190,7 @@ class TabLayout {
     if (g == null) return;
     final i = g.tabs.indexOf(tab);
     g.tabs.remove(tab);
+    revision++;
     pinned.remove(tab);
     if (g.active == tab) {
       g.active = g.tabs.isEmpty ? null : g.tabs[i.clamp(0, g.tabs.length - 1)];
@@ -154,6 +211,7 @@ class TabLayout {
       return null;
     }
     final next = TabGroup('g${++_serial}');
+    revision++;
     groups.insert(groups.indexOf(original) + (before ? 0 : 1), next);
     final branch = TabSplit(
       's${++_serial}',
@@ -204,6 +262,7 @@ class TabLayout {
     final g = group(id);
     if (g == null || groups.length < 2) return;
     final i = groups.indexOf(g);
+    revision++;
     final to = groups[i == 0 ? 1 : i - 1];
     to.tabs.addAll(g.tabs);
     if (focused == id) {
@@ -217,6 +276,7 @@ class TabLayout {
   }
 
   void arrange(EditorArrangement arrangement) {
+    revision++;
     final active = current.active;
     final count = switch (arrangement) {
       EditorArrangement.single => 1,

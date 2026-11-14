@@ -333,6 +333,31 @@ void main() {
     },
   );
 
+  testWidgets('drag can enter the no-op center, then split at an edge; Escape cancels cleanly', (t) async {
+    open('a'); open('b'); await pump(t);
+    final group = ws.tabLayout.focused;
+    final gesture = await t.startGesture(t.getCenter(find.byKey(const ValueKey('tab-b'))));
+    await gesture.moveBy(const Offset(22, 0)); await t.pump();
+    final target = find.byKey(ValueKey('pane-drop-$group'));
+    final rect = t.getRect(target);
+    await gesture.moveTo(rect.center); await t.pump();
+    expect(find.byKey(ValueKey('drop-preview-$group')), findsNothing);
+    await gesture.moveTo(Offset(rect.right - 8, rect.center.dy)); await t.pump();
+    expect(find.byKey(ValueKey('drop-preview-$group')), findsOneWidget);
+    final before = ws.tabLayout.toJson().toString();
+    await t.sendKeyEvent(LogicalKeyboardKey.escape); await t.pump();
+    await gesture.up(); await t.pumpAndSettle();
+    expect(ws.tabLayout.toJson().toString(), before);
+    expect(find.byKey(ValueKey('pane-drop-$group')), findsNothing);
+    final next = await t.startGesture(t.getCenter(find.byKey(const ValueKey('tab-b'))));
+    await next.moveBy(const Offset(22, 0)); await t.pump();
+    await next.moveTo(rect.center); await t.pump();
+    await next.moveTo(Offset(rect.right - 8, rect.center.dy)); await t.pump();
+    await next.up(); await t.pumpAndSettle();
+    expect(ws.tabLayout.groups, hasLength(2)); expect(disposed, isEmpty);
+    await finish(t);
+  });
+
   testWidgets(
     'focusing another group restores its input focus, not just the highlight',
     (t) async {

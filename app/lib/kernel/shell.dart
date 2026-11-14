@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../features/search/quick_open.dart';
+import '../features/ai/ai_feature.dart' show openNewAiSession, AiSessionSidebar;
 import '../features/terminal/terminal_feature.dart' show createSession, openSession, SessionList;
 import '../state/app_state.dart';
 import '../theme/ide_theme.dart';
@@ -199,6 +200,7 @@ class _ShellState extends State<Shell> {
         Command(id: 'tab.next', title: '下一个标签', group: '视图', shortcut: 'Ctrl+Tab', enabled: () => ws.navigationTabs.length > 1, run: () => ws.next(1)),
         Command(id: 'tab.prev', title: '上一个标签', group: '视图', shortcut: 'Ctrl+Shift+Tab', enabled: () => ws.navigationTabs.length > 1, run: () => ws.next(-1)),
         Command(id: 'panel.toggle', title: '显示或隐藏终端面板', group: '视图', shortcut: 'Ctrl+J', icon: Icons.terminal, run: ws.toggleTerminalPanel),
+        Command(id: 'assistant.toggle', title: '显示或隐藏 AI 侧栏', group: '视图', shortcut: 'Ctrl+Alt+I', icon: Icons.auto_awesome_outlined, run: ws.toggleAssistantPanel),
         Command(id: 'terminal.focus', title: '聚焦终端面板', group: '终端', shortcut: 'Ctrl+`', icon: Icons.terminal, run: ws.showTerminalPanel),
         Command(id: 'side.toggle', title: '显示或隐藏侧栏', group: '视图', icon: Icons.view_sidebar_outlined, shortcut: 'Ctrl+B', run: _toggleSide),
         Command(id: 'server.overview', title: '服务器概览与设置', group: '服务器', icon: Icons.info_outline, run: () => ws.openTab(overviewTab(ws, widget.features))),
@@ -273,6 +275,7 @@ class _ShellState extends State<Shell> {
           const SingleActivator(LogicalKeyboardKey.backslash, control: true, shift: true): () => ws.splitGroup(SplitAxis.vertical),
         if (ws != null) ...{
           const SingleActivator(LogicalKeyboardKey.keyJ, control: true): ws.toggleTerminalPanel,
+          const SingleActivator(LogicalKeyboardKey.keyI, control: true, alt: true): ws.toggleAssistantPanel,
           const SingleActivator(LogicalKeyboardKey.backquote, control: true): ws.showTerminalPanel,
           const SingleActivator(LogicalKeyboardKey.backquote, control: true, shift: true): () {
             if (_usable(ws, 'terminal')) { createSession(ws, context: context); } else { ws.showTerminalPanel(); }
@@ -320,7 +323,7 @@ class _ShellState extends State<Shell> {
     ]);
     void servers() => setState(() => _serversOpen = !_serversOpen);
     final status = _StatusBar(ws: ws, app: app, onTapConn: () => app.connect(ws.serverId));
-    final showEditor = !narrow || (ws.compactEditor && (ws.visibleTabs.isNotEmpty || ws.terminalPanel.visible));
+    final showEditor = !narrow || (ws.compactEditor && (ws.visibleTabs.isNotEmpty || ws.terminalPanel.visible || ws.assistantPanel.visible));
     final sideShown = _sideOpen && wide;
     final sideWidth = ws.tabLayout.sideWidth.clamp(180.0, (MediaQuery.sizeOf(context).width - 340).clamp(180.0, 640.0));
     final drawerWidth = ws.tabLayout.sideWidth.clamp(180.0, MediaQuery.sizeOf(context).width * .7);
@@ -511,6 +514,8 @@ class _TitleBar extends StatelessWidget {
          IconBtn(sideOpen ? Icons.view_sidebar : Icons.view_sidebar_outlined, '显示或隐藏侧栏（Ctrl+B）', onToggleSide),
          IconBtn(Icons.terminal, '显示或隐藏终端面板（Ctrl+J）', ws.toggleTerminalPanel,
            color: ws.terminalPanel.visible ? ide.accent : null),
+         IconBtn(Icons.auto_awesome_outlined, '显示或隐藏 AI 侧栏（Ctrl+Alt+I）', ws.toggleAssistantPanel,
+           color: ws.assistantPanel.visible ? ide.accent : null),
          SizedBox(width: 28, height: 28, child: TabLayoutMenu(ws: ws)),
         const SizedBox(width: Space.s),
         const WindowButtonsGap(),
@@ -653,8 +658,8 @@ class _ActivityBar extends StatelessWidget {
             final usable = st == FeatureState.available || st == FeatureState.loading;
             final tip = usable ? f.title : '${f.title}（${_stateText(st)}）';
             return vertical
-                ? rail(f.icon, tip, on: current == f.id || (f.id == 'terminal' && ws.terminalPanel.visible), dim: !usable, tap: () => onPick(f))
-                : tab(f.icon, f.title, tip, on: current == f.id || (f.id == 'terminal' && ws.terminalPanel.visible), dim: !usable, tap: () => onPick(f));
+                ? rail(f.icon, tip, on: current == f.id || (f.id == 'terminal' && ws.terminalPanel.visible) || (f.id == 'ai' && ws.assistantPanel.visible), dim: !usable, tap: () => onPick(f))
+                : tab(f.icon, f.title, tip, on: current == f.id || (f.id == 'terminal' && ws.terminalPanel.visible) || (f.id == 'ai' && ws.assistantPanel.visible), dim: !usable, tap: () => onPick(f));
           },
         ),
     ];
@@ -899,6 +904,8 @@ class _EditorAreaState extends State<_EditorArea> {
     final terminal = features.byId('terminal');
     return WorkbenchView(ws: ws,
       empty: _Welcome(ws: ws, features: features, onPalette: widget.onPalette, onFind: widget.onFind),
+      onNewAssistant: () => openNewAiSession(ws),
+      assistantHistoryBuilder: (onOpened) => LinkGate(ws: ws, builder: (_, _) => AiSessionSidebar(ws: ws, onOpened: onOpened)),
       onNewTerminal: ws.link != null && terminal != null && ws.stateOf(terminal) == FeatureState.available
         ? () => createSession(ws, context: context) : null,
       terminalSessionsBuilder: (onOpened) => LinkGate(ws: ws, builder: (_, _) {

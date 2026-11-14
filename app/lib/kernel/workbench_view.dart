@@ -7,6 +7,7 @@ import 'terminal_panel_state.dart';
 import 'terminal_panel_view.dart';
 import 'workbench_geometry.dart';
 import 'workspace.dart';
+import 'assistant_panel_view.dart';
 
 typedef TerminalSessionsBuilder = Widget Function(VoidCallback onOpened);
 
@@ -15,12 +16,16 @@ class WorkbenchView extends StatefulWidget {
   final Widget empty;
   final VoidCallback? onNewTerminal;
   final TerminalSessionsBuilder? terminalSessionsBuilder;
+  final VoidCallback? onNewAssistant;
+  final Widget Function(VoidCallback onOpened)? assistantHistoryBuilder;
   const WorkbenchView({
     super.key,
     required this.ws,
     required this.empty,
     this.onNewTerminal,
     this.terminalSessionsBuilder,
+    this.onNewAssistant,
+    this.assistantHistoryBuilder,
   });
   @override
   State<WorkbenchView> createState() => _WorkbenchViewState();
@@ -28,6 +33,8 @@ class WorkbenchView extends StatefulWidget {
 
 class _WorkbenchViewState extends State<WorkbenchView> {
   Rect? _editorRect, _terminalRect;
+  Rect? _assistantRect;
+  bool _assistantVisited = false;
   bool _terminalVisited = false;
   @override
   void initState() {
@@ -43,6 +50,8 @@ class _WorkbenchViewState extends State<WorkbenchView> {
       widget.ws.geometryRevision.addListener(_geometryChanged);
       _editorRect = _terminalRect = null;
       _terminalVisited = false;
+      _assistantRect = null;
+      _assistantVisited = false;
     }
   }
 
@@ -66,8 +75,16 @@ class _WorkbenchViewState extends State<WorkbenchView> {
         panelFocused: ws.terminalFocused,
         panelMaximized: panel.maximized,
         preferredHeight: panel.height,
+        assistantVisible: ws.assistantPanel.visible,
+        assistantFocused: ws.assistantFocused,
+        assistantMaximized: ws.assistantPanel.maximized,
+        assistantWidth: ws.assistantPanel.width,
       );
       final bounds = Offset.zero & box.biggest;
+      if (geometry.assistant != null) {
+        _assistantRect = geometry.assistant;
+        _assistantVisited = true;
+      }
       if (geometry.editor != null) _editorRect = geometry.editor;
       if (geometry.terminal != null) {
         _terminalRect = geometry.terminal;
@@ -109,6 +126,30 @@ class _WorkbenchViewState extends State<WorkbenchView> {
                   )
                 : const SizedBox.shrink(),
           ),
+          region(
+            'workbench-assistant',
+            _assistantRect ?? bounds,
+            geometry.assistant != null,
+            _assistantVisited
+                ? AssistantPanelView(
+                    ws: ws,
+                    onNew: widget.onNewAssistant,
+                    historyBuilder: widget.assistantHistoryBuilder,
+                  )
+                : const SizedBox.shrink(),
+          ),
+          if (geometry.assistantDivider != null)
+            Positioned.fromRect(
+              rect: geometry.assistantDivider!,
+              child: TabResizeHandle(
+                key: const ValueKey('assistant-panel-resize'),
+                axis: Axis.horizontal,
+                label: '调整 AI 侧栏宽度',
+                onDelta: (dx) =>
+                    ws.setAssistantWidth(geometry.assistant!.width - dx),
+                onReset: () => ws.setAssistantWidth(420),
+              ),
+            ),
           if (geometry.divider != null)
             Positioned.fromRect(
               rect: geometry.divider!,

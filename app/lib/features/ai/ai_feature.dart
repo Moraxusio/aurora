@@ -32,14 +32,12 @@ class AiFeature extends Feature {
   List<String> get ops => const ['ai.sessions', 'ai.get', 'ai.run', 'ai.stream', 'ai.stop', 'ai.approve'];
 
   @override
-  SideBarView? sideBar(BuildContext context, Workspace ws) => SideBarView(
-        title: 'AI 智能体',
-        actions: [
-          IconBtn(Icons.add_rounded, '新建 AI 会话', () => openNewAiSession(ws)),
-          IconBtn(Icons.tune_rounded, '配置模型与密钥', () => showAiSettingsDialog(context, app: ws.app, ws: ws)),
-        ],
-        body: AiSessionSidebar(ws: ws),
-      );
+  SideBarView? sideBar(BuildContext context, Workspace ws) => null;
+
+  @override
+  void open(Workspace ws) {
+    if (ws.assistantTabs.isEmpty) { openNewAiSession(ws); } else { ws.showAssistantPanel(); }
+  }
 
   @override
   List<Command> commands(Workspace ws) => [
@@ -58,13 +56,13 @@ class AiFeature extends Feature {
 }
 
 void openNewAiSession(Workspace ws) {
-  ws.dropTabs((t) => t.id == 'ai:new');
   ws.openTab(aiStudioTab(ws));
 }
 
 class AiSessionSidebar extends StatefulWidget {
   final Workspace ws;
-  const AiSessionSidebar({super.key, required this.ws});
+  final VoidCallback? onOpened;
+  const AiSessionSidebar({super.key, required this.ws, this.onOpened});
 
   @override
   State<AiSessionSidebar> createState() => _AiSessionSidebarState();
@@ -232,9 +230,13 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
       danger: true,
     );
     if (!ok || !mounted) return;
-    await ws.guard(() => link.call('ai.delete', {'id': s.id}));
-    ws.dropTabs((t) => t.id == 'ai:${s.id}');
-    await _reload();
+    final deleted = await ws.guard(() async {
+      await link.call('ai.delete', {'id': s.id});
+      return true;
+    });
+    if (deleted != true) return;
+    ws.dropTabs((t) => t.isAssistant && (t.taskKey == s.id || t.id == 'ai:${s.id}'));
+    if (mounted) await _reload();
   }
 
   Future<void> _rename(AiSessionSummary s) async {
@@ -242,10 +244,15 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
     if (link == null) return;
     final t = await askText(context, title: '重命名会话', initial: s.title, hint: '会话标题');
     if (t == null || t.isEmpty || t == s.title || !mounted) return;
-    await ws.guard(() => link.call('ai.update', {'id': s.id, 'title': t}));
-    final tab = ws.tab('ai:${s.id}');
-    if (tab != null) tab.title = t;
-    await _reload();
+    final renamed = await ws.guard(() async {
+      await link.call('ai.update', {'id': s.id, 'title': t});
+      return true;
+    });
+    if (renamed != true) return;
+    for (final tab in ws.assistantTabs) {
+      if (tab.taskKey == s.id || tab.id == 'ai:${s.id}') ws.updateTabTitle(tab.id, t);
+    }
+    if (mounted) await _reload();
   }
 
   Future<void> _togglePin(AiSessionSummary s) async {
@@ -262,7 +269,8 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
     if (res is Map) copyText(res['markdown'] as String? ?? '', what: '已把会话复制为 Markdown');
   }
 
-  void _open(String id, String title) => ws.openTab(aiStudioTab(ws, sessionId: id, title: title));
+  void _open(String id, String title) { ws.openTab(aiStudioTab(ws, sessionId: id, title: title)); widget.onOpened?.call(); }
+  void _new() { openNewAiSession(ws); widget.onOpened?.call(); }
 
   List<MenuItem> _menu(AiSessionSummary s) => [
         MenuItem('打开', () => _open(s.id, s.title), icon: Icons.open_in_new_rounded),
@@ -316,7 +324,8 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
       );
 
   Widget _row(Ide ide, AiSessionSummary s) {
-    final selected = ws.focusedId == 'ai:${s.id}';
+    final active = ws.tab(ws.assistantPanel.active ?? '');
+    final selected = active?.id == 'ai:${s.id}' || active?.taskKey == s.id;
     final busy = s.pendingPermission != null ? ide.warn : (s.running ? ide.accent : null);
     return ContextArea(
       items: () => _menu(s),
@@ -423,7 +432,7 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
           child: SizedBox(
             width: double.infinity,
             child: FilledButton.tonalIcon(
-              onPressed: () => openNewAiSession(ws),
+              onPressed: _new,
               icon: const Icon(Icons.add_rounded, size: 16),
               label: const Text('新建 AI 会话'),
             ),
@@ -434,7 +443,7 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
             icon: Icons.auto_awesome_outlined,
             text: '还没有 AI 会话。\n它能在这台服务器上读写代码、运行命令、联网查资料，每一步都能一键回退。',
             actionLabel: '新建 AI 会话',
-            onAction: () => openNewAiSession(ws),
+            onAction: _new,
           );
         }
         final searching = _hits != null;

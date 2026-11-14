@@ -2,6 +2,7 @@ import 'package:aurora/features/ai/ai_feature.dart';
 import 'package:aurora/features/ai/ai_models.dart';
 import 'package:aurora/features/ai/ai_settings_dialog.dart';
 import 'package:aurora/features/ai/ai_studio_view.dart';
+import 'package:aurora/kernel/editor_tab.dart';
 import 'package:aurora/kernel/input_mode.dart';
 import 'package:aurora/kernel/workspace.dart';
 import 'package:aurora/theme/ide_theme.dart';
@@ -17,6 +18,7 @@ import 'support/workspace_fixture.dart';
 class FakeAiLink extends FileTreeLink {
   final rpcCalls = <(String, Map<String, dynamic>)>[];
   bool pinned = false;
+  bool failDelete = false;
   String? renamedTo;
   Map<String, dynamic>? pendingPermission = {
     'id': 'perm_1',
@@ -84,6 +86,9 @@ class FakeAiLink extends FileTreeLink {
         if (a.containsKey('pinned')) pinned = a['pinned'] == true;
         if (a['title'] is String) renamedTo = a['title'] as String;
         return {'session': {'id': a['id'], 'title': renamedTo ?? 'x'}};
+      case 'ai.delete':
+        if (failDelete) throw OpError(codeNotFound, 'synthetic delete refused');
+        return {'deleted': true};
       case 'ai.search':
         return {
           'hits': [
@@ -271,6 +276,42 @@ void main() {
     await t.tap(find.text('重构登录接口'));
     await t.pump(const Duration(milliseconds: 100));
     expect(ws.active?.id, 'ai:ses_1');
+  });
+
+  testWidgets('history reuses, renames and deletes a saved draft host; failed delete retains it', (t) async {
+    final draft = EditorTab(id: 'ai:draft:fixture', taskKey: 'ses_1', title: 'saved draft', icon: Icons.auto_awesome,
+      builder: (_) => const SizedBox());
+    ws.openTab(draft);
+    await pumpView(t, AiSessionSidebar(ws: ws));
+    await t.tap(find.byKey(const ValueKey('ai-session-ses_1'))); await settle(t);
+    expect(ws.assistantTabs.single, same(draft));
+    expect(ws.assistantPanel.active, draft.id);
+    await t.tap(find.byKey(const ValueKey('ai-session-ses_1')), buttons: kSecondaryButton); await settle(t);
+    await t.tap(find.text('重命名…')); await settle(t);
+    await t.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'renamed saved draft');
+    await t.tap(find.text('确定')); await settle(t);
+    expect(draft.title, 'renamed saved draft');
+    for (final fail in [true, false]) {
+      link.failDelete = fail;
+      await t.tap(find.byKey(const ValueKey('ai-session-ses_1')), buttons: kSecondaryButton); await settle(t);
+      await t.tap(find.text('删除…')); await settle(t);
+      await t.tap(find.text('删除')); await settle(t);
+      expect(ws.assistantTabs.contains(draft), fail, reason: 'only a successful remote delete closes the canonical host');
+    }
+    expect(link.rpcCalls.where((call) => call.$1 == 'ai.delete'), hasLength(2));
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('history new conversation completes the picker without discarding saved drafts', (t) async {
+    openNewAiSession(ws);
+    final first = ws.assistantTabs.single;
+    var opened = 0;
+    await pumpView(t, AiSessionSidebar(ws: ws, onOpened: () => opened++));
+    await t.tap(find.text('新建 AI 会话')); await settle(t);
+    expect(opened, 1);
+    expect(ws.assistantTabs, hasLength(2));
+    expect(ws.assistantTabs.first, same(first));
+    await t.pumpWidget(const SizedBox());
   });
 
   testWidgets('history groups by day, shows a preview, pins, renames and searches the conversation text', (t) async {

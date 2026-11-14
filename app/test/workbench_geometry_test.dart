@@ -4,6 +4,29 @@ import 'package:aurora/kernel/workbench_geometry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('three workbench hosts stay disjoint through narrow, short and maximized layouts', () {
+    for (final width in [390.0, 879.0, 880.0, 1000.0, 1440.0]) {
+      for (final height in [240.0, 360.0, 700.0]) {
+        for (final wanted in [320.0, 800.0, double.nan]) {
+          for (var flags = 0; flags < 64; flags++) {
+            final geometry = WorkbenchGeometry(size: Size(width, height), preferredHeight: 260,
+              panelVisible: flags & 1 != 0, panelFocused: flags & 2 != 0, panelMaximized: flags & 4 != 0,
+              assistantVisible: flags & 8 != 0, assistantFocused: flags & 16 != 0, assistantMaximized: flags & 32 != 0,
+              assistantWidth: wanted);
+            final rects = [geometry.editor, geometry.terminal, geometry.divider, geometry.assistant, geometry.assistantDivider].whereType<Rect>().toList();
+            for (var i = 0; i < rects.length; i++) {
+              final rect = rects[i];
+              expect(rect.isFinite, isTrue); expect(rect.width, greaterThanOrEqualTo(0)); expect(rect.height, greaterThanOrEqualTo(0));
+              expect(rect.left, greaterThanOrEqualTo(0)); expect(rect.top, greaterThanOrEqualTo(0));
+              expect(rect.right, lessThanOrEqualTo(width)); expect(rect.bottom, lessThanOrEqualTo(height));
+              for (final other in rects.skip(i + 1)) { expect(rect.overlaps(other), isFalse); }
+            }
+          }
+        }
+      }
+    }
+  });
+
   test('editor and panel rectangles are disjoint and bounded for every window state', () {
     var cases = 0;
     for (final width in [0.0, 240.0, 390.0, 600.0, 900.0, 1440.0]) {

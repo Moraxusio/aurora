@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:aurora/features/ai/ai_studio_view.dart';
+import 'package:aurora/features/ai/ai_transcript.dart';
 import 'package:aurora/kernel/input_mode.dart';
 import 'package:aurora/kernel/workspace.dart';
 import 'package:aurora/theme/ide_theme.dart';
@@ -302,8 +303,8 @@ void main() {
   testWidgets('stream text is coalesced and reading history is not forcibly scrolled', (t) async {
     link.longHistory = true;
     await pump(t);
-    final list = t.widget<ListView>(find.byType(ListView).first);
-    expect(list.controller!.position.maxScrollExtent, greaterThan(200));
+    final list = t.widget<CustomScrollView>(find.byKey(const ValueKey('ai-transcript')));
+    expect(list.controller!.position.maxScrollExtent - list.controller!.position.minScrollExtent, greaterThan(200));
     list.controller!.jumpTo(list.controller!.position.maxScrollExtent);
     await t.pump();
     link.events.emit({'type': 'text.delta', 'delta': 'batched '});
@@ -313,20 +314,24 @@ void main() {
     await t.pump(const Duration(milliseconds: 34));
     // The buffers are flushed together, not rendered once for each token.
     expect(find.text('batched reply', findRichText: true), findsWidgets);
-    list.controller!.jumpTo(0);
+    (list.controller! as AiTranscriptController).reveal('msg_u1');
+    await t.pump(); await t.pump();
+    list.controller!.jumpTo(list.controller!.offset + 200);
     await t.pump();
+    final readingOffset = list.controller!.offset;
     expect(find.byKey(const ValueKey('ai-jump-latest')), findsOneWidget);
     link.events.emit({'type': 'text.delta', 'delta': ' while reading history'});
     await t.pump();
     await t.pump(const Duration(milliseconds: 200));
-    expect(list.controller!.offset, 0);
+    expect(list.controller!.offset, closeTo(readingOffset, .1));
     await t.tap(find.byKey(const ValueKey('ai-jump-latest')));
     await t.pump();
-    // animateTo is started after layout; give its ticker a first frame before
-    // advancing past the animation, rather than measuring at its start time.
-    await t.pump(const Duration(milliseconds: 16));
-    await t.pump(const Duration(milliseconds: 200));
-    expect(list.controller!.offset, greaterThan(200));
+    expect(list.controller!.offset, closeTo(list.controller!.position.maxScrollExtent, 1));
+    final latestOffset = list.controller!.offset;
+    for (var frame = 0; frame < 6; frame++) {
+      await t.pump(const Duration(milliseconds: 30));
+      expect(list.controller!.offset, closeTo(latestOffset, .1));
+    }
   });
   testWidgets('mobile composer previews pasted image and file without uploading', (t) async {
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -357,5 +362,56 @@ void main() {
     expect(t.takeException(), isNull);
     expect(link.rpcCalls.where((c) => c.$1 == 'ai.run' || c.$1 == 'ai.attach.upload'), isEmpty);
     await snapshot(t, 'ai-attachments-mobile');
+  });
+  testWidgets('completed plans disappear immediately, new unfinished plans can appear again', (t) async {
+    await pump(t, width: 420);
+    expect(find.byKey(const ValueKey('ai-active-plan')), findsOneWidget);
+    expect(t.getSize(find.byKey(const ValueKey('ai-active-plan'))).height, lessThanOrEqualTo(40));
+    link.events.emit({'type': 'todos.updated', 'todos': [
+      {'id':'one','content':'finished work','status':'completed'},
+      {'id':'two','content':'no longer needed','status':'cancelled'},
+    ]});
+    await t.pump();
+    expect(find.byKey(const ValueKey('ai-active-plan')), findsNothing);
+    await snapshot(t, 'ai-plan-completed-sidebar');
+    link.events.emit({'type': 'todos.updated', 'todos': [
+      {'id':'next','content':'new active task','status':'in_progress'},
+    ]});
+    await t.pump();
+    expect(find.byKey(const ValueKey('ai-active-plan')), findsOneWidget);
+    expect(find.text('new active task'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
+  testWidgets('fixed message navigation survives resize and background resync while reading', (t) async {
+    link.longHistory = true;
+    await pump(t, width: 520);
+    final controller = t.widget<CustomScrollView>(find.byKey(const ValueKey('ai-transcript'))).controller! as AiTranscriptController;
+    controller.reveal('msg_u1'); await t.pump(); await t.pump();
+    controller.jumpTo(controller.offset + 320); await t.pump();
+    final anchor = controller.debugReadingAnchor!;
+    final navigationTop = t.getTopLeft(find.byKey(const ValueKey('ai-message-navigation'))).dy;
+    t.view.physicalSize = const Size(420, 900); await t.pump();
+    expect(controller.debugReadingAnchor!.$1, anchor.$1);
+    expect(t.getTopLeft(find.byKey(const ValueKey('ai-message-navigation'))).dy, navigationTop);
+    final before = controller.offset;
+    link.events.emit({'type':'sync.required'});
+    await t.pump(); await t.pump(); await t.pump(const Duration(milliseconds: 100));
+    expect(controller.debugReadingAnchor!.$1, anchor.$1);
+    expect(controller.offset, closeTo(before, 1.5));
+    expect(controller.followsLatest.value, isFalse);
+    await t.tap(find.byKey(const ValueKey('ai-next-message'))); await t.pump(); await t.pump();
+    expect(find.byKey(const ValueKey('msg_a1')), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('ai-previous-message'))); await t.pump(); await t.pump();
+    expect(find.byKey(const ValueKey('msg_u1')), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  });
+  testWidgets('short windows retain a usable composer without chrome overflowing the conversation', (t) async {
+    await pump(t, width: 420);
+    t.view.physicalSize = const Size(420, 240); await t.pump();
+    expect(find.byKey(const ValueKey('ai-prompt-input')).hitTestable(), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-message-navigation')).hitTestable(), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
   });
 }

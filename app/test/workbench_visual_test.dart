@@ -115,7 +115,7 @@ class _VisualLink extends FakeAiLink {
   }
   @override
   AgentInfo get server => AgentInfo({
-    'version': '3.15.0',
+    'version': '3.16.0',
     'os': 'linux',
     'arch': 'amd64',
     'caps': <String>[],
@@ -343,10 +343,28 @@ void main() {
         ),
       );
       ws.activate('file:home:/project/src/main.dart');
-      ws.splitGroup(SplitAxis.horizontal, tabId: 'ai:ses_1');
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       await snapshot(t, 'workbench-split-ai');
+      await show(Brightness.light);
+      await snapshot(t, 'workbench-ai-sidebar-light');
+      await show(Brightness.dark);
+      final group = ws.tabLayout.focused;
+      final drag = await t.startGesture(t.getCenter(find.byKey(const ValueKey('tab-file:home:/project/src/workbench.dart'))));
+      await drag.moveBy(const Offset(22, 0)); await t.pump();
+      final pane = t.getRect(find.byKey(ValueKey('pane-drop-$group')));
+      await drag.moveTo(Offset(pane.right - 8, pane.center.dy)); await t.pump();
+      expect(find.byKey(ValueKey('drop-preview-$group')), findsOneWidget);
+      expect(ws.tabLayout.groups, hasLength(1));
+      await snapshot(t, 'workbench-drag-split-preview');
+      await drag.up(); await t.pumpAndSettle();
+      expect(ws.tabLayout.groups, hasLength(2));
+      expect(t.takeException(), isNull);
+      await snapshot(t, 'workbench-documents-ai-terminal');
+      await show(Brightness.light);
+      await snapshot(t, 'workbench-documents-ai-terminal-light');
+      await show(Brightness.dark);
+      ws.arrangeEditors(EditorArrangement.single);
       ws.setTabPlacement(TabPlacement.right);
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
@@ -376,6 +394,9 @@ void main() {
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       await snapshot(t, 'workbench-phone-terminal');
+      ws.showAssistantPanel();
+      await t.pumpAndSettle();
+      await snapshot(t, 'workbench-phone-ai');
       expect(
         link.terminalStreams,
         hasLength(1),

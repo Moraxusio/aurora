@@ -8,6 +8,7 @@ import 'package:flutter/gestures.dart'
         GestureBinding;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/ide_theme.dart';
 import 'editor_tab.dart';
@@ -17,26 +18,13 @@ import 'input_mode.dart';
 import 'tab_layout.dart';
 import 'widgets.dart';
 import 'workspace.dart';
+import 'editor_grid_geometry.dart';
 
 export 'tab_layout_menu.dart'
     show TabLayoutMenu, arrangementLabel, placementLabel;
 
 const _gap = 5.0;
 double _rowOf(BuildContext context) => InputMode.isTouch(context) ? 44 : 36;
-
-class _DividerGeometry {
-  final TabSplit split;
-  final Rect rect;
-  final double extent;
-  final double minRatio, maxRatio;
-  const _DividerGeometry(
-    this.split,
-    this.rect,
-    this.extent,
-    this.minRatio,
-    this.maxRatio,
-  );
-}
 
 /// All document bodies stay direct, keyed siblings in ONE stack. Even changing
 /// orientation, group count, sidebar width or phone size cannot unmount them.
@@ -81,16 +69,6 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
     super.dispose();
   }
 
-  Size _minimum(TabNode node) {
-    if (node is TabLeaf) return const Size(260, 160);
-    final s = node as TabSplit,
-        a = _minimum((node).first),
-        b = _minimum(node.second);
-    return s.axis == SplitAxis.horizontal
-        ? Size(a.width + b.width + _gap, math.max(a.height, b.height))
-        : Size(math.max(a.width, b.width), a.height + b.height + _gap);
-  }
-
   @override
   Widget build(BuildContext context) {
     final ws = widget.ws;
@@ -104,85 +82,15 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
     _lastRects.removeWhere((tab, _) => !live.contains(tab));
     final tabsById = {for (final t in live) t.id: t};
     final ide = Ide.of(context), layout = ws.tabLayout;
-    return LayoutBuilder(
+    return CallbackShortcuts(bindings: {
+      const SingleActivator(LogicalKeyboardKey.escape): () { _drag.value?.cancelled = true; _drag.value = null; },
+    }, child: LayoutBuilder(
       builder: (context, box) {
-        final rects = <String, Rect>{}, contents = <String, Rect>{};
+        final grid = EditorGridGeometry(layout, box.biggest, focusMode: ws.focusMode);
+        final rects = grid.groups, contents = <String, Rect>{};
         final row = _rowOf(context);
-        final dividers = <_DividerGeometry>[];
-        final minimum = _minimum(layout.root);
-        final compact =
-            box.maxWidth < minimum.width ||
-            box.maxHeight < minimum.height ||
-            ws.focusMode;
-        void place(TabNode node, Rect rect) {
-          if (node is TabLeaf) {
-            rects[node.group] = rect;
-            return;
-          }
-          final split = node as TabSplit;
-          final horizontal = split.axis == SplitAxis.horizontal;
-          final extent = (horizontal ? rect.width : rect.height) - _gap;
-          final aMin = _minimum(split.first), bMin = _minimum(split.second);
-          final low = horizontal ? aMin.width : aMin.height,
-              high = extent - (horizontal ? bMin.width : bMin.height);
-          final first = (extent * split.ratio)
-              .clamp(math.min(low, high), math.max(low, high))
-              .toDouble();
-          if (horizontal) {
-            place(
-              split.first,
-              Rect.fromLTWH(rect.left, rect.top, first, rect.height),
-            );
-            place(
-              split.second,
-              Rect.fromLTWH(
-                rect.left + first + _gap,
-                rect.top,
-                extent - first,
-                rect.height,
-              ),
-            );
-            dividers.add(
-              _DividerGeometry(
-                split,
-                Rect.fromLTWH(rect.left + first, rect.top, _gap, rect.height),
-                extent,
-                low / extent,
-                high / extent,
-              ),
-            );
-          } else {
-            place(
-              split.first,
-              Rect.fromLTWH(rect.left, rect.top, rect.width, first),
-            );
-            place(
-              split.second,
-              Rect.fromLTWH(
-                rect.left,
-                rect.top + first + _gap,
-                rect.width,
-                extent - first,
-              ),
-            );
-            dividers.add(
-              _DividerGeometry(
-                split,
-                Rect.fromLTWH(rect.left, rect.top + first, rect.width, _gap),
-                extent,
-                low / extent,
-                high / extent,
-              ),
-            );
-          }
-        }
-
+        final dividers = grid.dividers, compact = grid.compact;
         final bounds = Offset.zero & Size(box.maxWidth, box.maxHeight);
-        if (compact) {
-          rects[layout.current.id] = bounds;
-        } else {
-          place(layout.root, bounds);
-        }
         final chrome = <Widget>[];
         for (final g in layout.groups) {
           final rect = rects[g.id];
@@ -204,7 +112,7 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                     .clamp(120.0, math.min(400.0, rect.width - 280))
                     .toDouble()
               : rect.width;
-          final railSpace = 64 + (compact && layout.groups.length > 1 ? 42 : 0);
+          final railSpace = 92 + (compact && layout.groups.length > 1 ? 42 : 0);
           final columns = math.max(
             1,
             ((rect.width - railSpace) / layout.tabWidth).floor(),
@@ -361,12 +269,12 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
                                 child: TabFocusFrame(
                                   request:
                                       on &&
-                                          !ws.terminalFocused &&
+                                           !ws.terminalFocused && !ws.assistantFocused &&
                                           layout.current.active == t.id
                                       ? ws.editorFocusRequest
                                       : -1,
                                   canFocus: () =>
-                                      !ws.terminalFocused &&
+                                       !ws.terminalFocused && !ws.assistantFocused &&
                                       ws.editorActiveId == t.id,
                                   child: RepaintBoundary(
                                     child: _bodies.putIfAbsent(
@@ -421,7 +329,7 @@ class _TabWorkspaceViewState extends State<TabWorkspaceView> {
           ),
         );
       },
-    );
+    ));
   }
 }
 
@@ -659,6 +567,10 @@ class _PaneBar extends StatelessWidget {
       drag: drag,
       onDrag: onDrag,
     );
+    final splitButton = SizedBox(width: 28, height: row, child: IconButton(
+      key: ValueKey('split-editor-${group.id}'), tooltip: '新建右侧视图（Ctrl+\\）', padding: EdgeInsets.zero,
+      onPressed: layout.groups.length < TabLayout.maxGroups ? () => ws.splitGroup(SplitAxis.horizontal, group: group.id) : null,
+      icon: const Icon(Icons.vertical_split_outlined, size: 15)));
     return Material(
       color: ide.tabBar,
       child: DecoratedBox(
@@ -689,6 +601,7 @@ class _PaneBar extends StatelessWidget {
                           width: 28,
                           child: _OpenTabsMenu(ws: ws, group: group),
                         ),
+                        splitButton,
                         actions,
                       ],
                     ),
@@ -701,7 +614,7 @@ class _PaneBar extends StatelessWidget {
                   final overflow =
                       !wrap &&
                       group.tabs.length * layout.tabWidth >
-                          box.maxWidth - 32 - (switcher != null ? 42 : 0);
+                          box.maxWidth - 60 - (switcher != null ? 42 : 0);
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -713,6 +626,7 @@ class _PaneBar extends StatelessWidget {
                           height: row,
                           child: _OpenTabsMenu(ws: ws, group: group),
                         ),
+                      splitButton,
                       actions,
                     ],
                   );
@@ -940,6 +854,12 @@ class _TabTile extends StatefulWidget {
 
 class _TabTileState extends State<_TabTile> {
   bool _hover = false;
+  void _endDrag() {
+    widget.onDrag(null);
+    // Escape invalidates this gesture's payload permanently. Rebuild even if
+    // the layout did not change, so the next gesture gets a fresh transaction.
+    if (mounted) setState(() {});
+  }
   @override
   Widget build(BuildContext context) {
     final ws = widget.ws,
@@ -948,7 +868,7 @@ class _TabTileState extends State<_TabTile> {
         layout = ws.tabLayout;
     final ide = Ide.of(context),
         on = group.active == tab.id,
-        focused = group.id == layout.focused && !ws.terminalFocused;
+        focused = group.id == layout.focused && !ws.terminalFocused && !ws.assistantFocused;
     final pin = layout.pinned.contains(tab.id);
     final tile = ContextArea(
       items: () => [
@@ -1140,7 +1060,7 @@ class _TabTileState extends State<_TabTile> {
         dragAnchorStrategy: pointerDragAnchorStrategy,
         maxSimultaneousDrags: 1,
         onDragStarted: () => widget.onDrag(drag),
-        onDragEnd: (_) => widget.onDrag(null),
+        onDragEnd: (_) => _endDrag(),
         childWhenDragging: Opacity(opacity: .35, child: tile),
         child: tile,
       );
@@ -1152,7 +1072,7 @@ class _TabTileState extends State<_TabTile> {
       allowedButtonsFilter: (buttons) => buttons == kPrimaryMouseButton,
       maxSimultaneousDrags: 1,
       onDragStarted: () => widget.onDrag(drag),
-      onDragEnd: (_) => widget.onDrag(null),
+      onDragEnd: (_) => _endDrag(),
       childWhenDragging: Opacity(opacity: .35, child: tile),
       child: tile,
     );

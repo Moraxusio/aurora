@@ -5,14 +5,16 @@ import 'dart:ui';
 /// temporarily show the focused region; this never rewrites the editor tree.
 class WorkbenchGeometry {
   static const dividerSize = 5.0, minimumEditorHeight = 200.0;
-  final Rect? editor, terminal, divider;
+  final Rect? editor, terminal, divider, assistant, assistantDivider;
   final bool compact;
   const WorkbenchGeometry._(
     this.editor,
     this.terminal,
     this.divider,
-    this.compact,
-  );
+    this.compact, [
+    this.assistant,
+    this.assistantDivider,
+  ]);
 
   factory WorkbenchGeometry({
     required Size size,
@@ -20,11 +22,41 @@ class WorkbenchGeometry {
     required bool panelFocused,
     required bool panelMaximized,
     required double preferredHeight,
+    bool assistantVisible = false,
+    bool assistantFocused = false,
+    bool assistantMaximized = false,
+    double assistantWidth = 420,
   }) {
     final width = size.width.isFinite ? math.max(0.0, size.width) : 0.0;
     final height = size.height.isFinite ? math.max(0.0, size.height) : 0.0;
     final bounds = Rect.fromLTWH(0, 0, width, height);
     final compact = width < 600 || height < 360;
+    if (assistantVisible) {
+      if (assistantMaximized || width < 880) {
+        if (assistantFocused || assistantMaximized) {
+          return WorkbenchGeometry._(null, null, null, true, bounds);
+        }
+      } else {
+        final dock = (assistantWidth.isFinite ? assistantWidth : 420.0)
+            .clamp(320.0, math.min(800.0, width - 420.0 - dividerSize))
+            .toDouble();
+        final rest = WorkbenchGeometry(
+          size: Size(width - dock - dividerSize, height),
+          panelVisible: panelVisible,
+          panelFocused: panelFocused,
+          panelMaximized: panelMaximized,
+          preferredHeight: preferredHeight,
+        );
+        return WorkbenchGeometry._(
+          rest.editor,
+          rest.terminal,
+          rest.divider,
+          rest.compact,
+          Rect.fromLTWH(width - dock, 0, dock, height),
+          Rect.fromLTWH(width - dock - dividerSize, 0, dividerSize, height),
+        );
+      }
+    }
     if (!panelVisible) return WorkbenchGeometry._(bounds, null, null, compact);
     if (compact) {
       return panelFocused

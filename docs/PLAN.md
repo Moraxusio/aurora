@@ -696,3 +696,10 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 正式包实际 Release 使用临时独立配置／实例启动，连接同包签名本地 agent（界面显示 3.20.0）。原生点击文件选项、切换隐藏文件并确认勾选、排序菜单选择名称、工作台菜单及命令选择器，6 张截图已检查，GUI 异常记录 **0**。仅结束自有客户端 PID 11464，agent PID 29456 随之退出；后台启动器完整保留到验收结束。
 - 源码与标签先推送，再上传草稿；Windows ZIP、ZIP sidecar、`SHA256SUMS.txt` 共 **3 项资产**的服务端 SHA-256 和大小全部匹配后转正式 latest，公开 API 再确认非草稿／非预发布及规范下载链接。发布证据见 [20261115-release-3.20.0.json](performance/20261115-release-3.20.0.json)，本机日志／截图位于临时 `release-3.20.0` 目录。
 - 旧正式包及三个候选的 12 项保护摘要一致，v2 干净、`release` 顶层仍 13 项。无发布授权、私钥、真实 profile 或验收启动器进入正式包；临时 GitHub 授权在本次记录推送后清理。Android 继续暂缓，原始 GPU 灰屏根因及其余实机验收边界沿用前述记录。
+
+### 3.21.0 Windows 发布准备（2026-11-15）
+
+- 用户授权直接发布本轮 AI 专项重构，版本为 3.21.0。范围包含 AI 页面统一视觉与简化、OpenCode 模型图片输入能力识别、配置预设与对话思考强度分离、始终可见的工作目录栏，以及相关 profile／agent 协议兼容改动；Android 继续暂缓。
+- 模型能力支持 `supports_image`、`supports_vision`、`vision`、`image_input`、`image_support`、`modalities`、`input_modalities` 及嵌套能力字段。能力以支持／不支持／未确认三态保存，不把模型名称当作能力证据。
+- 配置页只保存思考强度默认预设；对话选择通过临时 `reasoningOverride` 发送，不覆盖 profile。模型目录、输入区和工作目录栏统一使用 AI 视觉规范，原 API Key／OAuth、附件边界、会话状态和本地 agent 生命周期保持兼容。
+- 发布前复用本轮 AI 定向回归：AI 历史／设置／模型切换／配置保存、图片附件、工作目录浏览、中文输入法和 390px 窄屏测试；Go AI 协议、profile round-trip 与 Windows Release 编译已通过。正式包另核对版本、签名、ZIP、许可证、隔离启动及 GitHub 服务端资产摘要。

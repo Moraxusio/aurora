@@ -89,3 +89,26 @@ func TestModelListShapes(t *testing.T) {
 		t.Fatal("unexpected JSON accepted as empty models")
 	}
 }
+
+func TestModelListImageCapabilities(t *testing.T) {
+	list, err := parseModelList([]byte(`{"data":[{"id":"vision","modalities":["text","image"]},{"id":"nested","architecture":{"input_modalities":["text","image"]}},{"id":"text-only","supports_image":false},{"id":"unknown"}]}`))
+	if err != nil || len(list) != 4 {
+		t.Fatalf("unexpected model list: %+v %v", list, err)
+	}
+	byID := map[string]ModelInfo{}
+	for _, model := range list {
+		byID[model.ID] = model
+	}
+	if !byID["vision"].ImageSupportKnown || !byID["vision"].SupportsImage {
+		t.Fatalf("vision capability not parsed: %+v", byID["vision"])
+	}
+	if !byID["nested"].ImageSupportKnown || !byID["nested"].SupportsImage {
+		t.Fatalf("nested capability not parsed: %+v", byID["nested"])
+	}
+	if !byID["text-only"].ImageSupportKnown || byID["text-only"].SupportsImage {
+		t.Fatalf("negative capability not parsed: %+v", byID["text-only"])
+	}
+	if byID["unknown"].ImageSupportKnown {
+		t.Fatalf("unknown capability became known: %+v", byID["unknown"])
+	}
+}

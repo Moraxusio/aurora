@@ -60,10 +60,13 @@ type LLMResponse struct {
 
 // ModelInfo describes a model returned by ai.models (/models discovery).
 type ModelInfo struct {
-	ID            string `json:"id"`
-	Name          string `json:"name,omitempty"`
-	ContextWindow int    `json:"context_window,omitempty"`
-	MaxTokens     int    `json:"max_tokens,omitempty"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name,omitempty"`
+	ContextWindow     int      `json:"context_window,omitempty"`
+	MaxTokens         int      `json:"max_tokens,omitempty"`
+	InputModalities   []string `json:"input_modalities,omitempty"`
+	SupportsImage     bool     `json:"supports_image"`
+	ImageSupportKnown bool     `json:"image_support_known,omitempty"`
 }
 
 // HTTPStatusError carries an upstream HTTP status code and body for retry/overflow classification.
@@ -514,13 +517,18 @@ func fetchModelPages(cctx context.Context, cfg ProviderConfig, proxyEnv func() m
 
 func parseModelList(body []byte) ([]ModelInfo, error) {
 	type row struct {
-		ID            string `json:"id"`
-		Name          string `json:"name"`
-		DisplayName   string `json:"display_name"`
-		ContextLength int    `json:"context_length"`
-		ContextWindow int    `json:"context_window"`
-		MaxInput      int    `json:"max_input_tokens"`
-		MaxTokens     int    `json:"max_output_tokens"`
+		ID              string   `json:"id"`
+		Name            string   `json:"name"`
+		DisplayName     string   `json:"display_name"`
+		ContextLength   int      `json:"context_length"`
+		ContextWindow   int      `json:"context_window"`
+		MaxInput        int      `json:"max_input_tokens"`
+		MaxTokens       int      `json:"max_output_tokens"`
+		InputModalities []string `json:"input_modalities"`
+		Modalities      []string `json:"modalities"`
+		SupportsImage   *bool    `json:"supports_image"`
+		SupportsVision  *bool    `json:"supports_vision"`
+		Vision          *bool    `json:"vision"`
 	}
 	var parsed struct {
 		Data   []json.RawMessage `json:"data"`
@@ -570,8 +578,74 @@ func parseModelList(body []byte) ([]ModelInfo, error) {
 		if cw == 0 {
 			cw = m.MaxInput
 		}
-		list = append(list, ModelInfo{ID: id, Name: name, ContextWindow: cw, MaxTokens: m.MaxTokens})
+		modalities := append([]string{}, m.InputModalities...)
+		modalities = append(modalities, m.Modalities...)
+		known := false
+		supportsImage := false
+		if m.SupportsImage != nil {
+			known, supportsImage = true, *m.SupportsImage
+		}
+		if m.SupportsVision != nil {
+			known, supportsImage = true, *m.SupportsVision
+		}
+		if m.Vision != nil {
+			known, supportsImage = true, *m.Vision
+		}
+		for _, modality := range modalities {
+			m := strings.ToLower(modality)
+			if strings.Contains(m, "image") || strings.Contains(m, "vision") {
+				known, supportsImage = true, true
+			}
+		}
+		nestedKnown, nestedImage, nestedModalities := detectImageCapability(raw)
+		known = known || nestedKnown
+		supportsImage = supportsImage || nestedImage
+		modalities = append(modalities, nestedModalities...)
+		model := ModelInfo{ID: id, Name: name, ContextWindow: cw, MaxTokens: m.MaxTokens, InputModalities: modalities, SupportsImage: supportsImage, ImageSupportKnown: known}
+		list = append(list, model)
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
 	return list, nil
+}
+
+// detectImageCapability accepts the loose capability shapes used by OpenAI-
+// compatible gateways: top-level flags, `capabilities`, `architecture`, and
+// modality arrays. Unknown remains unknown; a model name is never treated as
+// evidence of image support.
+func detectImageCapability(raw json.RawMessage) (known, supports bool, modalities []string) {
+	var value any
+	if json.Unmarshal(raw, &value) != nil {
+		return false, false, nil
+	}
+	var walk func(any)
+	walk = func(node any) {
+		obj, ok := node.(map[string]any)
+		if !ok {
+			return
+		}
+		for key, child := range obj {
+			switch strings.ToLower(key) {
+			case "supports_image", "supports_vision", "vision", "image_input", "image_support":
+				if flag, ok := child.(bool); ok {
+					known = true
+					supports = supports || flag
+				}
+			case "modalities", "input_modalities", "input_modality":
+				if list, ok := child.([]any); ok {
+					for _, item := range list {
+						if text, ok := item.(string); ok {
+							modalities = append(modalities, text)
+							lower := strings.ToLower(text)
+							if strings.Contains(lower, "image") || strings.Contains(lower, "vision") {
+								known, supports = true, true
+							}
+						}
+					}
+				}
+			}
+			walk(child)
+		}
+	}
+	walk(value)
+	return known, supports, modalities
 }

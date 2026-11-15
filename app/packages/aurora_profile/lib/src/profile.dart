@@ -25,30 +25,49 @@ class Profile {
   /// Sealed with the profile so API keys never sit in plaintext or on remote servers.
   AiSettings ai;
 
-  Profile({List<ServerEntry>? servers, this.selected, List<KnownHost>? knownHosts, List<ProxySource>? proxySources, EditorSettings? editor, AiSettings? ai})
-      : servers = servers ?? [],
-        knownHosts = knownHosts ?? [],
-        proxySources = proxySources ?? [],
-        editor = editor ?? EditorSettings(),
-        ai = ai ?? AiSettings();
+  Profile({
+    List<ServerEntry>? servers,
+    this.selected,
+    List<KnownHost>? knownHosts,
+    List<ProxySource>? proxySources,
+    EditorSettings? editor,
+    AiSettings? ai,
+  }) : servers = servers ?? [],
+       knownHosts = knownHosts ?? [],
+       proxySources = proxySources ?? [],
+       editor = editor ?? EditorSettings(),
+       ai = ai ?? AiSettings();
 
   factory Profile.fromJson(Map<String, dynamic> j) => Profile(
-        servers: [for (final s in (j['servers'] as List? ?? const [])) ServerEntry.fromJson(_map(s))],
-        selected: j['selected'] as String?,
-        knownHosts: [for (final k in (j['known_hosts'] as List? ?? const [])) KnownHost.fromJson(_map(k))],
-        proxySources: [for (final s in (j['proxy_sources'] as List? ?? const [])) ProxySource.fromJson(_map(s))],
-        editor: j['editor'] == null ? null : EditorSettings.fromJson(_map(j['editor'])),
-        ai: j['ai'] == null ? null : AiSettings.fromJson(_map(j['ai'])),
-      );
+    servers: [
+      for (final s in (j['servers'] as List? ?? const []))
+        ServerEntry.fromJson(_map(s)),
+    ],
+    selected: j['selected'] as String?,
+    knownHosts: [
+      for (final k in (j['known_hosts'] as List? ?? const []))
+        KnownHost.fromJson(_map(k)),
+    ],
+    proxySources: [
+      for (final s in (j['proxy_sources'] as List? ?? const []))
+        ProxySource.fromJson(_map(s)),
+    ],
+    editor: j['editor'] == null
+        ? null
+        : EditorSettings.fromJson(_map(j['editor'])),
+    ai: j['ai'] == null ? null : AiSettings.fromJson(_map(j['ai'])),
+  );
 
   Map<String, dynamic> toJson() => {
-        if (servers.isNotEmpty) 'servers': [for (final s in servers) s.toJson()],
-        'selected': ?selected,
-        if (knownHosts.isNotEmpty) 'known_hosts': [for (final k in knownHosts) k.toJson()],
-        if (proxySources.isNotEmpty) 'proxy_sources': [for (final s in proxySources) s.toJson()],
-        if (!editor.isDefault) 'editor': editor.toJson(),
-        if (!ai.isDefault) 'ai': ai.toJson(),
-      };
+    if (servers.isNotEmpty) 'servers': [for (final s in servers) s.toJson()],
+    'selected': ?selected,
+    if (knownHosts.isNotEmpty)
+      'known_hosts': [for (final k in knownHosts) k.toJson()],
+    if (proxySources.isNotEmpty)
+      'proxy_sources': [for (final s in proxySources) s.toJson()],
+    if (!editor.isDefault) 'editor': editor.toJson(),
+    if (!ai.isDefault) 'ai': ai.toJson(),
+  };
 
   ProxySource? proxySource(String id) {
     for (final s in proxySources) {
@@ -81,7 +100,15 @@ class Profile {
   void trustHost(String host, int port, String type, String fingerprint) {
     final h = host.toLowerCase();
     knownHosts.removeWhere((k) => k.host == h && k.port == port);
-    knownHosts.add(KnownHost(host: h, port: port, type: type, fingerprint: fingerprint, added: _now()));
+    knownHosts.add(
+      KnownHost(
+        host: h,
+        port: port,
+        type: type,
+        fingerprint: fingerprint,
+        added: _now(),
+      ),
+    );
   }
 }
 
@@ -90,6 +117,7 @@ class ServerEntry {
   /// Lifecycle is independent from platform: old entries remain remote.
   String kind;
   bool get isLocal => kind == 'local';
+
   /// Client-local id, fixed when the entry is created.
   final String id;
   String name;
@@ -128,53 +156,90 @@ class ServerEntry {
   String? selectedWorkspace;
   WorkspaceView browserView;
 
-  ServerEntry({required this.id, required this.name, this.kind = 'remote', this.agentId, this.instance = '', this.ssh, this.direct, this.lastSeen, List<ForwardSpec>? forwards, this.proxy, this.upgrade, List<String>? failedUpgrades,
-    List<ProjectWorkspace>? workspaces, this.selectedWorkspace, WorkspaceView? browserView})
-      : forwards = forwards ?? [], failedUpgrades = failedUpgrades ?? [], workspaces = workspaces ?? [], browserView = browserView ?? WorkspaceView();
+  ServerEntry({
+    required this.id,
+    required this.name,
+    this.kind = 'remote',
+    this.agentId,
+    this.instance = '',
+    this.ssh,
+    this.direct,
+    this.lastSeen,
+    List<ForwardSpec>? forwards,
+    this.proxy,
+    this.upgrade,
+    List<String>? failedUpgrades,
+    List<ProjectWorkspace>? workspaces,
+    this.selectedWorkspace,
+    WorkspaceView? browserView,
+  }) : forwards = forwards ?? [],
+       failedUpgrades = failedUpgrades ?? [],
+       workspaces = workspaces ?? [],
+       browserView = browserView ?? WorkspaceView();
 
   /// A new entry with a random id.
-  factory ServerEntry.create(String name, {SshLogin? ssh, String instance = ''}) =>
-      ServerEntry(id: newId(), name: name, ssh: ssh, instance: instance);
+  factory ServerEntry.create(
+    String name, {
+    SshLogin? ssh,
+    String instance = '',
+  }) => ServerEntry(id: newId(), name: name, ssh: ssh, instance: instance);
 
   factory ServerEntry.fromJson(Map<String, dynamic> j) => ServerEntry(
-        id: j['id'] as String,
-        kind: j['kind'] == 'local' ? 'local' : 'remote',
-        name: j['name'] as String? ?? '',
-        agentId: j['agent_id'] as String?,
-        instance: j['instance'] as String? ?? '',
-        ssh: j['ssh'] == null ? null : SshLogin.fromJson(_map(j['ssh'])),
-        direct: j['direct'] == null ? null : DirectParams.fromJson(_map(j['direct'])),
-        lastSeen: j['last_seen'] as int?,
-        forwards: [for (final f in (j['forwards'] as List? ?? const [])) ForwardSpec.fromJson(_map(f))],
-        proxy: j['proxy'] == null ? null : ProxyChoice.fromJson(_map(j['proxy'])),
-        upgrade: j['upgrade'] == null ? null : UpgradeRecord.fromJson(_map(j['upgrade'])),
-        failedUpgrades: (j['failed_upgrades'] as List? ?? const []).cast<String>().toList(),
-        workspaces: [for (final w in j['workspaces'] as List? ?? const []) ProjectWorkspace.fromJson(_map(w))],
-        selectedWorkspace: j['selected_workspace'] as String?,
-        browserView: j['browser_view'] == null ? null : WorkspaceView.fromJson(_map(j['browser_view'])),
-      );
+    id: j['id'] as String,
+    kind: j['kind'] == 'local' ? 'local' : 'remote',
+    name: j['name'] as String? ?? '',
+    agentId: j['agent_id'] as String?,
+    instance: j['instance'] as String? ?? '',
+    ssh: j['ssh'] == null ? null : SshLogin.fromJson(_map(j['ssh'])),
+    direct: j['direct'] == null
+        ? null
+        : DirectParams.fromJson(_map(j['direct'])),
+    lastSeen: j['last_seen'] as int?,
+    forwards: [
+      for (final f in (j['forwards'] as List? ?? const []))
+        ForwardSpec.fromJson(_map(f)),
+    ],
+    proxy: j['proxy'] == null ? null : ProxyChoice.fromJson(_map(j['proxy'])),
+    upgrade: j['upgrade'] == null
+        ? null
+        : UpgradeRecord.fromJson(_map(j['upgrade'])),
+    failedUpgrades: (j['failed_upgrades'] as List? ?? const [])
+        .cast<String>()
+        .toList(),
+    workspaces: [
+      for (final w in j['workspaces'] as List? ?? const [])
+        ProjectWorkspace.fromJson(_map(w)),
+    ],
+    selectedWorkspace: j['selected_workspace'] as String?,
+    browserView: j['browser_view'] == null
+        ? null
+        : WorkspaceView.fromJson(_map(j['browser_view'])),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        if (isLocal) 'kind': 'local',
-        'name': name,
-        'agent_id': ?agentId,
-        if (instance.isNotEmpty) 'instance': instance,
-        'ssh': ?ssh?.toJson(),
-        'direct': ?direct?.toJson(),
-        'last_seen': ?lastSeen,
-        if (forwards.isNotEmpty) 'forwards': [for (final f in forwards) f.toJson()],
-        'proxy': ?proxy?.toJson(),
-        'upgrade': ?upgrade?.toJson(),
-        if (failedUpgrades.isNotEmpty) 'failed_upgrades': failedUpgrades,
-        if (workspaces.isNotEmpty) 'workspaces': [for (final w in workspaces) w.toJson()],
-        'selected_workspace': ?selectedWorkspace,
-        if (!browserView.isEmpty) 'browser_view': browserView.toJson(),
-      };
+    'id': id,
+    if (isLocal) 'kind': 'local',
+    'name': name,
+    'agent_id': ?agentId,
+    if (instance.isNotEmpty) 'instance': instance,
+    'ssh': ?ssh?.toJson(),
+    'direct': ?direct?.toJson(),
+    'last_seen': ?lastSeen,
+    if (forwards.isNotEmpty) 'forwards': [for (final f in forwards) f.toJson()],
+    'proxy': ?proxy?.toJson(),
+    'upgrade': ?upgrade?.toJson(),
+    if (failedUpgrades.isNotEmpty) 'failed_upgrades': failedUpgrades,
+    if (workspaces.isNotEmpty)
+      'workspaces': [for (final w in workspaces) w.toJson()],
+    'selected_workspace': ?selectedWorkspace,
+    if (!browserView.isEmpty) 'browser_view': browserView.toJson(),
+  };
 
   ProjectWorkspace? workspace(String? id) {
     if (id == null) return null;
-    for (final w in workspaces) { if (w.id == id) return w; }
+    for (final w in workspaces) {
+      if (w.id == id) return w;
+    }
     return null;
   }
 
@@ -185,20 +250,30 @@ class ServerEntry {
 /// an arbitrary absolute server path or accept parent traversal from a profile.
 class WorkspacePath {
   final String root, path;
-  WorkspacePath({required this.root, required String path}) : path = normalize(path) {
-    if (root.isEmpty || root.contains('\u0000')) throw const FormatException('invalid workspace root');
+  WorkspacePath({required this.root, required String path})
+    : path = normalize(path) {
+    if (root.isEmpty || root.contains('\u0000'))
+      throw const FormatException('invalid workspace root');
   }
   static String normalize(String value) {
-    if (value.contains('\u0000') || value.split('/').contains('..')) throw const FormatException('invalid workspace path');
+    if (value.contains('\u0000') || value.split('/').contains('..'))
+      throw const FormatException('invalid workspace path');
     final parts = value.split('/').where((p) => p.isNotEmpty && p != '.');
     return '/${parts.join('/')}';
   }
+
   String get name => path == '/' ? root : path.split('/').last;
-  bool contains(WorkspacePath other) => root == other.root && (path == '/' || path == other.path || other.path.startsWith('$path/'));
-  factory WorkspacePath.fromJson(Map<String, dynamic> j) => WorkspacePath(root: j['root'] as String, path: j['path'] as String);
+  bool contains(WorkspacePath other) =>
+      root == other.root &&
+      (path == '/' || path == other.path || other.path.startsWith('$path/'));
+  factory WorkspacePath.fromJson(Map<String, dynamic> j) =>
+      WorkspacePath(root: j['root'] as String, path: j['path'] as String);
   Map<String, dynamic> toJson() => {'root': root, 'path': path};
-  @override bool operator ==(Object other) => other is WorkspacePath && other.root == root && other.path == path;
-  @override int get hashCode => Object.hash(root, path);
+  @override
+  bool operator ==(Object other) =>
+      other is WorkspacePath && other.root == root && other.path == path;
+  @override
+  int get hashCode => Object.hash(root, path);
 }
 
 class WorkspaceView {
@@ -207,12 +282,33 @@ class WorkspaceView {
   List<WorkspacePath> expanded, files;
   WorkspacePath? activeFile;
   bool treeSet;
-  WorkspaceView({List<WorkspacePath>? expanded, List<WorkspacePath>? files, this.activeFile, this.treeSet = false, Map<String, dynamic>? tabLayout}) : expanded = expanded ?? [], files = files ?? [], tabLayout = _copyTabLayout(tabLayout ?? {});
-  bool get isEmpty => !treeSet && expanded.isEmpty && files.isEmpty && activeFile == null && tabLayout.isEmpty;
+  WorkspaceView({
+    List<WorkspacePath>? expanded,
+    List<WorkspacePath>? files,
+    this.activeFile,
+    this.treeSet = false,
+    Map<String, dynamic>? tabLayout,
+  }) : expanded = expanded ?? [],
+       files = files ?? [],
+       tabLayout = _copyTabLayout(tabLayout ?? {});
+  bool get isEmpty =>
+      !treeSet &&
+      expanded.isEmpty &&
+      files.isEmpty &&
+      activeFile == null &&
+      tabLayout.isEmpty;
   factory WorkspaceView.fromJson(Map<String, dynamic> j) => WorkspaceView(
-    expanded: [for (final p in j['expanded'] as List? ?? const []) WorkspacePath.fromJson(_map(p))],
-    files: [for (final p in j['files'] as List? ?? const []) WorkspacePath.fromJson(_map(p))],
-    activeFile: j['active_file'] == null ? null : WorkspacePath.fromJson(_map(j['active_file'])),
+    expanded: [
+      for (final p in j['expanded'] as List? ?? const [])
+        WorkspacePath.fromJson(_map(p)),
+    ],
+    files: [
+      for (final p in j['files'] as List? ?? const [])
+        WorkspacePath.fromJson(_map(p)),
+    ],
+    activeFile: j['active_file'] == null
+        ? null
+        : WorkspacePath.fromJson(_map(j['active_file'])),
     treeSet: j['tree_set'] as bool? ?? false,
     tabLayout: j['tab_layout'] is Map ? _map(j['tab_layout']) : {},
   );
@@ -228,11 +324,18 @@ class WorkspaceView {
 Map<String, dynamic> _copyTabLayout(Map<String, dynamic> value) {
   Object? copy(Object? v, int depth) {
     if (depth > 16) return null;
-    if (v is Map) return <String, dynamic>{for (final e in v.entries.take(2000)) if (e.key is String) e.key as String: copy(e.value, depth + 1)};
-    if (v is List) return [for (final item in v.take(2000)) copy(item, depth + 1)];
-    if (v == null || v is String || v is bool || (v is num && v.isFinite)) return v;
+    if (v is Map)
+      return <String, dynamic>{
+        for (final e in v.entries.take(2000))
+          if (e.key is String) e.key as String: copy(e.value, depth + 1),
+      };
+    if (v is List)
+      return [for (final item in v.take(2000)) copy(item, depth + 1)];
+    if (v == null || v is String || v is bool || (v is num && v.isFinite))
+      return v;
     return null;
   }
+
   return copy(value, 0) as Map<String, dynamic>;
 }
 
@@ -241,14 +344,28 @@ class ProjectWorkspace {
   String name;
   List<WorkspacePath> folders;
   WorkspaceView view;
-  ProjectWorkspace({required this.id, required this.name, List<WorkspacePath>? folders, WorkspaceView? view})
-      : folders = folders ?? [], view = view ?? WorkspaceView();
+  ProjectWorkspace({
+    required this.id,
+    required this.name,
+    List<WorkspacePath>? folders,
+    WorkspaceView? view,
+  }) : folders = folders ?? [],
+       view = view ?? WorkspaceView();
   factory ProjectWorkspace.fromJson(Map<String, dynamic> j) => ProjectWorkspace(
-    id: j['id'] as String, name: j['name'] as String? ?? '工作区',
-    folders: [for (final p in j['folders'] as List? ?? const []) WorkspacePath.fromJson(_map(p))],
+    id: j['id'] as String,
+    name: j['name'] as String? ?? '工作区',
+    folders: [
+      for (final p in j['folders'] as List? ?? const [])
+        WorkspacePath.fromJson(_map(p)),
+    ],
     view: j['view'] == null ? null : WorkspaceView.fromJson(_map(j['view'])),
   );
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'folders': [for (final p in folders) p.toJson()], if (!view.isEmpty) 'view': view.toJson()};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'folders': [for (final p in folders) p.toJson()],
+    if (!view.isEmpty) 'view': view.toJson(),
+  };
 }
 
 /// A safe, secret-free upgrade receipt, persisted before upload/commit.
@@ -256,12 +373,43 @@ class UpgradeRecord {
   String target, previous, state;
   String? job, message;
   int started;
-  UpgradeRecord({required this.target, required this.previous, required this.state, this.job, this.message, int? started}) : started = started ?? _now();
+  UpgradeRecord({
+    required this.target,
+    required this.previous,
+    required this.state,
+    this.job,
+    this.message,
+    int? started,
+  }) : started = started ?? _now();
+
   /// [interrupted] is terminal for automatic recovery: the user must inspect
   /// the server (or use SSH fallback) before any new upload is considered.
-  bool get terminal => const {'upgraded', 'installed', 'up_to_date', 'rolled_back', 'rollback_failed', 'refused', 'failed', 'interrupted'}.contains(state);
-  factory UpgradeRecord.fromJson(Map<String,dynamic> j) => UpgradeRecord(target: j['target'] as String, previous: j['previous'] as String, state: j['state'] as String, job: j['job'] as String?, message: j['message'] as String?, started: j['started'] as int?);
-  Map<String,dynamic> toJson() => {'target':target,'previous':previous,'state':state,'job':?job,'message':?message,'started':started};
+  bool get terminal => const {
+    'upgraded',
+    'installed',
+    'up_to_date',
+    'rolled_back',
+    'rollback_failed',
+    'refused',
+    'failed',
+    'interrupted',
+  }.contains(state);
+  factory UpgradeRecord.fromJson(Map<String, dynamic> j) => UpgradeRecord(
+    target: j['target'] as String,
+    previous: j['previous'] as String,
+    state: j['state'] as String,
+    job: j['job'] as String?,
+    message: j['message'] as String?,
+    started: j['started'] as int?,
+  );
+  Map<String, dynamic> toJson() => {
+    'target': target,
+    'previous': previous,
+    'state': state,
+    'job': ?job,
+    'message': ?message,
+    'started': started,
+  };
 }
 
 /// A place proxy nodes come from (D-83, D-84): a subscription address, or links
@@ -284,27 +432,35 @@ class ProxySource {
   /// Why the last refresh failed, or null.
   String? error;
 
-  ProxySource({required this.id, required this.name, this.url, List<Map<String, dynamic>>? nodes, this.updated = 0, this.error}) : nodes = nodes ?? [];
+  ProxySource({
+    required this.id,
+    required this.name,
+    this.url,
+    List<Map<String, dynamic>>? nodes,
+    this.updated = 0,
+    this.error,
+  }) : nodes = nodes ?? [];
 
-  factory ProxySource.create(String name, {String? url}) => ProxySource(id: newId(), name: name, url: url, updated: _now());
+  factory ProxySource.create(String name, {String? url}) =>
+      ProxySource(id: newId(), name: name, url: url, updated: _now());
 
   factory ProxySource.fromJson(Map<String, dynamic> j) => ProxySource(
-        id: j['id'] as String,
-        name: j['name'] as String? ?? '',
-        url: j['url'] as String?,
-        nodes: [for (final n in (j['nodes'] as List? ?? const [])) _map(n)],
-        updated: j['updated'] as int? ?? 0,
-        error: j['error'] as String?,
-      );
+    id: j['id'] as String,
+    name: j['name'] as String? ?? '',
+    url: j['url'] as String?,
+    nodes: [for (final n in (j['nodes'] as List? ?? const [])) _map(n)],
+    updated: j['updated'] as int? ?? 0,
+    error: j['error'] as String?,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'url': ?url,
-        if (nodes.isNotEmpty) 'nodes': nodes,
-        'updated': updated,
-        'error': ?error,
-      };
+    'id': id,
+    'name': name,
+    'url': ?url,
+    if (nodes.isNotEmpty) 'nodes': nodes,
+    'updated': updated,
+    'error': ?error,
+  };
 }
 
 /// Which node of which source a server uses. [key] is the node's identity
@@ -323,11 +479,32 @@ class ProxyChoice {
   int revision;
   String? syncError;
 
-  ProxyChoice({required this.source, required this.key, required this.name, this.pending = false, this.revision = 0, this.syncError});
+  ProxyChoice({
+    required this.source,
+    required this.key,
+    required this.name,
+    this.pending = false,
+    this.revision = 0,
+    this.syncError,
+  });
 
-  factory ProxyChoice.fromJson(Map<String, dynamic> j) => ProxyChoice(source: j['source'] as String? ?? '', key: j['key'] as String? ?? '', name: j['name'] as String? ?? '', pending: j['pending'] as bool? ?? false, revision: j['revision'] as int? ?? 0, syncError: j['sync_error'] as String?);
+  factory ProxyChoice.fromJson(Map<String, dynamic> j) => ProxyChoice(
+    source: j['source'] as String? ?? '',
+    key: j['key'] as String? ?? '',
+    name: j['name'] as String? ?? '',
+    pending: j['pending'] as bool? ?? false,
+    revision: j['revision'] as int? ?? 0,
+    syncError: j['sync_error'] as String?,
+  );
 
-  Map<String, dynamic> toJson() => {'source': source, 'key': key, 'name': name, if (pending) 'pending': true, if (revision != 0) 'revision': revision, 'sync_error': ?syncError};
+  Map<String, dynamic> toJson() => {
+    'source': source,
+    'key': key,
+    'name': name,
+    if (pending) 'pending': true,
+    if (revision != 0) 'revision': revision,
+    'sync_error': ?syncError,
+  };
 }
 
 /// One port forward: [host]:[port] on the server, opened on this machine's
@@ -338,17 +515,28 @@ class ForwardSpec {
   int local;
   String label;
 
-  ForwardSpec({this.host = '127.0.0.1', required this.port, required this.local, this.label = ''});
+  ForwardSpec({
+    this.host = '127.0.0.1',
+    required this.port,
+    required this.local,
+    this.label = '',
+  });
 
   factory ForwardSpec.fromJson(Map<String, dynamic> j) => ForwardSpec(
-        host: j['host'] as String? ?? '127.0.0.1',
-        port: j['port'] as int? ?? 0,
-        local: j['local'] as int? ?? 0,
-        label: j['label'] as String? ?? '',
-      );
+    host: j['host'] as String? ?? '127.0.0.1',
+    port: j['port'] as int? ?? 0,
+    local: j['local'] as int? ?? 0,
+    label: j['label'] as String? ?? '',
+  );
 
-  Map<String, dynamic> toJson() => {'host': host, 'port': port, 'local': local, if (label.isNotEmpty) 'label': label};
+  Map<String, dynamic> toJson() => {
+    'host': host,
+    'port': port,
+    'local': local,
+    if (label.isNotEmpty) 'label': label,
+  };
 }
+
 /// An SSH account. Secrets are optional: a field left null is asked for
 /// each time it is needed (D-1: saving is the user's choice).
 class SshLogin {
@@ -375,24 +563,24 @@ class SshLogin {
   });
 
   factory SshLogin.fromJson(Map<String, dynamic> j) => SshLogin(
-        host: j['host'] as String,
-        port: j['port'] as int? ?? 22,
-        user: j['user'] as String,
-        password: j['password'] as String?,
-        privateKey: j['private_key'] as String?,
-        passphrase: j['passphrase'] as String?,
-        sudoPassword: j['sudo_password'] as String?,
-      );
+    host: j['host'] as String,
+    port: j['port'] as int? ?? 22,
+    user: j['user'] as String,
+    password: j['password'] as String?,
+    privateKey: j['private_key'] as String?,
+    passphrase: j['passphrase'] as String?,
+    sudoPassword: j['sudo_password'] as String?,
+  );
 
   Map<String, dynamic> toJson() => {
-        'host': host,
-        'port': port,
-        'user': user,
-        'password': ?password,
-        'private_key': ?privateKey,
-        'passphrase': ?passphrase,
-        'sudo_password': ?sudoPassword,
-      };
+    'host': host,
+    'port': port,
+    'user': user,
+    'password': ?password,
+    'private_key': ?privateKey,
+    'passphrase': ?passphrase,
+    'sudo_password': ?sudoPassword,
+  };
 }
 
 /// The agent's direct-link parameters (wire.DirectInfo), read over SSH at
@@ -410,28 +598,35 @@ class DirectParams {
   /// The last address that worked, tried first.
   String? goodAddr;
 
-  DirectParams({required this.port, List<String>? addrs, required this.pin, required this.token, this.goodAddr})
-      : addrs = addrs ?? [];
+  DirectParams({
+    required this.port,
+    List<String>? addrs,
+    required this.pin,
+    required this.token,
+    this.goodAddr,
+  }) : addrs = addrs ?? [];
 
   /// Has what a dial needs.
   bool get ready =>
-      token.isNotEmpty && RegExp(r'^[0-9a-f]{64}$').hasMatch(pin) && (addrs.isNotEmpty || goodAddr != null);
+      token.isNotEmpty &&
+      RegExp(r'^[0-9a-f]{64}$').hasMatch(pin) &&
+      (addrs.isNotEmpty || goodAddr != null);
 
   factory DirectParams.fromJson(Map<String, dynamic> j) => DirectParams(
-        port: j['port'] as int? ?? 0,
-        addrs: [for (final a in (j['addrs'] as List? ?? const [])) a as String],
-        pin: j['pin'] as String? ?? '',
-        token: j['token'] as String? ?? '',
-        goodAddr: j['good_addr'] as String?,
-      );
+    port: j['port'] as int? ?? 0,
+    addrs: [for (final a in (j['addrs'] as List? ?? const [])) a as String],
+    pin: j['pin'] as String? ?? '',
+    token: j['token'] as String? ?? '',
+    goodAddr: j['good_addr'] as String?,
+  );
 
   Map<String, dynamic> toJson() => {
-        'port': port,
-        if (addrs.isNotEmpty) 'addrs': addrs,
-        'pin': pin,
-        'token': token,
-        'good_addr': ?goodAddr,
-      };
+    'port': port,
+    if (addrs.isNotEmpty) 'addrs': addrs,
+    'pin': pin,
+    'token': token,
+    'good_addr': ?goodAddr,
+  };
 }
 
 /// Editor and appearance choices (the settings page). Values outside the
@@ -443,6 +638,7 @@ class EditorSettings {
   double fontSize;
   double terminalFontSize, uiScale;
   bool wordWrap;
+
   /// Spaces that Tab inserts (the editor indents with spaces only).
   int tabSize;
 
@@ -475,7 +671,12 @@ class EditorSettings {
     return EditorSettings(
       theme: themes.contains(t) ? t! : 'system',
       fontSize: f.isFinite ? f.clamp(minFont, maxFont).toDouble() : 13.5,
-      terminalFontSize: _displayNumber(j['terminal_font_size'], 14, minFont, maxFont),
+      terminalFontSize: _displayNumber(
+        j['terminal_font_size'],
+        14,
+        minFont,
+        maxFont,
+      ),
       uiScale: _displayNumber(j['ui_scale'], 1, .8, 1.5),
       wordWrap: j['word_wrap'] == true,
       tabSize: const [2, 4, 8].contains(ts) ? ts : 4,
@@ -486,21 +687,34 @@ class EditorSettings {
   }
 
   Map<String, dynamic> toJson() => {
-        'theme': theme,
-        'font_size': fontSize,
-        if (terminalFontSize != 14) 'terminal_font_size': terminalFontSize,
-        if (uiScale != 1) 'ui_scale': uiScale,
-        'word_wrap': wordWrap,
-        'tab_size': tabSize,
-        if (fileSort != 'name') 'file_sort': fileSort,
-        if (fileSortDesc) 'file_sort_desc': true,
-        if (!foldersFirst) 'folders_first': false,
-      };
+    'theme': theme,
+    'font_size': fontSize,
+    if (terminalFontSize != 14) 'terminal_font_size': terminalFontSize,
+    if (uiScale != 1) 'ui_scale': uiScale,
+    'word_wrap': wordWrap,
+    'tab_size': tabSize,
+    if (fileSort != 'name') 'file_sort': fileSort,
+    if (fileSortDesc) 'file_sort_desc': true,
+    if (!foldersFirst) 'folders_first': false,
+  };
 
   bool get isDefault =>
-      theme == 'system' && fontSize == 13.5 && terminalFontSize == 14 && uiScale == 1 && !wordWrap && tabSize == 4 && fileSort == 'name' && !fileSortDesc && foldersFirst;
+      theme == 'system' &&
+      fontSize == 13.5 &&
+      terminalFontSize == 14 &&
+      uiScale == 1 &&
+      !wordWrap &&
+      tabSize == 4 &&
+      fileSort == 'name' &&
+      !fileSortDesc &&
+      foldersFirst;
 
-  static double _displayNumber(Object? raw, double fallback, double min, double max) {
+  static double _displayNumber(
+    Object? raw,
+    double fallback,
+    double min,
+    double max,
+  ) {
     final n = raw is num ? raw.toDouble() : fallback;
     return n.isFinite ? n.clamp(min, max) : fallback;
   }
@@ -511,8 +725,10 @@ class EditorSettings {
 class AiSettings {
   List<AiProvider> providers;
   String? selectedProviderId;
+
   /// 'ask' | 'auto'
   String permissionMode;
+
   /// 'build' | 'plan'
   String defaultAgent;
   double chatFontSize;
@@ -540,51 +756,69 @@ class AiSettings {
       providers.isEmpty &&
       selectedProviderId == null &&
       permissionMode == 'ask' &&
-      defaultAgent == 'build' && chatFontSize == 15;
+      defaultAgent == 'build' &&
+      chatFontSize == 15;
 
   factory AiSettings.fromJson(Map<String, dynamic> j) {
     final pm = j['permission_mode'] as String?;
     final da = j['default_agent'] as String?;
     return AiSettings(
-      providers: [for (final p in (j['providers'] as List? ?? const [])) AiProvider.fromJson(_map(p))],
+      providers: [
+        for (final p in (j['providers'] as List? ?? const []))
+          AiProvider.fromJson(_map(p)),
+      ],
       selectedProviderId: j['selected_provider_id'] as String?,
       permissionMode: permissionModes.contains(pm) ? pm! : 'ask',
       defaultAgent: agentModes.contains(da) ? da! : 'build',
-      chatFontSize: j['chat_font_size'] is num && (j['chat_font_size'] as num).isFinite ? (j['chat_font_size'] as num).toDouble().clamp(9,28) : 15,
+      chatFontSize:
+          j['chat_font_size'] is num && (j['chat_font_size'] as num).isFinite
+          ? (j['chat_font_size'] as num).toDouble().clamp(9, 28)
+          : 15,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        if (providers.isNotEmpty) 'providers': [for (final p in providers) p.toJson()],
-        'selected_provider_id': ?selectedProviderId,
-        if (permissionMode != 'ask') 'permission_mode': permissionMode,
-        if (defaultAgent != 'build') 'default_agent': defaultAgent,
-        if (chatFontSize != 15) 'chat_font_size':chatFontSize,
-      };
+    if (providers.isNotEmpty)
+      'providers': [for (final p in providers) p.toJson()],
+    'selected_provider_id': ?selectedProviderId,
+    if (permissionMode != 'ask') 'permission_mode': permissionMode,
+    if (defaultAgent != 'build') 'default_agent': defaultAgent,
+    if (chatFontSize != 15) 'chat_font_size': chatFontSize,
+  };
 }
 
 /// One OpenCode-compatible LLM API endpoint & credential entry.
 class AiProvider {
   final String id;
   String name;
+
   /// 'openai-chat' | 'anthropic-messages' | 'openai-responses'
   String protocol;
   String baseUrl;
   String apiKey;
+
   /// '' (auto) | 'bearer' | 'x-api-key' | 'chatgpt-device'
   String authMode;
   AiOAuthCredential? oauth;
   bool get isSubscription => authMode == 'chatgpt-device';
   String model;
+
   /// Cached / user-listed models for quick switching
   List<String> models;
+
+  /// Per-model image-input capability. Missing entries mean unknown; false is
+  /// an explicit provider/catalog declaration that image input is unavailable.
+  Map<String, bool> modelImageSupport;
+
   /// '' | 'low' | 'medium' | 'high'
   String reasoningEffort;
   int contextWindow;
   Map<String, int> modelContextWindows;
   int maxTokens;
+
   /// Route LLM & shell traffic on the server through its configured proxy node (proxysvc).
   bool useProxy;
+
   /// Empty preserves the pre-selection behavior; otherwise system/agent/direct.
   String proxyMode;
   bool get usesProxy => proxyMode.isEmpty ? useProxy : proxyMode != 'direct';
@@ -600,6 +834,7 @@ class AiProvider {
     this.oauth,
     this.model = '',
     List<String>? models,
+    Map<String, bool>? modelImageSupport,
     this.reasoningEffort = '',
     this.contextWindow = 0,
     Map<String, int>? modelContextWindows,
@@ -607,11 +842,16 @@ class AiProvider {
     this.useProxy = false,
     this.proxyMode = '',
     Map<String, String>? headers,
-  })  : modelContextWindows = modelContextWindows ?? {},
-        models = models ?? [],
-        headers = headers ?? {};
+  }) : modelContextWindows = modelContextWindows ?? {},
+       modelImageSupport = modelImageSupport ?? {},
+       models = models ?? [],
+       headers = headers ?? {};
 
-  static const protocols = ['openai-chat', 'anthropic-messages', 'openai-responses'];
+  static const protocols = [
+    'openai-chat',
+    'anthropic-messages',
+    'openai-responses',
+  ];
 
   factory AiProvider.create({
     required String name,
@@ -620,16 +860,15 @@ class AiProvider {
     String apiKey = '',
     String model = '',
     bool useProxy = false,
-  }) =>
-      AiProvider(
-        id: newId(),
-        name: name,
-        protocol: protocol,
-        baseUrl: baseUrl,
-        apiKey: apiKey,
-        model: model,
-        useProxy: useProxy,
-      );
+  }) => AiProvider(
+    id: newId(),
+    name: name,
+    protocol: protocol,
+    baseUrl: baseUrl,
+    apiKey: apiKey,
+    model: model,
+    useProxy: useProxy,
+  );
 
   factory AiProvider.fromJson(Map<String, dynamic> j) {
     final proto = j['protocol'] as String? ?? 'openai-chat';
@@ -646,64 +885,94 @@ class AiProvider {
       baseUrl: j['base_url'] as String? ?? '',
       apiKey: j['api_key'] as String? ?? '',
       authMode: j['auth_mode'] as String? ?? '',
-      oauth: j['oauth'] is Map ? AiOAuthCredential.fromJson((j['oauth'] as Map).cast<String, dynamic>()) : null,
+      oauth: j['oauth'] is Map
+          ? AiOAuthCredential.fromJson(
+              (j['oauth'] as Map).cast<String, dynamic>(),
+            )
+          : null,
       model: j['model'] as String? ?? '',
       models: [for (final m in (j['models'] as List? ?? const [])) '$m'],
+      modelImageSupport: {
+        if (j['model_image_support'] is Map)
+          for (final e in (j['model_image_support'] as Map).entries)
+            if (e.value is bool) '${e.key}': e.value as bool,
+      },
       reasoningEffort: j['reasoning_effort'] as String? ?? '',
       contextWindow: (j['context_window'] as num?)?.toInt() ?? 0,
       modelContextWindows: {
         if (j['model_context_windows'] is Map)
           for (final e in (j['model_context_windows'] as Map).entries)
-            if (e.value is num && (e.value as num).toInt() > 0) '${e.key}': (e.value as num).toInt(),
+            if (e.value is num && (e.value as num).toInt() > 0)
+              '${e.key}': (e.value as num).toInt(),
       },
       maxTokens: (j['max_tokens'] as num?)?.toInt() ?? 0,
       useProxy: j['use_proxy'] == true,
-      proxyMode: const ['system', 'agent', 'direct'].contains(j['proxy_mode']) ? j['proxy_mode'] as String : '',
+      proxyMode: const ['system', 'agent', 'direct'].contains(j['proxy_mode'])
+          ? j['proxy_mode'] as String
+          : '',
       headers: hdrs,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'protocol': protocol,
-        'base_url': baseUrl,
-        if (apiKey.isNotEmpty) 'api_key': apiKey,
-        if (authMode.isNotEmpty) 'auth_mode': authMode,
-        if (oauth != null) 'oauth': oauth!.toJson(),
-        'model': model,
-        if (models.isNotEmpty) 'models': models,
-        if (reasoningEffort.isNotEmpty) 'reasoning_effort': reasoningEffort,
-        if (contextWindow > 0) 'context_window': contextWindow,
-        if (modelContextWindows.isNotEmpty) 'model_context_windows': modelContextWindows,
-        if (maxTokens > 0) 'max_tokens': maxTokens,
-        if (useProxy) 'use_proxy': true,
-        if (proxyMode.isNotEmpty) 'proxy_mode': proxyMode,
-        if (headers.isNotEmpty) 'headers': headers,
-      };
+    'id': id,
+    'name': name,
+    'protocol': protocol,
+    'base_url': baseUrl,
+    if (apiKey.isNotEmpty) 'api_key': apiKey,
+    if (authMode.isNotEmpty) 'auth_mode': authMode,
+    if (oauth != null) 'oauth': oauth!.toJson(),
+    'model': model,
+    if (models.isNotEmpty) 'models': models,
+    if (modelImageSupport.isNotEmpty) 'model_image_support': modelImageSupport,
+    if (reasoningEffort.isNotEmpty) 'reasoning_effort': reasoningEffort,
+    if (contextWindow > 0) 'context_window': contextWindow,
+    if (modelContextWindows.isNotEmpty)
+      'model_context_windows': modelContextWindows,
+    if (maxTokens > 0) 'max_tokens': maxTokens,
+    if (useProxy) 'use_proxy': true,
+    if (proxyMode.isNotEmpty) 'proxy_mode': proxyMode,
+    if (headers.isNotEmpty) 'headers': headers,
+  };
 
   /// Wire payload passed to agent RPCs (`ai.run`, `ai.models`, `ai.compact`).
   /// NEVER includes refresh tokens. Only ai.auth.refresh may carry those.
-  Map<String, dynamic> toWireJson({String? modelOverride}) => {
-        'id': id,
-        'name': name,
-        'protocol': isSubscription ? 'openai-responses' : protocol,
-        'base_url': isSubscription ? 'https://chatgpt.com/backend-api/codex' : baseUrl,
-        if (isSubscription && oauth != null) 'api_key': oauth!.access,
-        if (!isSubscription && apiKey.isNotEmpty) 'api_key': apiKey,
-        if (isSubscription && oauth != null) 'expires_at': oauth!.expires,
-        if (isSubscription && oauth != null && oauth!.accountId.isNotEmpty) 'account_id': oauth!.accountId,
-        if (authMode.isNotEmpty) 'auth_mode': authMode,
-        'model': (modelOverride != null && modelOverride.isNotEmpty) ? modelOverride : model,
-        if (reasoningEffort.isNotEmpty) 'reasoning_effort': reasoningEffort,
-        if (effectiveContextWindow(modelOverride) > 0) 'context_window': effectiveContextWindow(modelOverride),
-        if (!isSubscription && maxTokens > 0) 'max_tokens': maxTokens,
-        'use_proxy': usesProxy,
-        if (proxyMode.isNotEmpty) 'proxy_mode': proxyMode,
-        if (!isSubscription && headers.isNotEmpty) 'headers': headers,
-      };
+  Map<String, dynamic> toWireJson({
+    String? modelOverride,
+    String? reasoningOverride,
+  }) => {
+    'id': id,
+    'name': name,
+    'protocol': isSubscription ? 'openai-responses' : protocol,
+    'base_url': isSubscription
+        ? 'https://chatgpt.com/backend-api/codex'
+        : baseUrl,
+    if (isSubscription && oauth != null) 'api_key': oauth!.access,
+    if (!isSubscription && apiKey.isNotEmpty) 'api_key': apiKey,
+    if (isSubscription && oauth != null) 'expires_at': oauth!.expires,
+    if (isSubscription && oauth != null && oauth!.accountId.isNotEmpty)
+      'account_id': oauth!.accountId,
+    if (authMode.isNotEmpty) 'auth_mode': authMode,
+    'model': (modelOverride != null && modelOverride.isNotEmpty)
+        ? modelOverride
+        : model,
+    if ((reasoningOverride ?? reasoningEffort).isNotEmpty)
+      'reasoning_effort': reasoningOverride ?? reasoningEffort,
+    if (effectiveContextWindow(modelOverride) > 0)
+      'context_window': effectiveContextWindow(modelOverride),
+    if (!isSubscription && maxTokens > 0) 'max_tokens': maxTokens,
+    'use_proxy': usesProxy,
+    if (proxyMode.isNotEmpty) 'proxy_mode': proxyMode,
+    if (!isSubscription && headers.isNotEmpty) 'headers': headers,
+  };
 
-  int effectiveContextWindow([String? selected]) => contextWindow > 0 ? contextWindow : modelContextWindows[selected ?? model] ?? 0;
+  int effectiveContextWindow([String? selected]) => contextWindow > 0
+      ? contextWindow
+      : modelContextWindows[selected ?? model] ?? 0;
+
+  /// null means the provider has not declared this capability either way.
+  bool? imageSupport([String? selected]) =>
+      modelImageSupport[selected ?? model];
 }
 
 /// Stored only inside the sealed profile. Do not stringify or log credentials.
@@ -713,13 +982,31 @@ class AiOAuthCredential {
   final int expires;
   final String accountId;
   final String transport;
-  const AiOAuthCredential({required this.access, required this.refresh, required this.expires, this.accountId = '', this.transport = 'client'});
-  factory AiOAuthCredential.fromJson(Map<String, dynamic> j) => AiOAuthCredential(
-    access: j['access'] as String? ?? '', refresh: j['refresh'] as String? ?? '',
-    expires: (j['expires'] as num?)?.toInt() ?? 0, accountId: j['account_id'] as String? ?? '', transport:j['transport'] == 'server' ? 'server' : 'client',
-  );
-  Map<String, dynamic> toJson() => {'access':access, 'refresh':refresh, 'expires':expires, if (accountId.isNotEmpty) 'account_id':accountId, 'transport':transport};
-  bool get needsRefresh => access.isEmpty || expires <= DateTime.now().millisecondsSinceEpoch + 90000;
+  const AiOAuthCredential({
+    required this.access,
+    required this.refresh,
+    required this.expires,
+    this.accountId = '',
+    this.transport = 'client',
+  });
+  factory AiOAuthCredential.fromJson(Map<String, dynamic> j) =>
+      AiOAuthCredential(
+        access: j['access'] as String? ?? '',
+        refresh: j['refresh'] as String? ?? '',
+        expires: (j['expires'] as num?)?.toInt() ?? 0,
+        accountId: j['account_id'] as String? ?? '',
+        transport: j['transport'] == 'server' ? 'server' : 'client',
+      );
+  Map<String, dynamic> toJson() => {
+    'access': access,
+    'refresh': refresh,
+    'expires': expires,
+    if (accountId.isNotEmpty) 'account_id': accountId,
+    'transport': transport,
+  };
+  bool get needsRefresh =>
+      access.isEmpty ||
+      expires <= DateTime.now().millisecondsSinceEpoch + 90000;
 }
 
 /// A host key the user confirmed on first SSH contact (D-2).
@@ -737,17 +1024,29 @@ class KnownHost {
   /// Unix seconds when it was confirmed.
   final int added;
 
-  KnownHost({required this.host, required this.port, required this.type, required this.fingerprint, required this.added});
+  KnownHost({
+    required this.host,
+    required this.port,
+    required this.type,
+    required this.fingerprint,
+    required this.added,
+  });
 
   factory KnownHost.fromJson(Map<String, dynamic> j) => KnownHost(
-        host: j['host'] as String,
-        port: j['port'] as int? ?? 22,
-        type: j['type'] as String,
-        fingerprint: j['fingerprint'] as String,
-        added: j['added'] as int? ?? 0,
-      );
+    host: j['host'] as String,
+    port: j['port'] as int? ?? 22,
+    type: j['type'] as String,
+    fingerprint: j['fingerprint'] as String,
+    added: j['added'] as int? ?? 0,
+  );
 
-  Map<String, dynamic> toJson() => {'host': host, 'port': port, 'type': type, 'fingerprint': fingerprint, 'added': added};
+  Map<String, dynamic> toJson() => {
+    'host': host,
+    'port': port,
+    'type': type,
+    'fingerprint': fingerprint,
+    'added': added,
+  };
 }
 
 /// 16 random hex digits.

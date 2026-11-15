@@ -23,26 +23,50 @@ AiProvider subscription() => AiProvider(
 );
 
 void main() {
-  test('chat font preference round trips, clamps and keeps old defaults',(){
-    expect(AiSettings().isDefault,isTrue);
-    expect(AiSettings().toJson().containsKey('chat_font_size'),isFalse);
-    expect(AiSettings.fromJson(AiSettings(chatFontSize:17).toJson()).chatFontSize,17);
-    expect(AiSettings.fromJson({'chat_font_size':999}).chatFontSize,28);
-    expect(AiSettings.fromJson({'chat_font_size':0}).chatFontSize,9);
-    expect(AiSettings.fromJson({'chat_font_size':double.nan}).chatFontSize,15);
-    expect(AiSettings.fromJson({}).chatFontSize,15);
-    expect(AiOAuthCredential.fromJson({'access':'fixture','refresh':'fixture','expires':1}).transport,'client');
+  test('chat font preference round trips, clamps and keeps old defaults', () {
+    expect(AiSettings().isDefault, isTrue);
+    expect(AiSettings().toJson().containsKey('chat_font_size'), isFalse);
+    expect(
+      AiSettings.fromJson(AiSettings(chatFontSize: 17).toJson()).chatFontSize,
+      17,
+    );
+    expect(AiSettings.fromJson({'chat_font_size': 999}).chatFontSize, 28);
+    expect(AiSettings.fromJson({'chat_font_size': 0}).chatFontSize, 9);
+    expect(
+      AiSettings.fromJson({'chat_font_size': double.nan}).chatFontSize,
+      15,
+    );
+    expect(AiSettings.fromJson({}).chatFontSize, 15);
+    expect(
+      AiOAuthCredential.fromJson({
+        'access': 'fixture',
+        'refresh': 'fixture',
+        'expires': 1,
+      }).transport,
+      'client',
+    );
   });
-  test('workbench appearance fields are optional, bounded, and survive round trip', () {
-    expect(EditorSettings().toJson().containsKey('terminal_font_size'), isFalse);
-    expect(EditorSettings().toJson().containsKey('ui_scale'), isFalse);
-    final old = EditorSettings.fromJson({'font_size': 17});
-    expect((old.fontSize, old.terminalFontSize, old.uiScale), (17, 14, 1));
-    final next = EditorSettings.fromJson(EditorSettings(terminalFontSize: 20, uiScale: 1.25).toJson());
-    expect((next.terminalFontSize, next.uiScale), (20, 1.25));
-    expect(EditorSettings.fromJson({'ui_scale': double.infinity}).uiScale, 1);
-    expect(EditorSettings.fromJson({'terminal_font_size': -1}).terminalFontSize, 9);
-  });
+  test(
+    'workbench appearance fields are optional, bounded, and survive round trip',
+    () {
+      expect(
+        EditorSettings().toJson().containsKey('terminal_font_size'),
+        isFalse,
+      );
+      expect(EditorSettings().toJson().containsKey('ui_scale'), isFalse);
+      final old = EditorSettings.fromJson({'font_size': 17});
+      expect((old.fontSize, old.terminalFontSize, old.uiScale), (17, 14, 1));
+      final next = EditorSettings.fromJson(
+        EditorSettings(terminalFontSize: 20, uiScale: 1.25).toJson(),
+      );
+      expect((next.terminalFontSize, next.uiScale), (20, 1.25));
+      expect(EditorSettings.fromJson({'ui_scale': double.infinity}).uiScale, 1);
+      expect(
+        EditorSettings.fromJson({'terminal_font_size': -1}).terminalFontSize,
+        9,
+      );
+    },
+  );
   test('subscription wire uses access only and refuses custom routing', () {
     final p = subscription();
     final wire = p.toWireJson();
@@ -51,7 +75,12 @@ void main() {
     expect(wire['protocol'], 'openai-responses');
     expect(wire['context_window'], 500000);
     final text = jsonEncode(wire);
-    for (final secret in ['refresh-fixture', 'untrusted-fixture', 'unused-fixture', 'untrusted.invalid']) {
+    for (final secret in [
+      'refresh-fixture',
+      'untrusted-fixture',
+      'unused-fixture',
+      'untrusted.invalid',
+    ]) {
       expect(text, isNot(contains(secret)));
     }
     expect(wire.containsKey('oauth'), isFalse);
@@ -60,26 +89,64 @@ void main() {
   test('model-specific windows survive round trip and switching', () {
     final p = AiProvider.fromJson(subscription().toJson());
     expect(p.oauth!.refresh, 'refresh-fixture');
-    expect(p.toWireJson(modelOverride: 'gpt-5.2-codex')['context_window'], 272000);
-    expect(p.toWireJson(modelOverride: 'custom').containsKey('context_window'), isFalse);
+    expect(
+      p.toWireJson(modelOverride: 'gpt-5.2-codex')['context_window'],
+      272000,
+    );
+    expect(
+      p.toWireJson(modelOverride: 'custom').containsKey('context_window'),
+      isFalse,
+    );
     p.contextWindow = 64000;
     expect(p.toWireJson(modelOverride: 'custom')['context_window'], 64000);
   });
-  test('API key configuration remains compatible and ignores dormant OAuth', () {
+  test(
+    'conversation reasoning override can replace or clear the provider preset',
+    () {
+      final p = subscription()..reasoningEffort = 'medium';
+      expect(p.toWireJson()['reasoning_effort'], 'medium');
+      expect(
+        p.toWireJson(reasoningOverride: 'high')['reasoning_effort'],
+        'high',
+      );
+      expect(
+        p.toWireJson(reasoningOverride: '').containsKey('reasoning_effort'),
+        isFalse,
+      );
+    },
+  );
+  test('model image capability survives round trip and stays tri-state', () {
     final p = subscription()
-      ..authMode = 'bearer'
-      ..baseUrl = 'https://gateway.invalid';
-    final wire = p.toWireJson();
-    expect(wire['api_key'], 'unused-fixture');
-    expect(wire['base_url'], 'https://gateway.invalid');
-    expect(jsonEncode(wire), isNot(contains('refresh-fixture')));
-    expect(AiProvider.fromJson({'id': 'old', 'name': 'Old', 'model': 'gpt-4o'}).oauth, isNull);
+      ..modelImageSupport = {'gpt-6.1-sol': true, 'text-only': false};
+    final copy = AiProvider.fromJson(p.toJson());
+    expect(copy.imageSupport('gpt-6.1-sol'), isTrue);
+    expect(copy.imageSupport('text-only'), isFalse);
+    expect(copy.imageSupport('unknown'), isNull);
   });
+  test(
+    'API key configuration remains compatible and ignores dormant OAuth',
+    () {
+      final p = subscription()
+        ..authMode = 'bearer'
+        ..baseUrl = 'https://gateway.invalid';
+      final wire = p.toWireJson();
+      expect(wire['api_key'], 'unused-fixture');
+      expect(wire['base_url'], 'https://gateway.invalid');
+      expect(jsonEncode(wire), isNot(contains('refresh-fixture')));
+      expect(
+        AiProvider.fromJson({'id': 'old', 'name': 'Old', 'model': 'gpt-4o'})
+            .oauth,
+        isNull,
+      );
+    },
+  );
   test('OAuth is encrypted at rest, reloads and rejects tampering', () async {
     final dir = await Directory.systemTemp.createTemp('aurora-ai-oauth-test-');
     addTearDown(() => dir.delete(recursive: true));
     final path = '${dir.path}/profile.bin';
-    final sealer = AndroidSealer(Uint8List.fromList(List.generate(32, (i) => i)));
+    final sealer = AndroidSealer(
+      Uint8List.fromList(List.generate(32, (i) => i)),
+    );
     final store = await ProfileStore.open(path, sealer);
     await store.update((p) {
       p.ai.providers.add(subscription());
@@ -95,6 +162,9 @@ void main() {
     await reopened.close();
     bytes[bytes.length - 1] ^= 1;
     await File(path).writeAsBytes(bytes);
-    await expectLater(ProfileStore.open(path, sealer), throwsA(isA<ProfileUnreadable>()));
+    await expectLater(
+      ProfileStore.open(path, sealer),
+      throwsA(isA<ProfileUnreadable>()),
+    );
   });
 }

@@ -32,12 +32,20 @@ class FakeAiLink extends FileTreeLink {
   };
 
   @override
-  Future<OpStream> open(String op, [Object? args, Priority priority = Priority.interactive]) async {
+  Future<OpStream> open(
+    String op, [
+    Object? args,
+    Priority priority = Priority.interactive,
+  ]) async {
     throw OpError(codeUnsupported, 'stream stubbed in widget test');
   }
 
   @override
-  Future<Object?> call(String op, [Object? args, Duration timeout = const Duration(seconds: 60)]) async {
+  Future<Object?> call(
+    String op, [
+    Object? args,
+    Duration timeout = const Duration(seconds: 60),
+  ]) async {
     final a = args is Map ? args.cast<String, dynamic>() : <String, dynamic>{};
     rpcCalls.add((op, a));
     switch (op) {
@@ -48,9 +56,24 @@ class FakeAiLink extends FileTreeLink {
               'id': 'ai',
               'enabled': true,
               'available': true,
-              'ops': const ['ai.sessions', 'ai.get', 'ai.run', 'ai.stream', 'ai.stop', 'ai.approve', 'ai.revert', 'ai.compact', 'ai.models'],
+              'ops': const [
+                'ai.sessions',
+                'ai.get',
+                'ai.run',
+                'ai.stream',
+                'ai.stop',
+                'ai.approve',
+                'ai.revert',
+                'ai.compact',
+                'ai.models',
+              ],
             },
-            {'id': 'files', 'enabled': true, 'available': true, 'ops': const <String>[]},
+            {
+              'id': 'files',
+              'enabled': true,
+              'available': true,
+              'ops': const <String>[],
+            },
           ],
         };
       case 'ai.sessions':
@@ -78,21 +101,30 @@ class FakeAiLink extends FileTreeLink {
               'agent': 'plan',
               'preview': 'upstream 超时调成 30 秒。',
               'message_count': 4,
-              'updated_at': DateTime.now().millisecondsSinceEpoch - 3 * 86400000,
+              'updated_at':
+                  DateTime.now().millisecondsSinceEpoch - 3 * 86400000,
             },
           ],
         };
       case 'ai.update':
         if (a.containsKey('pinned')) pinned = a['pinned'] == true;
         if (a['title'] is String) renamedTo = a['title'] as String;
-        return {'session': {'id': a['id'], 'title': renamedTo ?? 'x'}};
+        return {
+          'session': {'id': a['id'], 'title': renamedTo ?? 'x'},
+        };
       case 'ai.delete':
         if (failDelete) throw OpError(codeNotFound, 'synthetic delete refused');
         return {'deleted': true};
       case 'ai.search':
         return {
           'hits': [
-            {'session_id': 'ses_2', 'title': 'Nginx 调优笔记', 'workdir': '/etc/nginx', 'updated_at': 1700000000000, 'snippet': '…proxy_read_timeout 30s 解决了 502…'},
+            {
+              'session_id': 'ses_2',
+              'title': 'Nginx 调优笔记',
+              'workdir': '/etc/nginx',
+              'updated_at': 1700000000000,
+              'snippet': '…proxy_read_timeout 30s 解决了 502…',
+            },
           ],
         };
       case 'ai.get':
@@ -109,10 +141,25 @@ class FakeAiLink extends FileTreeLink {
             'model': 'claude-sonnet-4-5',
             'protocol': 'anthropic-messages',
             'todos': [
-              {'id': '1', 'content': '阅读现有鉴权模块', 'status': 'completed', 'priority': 'high'},
-              {'id': '2', 'content': '修改 main.dart 参数校验', 'status': 'in_progress', 'priority': 'high'},
+              {
+                'id': '1',
+                'content': '阅读现有鉴权模块',
+                'status': 'completed',
+                'priority': 'high',
+              },
+              {
+                'id': '2',
+                'content': '修改 main.dart 参数校验',
+                'status': 'in_progress',
+                'priority': 'high',
+              },
             ],
-            'total_usage': {'input_tokens': 1200, 'output_tokens': 300, 'cache_read_tokens': 900, 'total_tokens': 1500},
+            'total_usage': {
+              'input_tokens': 1200,
+              'output_tokens': 300,
+              'cache_read_tokens': 900,
+              'total_tokens': 1500,
+            },
             'messages': [
               {
                 'id': 'msg_u1',
@@ -152,12 +199,19 @@ class FakeAiLink extends FileTreeLink {
                     'type': 'tool-result',
                     'tool_call_id': 'call_ws',
                     'name': 'websearch',
-                    'output': '## [Dart null safety](https://dart.dev/null-safety)',
+                    'output':
+                        '## [Dart null safety](https://dart.dev/null-safety)',
                     'metadata': {
                       'provider': 'exa',
                       'sources': [
-                        {'title': 'Dart null safety', 'url': 'https://dart.dev/null-safety'},
-                        {'title': 'Migrating', 'url': 'https://dart.dev/null-safety/migration-guide'},
+                        {
+                          'title': 'Dart null safety',
+                          'url': 'https://dart.dev/null-safety',
+                        },
+                        {
+                          'title': 'Migrating',
+                          'url': 'https://dart.dev/null-safety/migration-guide',
+                        },
                       ],
                     },
                   },
@@ -167,7 +221,13 @@ class FakeAiLink extends FileTreeLink {
                   'start': 'sha_1',
                   'end': 'sha_2',
                   'files': [
-                    {'file': 'src/main.dart', 'additions': 4, 'deletions': 1, 'status': 'modified', 'patch': '+checkAuth();'},
+                    {
+                      'file': 'src/main.dart',
+                      'additions': 4,
+                      'deletions': 1,
+                      'status': 'modified',
+                      'patch': '+checkAuth();',
+                    },
                   ],
                 },
                 'created_at': 1700000005000,
@@ -196,7 +256,12 @@ class FakeAiLink extends FileTreeLink {
         return {
           'models': [
             {'id': 'claude-sonnet-4-5', 'name': 'Claude Sonnet 4.5'},
-            {'id': 'gpt-5.2-codex', 'name': 'GPT-5.2 Codex'},
+            {
+              'id': 'gpt-5.2-codex',
+              'name': 'GPT-5.2 Codex',
+              'supports_image': true,
+              'image_support_known': true,
+            },
           ],
         };
     }
@@ -217,7 +282,13 @@ void main() {
         ServerEntry(
           id: 'server',
           name: 'fixture',
-          workspaces: [ProjectWorkspace(id: 'a', name: 'Alpha', folders: [ref('/project')])],
+          workspaces: [
+            ProjectWorkspace(
+              id: 'a',
+              name: 'Alpha',
+              folders: [ref('/project')],
+            ),
+          ],
           selectedWorkspace: 'a',
         ),
       ],
@@ -253,10 +324,15 @@ void main() {
     t.view.devicePixelRatio = 1.0;
     addTearDown(t.view.resetPhysicalSize);
     addTearDown(t.view.resetDevicePixelRatio);
-    await t.pumpWidget(MaterialApp(
-      theme: buildTheme(Brightness.dark),
-      home: InputMode.scope(mode: input, child: Scaffold(body: child)),
-    ));
+    await t.pumpWidget(
+      MaterialApp(
+        theme: buildTheme(Brightness.dark),
+        home: InputMode.scope(
+          mode: input,
+          child: Scaffold(body: child),
+        ),
+      ),
+    );
     for (var i = 0; i < 6; i++) {
       await t.pump(const Duration(milliseconds: 50));
     }
@@ -270,7 +346,9 @@ void main() {
     }
   }
 
-  testWidgets('AiSessionSidebar lists remote sessions and opens studio tab', (t) async {
+  testWidgets('AiSessionSidebar lists remote sessions and opens studio tab', (
+    t,
+  ) async {
     await pumpView(t, AiSessionSidebar(ws: ws));
     expect(find.text('重构登录接口'), findsOneWidget);
     await t.tap(find.text('重构登录接口'));
@@ -278,122 +356,202 @@ void main() {
     expect(ws.active?.id, 'ai:ses_1');
   });
 
-  testWidgets('history reuses, renames and deletes a saved draft host; failed delete retains it', (t) async {
-    final draft = EditorTab(id: 'ai:draft:fixture', taskKey: 'ses_1', title: 'saved draft', icon: Icons.auto_awesome,
-      builder: (_) => const SizedBox());
-    ws.openTab(draft);
-    await pumpView(t, AiSessionSidebar(ws: ws));
-    await t.tap(find.byKey(const ValueKey('ai-session-ses_1'))); await settle(t);
-    expect(ws.assistantTabs.single, same(draft));
-    expect(ws.assistantPanel.active, draft.id);
-    await t.tap(find.byKey(const ValueKey('ai-session-ses_1')), buttons: kSecondaryButton); await settle(t);
-    await t.tap(find.text('重命名…')); await settle(t);
-    await t.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'renamed saved draft');
-    await t.tap(find.text('确定')); await settle(t);
-    expect(draft.title, 'renamed saved draft');
-    for (final fail in [true, false]) {
-      link.failDelete = fail;
-      await t.tap(find.byKey(const ValueKey('ai-session-ses_1')), buttons: kSecondaryButton); await settle(t);
-      await t.tap(find.text('删除…')); await settle(t);
-      await t.tap(find.text('删除')); await settle(t);
-      expect(ws.assistantTabs.contains(draft), fail, reason: 'only a successful remote delete closes the canonical host');
-    }
-    expect(link.rpcCalls.where((call) => call.$1 == 'ai.delete'), hasLength(2));
-    await t.pumpWidget(const SizedBox());
-  });
+  testWidgets(
+    'history reuses, renames and deletes a saved draft host; failed delete retains it',
+    (t) async {
+      final draft = EditorTab(
+        id: 'ai:draft:fixture',
+        taskKey: 'ses_1',
+        title: 'saved draft',
+        icon: Icons.auto_awesome,
+        builder: (_) => const SizedBox(),
+      );
+      ws.openTab(draft);
+      await pumpView(t, AiSessionSidebar(ws: ws));
+      await t.tap(find.byKey(const ValueKey('ai-session-ses_1')));
+      await settle(t);
+      expect(ws.assistantTabs.single, same(draft));
+      expect(ws.assistantPanel.active, draft.id);
+      await t.tap(
+        find.byKey(const ValueKey('ai-session-ses_1')),
+        buttons: kSecondaryButton,
+      );
+      await settle(t);
+      await t.tap(find.text('重命名…'));
+      await settle(t);
+      await t.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'renamed saved draft',
+      );
+      await t.tap(find.text('确定'));
+      await settle(t);
+      expect(draft.title, 'renamed saved draft');
+      for (final fail in [true, false]) {
+        link.failDelete = fail;
+        await t.tap(
+          find.byKey(const ValueKey('ai-session-ses_1')),
+          buttons: kSecondaryButton,
+        );
+        await settle(t);
+        await t.tap(find.text('删除…'));
+        await settle(t);
+        await t.tap(find.text('删除'));
+        await settle(t);
+        expect(
+          ws.assistantTabs.contains(draft),
+          fail,
+          reason: 'only a successful remote delete closes the canonical host',
+        );
+      }
+      expect(
+        link.rpcCalls.where((call) => call.$1 == 'ai.delete'),
+        hasLength(2),
+      );
+      await t.pumpWidget(const SizedBox());
+    },
+  );
 
-  testWidgets('history new conversation completes the picker without discarding saved drafts', (t) async {
-    openNewAiSession(ws);
-    final first = ws.assistantTabs.single;
-    var opened = 0;
-    await pumpView(t, AiSessionSidebar(ws: ws, onOpened: () => opened++));
-    await t.tap(find.text('新建 AI 会话')); await settle(t);
-    expect(opened, 1);
-    expect(ws.assistantTabs, hasLength(2));
-    expect(ws.assistantTabs.first, same(first));
-    await t.pumpWidget(const SizedBox());
-  });
+  testWidgets(
+    'history new conversation completes the picker without discarding saved drafts',
+    (t) async {
+      openNewAiSession(ws);
+      final first = ws.assistantTabs.single;
+      var opened = 0;
+      await pumpView(t, AiSessionSidebar(ws: ws, onOpened: () => opened++));
+      await t.tap(find.text('新建 AI 会话'));
+      await settle(t);
+      expect(opened, 1);
+      expect(ws.assistantTabs, hasLength(2));
+      expect(ws.assistantTabs.first, same(first));
+      await t.pumpWidget(const SizedBox());
+    },
+  );
 
-  testWidgets('history groups by day, shows a preview, pins, renames and searches the conversation text', (t) async {
-    await pumpView(t, AiSessionSidebar(ws: ws));
-    // Day groups and the last line said in each session.
-    expect(find.text('今天'), findsOneWidget);
-    expect(find.text('最近 7 天'), findsOneWidget);
-    expect(find.text('等待你批准：edit'), findsOneWidget, reason: 'a session waiting for approval says so instead of its last line');
-    expect(find.text('upstream 超时调成 30 秒。'), findsOneWidget);
+  testWidgets(
+    'history groups by day, shows a preview, pins, renames and searches the conversation text',
+    (t) async {
+      await pumpView(t, AiSessionSidebar(ws: ws));
+      // Day groups and the last line said in each session.
+      expect(find.text('今天'), findsOneWidget);
+      expect(find.text('最近 7 天'), findsOneWidget);
+      expect(
+        find.text('等待你批准：edit'),
+        findsOneWidget,
+        reason:
+            'a session waiting for approval says so instead of its last line',
+      );
+      expect(find.text('upstream 超时调成 30 秒。'), findsOneWidget);
 
-    // Pin through the context menu: ai.update carries pinned, nothing else.
-    await t.tap(find.byKey(const ValueKey('ai-session-ses_2')), buttons: kSecondaryButton);
-    await settle(t);
-    await t.tap(find.text('置顶'));
-    await settle(t);
-    final pin = link.rpcCalls.where((c) => c.$1 == 'ai.update').single.$2;
-    expect(pin['id'], 'ses_2');
-    expect(pin['pinned'], isTrue);
-    expect(pin.containsKey('title'), isFalse);
-    expect(find.text('置顶'), findsOneWidget, reason: 'the pinned group header appears');
+      // Pin through the context menu: ai.update carries pinned, nothing else.
+      await t.tap(
+        find.byKey(const ValueKey('ai-session-ses_2')),
+        buttons: kSecondaryButton,
+      );
+      await settle(t);
+      await t.tap(find.text('置顶'));
+      await settle(t);
+      final pin = link.rpcCalls.where((c) => c.$1 == 'ai.update').single.$2;
+      expect(pin['id'], 'ses_2');
+      expect(pin['pinned'], isTrue);
+      expect(pin.containsKey('title'), isFalse);
+      expect(
+        find.text('置顶'),
+        findsOneWidget,
+        reason: 'the pinned group header appears',
+      );
 
-    // Full-text search: debounced, asks the agent, shows the matching snippet.
-    await t.enterText(find.byKey(const ValueKey('ai-history-search')), '502');
-    await t.pump(const Duration(milliseconds: 400));
-    await t.pump(const Duration(milliseconds: 100));
-    final q = link.rpcCalls.where((c) => c.$1 == 'ai.search').single.$2;
-    expect(q['query'], '502');
-    expect(find.textContaining('proxy_read_timeout'), findsOneWidget);
-    await t.tap(find.byKey(const ValueKey('ai-hit-ses_2')));
-    await t.pump(const Duration(milliseconds: 100));
-    expect(ws.active?.id, 'ai:ses_2');
-  });
+      // Full-text search: debounced, asks the agent, shows the matching snippet.
+      await t.enterText(find.byKey(const ValueKey('ai-history-search')), '502');
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 100));
+      final q = link.rpcCalls.where((c) => c.$1 == 'ai.search').single.$2;
+      expect(q['query'], '502');
+      expect(find.textContaining('proxy_read_timeout'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('ai-hit-ses_2')));
+      await t.pump(const Duration(milliseconds: 100));
+      expect(ws.active?.id, 'ai:ses_2');
+    },
+  );
 
-  testWidgets('the composer shows the model and thinking strength, and the picker changes both', (t) async {
-    await pumpView(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
-    expect(find.text('OpenCode Gateway / claude-sonnet-4-5'), findsOneWidget);
-    await t.tap(find.byKey(const ValueKey('ai-model-btn')));
-    await settle(t);
+  testWidgets(
+    'the composer shows the model and thinking strength, and the picker changes both',
+    (t) async {
+      await pumpView(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
+      expect(find.text('OpenCode Gateway / claude-sonnet-4-5'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('ai-model-btn')));
+      await settle(t);
 
-    // Fetch the model list through the agent, then choose a model typed or listed.
-    await t.tap(find.text('拉取模型'));
-    await settle(t);
-    expect(find.text('gpt-5.2-codex'), findsOneWidget);
-    await t.tap(find.text('深度'));
-    await settle(t);
-    expect(app.profile.ai.activeProvider!.reasoningEffort, 'high');
-    await t.tap(find.text('gpt-5.2-codex'));
-    await settle(t);
-    expect(app.profile.ai.activeProvider!.model, 'gpt-5.2-codex');
-    expect(app.profile.ai.activeProvider!.models, contains('claude-sonnet-4-5'));
+      // Fetch the model list through the agent, then choose a model typed or listed.
+      await t.tap(find.text('拉取模型'));
+      await settle(t);
+      expect(find.text('gpt-5.2-codex'), findsOneWidget);
+      await t.tap(find.text('深度'));
+      await settle(t);
+      expect(
+        app.profile.ai.activeProvider!.reasoningEffort,
+        isEmpty,
+        reason: '对话临时选择不能改写配置页预设',
+      );
+      await t.tap(find.text('gpt-5.2-codex'));
+      await settle(t);
+      expect(app.profile.ai.activeProvider!.model, 'gpt-5.2-codex');
+      expect(
+        app.profile.ai.activeProvider!.models,
+        contains('claude-sonnet-4-5'),
+      );
+      expect(
+        app.profile.ai.activeProvider!.imageSupport('gpt-5.2-codex'),
+        isTrue,
+      );
 
-    // One model line; the full choice, including strength, stays in its tooltip.
-    expect(find.text('OpenCode Gateway / gpt-5.2-codex'), findsOneWidget);
-    expect(find.byTooltip('OpenCode Gateway / gpt-5.2-codex · 深度'), findsOneWidget);
+      // One model line; the full choice, including strength, stays in its tooltip.
+      expect(find.text('OpenCode Gateway / gpt-5.2-codex'), findsOneWidget);
+      expect(
+        find.byTooltip('OpenCode Gateway / gpt-5.2-codex · 深度'),
+        findsOneWidget,
+      );
 
-    // And what is sent to the agent carries both.
-    await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), 'hi');
-    await t.tap(find.byKey(const ValueKey('ai-send-btn')));
-    await t.pump(const Duration(milliseconds: 100));
-    final sent = link.rpcCalls.where((c) => c.$1 == 'ai.run').single.$2['provider'] as Map<String, dynamic>;
-    expect(sent['model'], 'gpt-5.2-codex');
-    expect(sent['reasoning_effort'], 'high');
-  });
+      // And what is sent to the agent carries both.
+      await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), 'hi');
+      await t.tap(find.byKey(const ValueKey('ai-send-btn')));
+      await t.pump(const Duration(milliseconds: 100));
+      final sent =
+          link.rpcCalls.where((c) => c.$1 == 'ai.run').single.$2['provider']
+              as Map<String, dynamic>;
+      expect(sent['model'], 'gpt-5.2-codex');
+      expect(sent['reasoning_effort'], 'high');
+    },
+  );
 
-  testWidgets('a websearch call shows its query, the result count and the sources, and a click copies the link', (t) async {
-    await pumpView(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
-    expect(find.text('联网搜索「dart null safety」 · 2 个结果'), findsOneWidget);
-    await t.tap(find.text('联网搜索「dart null safety」 · 2 个结果'));
-    await settle(t);
-    expect(find.text('来源'), findsOneWidget);
-    expect(find.text('dart.dev'), findsNWidgets(2));
-    expect(find.text('Migrating'), findsOneWidget);
-    final copied = <String>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.setData') copied.add((call.arguments as Map)['text'] as String);
-      return null;
-    });
-    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
-    await t.tap(find.byKey(const ValueKey('ai-source-1')));
-    await t.pump();
-    expect(copied, ['https://dart.dev/null-safety/migration-guide']);
-  });
+  testWidgets(
+    'a websearch call shows its query, the result count and the sources, and a click copies the link',
+    (t) async {
+      await pumpView(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
+      expect(find.text('联网搜索「dart null safety」 · 2 个结果'), findsOneWidget);
+      await t.tap(find.text('联网搜索「dart null safety」 · 2 个结果'));
+      await settle(t);
+      expect(find.text('来源'), findsOneWidget);
+      expect(find.text('dart.dev'), findsNWidgets(2));
+      expect(find.text('Migrating'), findsOneWidget);
+      final copied = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.setData')
+              copied.add((call.arguments as Map)['text'] as String);
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await t.tap(find.byKey(const ValueKey('ai-source-1')));
+      await t.pump();
+      expect(copied, ['https://dart.dev/null-safety/migration-guide']);
+    },
+  );
 
   test('aiDayGroup buckets by calendar day', () {
     final now = DateTime(2026, 11, 12, 15);
@@ -405,112 +563,164 @@ void main() {
     expect(aiDayGroup(ms(DateTime(2026, 5, 1)), now: now), '更早');
   });
 
-  testWidgets('AiStudioView renders OpenCode todos, tools, diffs, approves permission, and sends prompt', (t) async {
-    await pumpView(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
+  testWidgets(
+    'AiStudioView renders OpenCode todos, tools, diffs, approves permission, and sends prompt',
+    (t) async {
+      await pumpView(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
 
-    expect(find.text('任务进度 (1/2)'), findsOneWidget);
-    expect(find.text('读取 src/main.dart'), findsOneWidget);
-    expect(find.text('本步变更 1 个文件'), findsOneWidget);
-    expect(find.text('需要授权执行 edit'), findsOneWidget);
+      expect(find.text('任务进度 (1/2)'), findsOneWidget);
+      expect(find.text('读取 src/main.dart'), findsOneWidget);
+      expect(find.text('本步变更 1 个文件'), findsOneWidget);
+      expect(find.text('需要授权执行 edit'), findsOneWidget);
 
-    // Approve pending permission inline
-    await t.tap(find.byKey(const ValueKey('ai-approve-once')));
-    await t.pump(const Duration(milliseconds: 100));
-    final approveCall = link.rpcCalls.where((c) => c.$1 == 'ai.approve').single;
-    expect(approveCall.$2['id'], 'perm_1');
-    expect(approveCall.$2['allow'], isTrue);
+      // Approve pending permission inline
+      await t.tap(find.byKey(const ValueKey('ai-approve-once')));
+      await t.pump(const Duration(milliseconds: 100));
+      final approveCall = link.rpcCalls
+          .where((c) => c.$1 == 'ai.approve')
+          .single;
+      expect(approveCall.$2['id'], 'perm_1');
+      expect(approveCall.$2['allow'], isTrue);
 
-    // Switch to Plan mode and send steering message
-    await t.tap(find.text('Build 构建'));
-    await t.pump(const Duration(milliseconds: 50));
-    expect(find.text('Plan 规划'), findsOneWidget);
+      // Switch to Plan mode and send steering message
+      await t.tap(find.text('Build 构建'));
+      await t.pump(const Duration(milliseconds: 50));
+      expect(find.text('Plan 规划'), findsOneWidget);
 
-    await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), '先输出修改方案');
-    await t.tap(find.byKey(const ValueKey('ai-send-btn')));
-    await t.pump(const Duration(milliseconds: 100));
+      await t.enterText(
+        find.byKey(const ValueKey('ai-prompt-input')),
+        '先输出修改方案',
+      );
+      await t.tap(find.byKey(const ValueKey('ai-send-btn')));
+      await t.pump(const Duration(milliseconds: 100));
 
-    final runCall = link.rpcCalls.where((c) => c.$1 == 'ai.run').single;
-    expect(runCall.$2['agent'], 'plan');
-    expect(runCall.$2['text'], '先输出修改方案');
-    final sentProv = runCall.$2['provider'] as Map<String, dynamic>;
-    expect(sentProv['protocol'], 'anthropic-messages');
-    expect(sentProv['api_key'], 'sk-opencode-test');
-    expect(sentProv['use_proxy'], isTrue);
-  });
+      final runCall = link.rpcCalls.where((c) => c.$1 == 'ai.run').single;
+      expect(runCall.$2['agent'], 'plan');
+      expect(runCall.$2['text'], '先输出修改方案');
+      final sentProv = runCall.$2['provider'] as Map<String, dynamic>;
+      expect(sentProv['protocol'], 'anthropic-messages');
+      expect(sentProv['api_key'], 'sk-opencode-test');
+      expect(sentProv['use_proxy'], isTrue);
+    },
+  );
 
-  testWidgets('AiSettingsDialog fetches models via agent and saves sealed provider', (t) async {
-    await pumpView(
-      t,
-      Builder(
-        builder: (ctx) => Center(
-          child: FilledButton(
-            onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws),
-            child: const Text('打开配置'),
+  testWidgets(
+    'AiSettingsDialog fetches models via agent and saves sealed provider',
+    (t) async {
+      await pumpView(
+        t,
+        Builder(
+          builder: (ctx) => Center(
+            child: FilledButton(
+              onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws),
+              child: const Text('打开配置'),
+            ),
           ),
         ),
-      ),
-    );
-    await t.tap(find.text('打开配置'));
-    await t.pumpAndSettle();
+      );
+      await t.tap(find.text('打开配置'));
+      await t.pumpAndSettle();
 
-    await t.ensureVisible(find.text('拉取模型'));
-    await t.tap(find.text('拉取模型'));
-    await t.pumpAndSettle();
-    await t.ensureVisible(find.text('已获取 2 个模型'));
-    expect(find.text('已获取 2 个模型'), findsOneWidget);
-    await t.ensureVisible(find.byKey(const ValueKey('ai-model-catalog')));
-    await t.pumpAndSettle();
-    await t.ensureVisible(find.text('gpt-5.2-codex'));
-    await t.pumpAndSettle();
-    await t.tap(find.text('gpt-5.2-codex'));
-    await t.pump();
+      await t.ensureVisible(find.text('拉取模型'));
+      await t.tap(find.text('拉取模型'));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.text('已获取 2 个模型'));
+      expect(find.text('已获取 2 个模型'), findsOneWidget);
+      await t.ensureVisible(find.byKey(const ValueKey('ai-model-catalog')));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.text('gpt-5.2-codex'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('gpt-5.2-codex'));
+      await t.pump();
 
-    await t.tap(find.byKey(const ValueKey('ai-save-settings')));
-    await t.pumpAndSettle();
-    expect(app.profile.ai.activeProvider!.model, 'gpt-5.2-codex');
-  });
-  testWidgets('manual model and credential survive fetching and saving settings', (t) async {
-    await pumpView(t, Builder(builder: (ctx) => TextButton(onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws), child: const Text('配置'))));
-    final key = app.profile.ai.activeProvider!.apiKey;
-    await t.tap(find.text('配置'));
-    await t.pumpAndSettle();
-    await t.enterText(find.byKey(const ValueKey('ai-model-id')), 'manual-model-fixture');
-    await t.ensureVisible(find.byKey(const ValueKey('ai-add-model')));
-    await t.tap(find.byKey(const ValueKey('ai-add-model')));
-    await t.pumpAndSettle();
-    await t.ensureVisible(find.text('拉取模型'));
-    await t.tap(find.text('拉取模型'));
-    await t.pumpAndSettle();
-    await t.tap(find.byKey(const ValueKey('ai-save-settings')));
-    await t.pumpAndSettle();
-    expect(app.profile.ai.activeProvider!.models, contains('manual-model-fixture'));
-    expect(app.profile.ai.activeProvider!.apiKey, key);
-  });
-  testWidgets('provider settings fits a 390px phone without losing credentials', (t) async {
-    await pumpView(t, Builder(builder: (ctx) => TextButton(onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws), child: const Text('配置'))));
-    t.view.physicalSize = const Size(390, 900);
-    await t.pump();
-    await t.tap(find.text('配置'));
-    await t.pumpAndSettle();
-    expect(t.takeException(), isNull);
-    await t.tap(find.byKey(const ValueKey('ai-auth-prov_1-')));
-    await t.pumpAndSettle();
-    await t.tap(find.text('ChatGPT 订阅 · Device 设备码').last);
-    await t.pumpAndSettle();
-    expect(t.takeException(), isNull);
-    expect(find.byKey(const ValueKey('ai-save-settings')), findsOneWidget);
-    await t.tap(find.byKey(const ValueKey('ai-save-settings')));
-    await t.pumpAndSettle();
-    expect(app.profile.ai.activeProvider!.apiKey, 'sk-opencode-test');
-    expect(app.profile.ai.activeProvider!.authMode, 'chatgpt-device');
-  });
-  testWidgets('saving display settings preserves a concurrently rotated API key', (t) async {
-    await pumpView(t, Builder(builder: (ctx) => TextButton(onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws), child: const Text('配置'))));
-    await t.tap(find.text('配置'));
-    await t.pumpAndSettle();
-    await app.update((p) => p.ai.providers.first.apiKey = 'rotated-key-fixture');
-    await t.tap(find.byKey(const ValueKey('ai-save-settings')));
-    await t.pumpAndSettle();
-    expect(app.profile.ai.activeProvider!.apiKey, 'rotated-key-fixture');
-  });
+      await t.tap(find.byKey(const ValueKey('ai-save-settings')));
+      await t.pumpAndSettle();
+      expect(app.profile.ai.activeProvider!.model, 'gpt-5.2-codex');
+    },
+  );
+  testWidgets(
+    'manual model and credential survive fetching and saving settings',
+    (t) async {
+      await pumpView(
+        t,
+        Builder(
+          builder: (ctx) => TextButton(
+            onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws),
+            child: const Text('配置'),
+          ),
+        ),
+      );
+      final key = app.profile.ai.activeProvider!.apiKey;
+      await t.tap(find.text('配置'));
+      await t.pumpAndSettle();
+      await t.enterText(
+        find.byKey(const ValueKey('ai-model-id')),
+        'manual-model-fixture',
+      );
+      await t.ensureVisible(find.byKey(const ValueKey('ai-add-model')));
+      await t.tap(find.byKey(const ValueKey('ai-add-model')));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.text('拉取模型'));
+      await t.tap(find.text('拉取模型'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('ai-save-settings')));
+      await t.pumpAndSettle();
+      expect(
+        app.profile.ai.activeProvider!.models,
+        contains('manual-model-fixture'),
+      );
+      expect(app.profile.ai.activeProvider!.apiKey, key);
+    },
+  );
+  testWidgets(
+    'provider settings fits a 390px phone without losing credentials',
+    (t) async {
+      await pumpView(
+        t,
+        Builder(
+          builder: (ctx) => TextButton(
+            onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws),
+            child: const Text('配置'),
+          ),
+        ),
+      );
+      t.view.physicalSize = const Size(390, 900);
+      await t.pump();
+      await t.tap(find.text('配置'));
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      await t.tap(find.byKey(const ValueKey('ai-auth-prov_1-')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('ChatGPT 订阅 · Device 设备码').last);
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      expect(find.byKey(const ValueKey('ai-save-settings')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('ai-save-settings')));
+      await t.pumpAndSettle();
+      expect(app.profile.ai.activeProvider!.apiKey, 'sk-opencode-test');
+      expect(app.profile.ai.activeProvider!.authMode, 'chatgpt-device');
+    },
+  );
+  testWidgets(
+    'saving display settings preserves a concurrently rotated API key',
+    (t) async {
+      await pumpView(
+        t,
+        Builder(
+          builder: (ctx) => TextButton(
+            onPressed: () => showAiSettingsDialog(ctx, app: app, ws: ws),
+            child: const Text('配置'),
+          ),
+        ),
+      );
+      await t.tap(find.text('配置'));
+      await t.pumpAndSettle();
+      await app.update(
+        (p) => p.ai.providers.first.apiKey = 'rotated-key-fixture',
+      );
+      await t.tap(find.byKey(const ValueKey('ai-save-settings')));
+      await t.pumpAndSettle();
+      expect(app.profile.ai.activeProvider!.apiKey, 'rotated-key-fixture');
+    },
+  );
 }

@@ -738,3 +738,13 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 已验收源码 **1353 个文件**的摘要在发布准备前逐项匹配。复用 Flutter **488 通过、20 条件跳过**、profile **56 通过**、Go Windows／Linux AI 回归、vet 与双平台构建，以及 80–150% 原生工作流证据；本轮生产代码不另改动。
 - 验收包双平台签名、真实 TLS harness、基础 agent 冒烟和实际 Release 启动通过。正式包从干净提交重新构建，另核对客户端 AOT、agent 签名及 revision、源码前后指纹、ZIP 全文件和正式随包 agent。
 - 新产物归档至 `release3/Aurora-3.21.4`，使用常规配置；保留既有正式包和独立验收包。推送源码与注释标签，上传 ZIP、sidecar、SHA256SUMS 三项资产，核对后发布为 latest。Android 继续暂缓；真实账号授权、订阅资格及模型识图质量仍由账号实测。
+
+### 3.21.4 Windows 已发布（2026-11-16）
+
+- 发布：https://github.com/Moraxusio/aurora/releases/tag/v3.21.4 。构建源码与注释标签指向干净提交 `701765df1151026e8f680a997d413e53d075a9d8`；客户端 `3.21.4+32104`，两类随包 agent 均为 3.21.4。发布记录另行提交，版本标签固定在构建提交。
+- Windows Release 编译 **11.3 秒**，完整签名打包与源码校验 **26.7 秒**；构建前后 **1491 个文件摘要一致**。正式客户端 AOT SHA-256 `a34c0973a11d22e3f2a374dcf6a5254c533033b3b3332735fc465a41d3d6233a` 与已验收候选完全相同。
+- 正式包 `C:\dev\VPS\release3\Aurora-3.21.4.zip`，**32,329,303 字节**，SHA-256 `087348a08f4f0af051a89b81dde7d5eb86a2136045d6199ebdb5c8ec2aa95ae1`；ZIP **33 个文件**与目录逐项一致，sidecar、SHA256SUMS 和许可证检查通过。
+- Linux amd64 agent：14,467,234 字节，SHA-256 `3f57d6b9fac27acd63767b8fc948a8ee9ca30fd0aff35a5f0313e7168a994837`；Windows amd64 本地 agent：13,524,992 字节，SHA-256 `d6e54efce91dc1fe09bbb4e2e6753e03a08a211b044e5d5011245c8b160cfa88`。两类发布公钥验签通过，密钥 ID `87828dfb18459372`；Go 元数据为上述 revision 和 `vcs.modified=false`。
+- 正式随包 agent 真实 TLS harness 冒烟通过。正式 ZIP 全新隔离解压后启动成功，UI Automation 确认本机连接与 agent 3.21.4；UI 异常及原生错误均为 0，测试客户端退出码为 0，本地 agent 同时退出，无遗留测试进程。退出检查使用空测试实例的原生清理消息。
+- 源码与标签原子推送成功；ZIP、sidecar、SHA256SUMS **3 项资产**上传草稿并逐项核对服务端摘要后发布为正式 latest。三项均经免认证重新下载，字节数及 SHA-256 与本地一致。证据见 [20261116-release-3.21.4.json](performance/20261116-release-3.21.4.json)。
+- 3.21.3 正式 ZIP 和已验收的 `3.21.4-harness-preview1` ZIP 摘要保持一致。临时 GitHub 授权在发布记录推送后清理；本轮未执行服务器部署，账号实测边界沿用上述记录。

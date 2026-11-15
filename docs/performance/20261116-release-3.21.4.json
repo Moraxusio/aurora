@@ -1,0 +1,150 @@
+{
+  "date": "2026-11-16",
+  "version": "3.21.4",
+  "platform": "Windows x64",
+  "source_revision": "701765df1151026e8f680a997d413e53d075a9d8",
+  "tag": "v3.21.4",
+  "release_url": "https://github.com/Moraxusio/aurora/releases/tag/v3.21.4",
+  "release_id": 446277994,
+  "published_at_utc": "2026-11-15T18:41:02Z",
+  "public_downloads_verified_at_utc": "2026-11-15T18:41:10.3530621Z",
+  "draft": false,
+  "prerelease": false,
+  "public_latest_verified": true,
+  "build": {
+    "target": "lib/main.dart",
+    "client_version": "3.21.4+32104",
+    "windows_build_seconds": 11.3,
+    "signed_package_build_seconds": 26.7,
+    "source_files_checked_before_and_after_build": 1491,
+    "accepted_source_files_verified_before_release_edits": 1353,
+    "production_source_changed_during_release_preparation": false,
+    "client_aot_sha256": "a34c0973a11d22e3f2a374dcf6a5254c533033b3b3332735fc465a41d3d6233a",
+    "accepted_candidate_aot_identical": true,
+    "clean_before_and_after": true
+  },
+  "package": {
+    "directory": "C:/dev/VPS/release3/Aurora-3.21.4",
+    "zip_bytes": 32329303,
+    "zip_sha256": "087348a08f4f0af051a89b81dde7d5eb86a2136045d6199ebdb5c8ec2aa95ae1",
+    "zip_files_identical_to_directory": 33,
+    "opencode_mit_attribution_present": true,
+    "private_or_preview_files": 0,
+    "agents": [
+      {
+        "product": "aurora3-agent",
+        "platform": "linux/amd64",
+        "version": "3.21.4",
+        "bytes": 14467234,
+        "sha256": "3f57d6b9fac27acd63767b8fc948a8ee9ca30fd0aff35a5f0313e7168a994837",
+        "key_id": "87828dfb18459372",
+        "signature_verified": true,
+        "source_revision": "701765df1151026e8f680a997d413e53d075a9d8",
+        "vcs_modified": false
+      },
+      {
+        "product": "aurora3-local-agent",
+        "platform": "windows/amd64",
+        "version": "3.21.4",
+        "bytes": 13524992,
+        "sha256": "d6e54efce91dc1fe09bbb4e2e6753e03a08a211b044e5d5011245c8b160cfa88",
+        "key_id": "87828dfb18459372",
+        "signature_verified": true,
+        "source_revision": "701765df1151026e8f680a997d413e53d075a9d8",
+        "vcs_modified": false
+      }
+    ]
+  },
+  "regression": {
+    "reused_from_accepted_candidate": true,
+    "details": "docs/AI_HARNESS.md",
+    "flutter": {
+      "passed": 488,
+      "conditionally_skipped": 20,
+      "failed": 0
+    },
+    "aurora_profile_passed": 56,
+    "dart_ai_analyze": {
+      "errors": 0,
+      "warnings": 0,
+      "info": 55
+    },
+    "windows_go_ai_tests_passed": true,
+    "linux_go_ai_tests_passed": true,
+    "go_ai_vet_passed": true,
+    "windows_and_linux_module_build_passed": true,
+    "native_profile_interaction_passed": true,
+    "native_axtree_errors": 0,
+    "production_gui_workflow_scales": [0.85, 0.8, 1.0, 1.25, 1.5, 0.85],
+    "native_profile_services_and_input": "synthetic",
+    "dark_and_light_layout_screenshots_reviewed": true,
+    "real_pdf_text_rendering_reviewed": true,
+    "base_agent_smoke_passed_on_accepted_source": true,
+    "formal_packaged_agent_tls_harness_passed": true,
+    "formal_tls_success_marker": "SIGNED_AGENT_TLS_HARNESS_MEDIA_PATCH_QUESTION_RESTART_OK",
+    "real_account_authorization_subscription_and_image_understanding": "requires user-account validation"
+  },
+  "formal_release_launch": {
+    "checked_at_utc": "2026-11-15T18:39:31.9275008Z",
+    "fresh_zip_extraction": true,
+    "isolated_test_environment": true,
+    "isolated_profile_created": true,
+    "visible_window_after_ms": 2619,
+    "local_agent_ready_after_ms": 15796,
+    "local_agent_connected": true,
+    "local_agent_version": "3.21.4",
+    "ui_automation_ready_text_observed": true,
+    "screenshot_reviewed": true,
+    "window_width": 1700,
+    "window_height": 1075,
+    "ui_exception_count": 0,
+    "native_error_count": 0,
+    "exit_method": "native WM_APP+41 teardown of the empty isolated test instance",
+    "test_instance_exited": true,
+    "packaged_local_agent_exited": true,
+    "test_processes_remaining": 0,
+    "exit_code": 0
+  },
+  "publication": {
+    "source_and_annotated_tag_pushed_atomically": true,
+    "assets_verified_before_publication": true,
+    "public_latest_verified": true,
+    "unauthenticated_downloads_verified": true,
+    "assets": [
+      {
+        "name": "Aurora-3.21.4.zip",
+        "bytes": 32329303,
+        "sha256": "087348a08f4f0af051a89b81dde7d5eb86a2136045d6199ebdb5c8ec2aa95ae1",
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.21.4/Aurora-3.21.4.zip",
+        "public_asset_id": 751963544,
+        "server_digest_verified": true,
+        "unauthenticated_download_verified": true
+      },
+      {
+        "name": "Aurora-3.21.4.zip.sha256",
+        "bytes": 85,
+        "sha256": "f56d5312186d3fe0d68eaa19d5ebd6f986c51d852c5c31d89f2fb3f6b2cbfc2d",
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.21.4/Aurora-3.21.4.zip.sha256",
+        "public_asset_id": 751963855,
+        "server_digest_verified": true,
+        "unauthenticated_download_verified": true
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 175,
+        "sha256": "a1315f41a31b6a15b7c79534a39b9ea265c4acc9ba12465e58c6e035984c5930",
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.21.4/SHA256SUMS.txt",
+        "public_asset_id": 751963914,
+        "server_digest_verified": true,
+        "unauthenticated_download_verified": true
+      }
+    ]
+  },
+  "protection": {
+    "protected_archives_unchanged": 2,
+    "formal_3_21_3_sha256": "9319f77d0836809cbc8a995dd377cb5792c0252d92e699c5eb70321770e24ff2",
+    "accepted_harness_preview_sha256": "78ca0c41012e5647cfd5080a47ba8b9f0f74a979f3c99eeaf6f747af2a19fb7d",
+    "server_deployment_performed": false,
+    "android_release": "deferred"
+  }
+}

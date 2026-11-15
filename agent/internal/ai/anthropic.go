@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -54,7 +55,7 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 		})
 	}
 
-	thinkingEnabled := req.Provider.ReasoningEffort != ""
+	thinkingEnabled := req.Provider.ReasoningEffort != "" || req.Provider.ReasoningMode == "anthropic-budget"
 	hasInterleavedThinking := false
 
 	for _, msg := range req.Messages {
@@ -130,7 +131,7 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 					tr := map[string]any{
 						"type":        "tool_result",
 						"tool_use_id": p.ToolCallID,
-						"content":     p.Output,
+						"content":     anthropicToolContent(p),
 					}
 					if p.IsError {
 						tr["is_error"] = true
@@ -151,7 +152,7 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 					tr := map[string]any{
 						"type":        "tool_result",
 						"tool_use_id": p.ToolCallID,
-						"content":     p.Output,
+						"content":     anthropicToolContent(p),
 					}
 					if p.IsError {
 						tr["is_error"] = true
@@ -206,19 +207,32 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 		body["tools"] = toolsPayload
 	}
 
-	if thinkingEnabled {
+	if req.Provider.ReasoningMode == "anthropic-adaptive" && thinkingEnabled {
+		body["thinking"] = map[string]any{"type": "adaptive"}
+		body["output_config"] = map[string]any{"effort": req.Provider.ReasoningEffort}
+	} else if thinkingEnabled {
 		budget := 4096
 		switch req.Provider.ReasoningEffort {
+		case "":
 		case "low":
 			budget = 2048
 		case "medium":
 			budget = 8192
 		case "high":
 			budget = 16000
+		default:
+			if req.Provider.ReasoningMode != "anthropic-budget" {
+				return LLMResponse{}, fmt.Errorf("Anthropic effort %q needs adaptive thinking or an explicit token budget; select the model's reasoning mode in settings", req.Provider.ReasoningEffort)
+			}
+		}
+		if req.Provider.ReasoningMode == "anthropic-budget" {
+			budget = req.Provider.ThinkingBudget
 		}
 		if maxTok <= budget {
-			maxTok = budget + 4096
-			body["max_tokens"] = maxTok
+			if req.Provider.MaxOutputTokens > 0 || req.MaxTokens > 0 {
+				return LLMResponse{}, fmt.Errorf("thinking budget %d must be smaller than max output tokens %d", budget, maxTok)
+			}
+			body["max_tokens"] = budget + 4096
 		}
 		body["thinking"] = map[string]any{
 			"type":          "enabled",

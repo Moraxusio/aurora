@@ -84,7 +84,7 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
       await click(find.byTooltip('还原 AI 侧栏'));
       await click(find.byKey(const ValueKey('ai-context-indicator')));
       expect(t.getSize(find.byKey(const ValueKey('ai-runtime-bar'))).height, greaterThan(0));
-      await click(find.byKey(const ValueKey('ai-context-indicator')));
+      await t.sendKeyEvent(LogicalKeyboardKey.escape, physicalKey: PhysicalKeyboardKey.escape); await frames();
       await click(find.byTooltip('隐藏 AI 侧栏（保留对话）'));
 
       if (ws.terminalTabs.isEmpty) {
@@ -147,10 +147,10 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
     await click(find.text('完成'));
     steps.add('layout dialog, width slider and accessible local overlay');
 
-    await guiCommand(t, '新建终端会话…');
+    await guiCommand(t, '新建终端会话…'); await frames();
     expect(find.byType(NewSessionDialog), findsOneWidget);
     await click(find.text('取消'));
-    await guiCommand(t, '配置 AI 模型与密钥…');
+    await guiCommand(t, '配置 AI 模型与密钥…'); await frames();
     expect(find.text('AI 设置'), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.escape, physicalKey: PhysicalKeyboardKey.escape); await frames();
     Toast.show('GUI interaction audit complete'); await frames();

@@ -33,7 +33,7 @@ try {
     # turns those into NativeCommandError; only the process exit code decides.
     $ErrorActionPreference = 'Continue'
     try {
-        & flutter drive --no-pub -d windows --profile "--target=$target" --driver=test_driver/workbench.dart "--dart-define=AURORA_REVIEW_OUT=$prefix" "--dart-define=AURORA_ENFORCE_BUDGET=$budget" *> "$Out\native.log"
+        & flutter drive --no-pub -d windows --profile "--target=$target" --driver=test_driver/perf_driver.dart "--dart-define=AURORA_REVIEW_OUT=$prefix" "--dart-define=AURORA_ENFORCE_BUDGET=$budget" *> "$Out\native.log"
         $code = $LASTEXITCODE
     } finally { $ErrorActionPreference = 'Stop' }
     $log = [IO.File]::ReadAllText("$Out\native.log")

@@ -3,6 +3,8 @@
 // known_hosts (D-2), whose integrity matters as much as the secrets' privacy.
 import 'dart:math';
 
+import 'ai_capabilities.dart';
+
 /// Everything the client remembers.
 class Profile {
   List<ServerEntry> servers;
@@ -779,6 +781,7 @@ class AiSettings {
   double chatFontSize;
   List<AiPermissionRule> permissionRules;
   String followUp;
+  Map<String, bool> toolDefaults;
 
   AiSettings({
     List<AiProvider>? providers,
@@ -788,7 +791,9 @@ class AiSettings {
     this.chatFontSize = 15,
     List<AiPermissionRule>? permissionRules,
     this.followUp = 'steer',
+    Map<String, bool>? toolDefaults,
   }) : providers = providers ?? [],
+       toolDefaults = toolDefaults ?? {},
        permissionRules = permissionRules ?? [];
 
   static const permissionModes = ['ask', 'auto'];
@@ -809,6 +814,7 @@ class AiSettings {
       defaultAgent == 'build' &&
       chatFontSize == 15 &&
       followUp == 'steer' &&
+      toolDefaults.isEmpty &&
       permissionRules.isEmpty;
 
   factory AiSettings.fromJson(Map<String, dynamic> j) {
@@ -831,6 +837,7 @@ class AiSettings {
           if (r is Map) AiPermissionRule.fromJson(r.cast<String, dynamic>()),
       ],
       followUp: j['follow_up'] == 'queue' ? 'queue' : 'steer',
+      toolDefaults: aiCapabilityMap(j['tool_defaults']),
     );
   }
 
@@ -842,6 +849,7 @@ class AiSettings {
     if (defaultAgent != 'build') 'default_agent': defaultAgent,
     if (chatFontSize != 15) 'chat_font_size': chatFontSize,
     if (followUp != 'steer') 'follow_up': followUp,
+    if (toolDefaults.isNotEmpty) 'tool_defaults': toolDefaults,
     if (permissionRules.isNotEmpty)
       'permission_rules': [for (final r in permissionRules) r.toJson()],
   };
@@ -869,8 +877,9 @@ class AiProvider {
   /// Per-model image-input capability. Missing entries mean unknown; false is
   /// an explicit provider/catalog declaration that image input is unavailable.
   Map<String, bool> modelImageSupport;
+  Map<String, AiModelOptions> modelOptions;
 
-  /// '' | 'low' | 'medium' | 'high'
+  /// Connection fallback; arbitrary upstream spelling, empty means omit.
   String reasoningEffort;
   int contextWindow;
   Map<String, int> modelContextWindows;
@@ -895,6 +904,7 @@ class AiProvider {
     this.model = '',
     List<String>? models,
     Map<String, bool>? modelImageSupport,
+    Map<String, AiModelOptions>? modelOptions,
     this.reasoningEffort = '',
     this.contextWindow = 0,
     Map<String, int>? modelContextWindows,
@@ -904,6 +914,7 @@ class AiProvider {
     Map<String, String>? headers,
   }) : modelContextWindows = modelContextWindows ?? {},
        modelImageSupport = modelImageSupport ?? {},
+       modelOptions = modelOptions ?? {},
        models = models ?? [],
        headers = headers ?? {};
 
@@ -958,6 +969,14 @@ class AiProvider {
             if (e.value is bool) '${e.key}': e.value as bool,
       },
       reasoningEffort: j['reasoning_effort'] as String? ?? '',
+      modelOptions: {
+        if (j['model_options'] is Map)
+          for (final e in (j['model_options'] as Map).entries)
+            if (e.value is Map)
+              '${e.key}': AiModelOptions.fromJson(
+                (e.value as Map).cast<String, dynamic>(),
+              ),
+      },
       contextWindow: (j['context_window'] as num?)?.toInt() ?? 0,
       modelContextWindows: {
         if (j['model_context_windows'] is Map)
@@ -985,6 +1004,10 @@ class AiProvider {
     'model': model,
     if (models.isNotEmpty) 'models': models,
     if (modelImageSupport.isNotEmpty) 'model_image_support': modelImageSupport,
+    if (modelOptions.isNotEmpty)
+      'model_options': {
+        for (final e in modelOptions.entries) e.key: e.value.toJson(),
+      },
     if (reasoningEffort.isNotEmpty) 'reasoning_effort': reasoningEffort,
     if (contextWindow > 0) 'context_window': contextWindow,
     if (modelContextWindows.isNotEmpty)
@@ -1000,6 +1023,7 @@ class AiProvider {
   Map<String, dynamic> toWireJson({
     String? modelOverride,
     String? reasoningOverride,
+    Map<String, bool>? capabilityDefaults,
   }) => {
     'id': id,
     'name': name,
@@ -1016,8 +1040,13 @@ class AiProvider {
     'model': (modelOverride != null && modelOverride.isNotEmpty)
         ? modelOverride
         : model,
-    if ((reasoningOverride ?? reasoningEffort).isNotEmpty)
-      'reasoning_effort': reasoningOverride ?? reasoningEffort,
+    if (wireReasoning(modelOverride, reasoningOverride).isNotEmpty)
+      'reasoning_effort': wireReasoning(modelOverride, reasoningOverride),
+    if (modelOptions[modelOverride ?? model]?.reasoningMode != null)
+      'reasoning_mode': modelOptions[modelOverride ?? model]!.reasoningMode,
+    if ((modelOptions[modelOverride ?? model]?.thinkingBudget ?? 0) > 0)
+      'thinking_budget': modelOptions[modelOverride ?? model]!.thinkingBudget,
+    'capabilities': effectiveCapabilities(modelOverride, capabilityDefaults),
     if (effectiveContextWindow(modelOverride) > 0)
       'context_window': effectiveContextWindow(modelOverride),
     if (!isSubscription && maxTokens > 0) 'max_tokens': maxTokens,
@@ -1032,7 +1061,29 @@ class AiProvider {
 
   /// null means the provider has not declared this capability either way.
   bool? imageSupport([String? selected]) =>
+      modelOptions[selected ?? model]?.capabilities['image_input'] ??
       modelImageSupport[selected ?? model];
+
+  Map<String, bool> effectiveCapabilities([
+    String? selected,
+    Map<String, bool>? defaults,
+  ]) => {
+    ...aiCapabilityDefaults,
+    if (modelImageSupport[selected ?? model] case final bool image)
+      'image_input': image,
+    ...?defaults,
+    ...?modelOptions[selected ?? model]?.capabilities,
+  };
+
+  String effectiveReasoning([String? selected]) =>
+      modelOptions[selected ?? model]?.reasoningEffort ?? reasoningEffort;
+
+  String wireReasoning(String? selected, String? override) {
+    final options = modelOptions[selected ?? model];
+    if (options?.reasoningMode == 'disabled') return '';
+    final value = (override ?? effectiveReasoning(selected)).trim();
+    return options?.reasoningEfforts[value] ?? value;
+  }
 }
 
 /// Stored only inside the sealed profile. Do not stringify or log credentials.

@@ -1,0 +1,100 @@
+import 'dart:convert';
+
+import 'package:aurora_profile/aurora_profile.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('legacy, global and model capabilities resolve in explicit order', () {
+    final p = AiProvider(
+      id: 'p',
+      name: 'fixture',
+      model: 'm',
+      modelImageSupport: {'m': false},
+      modelOptions: {
+        'm': AiModelOptions(capabilities: {'shell': true}),
+      },
+    );
+    expect(p.effectiveCapabilities()['image_input'], isFalse);
+    final resolved = p.effectiveCapabilities('m', {
+      'image_input': true,
+      'shell': false,
+      'grep': false,
+    });
+    expect(resolved['image_input'], isTrue);
+    expect(resolved['shell'], isTrue);
+    expect(resolved['grep'], isFalse);
+    expect(p.effectiveCapabilities('other')['shell'], isTrue);
+    expect(
+      p.toWireJson(capabilityDefaults: {'grep': false})['capabilities'],
+      containsPair('grep', false),
+    );
+  });
+
+  test('custom effort inheritance, mapping, omission and session override', () {
+    final p = AiProvider(
+      id: 'p',
+      name: 'fixture',
+      model: 'm',
+      reasoningEffort: 'high',
+      modelOptions: {
+        'm': AiModelOptions(reasoningEfforts: {'max': 'ultra', 'off': ''}),
+      },
+    );
+    expect(p.toWireJson()['reasoning_effort'], 'high');
+    p.modelOptions['m']!.reasoningEffort = 'max';
+    expect(p.toWireJson()['reasoning_effort'], 'ultra');
+    expect(
+      p.toWireJson(reasoningOverride: 'experimental')['reasoning_effort'],
+      'experimental',
+    );
+    expect(
+      p.toWireJson(reasoningOverride: 'off'),
+      isNot(contains('reasoning_effort')),
+    );
+    expect(
+      p.toWireJson(reasoningOverride: ''),
+      isNot(contains('reasoning_effort')),
+    );
+    expect(p.toWireJson(modelOverride: 'other')['reasoning_effort'], 'high');
+    p.modelOptions['m']!.reasoningMode = 'disabled';
+    expect(
+      p.toWireJson(reasoningOverride: 'max'),
+      isNot(contains('reasoning_effort')),
+    );
+  });
+
+  test('profile roundtrip retains per-model options and independent maps', () {
+    final ai = AiSettings(
+      toolDefaults: {'question': false},
+      providers: [
+        AiProvider(
+          id: 'p',
+          name: 'fixture',
+          model: 'm',
+          modelOptions: {
+            'm': AiModelOptions(
+              capabilities: {'image_input': true},
+              reasoningEffort: '',
+              reasoningEfforts: {'max': 'ultra'},
+              reasoningMode: 'anthropic-budget',
+              thinkingBudget: 8192,
+            ),
+          },
+        ),
+      ],
+    );
+    final restored = AiSettings.fromJson(
+      jsonDecode(jsonEncode(ai.toJson())) as Map<String, dynamic>,
+    );
+    final p = restored.providers.single;
+    expect(restored.toolDefaults, {'question': false});
+    expect(p.modelOptions['m']!.reasoningEffort, '');
+    expect(p.modelOptions['m']!.thinkingBudget, 8192);
+    expect(p.toWireJson()['thinking_budget'], 8192);
+    p.modelOptions['m']!.capabilities['image_input'] = false;
+    expect(
+      ai.providers.single.modelOptions['m']!.capabilities['image_input'],
+      isTrue,
+    );
+  });
+}

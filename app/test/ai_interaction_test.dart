@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -14,19 +15,62 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdfrx/pdfrx.dart';
 
 import 'ai_runtime_test.dart' show RuntimeLink;
 import 'support/workspace_fixture.dart';
+import 'support/test_pdf.dart';
+
+class _MediaDownload extends Fake implements OpStream {
+  final Uint8List bytes;
+  bool sent = false;
+  _MediaDownload(this.bytes);
+  @override
+  Future<Object?> response() async => {'size': bytes.length};
+  @override
+  Future<Frame?> read() async {
+    if (sent) return Frame(typeEnd, Uint8List(0));
+    sent = true;
+    return Frame(typeData, bytes);
+  }
+
+  @override
+  void reset() {}
+}
 
 class _Link extends RuntimeLink {
   Completer<Object?>? catalog, approval;
+  Completer<Object?>? answer;
+  Map<String, dynamic>? question;
+  bool modern = false;
+  int answers = 0;
   int approvals = 0;
+  int downloads = 0;
+  final media = <String, Uint8List>{};
+  List<Map<String, dynamic>>? history;
   final List<Map<String, dynamic>> inbox = [];
+  @override
+  Future<OpStream> open(
+    String op, [
+    Object? args,
+    Priority priority = Priority.interactive,
+  ]) async {
+    if (op == 'ai.attach.download') {
+      downloads++;
+      return _MediaDownload(media[(args as Map)['id']]!);
+    }
+    return super.open(op, args, priority);
+  }
+
   @override
   AgentInfo get server => AgentInfo({
     'version': '3.21.3',
     'arch': 'amd64',
-    'caps': ['ai.inbox', 'ai.permissions'],
+    'caps': [
+      'ai.inbox',
+      'ai.permissions',
+      if (modern) ...['ai.capabilities', 'ai.question'],
+    ],
   });
   @override
   Future<Object?> call(
@@ -34,6 +78,14 @@ class _Link extends RuntimeLink {
     Object? args,
     Duration timeout = const Duration(seconds: 60),
   ]) async {
+    if (op == 'ai.question') {
+      final input = args as Map;
+      if (input['id'] == null) return {'question': question};
+      answers++;
+      if (answer != null) return answer!.future;
+      question = null;
+      return {'accepted': true};
+    }
     if (op == 'ai.models' && catalog != null) return catalog!.future;
     if (op == 'ai.approve') {
       approvals++;
@@ -48,6 +100,11 @@ class _Link extends RuntimeLink {
     final result = await super.call(op, args, timeout);
     if (op == 'ai.get') {
       ((result as Map)['session'] as Map)['inbox'] = List.of(inbox);
+      if (history != null) {
+        result['running'] = false;
+        (result['session'] as Map)['messages'] = history;
+        (result['session'] as Map)['todos'] = [];
+      }
     }
     return result;
   }
@@ -280,7 +337,8 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.text('连接 B'));
       await t.pumpAndSettle();
-      await t.tap(find.text('深度'));
+      await t.ensureVisible(find.text('high'));
+      await t.tap(find.text('high'));
       await t.tap(find.byTooltip('关闭'));
       await t.pumpAndSettle();
       expect(result, isNull);
@@ -361,6 +419,8 @@ void main() {
       await pump(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
       await t.tap(find.byKey(const ValueKey('ai-context-indicator')));
       await frames(t);
+      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await frames(t);
       for (final size in [
         const Size(320, 480),
         const Size(280, 600),
@@ -399,11 +459,270 @@ void main() {
       expect(find.text('model-a'), findsNothing);
       await t.tap(find.text('model-new', findRichText: false).last);
       await frames(t);
+      await t.tap(find.byKey(const ValueKey('ai-model-apply')));
+      await frames(t);
       expect(app.profile.ai.activeProvider!.model, 'model-a');
       expect(find.text('连接 A / model-new'), findsOneWidget);
       await app.update((p) => p.ai.selectedProviderId = 'b');
       await frames(t);
       expect(find.text('连接 A / model-new'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'short model picker stages keyboard choice and custom effort until apply',
+    (t) async {
+      await pump(
+        t,
+        AiStudioView(ws: ws, initialSessionId: 'ses_1'),
+        size: const Size(420, 300),
+      );
+      await t.tap(find.byKey(const ValueKey('ai-compact-menu')));
+      await frames(t);
+      await t.tap(find.text('model-a'));
+      await frames(t);
+      final filter = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == '搜索模型，或直接输入模型 ID',
+      );
+      await t.ensureVisible(filter);
+      await t.enterText(filter, 'custom-model');
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await frames(t);
+      expect(find.byKey(const ValueKey('ai-model-apply')), findsOneWidget);
+      final effort = find.byKey(const ValueKey('ai-effort-input'));
+      await t.ensureVisible(effort);
+      await t.enterText(effort, 'max');
+      await frames(t);
+      expect(t.takeException(), isNull);
+      await snapshot(t, 'model-picker-short');
+      await t.tap(find.byKey(const ValueKey('ai-model-apply')));
+      await frames(t);
+      await t.enterText(
+        find.byKey(const ValueKey('ai-prompt-input')),
+        'test effort',
+      );
+      await t.tap(find.byKey(const ValueKey('ai-send-btn')));
+      await frames(t);
+      final wire =
+          link.rpcCalls.where((x) => x.$1 == 'ai.run').single.$2['provider']
+              as Map;
+      expect(wire['model'], 'custom-model');
+      expect(wire['reasoning_effort'], 'max');
+      expect(app.aiSettings.activeProvider!.model, 'model-a');
+    },
+  );
+
+  testWidgets(
+    'question is restored on load and failed answer is retained for retry',
+    (t) async {
+      link.modern = true;
+      link.question = {
+        'id': 'q1',
+        'session_id': 'ses_1',
+        'questions': [
+          {
+            'question': '选择实现方式',
+            'options': [
+              {'label': '简洁'},
+              {'label': '完整'},
+            ],
+          },
+          {
+            'question': '需要哪些输出',
+            'multiple': true,
+            'options': [
+              {'label': '源码'},
+              {'label': '文档'},
+            ],
+          },
+        ],
+      };
+      link.answer = Completer<Object?>();
+      await pump(
+        t,
+        AiStudioView(ws: ws, initialSessionId: 'ses_1'),
+        size: const Size(390, 700),
+      );
+      await t.tap(find.byKey(const ValueKey('ai-question-open')));
+      await frames(t);
+      await t.tap(find.text('简洁'));
+      await t.tap(find.text('源码'));
+      await t.tap(find.text('文档'));
+      await t.tap(find.byKey(const ValueKey('ai-question-submit')));
+      await frames(t);
+      expect(
+        t
+            .widget<FilledButton>(
+              find.byKey(const ValueKey('ai-question-submit')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(link.answers, 1);
+      link.answer!.completeError(OpError(codeNotFound, '连接暂时中断'));
+      await frames(t);
+      expect(find.text('连接暂时中断'), findsOneWidget);
+      expect(
+        t
+            .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+            .where((w) => w.value == true),
+        hasLength(3),
+      );
+      await snapshot(t, 'question-retry');
+      link.answer = null;
+      await t.tap(find.byKey(const ValueKey('ai-question-submit')));
+      await frames(t);
+      expect(link.answers, 2);
+      expect(find.byKey(const ValueKey('ai-question-open')), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'model overrides persist without switching default and are sent as a snapshot',
+    (t) async {
+      link.modern = true;
+      await settings(t);
+      await page(t, 'models');
+      await t.tap(find.text('model-new'));
+      await t.pumpAndSettle();
+      final image = find.byKey(const ValueKey('ai-capability-image_input'));
+      await t.ensureVisible(image);
+      await t.tap(image);
+      await t.pumpAndSettle();
+      await t.tap(find.text('关闭').last);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('ai-save-settings')));
+      await t.pumpAndSettle();
+      expect(app.aiSettings.activeProvider!.model, 'model-a');
+      expect(
+        app
+            .aiSettings
+            .activeProvider!
+            .modelOptions['model-new']!
+            .capabilities['image_input'],
+        isFalse,
+      );
+      await app.update(
+        (p) => p.ai.toolDefaults.addAll({'grep': false, 'image_input': false}),
+      );
+      await pump(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
+      expect(find.byTooltip('图片输入已关闭'), findsOneWidget);
+      await t.enterText(
+        find.byKey(const ValueKey('ai-prompt-input')),
+        'test capabilities',
+      );
+      await t.tap(find.byKey(const ValueKey('ai-send-btn')));
+      await frames(t);
+      final wire =
+          link.rpcCalls.where((x) => x.$1 == 'ai.run').single.$2['provider']
+              as Map;
+      expect(wire['capabilities'], containsPair('grep', false));
+      expect(wire['capabilities'], containsPair('image_input', false));
+    },
+  );
+
+  testWidgets('old agent cannot silently ignore explicit capability settings', (
+    t,
+  ) async {
+    await app.update((p) => p.ai.toolDefaults['shell'] = false);
+    await pump(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
+    final field = find.byKey(const ValueKey('ai-prompt-input'));
+    await t.enterText(field, 'preserve my draft');
+    await t.tap(find.byKey(const ValueKey('ai-send-btn')));
+    await frames(t);
+    expect(link.rpcCalls.where((x) => x.$1 == 'ai.run'), isEmpty);
+    expect(t.widget<TextField>(field).controller!.text, 'preserve my draft');
+  });
+
+  testWidgets(
+    'tool media loads on expansion and image and PDF open from immutable references',
+    (t) async {
+      link.pendingPermission = null;
+      link.media['image-ref'] = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJZkAAAAASUVORK5CYII=',
+      );
+      link.media['pdf-ref'] = buildTestPdf(pages: 1, extra: 'Harness document');
+      link.history = [
+        {
+          'id': 'media-step',
+          'role': 'assistant',
+          'finish': 'stop',
+          'parts': [
+            {
+              'type': 'tool-call',
+              'name': 'read',
+              'tool_call_id': 'media-call',
+              'input': {'path': 'chart.png'},
+            },
+            {
+              'type': 'tool-result',
+              'name': 'read',
+              'tool_call_id': 'media-call',
+              'output': 'Captured media attached.',
+              'attachments': [
+                {
+                  'type': 'image',
+                  'attachment_id': 'image-ref',
+                  'filename': 'chart.png',
+                  'mime': 'image/png',
+                  'size': link.media['image-ref']!.length,
+                },
+                {
+                  'type': 'file',
+                  'attachment_id': 'pdf-ref',
+                  'filename': 'report.pdf',
+                  'mime': 'application/pdf',
+                  'size': link.media['pdf-ref']!.length,
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const channel = MethodChannel('plugins.flutter.io/path_provider');
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => Directory.systemTemp.path,
+      );
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      await pump(
+        t,
+        AiStudioView(ws: ws, initialSessionId: 'ses_1'),
+        size: const Size(390, 800),
+      );
+      expect(link.downloads, 0);
+      await t.tap(find.text('读取 chart.png'));
+      await frames(t);
+      expect(find.text('report.pdf'), findsOneWidget);
+      expect(
+        link.downloads,
+        1,
+        reason: 'only the expanded image thumbnail loads',
+      );
+      await t.tap(find.text('chart.png'));
+      await frames(t);
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      await t.tap(find.text('关闭'));
+      await frames(t);
+      await t.ensureVisible(find.text('report.pdf'));
+      await t.tap(find.text('report.pdf'));
+      for (var i = 0; i < 12; i++) {
+        await t.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 120)),
+        );
+        await t.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.byType(PdfViewer), findsOneWidget);
+      expect(link.downloads, 2);
+      expect(t.takeException(), isNull);
+      await snapshot(t, 'tool-pdf-preview-390');
+      await t.pumpWidget(const SizedBox());
+      await t.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
     },
   );
 
@@ -532,13 +851,7 @@ void main() {
         'settings pages stay independent at ${size.width} ${brightness.name}',
         (t) async {
           await settings(t, size: size, brightness: brightness);
-          for (final id in [
-            'connection',
-            'models',
-            'execution',
-            'network',
-            'defaults',
-          ]) {
+          for (final id in ['connection', 'models', 'execution', 'defaults']) {
             await page(t, id);
             expect(
               find.byKey(const ValueKey('ai-save-settings')).hitTestable(),

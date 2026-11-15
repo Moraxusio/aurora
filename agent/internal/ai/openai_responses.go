@@ -116,6 +116,11 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 				}
 			}
 		}
+		if msg.Role == "assistant" || msg.Role == "tool" {
+			if media := toolMediaTurn(msg.Parts, true); len(media) > 0 {
+				inputItems = append(inputItems, map[string]any{"role": "user", "content": media})
+			}
+		}
 	}
 
 	body := map[string]any{

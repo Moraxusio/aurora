@@ -24,7 +24,6 @@ func (svc) ID() string { return ServiceID }
 func (svc) Dependencies() []service.Dependency {
 	return []service.Dependency{
 		{Name: "git", Purpose: "shadow-git tree snapshots & 1-click revert", Required: false},
-		{Name: "rg", Purpose: "fast regex code search in grep tool", Required: false},
 	}
 }
 
@@ -45,6 +44,10 @@ func (s svc) Operations() []service.Operation {
 		{Name: "ai.approve", Handle: s.opApprove},
 		{Name: "ai.inbox", Handle: s.opInbox},
 		{Name: "ai.permissions", Handle: s.opPermissions},
+		{Name: "ai.question", Handle: s.opQuestion},
+		{Name: "ai.capabilities", Handle: func(_ context.Context, _ json.RawMessage) (any, error) {
+			return map[string]any{"version": 1, "capabilities": resolvedCapabilities(ProviderConfig{}), "tool_media": true, "durable_steps": true}, nil
+		}},
 		{Name: "ai.revert", Handle: s.opRevert},
 		{Name: "ai.compact", Handle: s.opCompact},
 		{Name: "ai.models", Handle: s.opModels},

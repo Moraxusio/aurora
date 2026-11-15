@@ -233,7 +233,7 @@ func (s svc) opAttachmentDownload(ctx context.Context, st net.Conn, raw json.Raw
 	}
 	return wire.WriteFrame(st, wire.TypeEnd, nil)
 }
-func (e *Env) validateAttachments(atts []ContextAttachment) error {
+func (e *Env) validateAttachments(atts []ContextAttachment, providers ...ProviderConfig) error {
 	if len(atts) > 8 {
 		return errors.New("每条消息最多 8 个附件")
 	}
@@ -245,6 +245,14 @@ func (e *Env) validateAttachments(atts []ContextAttachment) error {
 				return err
 			}
 			total += m.Size
+			if len(providers) > 0 {
+				if strings.HasPrefix(m.Mime, "image/") && !providers[0].allows("image_input") {
+					return errors.New("当前模型已禁用图片输入，请调整模型能力或更换模型")
+				}
+				if m.Mime == "application/pdf" && !providers[0].allows("pdf_input") {
+					return errors.New("当前模型已禁用 PDF 输入，请调整模型能力或更换模型")
+				}
+			}
 		} else {
 			total += int64(len(a.Content))
 			if len(a.Content) > 256<<10 {
@@ -291,6 +299,9 @@ func (e *Env) removeUnusedAttachmentsLocked(candidates map[string]bool) {
 		for _, message := range session.Messages {
 			for _, part := range message.Parts {
 				delete(candidates, part.AttachmentID)
+				for _, attachment := range part.Attachments {
+					delete(candidates, attachment.AttachmentID)
+				}
 			}
 		}
 	}

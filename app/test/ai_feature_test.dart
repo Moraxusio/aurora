@@ -488,14 +488,18 @@ void main() {
       await t.tap(find.text('拉取模型'));
       await settle(t);
       expect(find.text('gpt-5.2-codex'), findsOneWidget);
-      await t.tap(find.text('深度'));
+      await t.ensureVisible(find.text('high'));
+      await t.tap(find.text('high'));
       await settle(t);
       expect(
         app.profile.ai.activeProvider!.reasoningEffort,
         isEmpty,
         reason: '对话临时选择不能改写配置页预设',
       );
+      await t.ensureVisible(find.text('gpt-5.2-codex'));
       await t.tap(find.text('gpt-5.2-codex'));
+      await settle(t);
+      await t.tap(find.byKey(const ValueKey('ai-model-apply')));
       await settle(t);
       expect(
         app.profile.ai.activeProvider!.model,
@@ -514,7 +518,7 @@ void main() {
       // One model line; the full choice, including strength, stays in its tooltip.
       expect(find.text('OpenCode Gateway / gpt-5.2-codex'), findsOneWidget);
       expect(
-        find.byTooltip('OpenCode Gateway / gpt-5.2-codex · 深度'),
+        find.byTooltip('OpenCode Gateway / gpt-5.2-codex · high'),
         findsOneWidget,
       );
 
@@ -636,6 +640,14 @@ void main() {
       await t.ensureVisible(find.text('gpt-5.2-codex'));
       await t.pumpAndSettle();
       await t.tap(find.text('gpt-5.2-codex'));
+      await t.pump();
+      final modelRow = find.ancestor(
+        of: find.text('gpt-5.2-codex').first,
+        matching: find.byType(ListTile),
+      );
+      await t.tap(
+        find.descendant(of: modelRow, matching: find.byTooltip('设为默认模型')),
+      );
       await t.pump();
 
       await t.tap(find.byKey(const ValueKey('ai-save-settings')));

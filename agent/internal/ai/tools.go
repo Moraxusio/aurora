@@ -9,8 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -38,9 +38,10 @@ type Auditor interface {
 
 // ToolExecResult is the structured output of one tool invocation.
 type ToolExecResult struct {
-	Output   string
-	IsError  bool
-	Metadata map[string]any
+	Output      string
+	IsError     bool
+	Metadata    map[string]any
+	Attachments []Part
 }
 
 type toolContext struct {
@@ -59,7 +60,7 @@ type toolContext struct {
 func ToolDefinitions(agentMode string, depth int) []ToolDef {
 	readTool := ToolDef{
 		Name:        "read",
-		Description: "Read a file or directory from the local filesystem. Lines are numbered starting at 1 (`1: content`). By default reads up to 2000 lines from the start of the file. Use offset and limit to inspect specific sections of large files.",
+		Description: "Read a file or directory on the current execution host, including server files. Text lines are numbered starting at 1 (`1: content`), up to 2000 by default. Images (PNG/JPEG/GIF/WebP) and PDFs are returned as actual visual content when the current model enables those inputs; they are not text or filenames. Use this to inspect server images directly. Media limit: 8 MiB per file; offset/limit apply only to text and directories.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -144,6 +145,7 @@ func ToolDefinitions(agentMode string, depth int) []ToolDef {
 					"type":        "boolean",
 					"description": "Include hidden files and directories (starting with `.`). Defaults to false.",
 				},
+				"limit": map[string]any{"type": "integer", "description": "Maximum paths to return (default 500, maximum 2000)"},
 			},
 			"required": []string{"pattern"},
 		},
@@ -167,6 +169,10 @@ func ToolDefinitions(agentMode string, depth int) []ToolDef {
 					"type":        "string",
 					"description": "File glob filter (e.g. `*.go`, `*.{ts,tsx}`).",
 				},
+				"literal":       map[string]any{"type": "boolean", "description": "Match the exact pattern instead of a regular expression"},
+				"caseSensitive": map[string]any{"type": "boolean", "description": "Case-sensitive matching (default true)"},
+				"hidden":        map[string]any{"type": "boolean", "description": "Search hidden paths (default false); file permissions still apply"},
+				"limit":         map[string]any{"type": "integer", "description": "Maximum matching lines (default 200, maximum 2000)"},
 			},
 			"required": []string{"pattern"},
 		},
@@ -253,6 +259,9 @@ Available subagents:
 
 	// OpenCode's webfetch + websearch (web.go) are offered in every mode.
 	web := []ToolDef{webFetchToolDef, webSearchToolDef}
+	if depth == 0 {
+		web = append(web, questionToolDef)
+	}
 	switch agentMode {
 	case "explore":
 		return append([]ToolDef{readTool, globTool, grepTool, shellTool}, web...)
@@ -264,16 +273,34 @@ Available subagents:
 		}
 		return out
 	case "general":
-		out := append([]ToolDef{readTool, writeTool, editTool, globTool, grepTool, shellTool}, web...)
+		out := append([]ToolDef{readTool, writeTool, editTool, patchToolDef, globTool, grepTool, shellTool}, web...)
 		return append(out, todoTool)
 	default: // "build"
-		out := append([]ToolDef{readTool, writeTool, editTool, globTool, grepTool, shellTool}, web...)
+		out := append([]ToolDef{readTool, writeTool, editTool, patchToolDef, globTool, grepTool, shellTool}, web...)
 		out = append(out, todoTool)
 		if depth == 0 {
 			out = append(out, subagentTool)
 		}
 		return out
 	}
+}
+
+// Declaration and execution share this resolver; hallucinated/disabled tools
+// cannot bypass model capabilities or the mode/depth restrictions.
+func modelToolDefinitions(mode string, depth int, cfg ProviderConfig) []ToolDef {
+	if !cfg.allows("tool_calling") {
+		return nil
+	}
+	var out []ToolDef
+	for _, tool := range ToolDefinitions(mode, depth) {
+		if cfg.allows(tool.Name) {
+			if tool.Name == "read" {
+				tool.Description += fmt.Sprintf(" Current inputs: images=%t, PDFs=%t.", cfg.allows("image_input"), cfg.allows("pdf_input"))
+			}
+			out = append(out, tool)
+		}
+	}
+	return out
 }
 
 func resolveToolPath(tc toolContext, rawPath string, allowSpill bool) (absPath string, relDisplay string, err error) {
@@ -289,7 +316,12 @@ func resolveToolPath(tc toolContext, rawPath string, allowSpill bool) (absPath s
 	if allowSpill && tc.env.StateDir != "" {
 		spill := filepath.Clean(filepath.Join(tc.env.StateDir, "ai", "tool-output"))
 		if paths.Within(spill, p) {
-			return p, p, nil
+			real, err := filepath.EvalSymlinks(p)
+			realSpill, rootErr := filepath.EvalSymlinks(spill)
+			if err != nil || rootErr != nil || !paths.Within(realSpill, real) {
+				return "", "", fmt.Errorf("tool output path is missing or escapes its store: %s", rawPath)
+			}
+			return real, real, nil
 		}
 	}
 
@@ -331,6 +363,24 @@ func resolveToolPath(tc toolContext, rawPath string, allowSpill bool) (absPath s
 }
 
 func executeTool(ctx context.Context, tc toolContext, name string, rawInput json.RawMessage) ToolExecResult {
+	if err := ctx.Err(); err != nil {
+		return ToolExecResult{Output: "Not executed: run cancelled.", IsError: true}
+	}
+	declared := false
+	var definition ToolDef
+	for _, tool := range modelToolDefinitions(tc.session.Agent, tc.depth, tc.provider) {
+		if tool.Name == name {
+			declared, definition = true, tool
+			break
+		}
+	}
+	if !declared {
+		return ToolExecResult{Output: fmt.Sprintf("Tool %q is unavailable for this model, mode or agent depth. Use only the currently declared tools.", name), IsError: true}
+	}
+	if err := decodeToolArgs(rawInput, definition); err != nil {
+		return ToolExecResult{Output: "Invalid tool arguments: " + err.Error(), IsError: true}
+	}
+	tc.env.init()
 	spillDir := ""
 	if tc.env.StateDir != "" {
 		spillDir = filepath.Join(tc.env.StateDir, "ai", "tool-output")
@@ -374,10 +424,23 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 		res = execWriteTool(ctx, tc, rawInput, checkPerm)
 	case "edit":
 		res = execEditTool(ctx, tc, rawInput, checkPerm)
+	case "apply_patch":
+		res = execPatchTool(ctx, tc, rawInput, checkPerm)
 	case "glob":
+		var in struct {
+			Path string `json:"path"`
+		}
+		_ = json.Unmarshal(rawInput, &in)
+		_, disp, err := resolveToolPath(tc, in.Path, false)
+		if err == nil {
+			err = checkPerm("glob", disp, nil)
+		}
+		if err != nil {
+			return ToolExecResult{Output: err.Error(), IsError: true}
+		}
 		res = execGlobTool(ctx, tc, rawInput)
 	case "grep":
-		res = execGrepTool(ctx, tc, rawInput)
+		res = execGrepTool(ctx, tc, rawInput, checkPerm)
 	case "shell":
 		res = execShellTool(ctx, tc, rawInput, checkPerm)
 	case "webfetch":
@@ -388,6 +451,8 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 		res = execTodoWriteTool(tc, rawInput)
 	case "subagent":
 		res = execSubagentTool(ctx, tc, rawInput, checkPerm)
+	case "question":
+		res = execQuestionTool(ctx, tc, rawInput)
 	default:
 		return ToolExecResult{
 			Output:  fmt.Sprintf("Unknown tool %q. Use one of the declared tools.", name),
@@ -415,7 +480,7 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 	return res
 }
 
-func execReadTool(_ context.Context, tc toolContext, rawInput json.RawMessage, checkPerm func(string, string, map[string]any) error) ToolExecResult {
+func execReadTool(ctx context.Context, tc toolContext, rawInput json.RawMessage, checkPerm func(string, string, map[string]any) error) ToolExecResult {
 	var in struct {
 		Path   string `json:"path"`
 		File   string `json:"filePath"` // alias tolerance
@@ -436,6 +501,12 @@ func execReadTool(_ context.Context, tc toolContext, rawInput json.RawMessage, c
 	if err := checkPerm("read", disp, nil); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
+	if err := ctx.Err(); err != nil {
+		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
+	if current, _, err := resolveToolPath(tc, targetRaw, true); err != nil || current != abs {
+		return ToolExecResult{Output: "Read path changed during approval; request it again.", IsError: true}
+	}
 
 	st, err := os.Stat(abs)
 	if err != nil {
@@ -448,6 +519,9 @@ func execReadTool(_ context.Context, tc toolContext, rawInput json.RawMessage, c
 	}
 	limit := in.Limit
 	if limit <= 0 {
+		limit = 2000
+	}
+	if limit > 2000 {
 		limit = 2000
 	}
 
@@ -484,6 +558,9 @@ func execReadTool(_ context.Context, tc toolContext, rawInput json.RawMessage, c
 		return ToolExecResult{Output: out.String(), Metadata: map[string]any{"path": disp}}
 	}
 
+	if !st.Mode().IsRegular() {
+		return ToolExecResult{Output: "Read requires a regular file or directory.", IsError: true}
+	}
 	if st.Size() > 8*1024*1024 {
 		return ToolExecResult{
 			Output:  fmt.Sprintf("File %s is %d bytes (> 8 MiB). Use grep or shell head/tail to inspect specific parts.", disp, st.Size()),
@@ -491,16 +568,19 @@ func execReadTool(_ context.Context, tc toolContext, rawInput json.RawMessage, c
 		}
 	}
 
-	data, err := os.ReadFile(abs)
+	data, err := readToolFile(abs, maxAttachmentBytes)
 	if err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
+	if mime := http.DetectContentType(data); strings.HasPrefix(mime, "image/") || mime == "application/pdf" {
+		return toolMediaResult(tc, disp, filepath.Base(abs), data)
 	}
 	// Detect binary file (null bytes or invalid UTF-8)
 	sample := data
 	if len(sample) > 8192 {
 		sample = sample[:8192]
 	}
-	if len(data) > 0 && (bytes.IndexByte(sample, 0) >= 0 || !utf8.Valid(sample)) {
+	if len(data) > 0 && (bytes.IndexByte(sample, 0) >= 0 || !utf8.Valid(data)) {
 		return ToolExecResult{
 			Output:  fmt.Sprintf("Cannot read binary file %s (%d bytes).", disp, len(data)),
 			IsError: true,
@@ -554,7 +634,7 @@ func execReadTool(_ context.Context, tc toolContext, rawInput json.RawMessage, c
 	}
 }
 
-func execWriteTool(_ context.Context, tc toolContext, rawInput json.RawMessage, checkPerm func(string, string, map[string]any) error) ToolExecResult {
+func execWriteTool(ctx context.Context, tc toolContext, rawInput json.RawMessage, checkPerm func(string, string, map[string]any) error) ToolExecResult {
 	var in struct {
 		Path    string `json:"path"`
 		File    string `json:"filePath"`
@@ -572,27 +652,34 @@ func execWriteTool(_ context.Context, tc toolContext, rawInput json.RawMessage, 
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 
-	var before string
-	var permMode os.FileMode = 0o644
-	if st, statErr := os.Stat(abs); statErr == nil {
-		if st.IsDir() {
-			return ToolExecResult{Output: fmt.Sprintf("Path is a directory, not a file: %s", targetRaw), IsError: true}
-		}
-		permMode = st.Mode().Perm()
-		if oldBytes, rErr := os.ReadFile(abs); rErr == nil && len(oldBytes) <= 2*1024*1024 {
-			before = string(oldBytes)
-		}
+	original, err := captureTextFile(abs, true)
+	if err != nil {
+		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 
-	diff := ComputeFileDiff(disp, before, in.Content)
+	diff := ComputeFileDiff(disp, string(original.data), in.Content)
+	if !original.exists {
+		diff.Status = "added"
+	}
 	if err := checkPerm("write", disp, map[string]any{"diff": diff}); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 
+	toolMutationMu.Lock()
+	defer toolMutationMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
+	if current, _, err := resolveToolPath(tc, targetRaw, false); err != nil || current != abs {
+		return ToolExecResult{Output: "Write path changed during approval; read it again.", IsError: true}
+	}
+	if err := original.revalidate(tc); err != nil {
+		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
-	if err := atomicWriteFile(abs, []byte(in.Content), permMode); err != nil {
+	if err := atomicWriteFile(abs, []byte(in.Content), original.mode); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 	if tc.env.Audit != nil {
@@ -608,7 +695,7 @@ func execWriteTool(_ context.Context, tc toolContext, rawInput json.RawMessage, 
 	}
 }
 
-func execEditTool(_ context.Context, tc toolContext, rawInput json.RawMessage, checkPerm func(string, string, map[string]any) error) ToolExecResult {
+func execEditTool(ctx context.Context, tc toolContext, rawInput json.RawMessage, checkPerm func(string, string, map[string]any) error) ToolExecResult {
 	var in struct {
 		Path       string `json:"path"`
 		File       string `json:"filePath"`
@@ -628,19 +715,12 @@ func execEditTool(_ context.Context, tc toolContext, rawInput json.RawMessage, c
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 
-	st, err := os.Stat(abs)
-	if err != nil {
-		return ToolExecResult{Output: fmt.Sprintf("File not found: %s", targetRaw), IsError: true}
-	}
-	if st.IsDir() {
-		return ToolExecResult{Output: fmt.Sprintf("Path is a directory, not a file: %s", targetRaw), IsError: true}
-	}
-	origBytes, err := os.ReadFile(abs)
+	original, err := captureTextFile(abs, false)
 	if err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 
-	editRes, err := ApplyEdit(disp, string(origBytes), in.OldString, in.NewString, in.ReplaceAll)
+	editRes, err := ApplyEdit(disp, string(original.data), in.OldString, in.NewString, in.ReplaceAll)
 	if err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
@@ -649,7 +729,18 @@ func execEditTool(_ context.Context, tc toolContext, rawInput json.RawMessage, c
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 
-	if err := atomicWriteFile(abs, []byte(editRes.Content), st.Mode().Perm()); err != nil {
+	toolMutationMu.Lock()
+	defer toolMutationMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
+	if current, _, err := resolveToolPath(tc, targetRaw, false); err != nil || current != abs {
+		return ToolExecResult{Output: "Edit path changed during approval; read it again.", IsError: true}
+	}
+	if err := original.revalidate(tc); err != nil {
+		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
+	if err := atomicWriteFile(abs, []byte(editRes.Content), original.mode); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 	if tc.env.Audit != nil {
@@ -669,7 +760,7 @@ func atomicWriteFile(absPath string, content []byte, mode os.FileMode) error {
 	dir := filepath.Dir(absPath)
 	tmp, err := os.CreateTemp(dir, ".aurora-ai-*")
 	if err != nil {
-		return os.WriteFile(absPath, content, mode)
+		return err
 	}
 	tmpName := tmp.Name()
 	if _, err := tmp.Write(content); err != nil {
@@ -682,13 +773,18 @@ func atomicWriteFile(absPath string, content []byte, mode os.FileMode) error {
 		_ = os.Remove(tmpName)
 		return err
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpName)
 		return err
 	}
 	if err := os.Rename(tmpName, absPath); err != nil {
 		_ = os.Remove(tmpName)
-		return os.WriteFile(absPath, content, mode)
+		return err
 	}
 	return nil
 }
@@ -698,6 +794,7 @@ func execGlobTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 		Pattern string `json:"pattern"`
 		Path    string `json:"path"`
 		Hidden  bool   `json:"hidden"`
+		Limit   int    `json:"limit"`
 	}
 	if err := json.Unmarshal(rawInput, &in); err != nil {
 		return ToolExecResult{Output: "Invalid glob arguments: " + err.Error(), IsError: true}
@@ -709,6 +806,11 @@ func execGlobTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 	if err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
+	if st, err := os.Stat(searchDir); err != nil || !st.IsDir() {
+		return ToolExecResult{Output: "glob path must be an existing directory.", IsError: true}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
 
 	re, err := globToRegex(in.Pattern)
 	if err != nil {
@@ -720,11 +822,17 @@ func execGlobTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 		mtime int64
 	}
 	var hits []hit
-	const maxHits = 500
+	maxHits := in.Limit
+	if maxHits <= 0 {
+		maxHits = 500
+	}
+	if maxHits > 2000 {
+		maxHits = 2000
+	}
 	truncated := false
 	foreign := paths.ForeignMounts(searchDir)
 
-	_ = filepath.WalkDir(searchDir, func(p string, d fs.DirEntry, walkErr error) error {
+	walkResult := filepath.WalkDir(searchDir, func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
 		}
@@ -767,6 +875,13 @@ func execGlobTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 					dispRel = p
 				}
 			}
+			if tc.env != nil && tc.session != nil {
+				tc.env.init()
+				effect, _ := tc.env.perms.EvaluateWithRules(tc.session.ID, tc.session.Agent, tc.session.PermissionMode, "glob", dispRel, tc.session.PermissionRules)
+				if effect != "allow" {
+					return nil
+				}
+			}
 			hits = append(hits, hit{rel: dispRel, mtime: mt})
 			if len(hits) >= maxHits {
 				truncated = true
@@ -775,6 +890,9 @@ func execGlobTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 		}
 		return nil
 	})
+	if walkResult != nil {
+		return ToolExecResult{Output: "Path search stopped: " + walkResult.Error(), IsError: true}
+	}
 
 	sort.Slice(hits, func(i, j int) bool {
 		if hits[i].mtime != hits[j].mtime {
@@ -846,11 +964,15 @@ func globToRegex(pat string) (*regexp.Regexp, error) {
 	return regexp.Compile(b.String())
 }
 
-func execGrepTool(ctx context.Context, tc toolContext, rawInput json.RawMessage) ToolExecResult {
+func execGrepTool(ctx context.Context, tc toolContext, rawInput json.RawMessage, checks ...func(string, string, map[string]any) error) ToolExecResult {
 	var in struct {
-		Pattern string `json:"pattern"`
-		Path    string `json:"path"`
-		Include string `json:"include"`
+		Pattern       string `json:"pattern"`
+		Path          string `json:"path"`
+		Include       string `json:"include"`
+		Literal       bool   `json:"literal"`
+		CaseSensitive *bool  `json:"caseSensitive"`
+		Hidden        bool   `json:"hidden"`
+		Limit         int    `json:"limit"`
 	}
 	if err := json.Unmarshal(rawInput, &in); err != nil {
 		return ToolExecResult{Output: "Invalid grep arguments: " + err.Error(), IsError: true}
@@ -858,55 +980,63 @@ func execGrepTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 	if in.Pattern == "" {
 		return ToolExecResult{Output: "pattern must not be empty", IsError: true}
 	}
-	searchTarget, _, err := resolveToolPath(tc, in.Path, true)
+	searchTarget, targetDisplay, err := resolveToolPath(tc, in.Path, true)
 	if err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 
-	// Prefer ripgrep (`rg`) when installed on server, otherwise fall back to pure-Go regex walk.
-	if rgPath, lookErr := exec.LookPath("rg"); lookErr == nil {
-		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		defer cancel()
-		args := []string{"-n", "--no-heading", "--color=never", "--max-count=100", "--max-columns=300", "--max-filesize=2M"}
-		if in.Include != "" {
-			args = append(args, "--glob", in.Include)
+	st, err := os.Stat(searchTarget)
+	if err != nil {
+		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
+	if len(checks) > 0 {
+		if err := checks[0]("grep", targetDisplay, nil); err != nil {
+			return ToolExecResult{Output: err.Error(), IsError: true}
 		}
-		args = append(args, "--", in.Pattern, searchTarget)
-		cmd := quietCommandContext(cctx, rgPath, args...)
-		cmd.Dir = tc.absWorkdir
-		out, runErr := cmd.Output()
-		if runErr == nil || len(out) > 0 {
-			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-			if len(lines) > 250 {
-				lines = append(lines[:250], fmt.Sprintf("... (%d more matches omitted)", len(lines)-250))
+		if !st.IsDir() {
+			if err := checks[0]("read", targetDisplay, nil); err != nil {
+				return ToolExecResult{Output: err.Error(), IsError: true}
 			}
-			// Relativize paths to absWorkdir for clean output
-			prefix := strings.TrimSuffix(tc.absWorkdir, "/") + "/"
-			for i := range lines {
-				lines[i] = strings.TrimPrefix(lines[i], prefix)
-			}
-			return ToolExecResult{Output: strings.Join(lines, "\n")}
-		}
-		var exitErr *exec.ExitError
-		if errors.As(runErr, &exitErr) && exitErr.ExitCode() == 1 {
-			return ToolExecResult{Output: "No matches found."}
 		}
 	}
-
-	re, err := regexp.Compile(in.Pattern)
+	if current, _, err := resolveToolPath(tc, in.Path, true); err != nil || current != searchTarget {
+		return ToolExecResult{Output: "Search path changed during approval; request it again.", IsError: true}
+	}
+	// A bounded walker lets every content read honor the same file policy.
+	// Capturing unbounded rg stdout could exhaust memory or bypass read rules.
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	pattern := in.Pattern
+	if in.Literal {
+		pattern = regexp.QuoteMeta(pattern)
+	}
+	if in.CaseSensitive != nil && !*in.CaseSensitive {
+		pattern = "(?i)" + pattern
+	}
+	re, err := regexp.Compile(pattern)
 	if err != nil {
-		re, _ = regexp.Compile(regexp.QuoteMeta(in.Pattern))
+		return ToolExecResult{Output: "Invalid regular expression: " + err.Error() + ". Use literal=true for exact text.", IsError: true}
 	}
 	var incRe *regexp.Regexp
 	if in.Include != "" {
-		incRe, _ = globToRegex(in.Include)
+		incRe, err = globToRegex(in.Include)
+		if err != nil {
+			return ToolExecResult{Output: err.Error(), IsError: true}
+		}
 	}
 
 	var matches []string
-	const maxMatches = 200
+	maxMatches := in.Limit
+	if maxMatches <= 0 {
+		maxMatches = 200
+	}
+	if maxMatches > 2000 {
+		maxMatches = 2000
+	}
+	skipped := 0
 	foreign := paths.ForeignMounts(searchTarget)
 
-	_ = filepath.WalkDir(searchTarget, func(p string, d fs.DirEntry, walkErr error) error {
+	walkResult := filepath.WalkDir(searchTarget, func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil || ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -915,25 +1045,38 @@ func execGrepTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 				return filepath.SkipDir
 			}
 			nm := d.Name()
-			if nm == ".git" || nm == "node_modules" || nm == ".dart_tool" || nm == "build" {
+			if p != searchTarget && (nm == ".git" || nm == "node_modules" || nm == ".dart_tool" || nm == "build" || (!in.Hidden && strings.HasPrefix(nm, "."))) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if incRe != nil && !incRe.MatchString(d.Name()) {
+		if p != searchTarget && !in.Hidden && strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
+		rel, _ := filepath.Rel(searchTarget, p)
+		if incRe != nil && !incRe.MatchString(d.Name()) && !incRe.MatchString(filepath.ToSlash(rel)) {
 			return nil
 		}
 		info, err := d.Info()
 		if err != nil || !info.Mode().IsRegular() || info.Size() > 2*1024*1024 {
 			return nil
 		}
-		b, err := os.ReadFile(p)
-		if err != nil || bytes.IndexByte(b[:minInt(len(b), 4096)], 0) >= 0 {
-			return nil
-		}
 		disp := p
 		if rel, rErr := filepath.Rel(tc.absWorkdir, p); rErr == nil && !strings.HasPrefix(rel, "..") {
 			disp = filepath.ToSlash(rel)
+		}
+		if st.IsDir() && tc.env != nil {
+			tc.env.init()
+			effect, _ := tc.env.perms.EvaluateWithRules(tc.session.ID, tc.session.Agent, tc.session.PermissionMode, "read", disp, tc.session.PermissionRules)
+			searchEffect, _ := tc.env.perms.EvaluateWithRules(tc.session.ID, tc.session.Agent, tc.session.PermissionMode, "grep", disp, tc.session.PermissionRules)
+			if effect != "allow" || searchEffect != "allow" {
+				skipped++
+				return nil
+			}
+		}
+		b, err := readToolFile(p, 2<<20)
+		if err != nil || bytes.IndexByte(b[:minInt(len(b), 4096)], 0) >= 0 || !utf8.Valid(b) {
+			return nil
 		}
 		for idx, line := range strings.Split(string(b), "\n") {
 			if re.MatchString(line) {
@@ -949,13 +1092,18 @@ func execGrepTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 		}
 		return nil
 	})
-
+	if walkResult != nil {
+		return ToolExecResult{Output: "Search stopped: " + walkResult.Error(), IsError: true}
+	}
 	if len(matches) == 0 {
-		return ToolExecResult{Output: "No matches found."}
+		return ToolExecResult{Output: fmt.Sprintf("No matches in readable files. %d file(s) excluded by permissions; read a specific file to request access.", skipped)}
 	}
 	out := strings.Join(matches, "\n")
 	if len(matches) >= maxMatches {
 		out += fmt.Sprintf("\n\n(Results capped at %d matches. Refine pattern or path.)", maxMatches)
+	}
+	if skipped > 0 {
+		out += fmt.Sprintf("\n(%d file(s) excluded by permissions.)", skipped)
 	}
 	return ToolExecResult{Output: out, Metadata: map[string]any{"matches": len(matches)}}
 }
@@ -985,6 +1133,12 @@ func execShellTool(ctx context.Context, tc toolContext, rawInput json.RawMessage
 
 	if err := checkPerm("shell", cmdStr, map[string]any{"workdir": cwd}); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
+	if err := ctx.Err(); err != nil {
+		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
+	if current, _, err := resolveToolPath(tc, cwd, false); err != nil || current != cwd {
+		return ToolExecResult{Output: "Shell working directory changed during approval; request it again.", IsError: true}
 	}
 
 	timeoutMS := in.Timeout

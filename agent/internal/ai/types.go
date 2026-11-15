@@ -47,7 +47,10 @@ type ProviderConfig struct {
 	ModelName       string            `json:"model_name,omitempty"`
 	ContextWindow   int               `json:"context_window,omitempty"`
 	MaxOutputTokens int               `json:"max_tokens,omitempty"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"` // "low" | "medium" | "high"
+	ReasoningEffort string            `json:"reasoning_effort,omitempty"` // exact upstream value
+	ReasoningMode   string            `json:"reasoning_mode,omitempty"`
+	ThinkingBudget  int               `json:"thinking_budget,omitempty"`
+	Capabilities    map[string]bool   `json:"capabilities,omitempty"` // resolved per admitted input
 	Headers         map[string]string `json:"headers,omitempty"`
 	UseProxy        bool              `json:"use_proxy"`
 	ProxyMode       string            `json:"proxy_mode,omitempty"` // absent: legacy; system | agent | direct
@@ -123,12 +126,13 @@ type Part struct {
 	Redacted  string `json:"redacted,omitempty"`  // Anthropic redacted_thinking data
 
 	// Tool call & result
-	ToolName   string          `json:"name,omitempty"`
-	ToolCallID string          `json:"tool_call_id,omitempty"`
-	Input      json.RawMessage `json:"input,omitempty"`
-	Output     string          `json:"output,omitempty"`
-	IsError    bool            `json:"is_error,omitempty"`
-	Metadata   map[string]any  `json:"metadata,omitempty"`
+	ToolName    string          `json:"name,omitempty"`
+	ToolCallID  string          `json:"tool_call_id,omitempty"`
+	Input       json.RawMessage `json:"input,omitempty"`
+	Output      string          `json:"output,omitempty"`
+	IsError     bool            `json:"is_error,omitempty"`
+	Metadata    map[string]any  `json:"metadata,omitempty"`
+	Attachments []Part          `json:"attachments,omitempty"` // immutable tool-result media references
 
 	// Provider-specific replay metadata (e.g. reasoningField, itemId)
 	ProviderMeta map[string]any `json:"provider_meta,omitempty"`
@@ -241,16 +245,19 @@ type StreamEvent struct {
 	Runtime       *RuntimeInfo        `json:"runtime,omitempty"`
 	Context       *ContextInfo        `json:"context,omitempty"`
 	Inbox         []InboxItem         `json:"inbox,omitempty"`
+	Question      *UserQuestion       `json:"question,omitempty"`
 }
 
 // Explicit allowlist: credentials, account IDs, URLs and custom headers must
 // never enter persisted runtime metadata or broadcast stream events.
 type RuntimeInfo struct {
-	ProviderID   string `json:"provider_id,omitempty"`
-	ProviderName string `json:"provider_name,omitempty"`
-	Model        string `json:"model"`
-	Protocol     string `json:"protocol"`
-	AuthMode     string `json:"auth_mode,omitempty"`
+	ProviderID      string          `json:"provider_id,omitempty"`
+	ProviderName    string          `json:"provider_name,omitempty"`
+	Model           string          `json:"model"`
+	Protocol        string          `json:"protocol"`
+	AuthMode        string          `json:"auth_mode,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	Capabilities    map[string]bool `json:"capabilities,omitempty"`
 }
 
 type ContextInfo struct {

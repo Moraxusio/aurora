@@ -270,10 +270,7 @@ void main() {
     (t) async {
       await pump(t);
       expect(find.byKey(const ValueKey('ai-next-model')), findsNothing);
-      expect(
-        t.getSize(find.byKey(const ValueKey('ai-runtime-bar'))).height,
-        lessThanOrEqualTo(34),
-      );
+      expect(find.byKey(const ValueKey('ai-runtime-bar')), findsNothing);
       await expandDetails(t);
       expect(text(t, 'ai-actual-model'), contains('ChatGPT 订阅 / gpt-6.1-sol'));
       expect(text(t, 'ai-next-model'), contains('新网关 / new-model'));
@@ -356,6 +353,7 @@ void main() {
   );
   testWidgets('runtime dashboard fits a narrow mobile viewport', (t) async {
     await pump(t, width: 390);
+    await expandDetails(t);
     expect(find.byKey(const ValueKey('ai-runtime-bar')), findsOneWidget);
     await snapshot(t, 'ai-runtime-mobile');
   });

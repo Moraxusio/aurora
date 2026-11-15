@@ -730,3 +730,11 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - Linux amd64 agent：14,336,162 字节，SHA-256 `a31778f47daa50eb202774a1794c2f837b65b5a7bb286ef7558c28ad2ce7fb71`；Windows amd64 本地 agent：13,394,944 字节，SHA-256 `555ef13a5e5950d3457b04a6cf206d9ab3f19d1d081ef9468941e60a78d56e8f`。两类验签通过，密钥 ID `87828dfb18459372`；Go 元数据均为上述 revision 和 `vcs.modified=false`。
 - 源码和注释标签原子推送成功。三项资产上传草稿并核对 GitHub 服务端大小／SHA-256 后发布为正式 latest；公开 API 确认非草稿、非预发布，三项资产均经免认证重新下载，字节数和摘要与本地完全一致。证据见 [20261116-release-3.21.3.json](performance/20261116-release-3.21.3.json)。
 - 3.20.0／3.21.0 正式 ZIP 及 3.21.1／3.21.2／3.21.3 验收 ZIP 共 **5 个既有归档**摘要保持一致。正式包使用常规配置；临时 GitHub 授权在本次记录推送后清理。账号实机验收边界沿用上述记录。
+
+### 3.21.4 Windows 发布准备（2026-11-16）
+
+- 用户验收 `3.21.4-harness-preview1` 后授权打包与 GitHub 发布。范围为 Windows x64 客户端 `3.21.4+32104`、Windows amd64 本地 agent 与 Linux amd64 远程 agent，沿用发行签名密钥。
+- 本轮包含图片／PDF 工具读取与三协议媒体传递、全局／逐模型能力、自定义思考强度及映射、多文件补丁、结构化询问、逐工具检查点与恢复、四页 AI 设置和统一会话交互；保活面板局部浮层与独立语义边界修复原生 AXTree 残留。详见 [AI_HARNESS.md](AI_HARNESS.md)。
+- 已验收源码 **1353 个文件**的摘要在发布准备前逐项匹配。复用 Flutter **488 通过、20 条件跳过**、profile **56 通过**、Go Windows／Linux AI 回归、vet 与双平台构建，以及 80–150% 原生工作流证据；本轮生产代码不另改动。
+- 验收包双平台签名、真实 TLS harness、基础 agent 冒烟和实际 Release 启动通过。正式包从干净提交重新构建，另核对客户端 AOT、agent 签名及 revision、源码前后指纹、ZIP 全文件和正式随包 agent。
+- 新产物归档至 `release3/Aurora-3.21.4`，使用常规配置；保留既有正式包和独立验收包。推送源码与注释标签，上传 ZIP、sidecar、SHA256SUMS 三项资产，核对后发布为 latest。Android 继续暂缓；真实账号授权、订阅资格及模型识图质量仍由账号实测。

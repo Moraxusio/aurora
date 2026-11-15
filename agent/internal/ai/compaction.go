@@ -141,6 +141,9 @@ func EstimateMessagesTokens(msgs []Message) int {
 	for _, m := range msgs {
 		for _, p := range m.Parts {
 			total += EstimateTokens(p.Text) + EstimateTokens(p.Output) + EstimateTokens(string(p.Input))
+			if len(p.Attachments) > 0 {
+				total += EstimateMessagesTokens([]Message{{Parts: p.Attachments}})
+			}
 			if p.AttachmentID != "" {
 				if p.Type == "image" {
 					total += 1600
@@ -303,6 +306,9 @@ func renderMessagePlain(m Message) string {
 				lines = append(lines, fmt.Sprintf("[Assistant tool call]: %s(%s)", p.ToolName, in))
 			case "tool-result":
 				out := p.Output
+				for _, attachment := range p.Attachments {
+					out += fmt.Sprintf("\n[Captured attachment: %s (%s, %d bytes); visual contents are not included in this text summary]", attachment.Filename, attachment.Mime, attachment.Size)
+				}
 				if len(out) > 800 {
 					out = out[:800] + "\n...[truncated]"
 				}

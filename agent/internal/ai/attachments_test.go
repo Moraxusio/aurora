@@ -253,6 +253,11 @@ func TestDeletingSessionOnlyRemovesUnsharedAttachmentData(t *testing.T) {
 	for _, id := range []string{"a", "b"} {
 		e.sessions[id] = &Session{ID: id, Messages: []Message{{Role: "user", Parts: e.userParts("", []ContextAttachment{{AttachmentID: m.ID}})}}}
 	}
+	// A tool result retains the same immutable bytes after its original
+	// user message is deleted (and becomes a cleanup candidate itself).
+	e.sessions["b"].Messages = []Message{{Role: "assistant", Parts: []Part{{
+		Type: "tool-result", Attachments: []Part{{Type: "file", AttachmentID: m.ID}},
+	}}}}
 	path := filepath.Join(e.attachmentDir(), m.ID+".bin")
 	if err := e.DeleteSession("a"); err != nil {
 		t.Fatal(err)

@@ -5,5 +5,6 @@ library;
 export 'src/android_sealer.dart' show AndroidSealer;
 export 'src/dpapi.dart' show DpapiSealer;
 export 'src/profile.dart';
+export 'src/ai_capabilities.dart';
 export 'src/sealer.dart';
 export 'src/store.dart';

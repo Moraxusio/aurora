@@ -1,11 +1,10 @@
 part of 'ai_settings_dialog.dart';
 
 const _sections = [
-  ('connection', '连接与凭据', Icons.cable_outlined, '管理提供商、API 地址和登录方式'),
-  ('models', '模型目录', Icons.memory_outlined, '选择默认模型，管理目录与输入能力'),
-  ('execution', '执行权限', Icons.shield_outlined, '全局与项目规则，按顺序决定工具行为'),
-  ('network', '网络出口', Icons.public_outlined, '明确请求从哪里发出、经过哪个代理'),
-  ('defaults', '对话默认值', Icons.tune_rounded, '用于新建会话；会话内选择独立生效'),
+  ('connection', '连接', Icons.cable_outlined, '登录、接口与网络'),
+  ('models', '模型', Icons.memory_outlined, '逐模型设置能力和思考参数'),
+  ('execution', '工具与权限', Icons.shield_outlined, '全局工具默认值与执行权限'),
+  ('defaults', '对话', Icons.tune_rounded, '新会话默认值'),
 ];
 
 extension _SettingsPages on _AiSettingsDialogState {
@@ -179,11 +178,8 @@ extension _SettingsPages on _AiSettingsDialogState {
                                         ),
                                       ),
                                       const SizedBox(height: 20),
-                                      if ([
-                                        'connection',
-                                        'models',
-                                        'network',
-                                      ].contains(_section)) ...[
+                                      if (_section == 'connection' ||
+                                          _section == 'models') ...[
                                         _providerHeader(ide),
                                         const SizedBox(height: 18),
                                       ],
@@ -193,11 +189,25 @@ extension _SettingsPages on _AiSettingsDialogState {
                                           _current == null
                                               ? _emptyConnections(ide)
                                               : _modelsPage(ide),
-                                        'execution' => _permissionsPage(ide),
-                                        'network' =>
-                                          _current == null
-                                              ? _emptyConnections(ide)
-                                              : _networkPage(ide),
+                                        'execution' => Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _notice(
+                                              ide,
+                                              '这里设置所有模型的工具默认值。单个模型可在“模型”页覆盖；开启工具后仍按下方权限规则执行。',
+                                            ),
+                                            AiCapabilityEditor(
+                                              values: _ai.toolDefaults,
+                                              inherited: aiCapabilityDefaults,
+                                              onChanged: (v) => _change(
+                                                () => _ai.toolDefaults = v,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            _permissionsPage(ide),
+                                          ],
+                                        ),
                                         _ => _defaultsPage(ide),
                                       },
                                       if (_note != null) ...[
@@ -545,6 +555,12 @@ extension _SettingsPages on _AiSettingsDialogState {
           ],
         ),
         const SizedBox(height: 20),
+        ExpansionTile(
+          key: const ValueKey('ai-network-options'),
+          tilePadding: EdgeInsets.zero,
+          title: const Text('网络出口', style: TextStyle(fontSize: 13)),
+          children: [_networkPage(ide)],
+        ),
         Divider(color: ide.border),
         Align(
           alignment: Alignment.centerLeft,
@@ -646,19 +662,29 @@ extension _SettingsPages on _AiSettingsDialogState {
                   shrinkWrap: true,
                   itemCount: models.length,
                   itemBuilder: (_, index) {
-                    final id = models[index], selected = id == p.model;
+                    final id = models[index],
+                        selected = id == (_inspectedModel ?? p.model);
                     final limit = p.modelContextWindows[id];
-                    final image = p.imageSupport(id);
+                    final image =
+                        p.effectiveCapabilities(
+                          id,
+                          _ai.toolDefaults,
+                        )['image_input'] !=
+                        false;
                     return ListTile(
                       dense: true,
                       selected: selected,
                       selectedTileColor: ide.accent.withValues(alpha: .07),
-                      leading: Icon(
-                        selected
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
-                        size: 17,
-                        color: selected ? ide.accent : ide.textFaint,
+                      leading: IconButton(
+                        tooltip: id == p.model ? '默认模型' : '设为默认模型',
+                        onPressed: () => _model.text = id,
+                        icon: Icon(
+                          id == p.model
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          size: 17,
+                          color: id == p.model ? ide.accent : ide.textFaint,
+                        ),
                       ),
                       title: Text(
                         id,
@@ -666,11 +692,7 @@ extension _SettingsPages on _AiSettingsDialogState {
                         style: TextStyle(fontSize: 12, color: ide.text),
                       ),
                       subtitle: Text(
-                        '${image == null
-                            ? '图片能力未知'
-                            : image
-                            ? '支持图片'
-                            : '不支持图片'}${limit == null ? '' : ' · ${(limit / 1000).round()}k 上下文'}',
+                        '图片${image ? '开启' : '关闭'}${limit == null ? '' : ' · ${(limit / 1000).round()}k 上下文'}',
                         style: TextStyle(fontSize: 10.5, color: ide.textFaint),
                       ),
                       trailing: IconButton(
@@ -678,67 +700,38 @@ extension _SettingsPages on _AiSettingsDialogState {
                         icon: const Icon(Icons.close, size: 15),
                         onPressed: () => _removeModel(id),
                       ),
-                      onTap: () => _model.text = id,
+                      onTap: () => _change(() => _inspectedModel = id),
                     );
                   },
                 ),
         ),
         const SizedBox(height: 20),
-        if (p.model.isNotEmpty) ...[
-          Text(
-            '当前模型能力',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-              color: ide.text,
-            ),
-          ),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
+        if ((_inspectedModel ?? p.model).isNotEmpty)
+          AiModelOptionsEditor(
             key: ValueKey(
-              'ai-model-image-${p.id}-${p.model}-${p.imageSupport()}',
+              'ai-model-options-${p.id}-${_inspectedModel ?? p.model}',
             ),
-            initialValue: p.imageSupport() == null
-                ? 'unknown'
-                : p.imageSupport()!
-                ? 'yes'
-                : 'no',
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: '图片输入'),
-            items: const [
-              DropdownMenuItem(value: 'unknown', child: Text('未知 · 由实际调用确认')),
-              DropdownMenuItem(value: 'yes', child: Text('支持图片输入')),
-              DropdownMenuItem(value: 'no', child: Text('不支持图片输入')),
-            ],
-            onChanged: (v) => _change(() {
-              if (v == 'unknown') {
-                p.modelImageSupport.remove(p.model);
-              } else {
-                p.modelImageSupport[p.model] = v == 'yes';
-              }
-            }),
+            provider: p,
+            model: _inspectedModel ?? p.model,
+            defaults: _ai.toolDefaults,
+            onChanged: (v) =>
+                _change(() => p.modelOptions[_inspectedModel ?? p.model] = v),
           ),
-          const SizedBox(height: 16),
-          _field(
-            _context,
-            '此连接统一上下文上限',
-            numeric: true,
-            hint: '留空使用每个模型的目录值 / 估计值',
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            key: ValueKey('ai-reasoning-${p.id}-${p.reasoningEffort}'),
-            initialValue: p.reasoningEffort,
-            decoration: const InputDecoration(labelText: '此连接的默认思考强度'),
-            items: const [
-              DropdownMenuItem(value: '', child: Text('模型默认')),
-              DropdownMenuItem(value: 'low', child: Text('轻度')),
-              DropdownMenuItem(value: 'medium', child: Text('中度')),
-              DropdownMenuItem(value: 'high', child: Text('深度')),
-            ],
-            onChanged: (v) => _change(() => p.reasoningEffort = v!),
-          ),
-        ],
+        const SizedBox(height: 16),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: const Text('连接级预设', style: TextStyle(fontSize: 13)),
+          children: [
+            _field(_context, '统一上下文上限', numeric: true, hint: '留空使用模型目录值 / 估计值'),
+            const SizedBox(height: 12),
+            AiReasoningField(
+              key: ValueKey('ai-connection-effort-${p.id}'),
+              value: p.reasoningEffort,
+              label: '所有模型的默认思考强度',
+              onChanged: (v) => _change(() => p.reasoningEffort = v),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -765,7 +758,7 @@ extension _SettingsPages on _AiSettingsDialogState {
           onChanged: (v) => _change(() => _ai.selectedProviderId = v),
         )
       else
-        _notice(ide, '尚未连接提供商，请先在连接与凭据页添加。'),
+        _notice(ide, '尚未连接提供商，请先在“连接”页添加。'),
       const SizedBox(height: 18),
       DropdownButtonFormField<String>(
         initialValue: _ai.defaultAgent,

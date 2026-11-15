@@ -42,6 +42,7 @@ type Env struct {
 	perms      *PermissionGate
 	snapshots  *SnapshotManager
 	activities map[string]StreamEvent
+	questions  map[string]*pendingQuestion
 }
 
 func (e *Env) init() {
@@ -51,6 +52,7 @@ func (e *Env) init() {
 		e.subs = map[chan StreamEvent]struct{}{}
 		e.perms = NewPermissionGate()
 		e.activities = map[string]StreamEvent{}
+		e.questions = map[string]*pendingQuestion{}
 		e.snapshots = NewSnapshotManager(e.StateDir)
 		e.loadAllFromDisk()
 	})
@@ -82,6 +84,7 @@ func (e *Env) loadAllFromDisk() {
 		}
 		var s Session
 		if json.Unmarshal(b, &s) == nil && s.ID != "" {
+			recoverInterruptedTools(&s)
 			e.sessions[s.ID] = &s
 		}
 	}
@@ -542,6 +545,9 @@ func (e *Env) DeleteSession(id string) error {
 					if part.AttachmentID != "" {
 						attachmentCandidates[part.AttachmentID] = true
 					}
+					for _, attachment := range part.Attachments {
+						attachmentCandidates[attachment.AttachmentID] = true
+					}
 				}
 			}
 		}
@@ -641,6 +647,10 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	if prepErr != nil {
 		return SessionSummary{}, prepErr
 	}
+	in.Provider, prepErr = prepareModelOptions(in.Provider)
+	if prepErr != nil {
+		return SessionSummary{}, prepErr
+	}
 	if strings.TrimSpace(in.Text) == "" && len(in.Attachments) == 0 && in.InboxID == "" {
 		return SessionSummary{}, errors.New("prompt text must not be empty")
 	}
@@ -679,7 +689,7 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	}
 	// Deletion uses the same lock: a shared reference must not disappear
 	// between validation and publishing this message/inbox entry.
-	if err := e.validateAttachments(in.Attachments); err != nil {
+	if err := e.validateAttachments(in.Attachments, in.Provider); err != nil {
 		e.mu.Unlock()
 		return SessionSummary{}, err
 	}
@@ -780,6 +790,7 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	before.Messages = append([]Message(nil), s.Messages...)
 	before.Inbox = append([]InboxItem(nil), s.Inbox...)
 	prevAgent := s.Agent
+	recoverInterruptedTools(s)
 	s.Agent = agentMode
 	s.PermissionMode = permMode
 	s.PermissionRules = append([]PermissionRule(nil), in.PermissionRules...)
@@ -960,6 +971,7 @@ func (e *Env) finishRunLocked(sessionID string, owned *activeRun) {
 	e.perms.CancelSession(sessionID)
 	delete(e.running, sessionID)
 	if s := e.sessions[sessionID]; s != nil {
+		recoverInterruptedTools(s)
 		_ = e.persistSessionLocked(s)
 	}
 	e.broadcastLocked(StreamEvent{Type: "session.status", SessionID: sessionID, Status: "idle"})
@@ -1079,10 +1091,12 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			}
 		}
 
-		tools := ToolDefinitions(sessSnap.Agent, depth)
+		tools := modelToolDefinitions(sessSnap.Agent, depth, prov)
 		toolNames := make([]string, len(tools))
+		declaredTools := map[string]bool{}
 		for i, t := range tools {
 			toolNames[i] = t.Name
+			declaredTools[t.Name] = true
 		}
 		sysPrompts := BuildSystemPrompts(sessSnap.Agent, prov, absWorkdir, toolNames)
 		activeMsgs := BuildActiveHistory(sessSnap.Messages)
@@ -1166,17 +1180,38 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 
 		// Collect tool calls from assistant parts
 		var toolCalls []Part
-		for _, p := range llmResp.Parts {
+		callIDs := map[string]bool{}
+		for i, p := range llmResp.Parts {
 			if p.Type == "tool-call" {
+				if p.ToolCallID == "" || callIDs[p.ToolCallID] {
+					p.ToolCallID = NewID("call")
+					llmResp.Parts[i] = p
+				}
+				callIDs[p.ToolCallID] = true
 				toolCalls = append(toolCalls, p)
+			}
+		}
+		progressMessage := Message{ID: asstMsgID, SessionID: sessionID, Role: "assistant",
+			Agent: sessSnap.Agent, Model: prov.Model, Runtime: runtime, Finish: "tool-running",
+			Parts: append([]Part(nil), llmResp.Parts...), CreatedAt: time.Now().UnixMilli()}
+		if startTree != "" {
+			progressMessage.Snapshot = &StepSnapshot{Start: startTree}
+		}
+		if len(toolCalls) > 0 {
+			if err := e.checkpointStep(progressMessage); err != nil {
+				e.recordError(sessionID, prov.Model, "工具调用记录保存失败，未执行工具："+err.Error())
+				return
 			}
 		}
 
 		// Execute tool calls sequentially (preserving snapshot & doom-loop determinism; read-only calls are fast)
 		var resultParts []Part
-		for _, call := range toolCalls {
+		for callIndex, call := range toolCalls {
 			if ctx.Err() != nil {
-				break
+				resultParts = append(resultParts, Part{Type: "tool-result", ID: NewID("prt"),
+					ToolName: call.ToolName, ToolCallID: call.ToolCallID, IsError: true,
+					Output: "Not executed: the user stopped this run."})
+				continue
 			}
 			e.broadcast(StreamEvent{
 				Type:       "tool.running",
@@ -1195,7 +1230,9 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 				lastCalls = lastCalls[len(lastCalls)-3:]
 			}
 			var execRes ToolExecResult
-			if len(lastCalls) == 3 && lastCalls[0] == lastCalls[1] && lastCalls[1] == lastCalls[2] {
+			if callIndex >= 64 {
+				execRes = ToolExecResult{Output: "Not executed: a step supports at most 64 tool calls. Split the task into smaller steps.", IsError: true}
+			} else if declaredTools[call.ToolName] && len(lastCalls) == 3 && lastCalls[0] == lastCalls[1] && lastCalls[1] == lastCalls[2] {
 				q := PermissionQuestion{
 					ID:        NewID("perm"),
 					SessionID: sessionID,
@@ -1243,15 +1280,21 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			}
 
 			resPart := Part{
-				Type:       "tool-result",
-				ID:         NewID("prt"),
-				ToolName:   call.ToolName,
-				ToolCallID: call.ToolCallID,
-				Output:     execRes.Output,
-				IsError:    execRes.IsError,
-				Metadata:   execRes.Metadata,
+				Type:        "tool-result",
+				ID:          NewID("prt"),
+				ToolName:    call.ToolName,
+				ToolCallID:  call.ToolCallID,
+				Output:      execRes.Output,
+				IsError:     execRes.IsError,
+				Metadata:    execRes.Metadata,
+				Attachments: execRes.Attachments,
 			}
 			resultParts = append(resultParts, resPart)
+			progressMessage.Parts = append(append([]Part(nil), llmResp.Parts...), resultParts...)
+			if err := e.checkpointStep(progressMessage); err != nil {
+				e.recordError(sessionID, prov.Model, "工具已返回，但结果保存失败；后续调用已暂停，请核对实际状态："+err.Error())
+				return
+			}
 
 			e.broadcast(StreamEvent{
 				Type:       "tool.done",
@@ -1295,11 +1338,15 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			Snapshot:  stepSnap,
 			CreatedAt: time.Now().UnixMilli(),
 		}
+		if ctx.Err() != nil {
+			asstMsg.Finish = "aborted"
+		}
 
 		var totalUsage Usage
+		var persistErr error
 		e.mu.Lock()
 		if cur := e.sessions[sessionID]; cur != nil {
-			cur.Messages = append(cur.Messages, asstMsg)
+			putStepMessage(cur, asstMsg)
 			cur.TotalUsage.Add(llmResp.Usage)
 			if llmResp.Usage.InputTokens > 0 {
 				cur.LastInputToks = llmResp.Usage.InputTokens
@@ -1316,7 +1363,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			}
 			cur.Context = contextState
 			totalUsage = cur.TotalUsage
-			_ = e.persistSessionLocked(cur)
+			persistErr = e.persistSessionLocked(cur)
 		}
 		e.mu.Unlock()
 
@@ -1336,6 +1383,10 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			Runtime:    runtime,
 			Context:    contextState,
 		})
+		if persistErr != nil {
+			e.recordError(sessionID, prov.Model, "步骤结果保存失败，任务已暂停："+persistErr.Error())
+			return
+		}
 
 		if ctx.Err() != nil {
 			return
@@ -1356,6 +1407,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			}
 		}
 	}
+	e.recordError(sessionID, "", "已达到单次任务的工具步骤上限，请确认当前结果后发送新的指令继续。")
 }
 
 func (e *Env) recordError(sessionID, model, errMsg string) {

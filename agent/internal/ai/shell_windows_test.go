@@ -14,6 +14,7 @@ func TestWindowsAIShellInheritsProxyAndStreams(t *testing.T) {
 	sub := e.subscribe()
 	defer e.unsubscribe(sub)
 	tc := toolContext{env: e, session: &Session{ID: "fixture", Agent: "build", PermissionMode: "auto"}, provider: ProviderConfig{UseProxy: true}, absWorkdir: t.TempDir(), callID: "shell-fixture"}
+	tc.rootPath = tc.absWorkdir
 	e.Proxy = func() map[string]string { return map[string]string{"HTTP_PROXY": "http://127.0.0.1:12345"} }
 	res := execShellTool(context.Background(), tc, json.RawMessage(`{"command":"Write-Output $env:HTTP_PROXY; Start-Sleep -Milliseconds 200; Write-Output 'fixture-done'"}`), func(string, string, map[string]any) error { return nil })
 	if res.IsError || !strings.Contains(res.Output, "http://127.0.0.1:12345") || !strings.Contains(res.Output, "fixture-done") {
@@ -42,6 +43,7 @@ func TestWindowsAIShellExplicitRoutes(t *testing.T) {
 	e.init()
 	for _, mode := range []string{"system", "agent", "direct"} {
 		tc := toolContext{env: e, session: &Session{ID: "route-fixture", Agent: "build", PermissionMode: "auto"}, provider: ProviderConfig{ProxyMode: mode}, absWorkdir: t.TempDir()}
+		tc.rootPath = tc.absWorkdir
 		res := execShellTool(context.Background(), tc, json.RawMessage(`{"command":"[Console]::WriteLine('ROUTE=' + $env:HTTP_PROXY + '|' + $env:HTTPS_PROXY + '|' + $env:ALL_PROXY + '|' + $env:NO_PROXY)"}`), func(string, string, map[string]any) error { return nil })
 		want := map[string]string{"system": "ROUTE=http://127.0.0.1:18101|http://127.0.0.1:18102|socks5://127.0.0.1:18103|system.fixture", "agent": "ROUTE=http://127.0.0.1:18104|||", "direct": "ROUTE=|||"}[mode]
 		if res.IsError || !strings.Contains(res.Output, want) {
@@ -50,6 +52,7 @@ func TestWindowsAIShellExplicitRoutes(t *testing.T) {
 	}
 	e.AgentProxy = func() map[string]string { return nil }
 	tc := toolContext{env: e, session: &Session{ID: "missing-fixture"}, provider: ProviderConfig{ProxyMode: "agent"}, absWorkdir: t.TempDir()}
+	tc.rootPath = tc.absWorkdir
 	res := execShellTool(context.Background(), tc, json.RawMessage(`{"command":"Write-Output 'MUST-NOT-RUN'"}`), func(string, string, map[string]any) error { return nil })
 	if !res.IsError || strings.Contains(res.Output, "MUST-NOT-RUN") {
 		t.Fatal("missing node executed the shell")

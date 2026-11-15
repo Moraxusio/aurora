@@ -20,6 +20,7 @@ func TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel(t *testing.T) {
 		Model    string          `json:"model"`
 		Messages json.RawMessage `json:"messages"`
 		Tools    []any           `json:"tools"`
+		Effort   string          `json:"reasoning_effort"`
 	}
 	requests := make(chan request, 8)
 	replies := make(chan bool, 8)
@@ -61,7 +62,8 @@ func TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel(t *testing.T) {
 	events := env.subscribe()
 	defer env.unsubscribe(events)
 	provider := func(model string) ProviderConfig {
-		return ProviderConfig{ID: model, Model: model, Protocol: "openai-chat", BaseURL: server.URL, APIKey: "never-save-this"}
+		return ProviderConfig{ID: model, Model: model, Protocol: "openai-chat", BaseURL: server.URL, APIKey: "never-save-this",
+			ReasoningEffort: model + "-effort", Capabilities: map[string]bool{"grep": model != "queue-model-one"}}
 	}
 	sum, err := env.StartRun(RunInput{Root: "work", Workdir: "/", Agent: "plan", Text: "initial", Provider: provider("initial-model")})
 	if err != nil {
@@ -84,10 +86,12 @@ func TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel(t *testing.T) {
 		{"queued-two", "queue", "queue-model-two"},
 		{"steering-now", "steer", "steer-model"},
 	} {
-		_, err := env.StartRun(RunInput{SessionID: sum.ID, Agent: "plan", Text: item.text, Delivery: item.delivery, Provider: provider(item.model)})
+		cfg := provider(item.model)
+		_, err := env.StartRun(RunInput{SessionID: sum.ID, Agent: "plan", Text: item.text, Delivery: item.delivery, Provider: cfg})
 		if err != nil {
 			t.Fatal(err)
 		}
+		cfg.Capabilities["grep"] = !cfg.Capabilities["grep"]
 	}
 	sess, _, _, _ := env.GetSession(sum.ID)
 	if sess.Model != "initial-model" || len(sess.Inbox) != 3 {
@@ -115,10 +119,16 @@ func TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel(t *testing.T) {
 	if got.Model != "queue-model-one" || !strings.Contains(string(got.Messages), "queued-one") || strings.Contains(string(got.Messages), "queued-two") {
 		t.Fatal("queued inputs were not delivered one at a time")
 	}
+	if strings.Contains(string(fixtureJSON(got.Tools)), `"name":"grep"`) || got.Effort != "queue-model-one-effort" {
+		t.Fatal("first queued input lost its capabilities or custom effort")
+	}
 	replies <- false
 	got = next()
 	if got.Model != "queue-model-two" || !strings.Contains(string(got.Messages), "queued-two") {
 		t.Fatal("second queue lost its model or input")
+	}
+	if !strings.Contains(string(fixtureJSON(got.Tools)), `"name":"grep"`) || got.Effort != "queue-model-two-effort" {
+		t.Fatal("queued input inherited another input's options")
 	}
 	replies <- false
 	timeout := time.After(5 * time.Second)

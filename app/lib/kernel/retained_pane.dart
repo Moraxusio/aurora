@@ -51,7 +51,21 @@ class _RetainedPaneState extends State<RetainedPane> {
                   key: widget.viewportKey,
                   child: SizedBox.fromSize(
                     size: _size,
-                    child: RepaintBoundary(child: body),
+                    // Portaled tooltips and selection controls must share the
+                    // pane's paint/semantics lifetime. A root-overlay tooltip
+                    // can otherwise outlive its hidden parent while its exit
+                    // animation is paused by TickerMode.
+                    child: RepaintBoundary(
+                      child: Semantics(
+                        container: true,
+                        explicitChildNodes: true,
+                        child: Overlay.wrap(
+                          alwaysSizeToContent: true,
+                          clipBehavior: Clip.none,
+                          child: body,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),

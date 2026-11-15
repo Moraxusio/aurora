@@ -36,23 +36,25 @@ class AiSessionSummary {
   });
 
   factory AiSessionSummary.fromJson(Map<String, dynamic> j) => AiSessionSummary(
-        id: j['id'] as String? ?? '',
-        parentId: j['parent_id'] as String? ?? '',
-        title: j['title'] as String? ?? '新会话',
-        pinned: j['pinned'] == true,
-        root: j['root'] as String? ?? '',
-        workdir: j['workdir'] as String? ?? '/',
-        agent: j['agent'] as String? ?? 'build',
-        model: j['model'] as String? ?? '',
-        preview: j['preview'] as String? ?? '',
-        running: j['running'] == true,
-        pendingPermission: j['pending_permission'] is Map
-            ? AiPermissionQuestion.fromJson((j['pending_permission'] as Map).cast<String, dynamic>())
-            : null,
-        messageCount: (j['message_count'] as num?)?.toInt() ?? 0,
-        createdAt: (j['created_at'] as num?)?.toInt() ?? 0,
-        updatedAt: (j['updated_at'] as num?)?.toInt() ?? 0,
-      );
+    id: j['id'] as String? ?? '',
+    parentId: j['parent_id'] as String? ?? '',
+    title: j['title'] as String? ?? '新会话',
+    pinned: j['pinned'] == true,
+    root: j['root'] as String? ?? '',
+    workdir: j['workdir'] as String? ?? '/',
+    agent: j['agent'] as String? ?? 'build',
+    model: j['model'] as String? ?? '',
+    preview: j['preview'] as String? ?? '',
+    running: j['running'] == true,
+    pendingPermission: j['pending_permission'] is Map
+        ? AiPermissionQuestion.fromJson(
+            (j['pending_permission'] as Map).cast<String, dynamic>(),
+          )
+        : null,
+    messageCount: (j['message_count'] as num?)?.toInt() ?? 0,
+    createdAt: (j['created_at'] as num?)?.toInt() ?? 0,
+    updatedAt: (j['updated_at'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// One hit of `ai.search`: a session whose title or text holds every word.
@@ -63,15 +65,21 @@ class AiSearchHit {
   final int updatedAt;
   final String snippet;
 
-  const AiSearchHit({required this.sessionId, required this.title, required this.workdir, required this.updatedAt, required this.snippet});
+  const AiSearchHit({
+    required this.sessionId,
+    required this.title,
+    required this.workdir,
+    required this.updatedAt,
+    required this.snippet,
+  });
 
   factory AiSearchHit.fromJson(Map<String, dynamic> j) => AiSearchHit(
-        sessionId: j['session_id'] as String? ?? '',
-        title: j['title'] as String? ?? '',
-        workdir: j['workdir'] as String? ?? '/',
-        updatedAt: (j['updated_at'] as num?)?.toInt() ?? 0,
-        snippet: j['snippet'] as String? ?? '',
-      );
+    sessionId: j['session_id'] as String? ?? '',
+    title: j['title'] as String? ?? '',
+    workdir: j['workdir'] as String? ?? '/',
+    updatedAt: (j['updated_at'] as num?)?.toInt() ?? 0,
+    snippet: j['snippet'] as String? ?? '',
+  );
 }
 
 /// Which day-group a session belongs to in the history list.
@@ -102,11 +110,11 @@ class AiTodoItem {
   });
 
   factory AiTodoItem.fromJson(Map<String, dynamic> j) => AiTodoItem(
-        id: '${j['id'] ?? ''}',
-        content: j['content'] as String? ?? '',
-        status: j['status'] as String? ?? 'pending',
-        priority: j['priority'] as String? ?? 'medium',
-      );
+    id: '${j['id'] ?? ''}',
+    content: j['content'] as String? ?? '',
+    status: j['status'] as String? ?? 'pending',
+    priority: j['priority'] as String? ?? 'medium',
+  );
 }
 
 class AiFileDiff {
@@ -125,12 +133,12 @@ class AiFileDiff {
   });
 
   factory AiFileDiff.fromJson(Map<String, dynamic> j) => AiFileDiff(
-        file: j['file'] as String? ?? '',
-        additions: (j['additions'] as num?)?.toInt() ?? 0,
-        deletions: (j['deletions'] as num?)?.toInt() ?? 0,
-        status: j['status'] as String? ?? 'modified',
-        patch: j['patch'] as String? ?? '',
-      );
+    file: j['file'] as String? ?? '',
+    additions: (j['additions'] as num?)?.toInt() ?? 0,
+    deletions: (j['deletions'] as num?)?.toInt() ?? 0,
+    status: j['status'] as String? ?? 'modified',
+    patch: j['patch'] as String? ?? '',
+  );
 }
 
 class AiStepSnapshot {
@@ -141,13 +149,13 @@ class AiStepSnapshot {
   const AiStepSnapshot({this.start = '', this.end = '', this.files = const []});
 
   factory AiStepSnapshot.fromJson(Map<String, dynamic> j) => AiStepSnapshot(
-        start: j['start'] as String? ?? '',
-        end: j['end'] as String? ?? '',
-        files: [
-          for (final f in (j['files'] as List? ?? const []))
-            if (f is Map) AiFileDiff.fromJson(f.cast<String, dynamic>()),
-        ],
-      );
+    start: j['start'] as String? ?? '',
+    end: j['end'] as String? ?? '',
+    files: [
+      for (final f in (j['files'] as List? ?? const []))
+        if (f is Map) AiFileDiff.fromJson(f.cast<String, dynamic>()),
+    ],
+  );
 }
 
 class AiUsage {
@@ -170,14 +178,14 @@ class AiUsage {
   });
 
   factory AiUsage.fromJson(Map<String, dynamic> j) => AiUsage(
-        inputTokens: (j['input_tokens'] as num?)?.toInt() ?? 0,
-        outputTokens: (j['output_tokens'] as num?)?.toInt() ?? 0,
-        cacheReadTokens: (j['cache_read_tokens'] as num?)?.toInt() ?? 0,
-        cacheWriteTokens: (j['cache_write_tokens'] as num?)?.toInt() ?? 0,
-        reasoningTokens: (j['reasoning_tokens'] as num?)?.toInt() ?? 0,
-        totalTokens: (j['total_tokens'] as num?)?.toInt() ?? 0,
-        cost: (j['cost'] as num?)?.toDouble() ?? 0,
-      );
+    inputTokens: (j['input_tokens'] as num?)?.toInt() ?? 0,
+    outputTokens: (j['output_tokens'] as num?)?.toInt() ?? 0,
+    cacheReadTokens: (j['cache_read_tokens'] as num?)?.toInt() ?? 0,
+    cacheWriteTokens: (j['cache_write_tokens'] as num?)?.toInt() ?? 0,
+    reasoningTokens: (j['reasoning_tokens'] as num?)?.toInt() ?? 0,
+    totalTokens: (j['total_tokens'] as num?)?.toInt() ?? 0,
+    cost: (j['cost'] as num?)?.toDouble() ?? 0,
+  );
 }
 
 class AiPart {
@@ -190,8 +198,9 @@ class AiPart {
   final String output;
   final bool isError;
   final Map<String, dynamic> metadata;
-  final String attachmentId,mime,filename;
+  final String attachmentId, mime, filename;
   final int size;
+  final List<AiPart> attachments;
 
   const AiPart({
     required this.type,
@@ -203,7 +212,11 @@ class AiPart {
     this.output = '',
     this.isError = false,
     this.metadata = const {},
-    this.attachmentId='',this.mime='',this.filename='',this.size=0,
+    this.attachmentId = '',
+    this.mime = '',
+    this.filename = '',
+    this.size = 0,
+    this.attachments = const [],
   });
 
   factory AiPart.fromJson(Map<String, dynamic> j) {
@@ -223,8 +236,17 @@ class AiPart {
       inputJson: rawInput,
       output: j['output'] as String? ?? '',
       isError: j['is_error'] == true,
-      metadata: j['metadata'] is Map ? (j['metadata'] as Map).cast<String, dynamic>() : const {},
-      attachmentId:j['attachment_id'] as String? ?? '',mime:j['mime'] as String? ?? '',filename:j['filename'] as String? ?? '',size:(j['size'] as num?)?.toInt() ?? 0,
+      metadata: j['metadata'] is Map
+          ? (j['metadata'] as Map).cast<String, dynamic>()
+          : const {},
+      attachments: [
+        for (final a in j['attachments'] as List? ?? const [])
+          if (a is Map) AiPart.fromJson(a.cast<String, dynamic>()),
+      ],
+      attachmentId: j['attachment_id'] as String? ?? '',
+      mime: j['mime'] as String? ?? '',
+      filename: j['filename'] as String? ?? '',
+      size: (j['size'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -235,9 +257,25 @@ class AiRuntimeInfo {
   final String model;
   final String protocol;
   final String authMode;
-  const AiRuntimeInfo({this.providerName='', this.providerId='', this.model='', this.protocol='', this.authMode=''});
-  factory AiRuntimeInfo.fromJson(Map<String, dynamic> j) => AiRuntimeInfo(providerName:j['provider_name'] as String? ?? '', providerId:j['provider_id'] as String? ?? '', model:j['model'] as String? ?? '', protocol:j['protocol'] as String? ?? '', authMode:j['auth_mode'] as String? ?? '');
-  String get label => '${providerName.isEmpty ? '未知提供商' : providerName} / $model';
+  final String reasoningEffort;
+  const AiRuntimeInfo({
+    this.providerName = '',
+    this.providerId = '',
+    this.model = '',
+    this.protocol = '',
+    this.authMode = '',
+    this.reasoningEffort = '',
+  });
+  factory AiRuntimeInfo.fromJson(Map<String, dynamic> j) => AiRuntimeInfo(
+    providerName: j['provider_name'] as String? ?? '',
+    providerId: j['provider_id'] as String? ?? '',
+    model: j['model'] as String? ?? '',
+    protocol: j['protocol'] as String? ?? '',
+    authMode: j['auth_mode'] as String? ?? '',
+    reasoningEffort: j['reasoning_effort'] as String? ?? '',
+  );
+  String get label =>
+      '${providerName.isEmpty ? '未知提供商' : providerName} / $model${reasoningEffort.isEmpty ? '' : ' · $reasoningEffort'}';
 }
 
 class AiContextInfo {
@@ -246,8 +284,20 @@ class AiContextInfo {
   final int lastInput;
   final bool estimated;
   final String limitSource;
-  const AiContextInfo({this.tokens=0, this.limit=0, this.lastInput=0, this.estimated=true, this.limitSource='unknown'});
-  factory AiContextInfo.fromJson(Map<String, dynamic> j) => AiContextInfo(tokens:(j['tokens'] as num?)?.toInt() ?? 0, limit:(j['limit'] as num?)?.toInt() ?? 0, lastInput:(j['last_input'] as num?)?.toInt() ?? 0, estimated:j['estimated'] != false, limitSource:j['limit_source'] as String? ?? 'unknown');
+  const AiContextInfo({
+    this.tokens = 0,
+    this.limit = 0,
+    this.lastInput = 0,
+    this.estimated = true,
+    this.limitSource = 'unknown',
+  });
+  factory AiContextInfo.fromJson(Map<String, dynamic> j) => AiContextInfo(
+    tokens: (j['tokens'] as num?)?.toInt() ?? 0,
+    limit: (j['limit'] as num?)?.toInt() ?? 0,
+    lastInput: (j['last_input'] as num?)?.toInt() ?? 0,
+    estimated: j['estimated'] != false,
+    limitSource: j['limit_source'] as String? ?? 'unknown',
+  );
   double? get ratio => limit > 0 ? tokens / limit : null;
 }
 
@@ -281,25 +331,35 @@ class AiMessage {
   });
 
   bool get isSystemReminder =>
-      role == 'user' && parts.length == 1 && parts.first.text.trimLeft().startsWith('<system-reminder>');
+      role == 'user' &&
+      parts.length == 1 &&
+      parts.first.text.trimLeft().startsWith('<system-reminder>');
 
   factory AiMessage.fromJson(Map<String, dynamic> j) => AiMessage(
-        id: j['id'] as String? ?? '',
-        sessionId: j['session_id'] as String? ?? '',
-        role: j['role'] as String? ?? 'user',
-        agent: j['agent'] as String? ?? '',
-        model: j['model'] as String? ?? '',
-        runtime: j['runtime'] is Map ? AiRuntimeInfo.fromJson((j['runtime'] as Map).cast<String, dynamic>()) : null,
-        parts: [
-          for (final p in (j['parts'] as List? ?? const []))
-            if (p is Map) AiPart.fromJson(p.cast<String, dynamic>()),
-        ],
-        finish: j['finish'] as String? ?? '',
-        error: j['error'] as String? ?? '',
-        usage: j['usage'] is Map ? AiUsage.fromJson((j['usage'] as Map).cast<String, dynamic>()) : null,
-        snapshot: j['snapshot'] is Map ? AiStepSnapshot.fromJson((j['snapshot'] as Map).cast<String, dynamic>()) : null,
-        createdAt: (j['created_at'] as num?)?.toInt() ?? 0,
-      );
+    id: j['id'] as String? ?? '',
+    sessionId: j['session_id'] as String? ?? '',
+    role: j['role'] as String? ?? 'user',
+    agent: j['agent'] as String? ?? '',
+    model: j['model'] as String? ?? '',
+    runtime: j['runtime'] is Map
+        ? AiRuntimeInfo.fromJson((j['runtime'] as Map).cast<String, dynamic>())
+        : null,
+    parts: [
+      for (final p in (j['parts'] as List? ?? const []))
+        if (p is Map) AiPart.fromJson(p.cast<String, dynamic>()),
+    ],
+    finish: j['finish'] as String? ?? '',
+    error: j['error'] as String? ?? '',
+    usage: j['usage'] is Map
+        ? AiUsage.fromJson((j['usage'] as Map).cast<String, dynamic>())
+        : null,
+    snapshot: j['snapshot'] is Map
+        ? AiStepSnapshot.fromJson(
+            (j['snapshot'] as Map).cast<String, dynamic>(),
+          )
+        : null,
+    createdAt: (j['created_at'] as num?)?.toInt() ?? 0,
+  );
 }
 
 class AiSession {
@@ -339,36 +399,40 @@ class AiSession {
     List<AiMessage>? messages,
     this.createdAt = 0,
     this.updatedAt = 0,
-  })  : todos = todos ?? [],
-        messages = messages ?? [];
+  }) : todos = todos ?? [],
+       messages = messages ?? [];
 
   factory AiSession.fromJson(Map<String, dynamic> j) => AiSession(
-        id: j['id'] as String? ?? '',
-        parentId: j['parent_id'] as String? ?? '',
-        title: j['title'] as String? ?? '新会话',
-        root: j['root'] as String? ?? '',
-        workdir: j['workdir'] as String? ?? '/',
-        agent: j['agent'] as String? ?? 'build',
-        permissionMode: j['permission_mode'] as String? ?? 'ask',
-        model: j['model'] as String? ?? '',
-        protocol: j['protocol'] as String? ?? '',
-        todos: [
-          for (final t in (j['todos'] as List? ?? const []))
-            if (t is Map) AiTodoItem.fromJson(t.cast<String, dynamic>()),
-        ],
-        totalUsage: j['total_usage'] is Map
-            ? AiUsage.fromJson((j['total_usage'] as Map).cast<String, dynamic>())
-            : const AiUsage(),
-        lastInputTokens: (j['last_input_tokens'] as num?)?.toInt() ?? 0,
-        runtime: j['runtime'] is Map ? AiRuntimeInfo.fromJson((j['runtime'] as Map).cast<String, dynamic>()) : null,
-        context: j['context'] is Map ? AiContextInfo.fromJson((j['context'] as Map).cast<String, dynamic>()) : null,
-        messages: [
-          for (final m in (j['messages'] as List? ?? const []))
-            if (m is Map) AiMessage.fromJson(m.cast<String, dynamic>()),
-        ],
-        createdAt: (j['created_at'] as num?)?.toInt() ?? 0,
-        updatedAt: (j['updated_at'] as num?)?.toInt() ?? 0,
-      );
+    id: j['id'] as String? ?? '',
+    parentId: j['parent_id'] as String? ?? '',
+    title: j['title'] as String? ?? '新会话',
+    root: j['root'] as String? ?? '',
+    workdir: j['workdir'] as String? ?? '/',
+    agent: j['agent'] as String? ?? 'build',
+    permissionMode: j['permission_mode'] as String? ?? 'ask',
+    model: j['model'] as String? ?? '',
+    protocol: j['protocol'] as String? ?? '',
+    todos: [
+      for (final t in (j['todos'] as List? ?? const []))
+        if (t is Map) AiTodoItem.fromJson(t.cast<String, dynamic>()),
+    ],
+    totalUsage: j['total_usage'] is Map
+        ? AiUsage.fromJson((j['total_usage'] as Map).cast<String, dynamic>())
+        : const AiUsage(),
+    lastInputTokens: (j['last_input_tokens'] as num?)?.toInt() ?? 0,
+    runtime: j['runtime'] is Map
+        ? AiRuntimeInfo.fromJson((j['runtime'] as Map).cast<String, dynamic>())
+        : null,
+    context: j['context'] is Map
+        ? AiContextInfo.fromJson((j['context'] as Map).cast<String, dynamic>())
+        : null,
+    messages: [
+      for (final m in (j['messages'] as List? ?? const []))
+        if (m is Map) AiMessage.fromJson(m.cast<String, dynamic>()),
+    ],
+    createdAt: (j['created_at'] as num?)?.toInt() ?? 0,
+    updatedAt: (j['updated_at'] as num?)?.toInt() ?? 0,
+  );
 }
 
 class AiPermissionQuestion {
@@ -403,7 +467,8 @@ class AiPermissionQuestion {
     this.metadata = const {},
   });
 
-  factory AiPermissionQuestion.fromJson(Map<String, dynamic> j) => AiPermissionQuestion(
+  factory AiPermissionQuestion.fromJson(Map<String, dynamic> j) =>
+      AiPermissionQuestion(
         id: j['id'] as String? ?? '',
         sessionId: j['session_id'] as String? ?? '',
         messageId: j['message_id'] as String? ?? '',
@@ -414,7 +479,9 @@ class AiPermissionQuestion {
         reason: j['reason'] as String? ?? '',
         reasonCode: j['reason_code'] as String? ?? '',
         scope: j['always_scope'] as String? ?? '',
-        metadata: j['metadata'] is Map ? (j['metadata'] as Map).cast<String, dynamic>() : const {},
+        metadata: j['metadata'] is Map
+            ? (j['metadata'] as Map).cast<String, dynamic>()
+            : const {},
       );
 
   /// The reason in Chinese. A code from the agent wins; otherwise the English
@@ -436,12 +503,16 @@ class AiPermissionQuestion {
   }
 
   static String _codeOfText(String text) {
-    if (text.startsWith('File modification requires')) return 'file_modification';
-    if (text.startsWith('Shell command execution requires')) return 'shell_command';
+    if (text.startsWith('File modification requires'))
+      return 'file_modification';
+    if (text.startsWith('Shell command execution requires'))
+      return 'shell_command';
     if (text.startsWith('High-impact shell command')) return 'high_risk_shell';
     if (text.startsWith('Accessing potential secret')) return 'sensitive_file';
     if (text.startsWith('Plan mode requires confirmation')) return 'plan_shell';
-    if (text.startsWith('Repeated identical tool call') || text.startsWith('Agent invoked the exact same tool')) return 'repeated_call';
+    if (text.startsWith('Repeated identical tool call') ||
+        text.startsWith('Agent invoked the exact same tool'))
+      return 'repeated_call';
     return '';
   }
 
@@ -490,15 +561,16 @@ class AiAttachment {
     required this.label,
     this.path = '',
     required this.content,
-    this.bytes,this.mime='text/plain',
+    this.bytes,
+    this.mime = 'text/plain',
   });
 
   Map<String, dynamic> toJson() => {
-        'kind': kind,
-        'label': label,
-        if (path.isNotEmpty) 'path': path,
-        'content': content,
-      };
+    'kind': kind,
+    'label': label,
+    if (path.isNotEmpty) 'path': path,
+    'content': content,
+  };
 }
 
 class LiveToolCall {

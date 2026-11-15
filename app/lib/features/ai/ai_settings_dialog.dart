@@ -14,6 +14,8 @@ import '../../theme/ide_theme.dart';
 import 'ai_auth.dart';
 import 'ai_model_discovery.dart';
 import 'ai_oauth_client.dart';
+import 'ai_capability_editor.dart';
+import 'ai_reasoning_field.dart';
 
 part 'ai_settings_pages.dart';
 
@@ -43,26 +45,48 @@ const _presets = <(String, String, String, String)>[
   ('自定义兼容网关', 'openai-chat', '', ''),
 ];
 
+final _settingsDialogs = Expando<Future<void>>();
+
 Future<void> showAiSettingsDialog(
   BuildContext context, {
   required AppState app,
   Workspace? ws,
+  String initialSection = 'connection',
+  String? providerId,
+  String? model,
   AiOAuthClient Function()? localAuthFactory,
-}) => showWorkbenchDialog<void>(
-  context: context,
-  barrierDismissible: false,
-  builder: (_) =>
-      AiSettingsDialog(app: app, ws: ws, localAuthFactory: localAuthFactory),
-);
+}) {
+  final pending = _settingsDialogs[app];
+  if (pending != null) return pending;
+  final dialog = showWorkbenchDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => AiSettingsDialog(
+      app: app,
+      ws: ws,
+      localAuthFactory: localAuthFactory,
+      initialSection: initialSection,
+      providerId: providerId,
+      model: model,
+    ),
+  ).whenComplete(() => _settingsDialogs[app] = null);
+  _settingsDialogs[app] = dialog;
+  return dialog;
+}
 
 class AiSettingsDialog extends StatefulWidget {
   final AppState app;
   final Workspace? ws;
+  final String initialSection;
+  final String? providerId, model;
   final AiOAuthClient Function()? localAuthFactory;
   const AiSettingsDialog({
     super.key,
     required this.app,
     this.ws,
+    this.initialSection = 'connection',
+    this.providerId,
+    this.model,
     this.localAuthFactory,
   });
   @override
@@ -74,6 +98,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   late Map<String, String> _originalKeys;
   late String _baseline;
   String? _editingId;
+  String? _inspectedModel;
   String _section = 'connection';
   final _name = TextEditingController();
   final _url = TextEditingController();
@@ -115,7 +140,14 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
         : AiSettings();
     _originalKeys = {for (final p in _ai.providers) p.id: p.apiKey};
     _clientNetwork = widget.ws?.link == null;
-    _load(_ai.activeProvider);
+    _load(
+      _ai.providers.where((p) => p.id == widget.providerId).firstOrNull ??
+          _ai.activeProvider,
+    );
+    _section = _sections.any((s) => s.$1 == widget.initialSection)
+        ? widget.initialSection
+        : 'connection';
+    _inspectedModel = widget.model;
     _baseline = _snapshot();
     _ruleBaseline = _ruleSnapshot();
     for (final field in _fields) {
@@ -186,6 +218,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   void _load(AiProvider? p) {
     _loadingFields = true;
     _editingId = p?.id;
+    _inspectedModel = null;
     _name.text = p?.name ?? '';
     _url.text = p?.baseUrl ?? '';
     _key.text = p?.apiKey ?? '';
@@ -270,11 +303,11 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     final p = AiProvider.fromJson(selected.toJson());
     final link = widget.ws?.link;
     if (_clientNetwork && p.proxyMode == 'agent') {
-      setState(() => _error = '此连接使用 agent 代理，请在网络出口页选择“当前 agent”拉取目录。');
+      setState(() => _error = '此连接使用 agent 代理，请在“连接 → 网络出口”选择“当前 agent”拉取目录。');
       return;
     }
     if (!_clientNetwork && link == null) {
-      setState(() => _error = '当前 agent 未连接；可在网络出口页选择本机网络。');
+      setState(() => _error = '当前 agent 未连接；可在“连接 → 网络出口”选择本机网络。');
       return;
     }
     final request = ++_request;
@@ -357,6 +390,8 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       p.models.remove(id);
       p.modelImageSupport.remove(id);
       p.modelContextWindows.remove(id);
+      p.modelOptions.remove(id);
+      if (_inspectedModel == id) _inspectedModel = null;
       if (p.model == id) _model.clear();
     });
   }
@@ -482,6 +517,44 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     }
     for (final p in _ai.providers) {
       String? error;
+      if (p.reasoningEffort.length > 64 ||
+          RegExp(r'[\x00-\x1f\x7f]').hasMatch(p.reasoningEffort)) {
+        setState(() {
+          _load(p);
+          _section = 'models';
+          _error = '连接思考预设最多 64 字符，不能包含控制字符。';
+        });
+        return;
+      }
+      for (final entry in p.modelOptions.entries) {
+        final options = entry.value;
+        final efforts = [
+          options.reasoningEffort ?? '',
+          ...options.reasoningEfforts.keys,
+          ...options.reasoningEfforts.values,
+        ];
+        if (efforts.any(
+          (v) => v.length > 64 || RegExp(r'[\x00-\x1f]').hasMatch(v),
+        )) {
+          error = '${entry.key}：思考档位与发送值最多 64 字符，不能包含控制字符。';
+        } else if (options.reasoningMode.startsWith('anthropic-') &&
+            p.protocol != 'anthropic-messages') {
+          error = '${entry.key}：Anthropic 思考格式需要 Messages 协议。';
+        } else if (options.reasoningMode == 'anthropic-budget' &&
+            (options.thinkingBudget < 1024 ||
+                options.thinkingBudget > 1000000)) {
+          error = '${entry.key}：思考预算应为 1024–1000000 Token。';
+        }
+        if (error != null) {
+          setState(() {
+            _load(p);
+            _inspectedModel = entry.key;
+            _section = 'models';
+            _error = error;
+          });
+          return;
+        }
+      }
       final uri = Uri.tryParse(p.baseUrl);
       if (p.name.trim().isEmpty) {
         error = '请为连接填写名称。';

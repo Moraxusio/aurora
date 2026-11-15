@@ -2,7 +2,10 @@ import 'dart:convert';
 
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
+import 'package:pdfrx/pdfrx.dart';
+
 import '../../kernel/overlays.dart';
+
 import 'package:flutter/services.dart';
 
 import '../../theme/ide_theme.dart';
@@ -23,20 +26,27 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
   @override
   void initState() {
     super.initState();
-    if (isImage) data = downloadAiAttachment(widget.link, widget.part.attachmentId);
+    if (isImage)
+      data = downloadAiAttachment(widget.link, widget.part.attachmentId);
   }
 
   @override
   void didUpdateWidget(covariant AiAttachmentTile old) {
     super.didUpdateWidget(old);
-    if (old.part.attachmentId != widget.part.attachmentId || !identical(old.link, widget.link)) {
-      data = isImage ? downloadAiAttachment(widget.link, widget.part.attachmentId) : null;
+    if (old.part.attachmentId != widget.part.attachmentId ||
+        !identical(old.link, widget.link)) {
+      data = isImage
+          ? downloadAiAttachment(widget.link, widget.part.attachmentId)
+          : null;
     }
   }
 
   Future<void> _open() async {
     try {
-      final bytes = await (data ??= downloadAiAttachment(widget.link, widget.part.attachmentId));
+      final bytes = await (data ??= downloadAiAttachment(
+        widget.link,
+        widget.part.attachmentId,
+      ));
       if (!mounted) return;
       await showWorkbenchDialog<void>(
         context: context,
@@ -46,20 +56,41 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
             width: 720,
             child: isImage
                 ? InteractiveViewer(
-                    child: Image.memory(bytes, cacheWidth: 1600, errorBuilder: (_, _, _) => const Text('图片解码失败')),
+                    child: Image.memory(
+                      bytes,
+                      cacheWidth: 1600,
+                      errorBuilder: (_, _, _) => const Text('图片解码失败'),
+                    ),
+                  )
+                : widget.part.mime == 'application/pdf'
+                ? SizedBox(
+                    height: 480,
+                    child: PdfViewer.data(
+                      bytes,
+                      sourceName: widget.part.filename,
+                    ),
                   )
                 : SingleChildScrollView(
                     child: SelectableText(
-                      widget.part.mime.startsWith('text/') ? utf8.decode(bytes) : 'PDF 已作为原始文档附件提供给模型。',
+                      widget.part.mime.startsWith('text/')
+                          ? utf8.decode(bytes)
+                          : 'PDF 已作为原始文档附件提供给模型。',
                     ),
                   ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
         ),
       );
     } on Object {
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('附件读取失败，文件可能已清理或服务器未连接')));
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('附件读取失败，文件可能已清理或服务器未连接')));
       }
     }
   }
@@ -92,8 +123,10 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
                             snapshot.data!,
                             cacheWidth: 640,
                             fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) =>
-                                const Padding(padding: EdgeInsets.all(16), child: Text('图片无法解码')),
+                            errorBuilder: (_, _, _) => const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text('图片无法解码'),
+                            ),
                           ),
                         );
                       }
@@ -102,7 +135,13 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
                         child: Center(
                           child: snapshot.hasError
                               ? const Icon(Icons.broken_image_outlined)
-                              : const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                              : const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
                         ),
                       );
                     },

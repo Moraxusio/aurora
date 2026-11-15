@@ -10,7 +10,27 @@ import 'package:integration_test/integration_test.dart';
 import '../test/support/gui_workflow.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  if (const bool.fromEnvironment('AURORA_GUI_TRACE')) {
+    final previous = <int, String>{};
+    binding.addPersistentFrameCallback((_) {
+      final owner = binding.renderViews.firstOrNull?.owner?.semanticsOwner;
+      if (owner == null) return;
+      for (var id = 0; id < 2000; id++) {
+        final node = owner.getSemanticsNode(id);
+        if (node == null && !previous.containsKey(id)) continue;
+        final data = node?.getSemanticsData();
+        final value = jsonEncode({
+          'id': id, 'parent': node?.parent?.id, 'label': data?.label,
+          'value': data?.value, 'tooltip': data?.tooltip,
+          'linkParent': node?.traversalParentIdentifier == null ? null : identityHashCode(node!.traversalParentIdentifier),
+          'linkChild': node?.traversalChildIdentifier == null ? null : identityHashCode(node!.traversalChildIdentifier),
+        });
+        if (previous[id] != value) debugPrint('GUI_NODE $value');
+        if (node == null) { previous.remove(id); } else { previous[id] = value; }
+      }
+    });
+  }
   testWidgets('Windows production-root GUI interaction audit', (t) async {
     // Profile rejects the debug-only client ID -1. Register the test IME so
     // injected text/actions carry the real active client ID on the native engine.

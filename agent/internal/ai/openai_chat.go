@@ -147,6 +147,9 @@ func streamOpenAIChat(ctx context.Context, req LLMRequest, proxyEnv func() map[s
 					"content":      tr.Output,
 				})
 			}
+			if media := toolMediaTurn(toolResults, false); len(media) > 0 {
+				messages = append(messages, map[string]any{"role": "user", "content": media})
+			}
 
 		case "tool":
 			for _, tr := range msg.Parts {
@@ -157,6 +160,9 @@ func streamOpenAIChat(ctx context.Context, req LLMRequest, proxyEnv func() map[s
 						"content":      tr.Output,
 					})
 				}
+			}
+			if media := toolMediaTurn(msg.Parts, false); len(media) > 0 {
+				messages = append(messages, map[string]any{"role": "user", "content": media})
 			}
 		}
 	}

@@ -3,7 +3,8 @@ package ai
 import "encoding/json"
 
 func runtimeInfo(cfg ProviderConfig) *RuntimeInfo {
-	return &RuntimeInfo{ProviderID: cfg.ID, ProviderName: cfg.Name, Model: cfg.Model, Protocol: cfg.Protocol, AuthMode: cfg.AuthMode}
+	return &RuntimeInfo{ProviderID: cfg.ID, ProviderName: cfg.Name, Model: cfg.Model, Protocol: cfg.Protocol, AuthMode: cfg.AuthMode,
+		ReasoningEffort: cfg.ReasoningEffort, Capabilities: resolvedCapabilities(cfg)}
 }
 
 func contextLimit(cfg ProviderConfig) (int, string) {

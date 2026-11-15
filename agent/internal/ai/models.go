@@ -346,8 +346,20 @@ var errSSEStreamDone = errors.New("sse stream done")
 
 // StreamLLM dispatches an LLMRequest through the selected OpenCode protocol with automatic retry on transient errors.
 func StreamLLM(ctx context.Context, req LLMRequest, proxyEnv func() map[string]string, onDelta func(LLMDelta)) (LLMResponse, error) {
+	var optionErr error
+	req.Provider, optionErr = prepareModelOptions(req.Provider)
+	if optionErr != nil {
+		return LLMResponse{}, optionErr
+	}
+	filtered := make([]ToolDef, 0, len(req.Tools))
+	for _, tool := range req.Tools {
+		if req.Provider.allows("tool_calling") && req.Provider.allows(tool.Name) {
+			filtered = append(filtered, tool)
+		}
+	}
+	req.Tools = filtered
 	var mediaErr error
-	req.Messages, mediaErr = materializeAttachments(req.Messages, req.LoadAttachment)
+	req.Messages, mediaErr = materializeAttachments(req.Messages, req.LoadAttachment, req.Provider)
 	if mediaErr != nil {
 		return LLMResponse{}, mediaErr
 	}

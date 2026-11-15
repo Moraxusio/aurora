@@ -1,0 +1,118 @@
+{
+  "date": "2026-11-16",
+  "version": "3.21.3",
+  "platform": "Windows x64",
+  "source_revision": "d1369c43e8639baf94b33204e26263c5fbd9a162",
+  "tag": "v3.21.3",
+  "release_url": "https://github.com/Moraxusio/aurora/releases/tag/v3.21.3",
+  "release_id": 446182845,
+  "published_at_utc": "2026-11-15T16:09:47Z",
+  "public_downloads_verified_at_utc": "2026-11-15T16:10:17.3603575Z",
+  "draft": false,
+  "prerelease": false,
+  "public_latest_verified": true,
+  "build": {
+    "target": "lib/main.dart",
+    "client_version": "3.21.3+32103",
+    "windows_build_seconds": 10.1,
+    "source_files_checked_before_and_after_build": 1474,
+    "client_aot_sha256": "9ce147c5878da0e096e2015fa3810df23cfd3a644696ac593aaae92aa1f9e2c6",
+    "accepted_candidate_aot_identical": true,
+    "clean_before_and_after": true
+  },
+  "package": {
+    "directory": "C:/dev/VPS/release3/Aurora-3.21.3",
+    "zip_bytes": 32217575,
+    "zip_sha256": "9319f77d0836809cbc8a995dd377cb5792c0252d92e699c5eb70321770e24ff2",
+    "zip_files_identical_to_directory": 33,
+    "opencode_mit_attribution_present": true,
+    "private_or_preview_files": 0,
+    "agents": [
+      {
+        "product": "aurora3-agent",
+        "platform": "linux/amd64",
+        "version": "3.21.3",
+        "bytes": 14336162,
+        "sha256": "a31778f47daa50eb202774a1794c2f837b65b5a7bb286ef7558c28ad2ce7fb71",
+        "key_id": "87828dfb18459372",
+        "signature_verified": true,
+        "source_revision": "d1369c43e8639baf94b33204e26263c5fbd9a162",
+        "vcs_modified": false
+      },
+      {
+        "product": "aurora3-local-agent",
+        "platform": "windows/amd64",
+        "version": "3.21.3",
+        "bytes": 13394944,
+        "sha256": "555ef13a5e5950d3457b04a6cf206d9ab3f19d1d081ef9468941e60a78d56e8f",
+        "key_id": "87828dfb18459372",
+        "signature_verified": true,
+        "source_revision": "d1369c43e8639baf94b33204e26263c5fbd9a162",
+        "vcs_modified": false
+      }
+    ]
+  },
+  "regression": {
+    "reused_from_accepted_candidate": true,
+    "details": "docs/AI_REDESIGN.md",
+    "flutter": {
+      "passed": 481,
+      "skipped": 20,
+      "failed": 0
+    },
+    "profile_passed": 53,
+    "dart_analyze": {
+      "errors": 0,
+      "warnings": 0,
+      "info": 52
+    },
+    "go_ai_tests_passed": true,
+    "go_ai_vet_passed": true,
+    "go_full_module_build_passed": true,
+    "new_interaction_tests_passed": 18,
+    "production_gui_workflow_scales": [0.8, 0.85, 1.0, 1.25, 1.5],
+    "dark_and_light_layout_screenshots_reviewed": true,
+    "real_account_auth_and_model_calls": "requires user-account validation"
+  },
+  "publication": {
+    "source_and_annotated_tag_pushed_atomically": true,
+    "assets_verified_before_publication": true,
+    "public_latest_verified": true,
+    "unauthenticated_downloads_verified": true,
+    "assets": [
+      {
+        "name": "Aurora-3.21.3.zip",
+        "bytes": 32217575,
+        "sha256": "9319f77d0836809cbc8a995dd377cb5792c0252d92e699c5eb70321770e24ff2",
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.21.3/Aurora-3.21.3.zip",
+        "public_asset_id": 751540834,
+        "server_digest_verified": true,
+        "unauthenticated_download_verified": true
+      },
+      {
+        "name": "Aurora-3.21.3.zip.sha256",
+        "bytes": 85,
+        "sha256": "34900d96022998c1360b340b9ea24d35dacda15397dd58c4a0cd053bfc9a4f91",
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.21.3/Aurora-3.21.3.zip.sha256",
+        "public_asset_id": 751541095,
+        "server_digest_verified": true,
+        "unauthenticated_download_verified": true
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 175,
+        "sha256": "36cfd184a433d47a0178e4f30a7cf34f47cacea1c503039a20c766fa87312300",
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.21.3/SHA256SUMS.txt",
+        "public_asset_id": 751541136,
+        "server_digest_verified": true,
+        "unauthenticated_download_verified": true
+      }
+    ]
+  },
+  "protection": {
+    "protected_archives_unchanged": 5,
+    "formal_zip_versions": ["3.20.0", "3.21.0"],
+    "acceptance_zip_versions": ["3.21.1", "3.21.2", "3.21.3"],
+    "android_release": "deferred"
+  }
+}

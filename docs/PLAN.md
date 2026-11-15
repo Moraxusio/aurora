@@ -713,3 +713,11 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 正式包隔离启动成功，连接同包本地 agent 后正常退出；客户端和 agent 均为自有进程，GUI 异常记录 0，隔离 profile／实例未触及用户配置。
 - GitHub 先推送源码和标签，再上传草稿；3 项资产的大小和 SHA-256 均与 GitHub 服务端摘要一致后转为正式 latest。发布记录见 [20261115-release-3.21.0.json](performance/20261115-release-3.21.0.json)。
 - 3.20.0 正式包、三个预览、v2 工作区和 `release` 顶层 13 项保护基线未改变。临时 GitHub 授权已清理，Android 继续暂缓。
+
+### 3.21.3 Windows 发布准备（2026-11-16）
+
+- 用户验收 3.21.3 独立候选后授权编译、打包及 GitHub 发布。范围为 Windows x64 客户端 `3.21.3+32103`、Linux amd64 远程 agent、Windows amd64 本地 agent；沿用发行签名密钥。3.21.1／3.21.2 为本地验收迭代，本次统一从干净提交发布为 3.21.3。
+- AI 设置五分区、草稿与默认连接分离、会话独立模型／思考强度、审批重试与授权撤销、项目权限规则、补充／排队状态机及持久化恢复；一并包含验收阶段的 GUI 对比度、快捷键、窄窗布局和后台刷新修正。实现与实际边界见 [AI_REDESIGN.md](AI_REDESIGN.md)。
+- 复用同一生产实现的最终回归：Flutter **481 通过、20 跳过、0 失败**，profile **53 通过**；Dart analyze **0 error、0 warning、52 info**。Go AI 测试、vet、全模块 build 及 diff 检查通过。18 项新增交互、80–150% GUI 工作流、深浅色宽窄布局截图与 SSE 投递／恢复／持久化失败夹具均已验证。
+- 正式产物写入新的 `release3/Aurora-3.21.3`，以常规配置方式启动。核对干净源码 revision、两类 agent 签名与构建元数据、客户端版本、ZIP 全文件一致性、许可证和发布资产摘要；验收启动器和 review-data 留在独立候选中。
+- 发布使用现有 `Moraxusio/aurora` 仓库：推送源码与标签，上传 ZIP、sidecar、SHA256SUMS 三项资产并核对后发布为 latest。真实账号授权／模型调用仍需用户账号验收，Android 继续暂缓。

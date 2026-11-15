@@ -43,6 +43,8 @@ func (s svc) Operations() []service.Operation {
 		{Name: "ai.run", Handle: s.opRun},
 		{Name: "ai.stop", Handle: s.opStop},
 		{Name: "ai.approve", Handle: s.opApprove},
+		{Name: "ai.inbox", Handle: s.opInbox},
+		{Name: "ai.permissions", Handle: s.opPermissions},
 		{Name: "ai.revert", Handle: s.opRevert},
 		{Name: "ai.compact", Handle: s.opCompact},
 		{Name: "ai.models", Handle: s.opModels},
@@ -57,6 +59,99 @@ func (s svc) Operations() []service.Operation {
 		{Name: "ai.attach.upload", Stream: s.opAttachmentUpload},
 		{Name: "ai.attach.download", Stream: s.opAttachmentDownload},
 	}
+}
+
+func (s svc) opInbox(_ context.Context, raw json.RawMessage) (any, error) {
+	var in struct {
+		SessionID string `json:"session_id"`
+		ID        string `json:"id"`
+		Action    string `json:"action"` // cancel | steer | queue; empty lists
+	}
+	if err := decodeArgs(raw, &in); err != nil {
+		return nil, err
+	}
+	s.init()
+	s.mu.Lock()
+	session := s.sessions[in.SessionID]
+	if session == nil {
+		s.mu.Unlock()
+		return nil, wire.Errf(wire.CodeNotFound, "会话不存在")
+	}
+	if in.Action != "" {
+		if in.Action != "cancel" && in.Action != "steer" && in.Action != "queue" {
+			s.mu.Unlock()
+			return nil, wire.Errf(wire.CodeBadRequest, "不支持的投递操作")
+		}
+		index := -1
+		for i, item := range session.Inbox {
+			if item.ID == in.ID {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			s.mu.Unlock()
+			return nil, wire.Errf(wire.CodeNotFound, "输入已投递或已移除")
+		}
+		before := append([]InboxItem(nil), session.Inbox...)
+		item := session.Inbox[index]
+		if in.Action != "cancel" && !s.inboxActiveLocked(in.SessionID, in.ID) {
+			s.mu.Unlock()
+			return nil, wire.Errf(wire.CodeBadRequest, "这条输入已保留，请等待当前任务停止后使用当前选择重新发送")
+		}
+		if in.Action == "cancel" {
+			session.Inbox = append(session.Inbox[:index], session.Inbox[index+1:]...)
+		} else {
+			item.Delivery = in.Action
+			session.Inbox[index] = item
+		}
+		if err := s.persistSessionLocked(session); err != nil {
+			session.Inbox = before
+			s.mu.Unlock()
+			return nil, wire.Errf(wire.CodeInternal, "%v", err)
+		}
+		if run := s.running[in.SessionID]; run != nil {
+			remove := func(items []InboxItem) []InboxItem {
+				for i, v := range items {
+					if v.ID == in.ID {
+						return append(items[:i], items[i+1:]...)
+					}
+				}
+				return items
+			}
+			run.inbox = remove(run.inbox)
+			run.queued = remove(run.queued)
+			if in.Action == "steer" {
+				run.inbox = append(run.inbox, item)
+			}
+			if in.Action == "queue" {
+				run.queued = append(run.queued, item)
+			}
+		}
+	}
+	pending := s.inboxSnapshotLocked(session)
+	s.mu.Unlock()
+	if in.Action != "" {
+		s.broadcast(StreamEvent{Type: "inbox.updated", SessionID: in.SessionID, Inbox: pending})
+	}
+	return map[string]any{"items": pending}, nil
+}
+
+func (s svc) opPermissions(_ context.Context, raw json.RawMessage) (any, error) {
+	var in struct {
+		SessionID string `json:"session_id"`
+		Action    string `json:"action"`
+		Resource  string `json:"resource"`
+		Revoke    bool   `json:"revoke"`
+	}
+	if err := decodeArgs(raw, &in); err != nil {
+		return nil, err
+	}
+	s.init()
+	if _, _, _, err := s.GetSession(in.SessionID); err != nil {
+		return nil, wire.Errf(wire.CodeNotFound, "%v", err)
+	}
+	return map[string]any{"grants": s.perms.SessionGrants(in.SessionID, in.Action, in.Resource, in.Revoke)}, nil
 }
 
 func (s svc) opUpdate(_ context.Context, raw json.RawMessage) (any, error) {

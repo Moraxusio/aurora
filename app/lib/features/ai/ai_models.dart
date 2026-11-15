@@ -380,6 +380,13 @@ class AiPermissionQuestion {
   final String action;
   final String resource;
   final String reason;
+
+  /// Stable name of [reason] (agent 3.21.1+); empty from older agents.
+  final String reasonCode;
+
+  /// What "allow for this session" would remember ("git *" or "*"); empty from
+  /// older agents, which is then derived with [alwaysScope].
+  final String scope;
   final Map<String, dynamic> metadata;
 
   const AiPermissionQuestion({
@@ -391,6 +398,8 @@ class AiPermissionQuestion {
     required this.action,
     required this.resource,
     this.reason = '',
+    this.reasonCode = '',
+    this.scope = '',
     this.metadata = const {},
   });
 
@@ -403,8 +412,69 @@ class AiPermissionQuestion {
         action: j['action'] as String? ?? '',
         resource: j['resource'] as String? ?? '',
         reason: j['reason'] as String? ?? '',
+        reasonCode: j['reason_code'] as String? ?? '',
+        scope: j['always_scope'] as String? ?? '',
         metadata: j['metadata'] is Map ? (j['metadata'] as Map).cast<String, dynamic>() : const {},
       );
+
+  /// The reason in Chinese. A code from the agent wins; otherwise the English
+  /// text of agents before the code existed is matched, so an old agent reads
+  /// the same.
+  String get reasonText {
+    final code = reasonCode.isNotEmpty ? reasonCode : _codeOfText(reason);
+    return switch (code) {
+      'file_modification' => '这一步会修改服务器上的文件',
+      'shell_command' => '这一步会执行一条命令',
+      'high_risk_shell' => '这条命令影响很大，即使在自动模式下也需要你确认',
+      'sensitive_file' => '这个文件可能含有密钥或环境凭据',
+      'plan_shell' => '规划模式下，会改动系统的命令需要确认',
+      'repeated_call' => 'AI 连续三次发出了完全相同的调用，可能陷入循环',
+      'plan_read_only' => '规划模式只读，不能修改文件',
+      'explore_read_only' || 'explore_shell' => '探索子代理只读',
+      _ => reason,
+    };
+  }
+
+  static String _codeOfText(String text) {
+    if (text.startsWith('File modification requires')) return 'file_modification';
+    if (text.startsWith('Shell command execution requires')) return 'shell_command';
+    if (text.startsWith('High-impact shell command')) return 'high_risk_shell';
+    if (text.startsWith('Accessing potential secret')) return 'sensitive_file';
+    if (text.startsWith('Plan mode requires confirmation')) return 'plan_shell';
+    if (text.startsWith('Repeated identical tool call') || text.startsWith('Agent invoked the exact same tool')) return 'repeated_call';
+    return '';
+  }
+
+  /// What "allow for this session" covers, in words, for the button.
+  String get alwaysLabel {
+    final s = scope.isNotEmpty ? scope : alwaysScope(action, resource);
+    if (action == 'shell' && s.endsWith(' *') && s != '*') {
+      return '本会话始终允许 ${s.substring(0, s.length - 2)} 开头的命令';
+    }
+    if ((action == 'edit' || action == 'write') && s.endsWith('/*')) {
+      final dir = s.substring(0, s.length - 2);
+      return '本会话始终允许修改 ${dir.isEmpty ? '当前目录' : '$dir/'} 下的文件';
+    }
+    if ((action == 'edit' || action == 'write') && s != '*') {
+      return '本会话始终允许修改此文件';
+    }
+    return switch (action) {
+      'edit' || 'write' => '本会话始终允许修改文件',
+      'shell' => '本会话始终允许执行命令',
+      _ => '本会话始终允许',
+    };
+  }
+
+  /// Mirrors the agent's savePattern for agents that do not send the scope.
+  static String alwaysScope(String action, String resource) {
+    if (action == 'shell') {
+      final words = resource.trim().split(RegExp(r'\s+'));
+      if (words.isNotEmpty && words.first.isNotEmpty) return '${words.first} *';
+    }
+    // Older agents do not send always_scope. Keep their generic wording; new
+    // agents send the precise directory or file scope explicitly.
+    return '*';
+  }
 }
 
 class AiAttachment {

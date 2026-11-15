@@ -17,6 +17,8 @@ import '../../theme/ide_theme.dart';
 import 'ai_model_picker.dart';
 import 'ai_auth.dart';
 import 'ai_models.dart';
+import 'ai_permission_card.dart';
+import 'ai_session_grants.dart';
 import 'ai_settings_dialog.dart';
 import 'ai_attachments.dart';
 import 'ai_path_picker.dart';
@@ -30,6 +32,48 @@ import 'ai_visuals.dart';
 class _AiPasteIntent extends Intent {
   const _AiPasteIntent();
 }
+
+/// The words of the two switches under the input, and of the send button.
+/// Chinese first: the English names are the agent's own and stay as a hint.
+abstract final class AiComposerText {
+  static String agent(String mode, {required bool narrow}) => mode == 'plan'
+      ? (narrow ? '规划' : '规划 · 只读')
+      : (narrow ? '构建' : '构建 · 可改文件');
+
+  static String agentTip(String mode) => mode == 'plan'
+      ? '规划模式（Plan）：只读文件、讨论方案，不修改任何文件。点击切换为构建'
+      : '构建模式（Build）：可以修改文件、运行命令。点击切换为规划';
+
+  static String permission(String mode, {required bool narrow}) =>
+      mode == 'auto' ? (narrow ? '自动' : '自动执行') : (narrow ? '询问' : '先询问');
+
+  static String permissionTip(String mode) => mode == 'auto'
+      ? '自动执行（Auto）：改文件和运行命令不再逐次询问，只有高风险命令仍会确认。点击切换为先询问'
+      : '先询问（Ask）：改文件和运行命令前会让你确认。点击切换为自动执行';
+
+  /// What sending does right now: a new turn, or a nudge into a turn that is running.
+  static String send({required bool running, required bool sending}) =>
+      sending ? '准备中' : (running ? '补充指令' : '发送');
+
+  static String sendTip({required bool running}) =>
+      running ? '把这条消息插入正在进行的任务（Enter）' : '发送（Enter）；Shift+Enter 换行';
+
+  static String hint({required bool running, required String agentMode}) =>
+      running
+      ? '任务进行中：输入补充指令，回车后会插入当前任务'
+      : (agentMode == 'plan' ? '规划任务，不修改文件…' : '向 AI 提问，或描述要完成的任务…');
+}
+
+const _aiSlashCommands = <(String, String)>[
+  ('/help', '查看可用的会话快捷命令'),
+  ('/compact', '压缩当前会话上下文'),
+  ('/plan', '切换到规划模式（只读）'),
+  ('/build', '切换到构建模式（可修改文件）'),
+  ('/ask', '切换为每次操作前询问'),
+  ('/auto', '切换为自动执行（高风险仍会询问）'),
+  ('/stop', '停止当前运行'),
+  ('/model', '打开本次对话的模型选择器'),
+];
 
 EditorTab aiStudioTab(
   Workspace ws, {
@@ -113,6 +157,7 @@ class _AiStudioViewState extends State<_AiConversation> {
 
   String _agentMode = 'build'; // 'build' | 'plan'
   String _permMode = 'ask'; // 'ask' | 'auto'
+  String _deliveryMode = 'steer'; // 'steer' | 'queue'
 
   // Live streaming buffers for the active step
   String _liveReasoning = '';
@@ -130,6 +175,7 @@ class _AiStudioViewState extends State<_AiConversation> {
   Timer? _paintTimer;
   double _chatFontSize = 15;
   AiProvider? _provider;
+  bool _selectionExplicit = false;
   String? _reasoningOverride;
   bool _reasoningOverrideSet = false;
   String? _editorId;
@@ -149,6 +195,13 @@ class _AiStudioViewState extends State<_AiConversation> {
   final Map<String, Map<String, dynamic>> _activities = {};
   final List<Map<String, dynamic>> _loadingEvents = [];
   bool _replayingEvents = false;
+  bool _approvalBusy = false;
+  String? _approvalError;
+  List<Map<String, dynamic>> _inbox = [];
+  int _inboxGeneration = 0;
+  final _inboxChanges = ValueNotifier<int>(0);
+  bool _inboxBusy = false;
+  String? _inboxError;
 
   Workspace get ws => widget.ws;
 
@@ -160,7 +213,11 @@ class _AiStudioViewState extends State<_AiConversation> {
       final ai = ws.app.aiSettings;
       _agentMode = ai.defaultAgent;
       _permMode = ai.permissionMode;
-      _provider = ai.activeProvider;
+      _deliveryMode = ai.followUp;
+      final initial = ai.activeProvider;
+      _provider = initial == null
+          ? null
+          : AiProvider.fromJson(initial.toJson());
     }
     _chatFontSize = ws.app.appearance.value.chatFont;
     _editorId = ws.editorActiveId;
@@ -181,14 +238,20 @@ class _AiStudioViewState extends State<_AiConversation> {
     _inputCtl.dispose();
     _inputFocus.dispose();
     _scrollCtl.dispose();
+    _inboxChanges.dispose();
     super.dispose();
   }
 
   void _onAppChanged() {
-    if (mounted)
-      setState(() {
-        _provider = ws.app.ready ? ws.app.aiSettings.activeProvider : null;
-      });
+    if (!mounted) return;
+    setState(() {
+      final ai = ws.app.ready ? ws.app.aiSettings : AiSettings();
+      final previous = _provider;
+      final live = ai.providers.where((p) => p.id == previous?.id).firstOrNull;
+      final source = live ?? (!_selectionExplicit ? ai.activeProvider : null);
+      _provider = source == null ? null : AiProvider.fromJson(source.toJson());
+      if (live != null && previous != null) _provider!.model = previous.model;
+    });
   }
 
   void _onAppearance() {
@@ -289,6 +352,7 @@ class _AiStudioViewState extends State<_AiConversation> {
         (res['session'] as Map).cast<String, dynamic>(),
       );
       final running = res['running'] == true;
+      final initialLoad = _session == null;
       final pending = res['pending_permission'] is Map
           ? AiPermissionQuestion.fromJson(
               (res['pending_permission'] as Map).cast<String, dynamic>(),
@@ -296,6 +360,10 @@ class _AiStudioViewState extends State<_AiConversation> {
           : null;
       setState(() {
         _session = sess;
+        _inbox = [
+          for (final item in ((res['session'] as Map)['inbox'] as List? ?? []))
+            if (item is Map) item.cast<String, dynamic>(),
+        ];
         _messageCache.clear();
         _running = running;
         _pendingPerm = pending;
@@ -308,11 +376,25 @@ class _AiStudioViewState extends State<_AiConversation> {
         }
         _root = sess.root;
         _workdir = sess.workdir;
-        _agentMode = sess.agent == 'plan' ? 'plan' : 'build';
-        if (sess.permissionMode.isNotEmpty) _permMode = sess.permissionMode;
+        if (initialLoad) {
+          _agentMode = sess.agent == 'plan' ? 'plan' : 'build';
+          if (sess.permissionMode.isNotEmpty) _permMode = sess.permissionMode;
+        }
+        if (!_selectionExplicit &&
+            sess.runtime?.providerId.isNotEmpty == true) {
+          final source = ws.app.aiSettings.providers
+              .where((p) => p.id == sess.runtime!.providerId)
+              .firstOrNull;
+          if (source != null) {
+            _provider = AiProvider.fromJson(source.toJson())
+              ..model = sess.runtime!.model;
+            _selectionExplicit = true;
+          }
+        }
         _loading = false;
       });
       _updateTabTitle(sess.title);
+      _inboxChanges.value++;
       if (widget.primary || widget.work.revisionFor(id) == workRevision) {
         widget.work.hydrate(
           sess,
@@ -533,6 +615,8 @@ class _AiStudioViewState extends State<_AiConversation> {
           );
       }
       switch (type) {
+        case 'inbox.updated':
+          unawaited(_refreshInbox());
         case 'session.status':
           final status = ev['status'] as String? ?? '';
           _running = status == 'running';
@@ -545,6 +629,7 @@ class _AiStudioViewState extends State<_AiConversation> {
             _pendingPerm = null;
           }
           widget.onSessionsChanged?.call();
+          unawaited(_refreshInbox());
 
         case 'session.title':
           final title = ev['title'] as String? ?? '';
@@ -753,7 +838,69 @@ class _AiStudioViewState extends State<_AiConversation> {
   AiProvider? get _activeProvider => _provider;
   bool _sending = false;
 
-  Future<void> _send([String? quickPrompt]) async {
+  List<(String, String)> _slashSuggestions(String value) {
+    final query = value.trim().toLowerCase();
+    if (!query.startsWith('/')) return const [];
+    return _aiSlashCommands
+        .where((entry) => entry.$1.startsWith(query))
+        .take(5)
+        .toList();
+  }
+
+  Future<void> _submitComposer() async {
+    final value = _inputCtl.text.trim();
+    if (value.startsWith('/')) {
+      final command = value.split(RegExp(r'\s+')).first.toLowerCase();
+      final known = _aiSlashCommands.any((entry) => entry.$1 == command);
+      if (!known) {
+        ws.toast('未知命令：$command。输入 /help 查看可用命令', error: true);
+        return;
+      }
+      _inputCtl.clear();
+      if (command == '/help') {
+        ws.toast('可用命令：${_aiSlashCommands.map((e) => e.$1).join('  ')}');
+      } else if (command == '/compact') {
+        await _compactManual();
+      } else if (command == '/plan') {
+        if (mounted) setState(() => _agentMode = 'plan');
+      } else if (command == '/build') {
+        if (mounted) setState(() => _agentMode = 'build');
+      } else if (command == '/ask') {
+        if (mounted) setState(() => _permMode = 'ask');
+      } else if (command == '/auto') {
+        if (mounted) setState(() => _permMode = 'auto');
+      } else if (command == '/stop') {
+        await _stop();
+      } else if (command == '/model' && mounted) {
+        await _chooseModel();
+      }
+      return;
+    }
+    await _send();
+  }
+
+  Future<void> _chooseModel() async {
+    final choice = await showAiModelPicker(
+      context,
+      ws,
+      initialProviderId: _provider?.id,
+      initialModel: _provider?.model,
+      initialReasoning: _reasoningOverride,
+    );
+    if (choice == null || !mounted) return;
+    final source = ws.app.aiSettings.providers
+        .where((p) => p.id == choice.providerId)
+        .firstOrNull;
+    if (source == null) return;
+    setState(() {
+      _provider = AiProvider.fromJson(source.toJson())..model = choice.model;
+      _reasoningOverride = choice.reasoning;
+      _reasoningOverrideSet = choice.reasoning != null;
+      _selectionExplicit = true;
+    });
+  }
+
+  Future<void> _send([String? quickPrompt, String? inboxId]) async {
     if (_sending) return;
     final link = ws.link;
     if (link == null) {
@@ -769,15 +916,41 @@ class _AiStudioViewState extends State<_AiConversation> {
       return;
     }
     final text = (quickPrompt ?? _inputCtl.text).trim();
-    if (text.isEmpty && _attachments.isEmpty) return;
+    if (text.isEmpty && _attachments.isEmpty && inboxId == null) return;
+    if (_running &&
+        _deliveryMode == 'queue' &&
+        !link.server.caps.contains('ai.inbox')) {
+      ws.toast('当前 agent 尚不支持任务结束后的排队，请升级 agent 后使用。', error: true);
+      return;
+    }
 
-    final sentAttachments = List<AiAttachment>.of(_attachments);
+    final sentAttachments = inboxId == null
+        ? List<AiAttachment>.of(_attachments)
+        : <AiAttachment>[];
     final sentRoot = _root,
         sentWorkdir = _workdir,
         sentAgent = _agentMode,
         sentPermission = _permMode,
-        sentReasoning = _reasoningOverride;
-    if (sentAttachmentsHaveImage && prov.imageSupport(prov.model) == false) {
+        sentReasoning = _reasoningOverride,
+        sentReasoningSet = _reasoningOverrideSet,
+        sentDelivery = _deliveryMode;
+    final project = ws.project;
+    final projectId =
+        project?.folders.any(
+              (f) =>
+                  f.contains(WorkspacePath(root: sentRoot, path: sentWorkdir)),
+            ) ==
+            true
+        ? project!.id
+        : null;
+    final sentPermissionRules = ws.app.ready
+        ? [
+            for (final rule in ws.app.aiSettings.permissionRules)
+              if (rule.appliesTo(ws.serverId, projectId)) rule.toJson(),
+          ]
+        : const <Map<String, dynamic>>[];
+    if (sentAttachments.any((a) => a.mime.startsWith('image/')) &&
+        prov.imageSupport(prov.model) == false) {
       ws.toast('当前模型已配置为不支持图片输入，请在模型配置中更换模型或更新能力标记', error: true);
       return;
     }
@@ -822,14 +995,17 @@ class _AiStudioViewState extends State<_AiConversation> {
       if (!mounted || !identical(link, ws.link)) return;
       final res = await link.call('ai.run', {
         if (_sessionId != null) 'session_id': _sessionId,
+        if (inboxId != null) 'inbox_id': inboxId,
         'root': sentRoot,
         'workdir': sentWorkdir,
         'agent': sentAgent,
         'permission_mode': sentPermission,
+        'permission_rules': sentPermissionRules,
+        if (_running) 'delivery': sentDelivery,
         'text': text,
         if (attachments.isNotEmpty) 'attachments': attachments,
         'provider': prepared.toWireJson(
-          reasoningOverride: _reasoningOverrideSet ? sentReasoning : null,
+          reasoningOverride: sentReasoningSet ? sentReasoning : null,
         ),
       }) as Map;
       if (!mounted || !identical(link, ws.link)) return;
@@ -853,6 +1029,7 @@ class _AiStudioViewState extends State<_AiConversation> {
         setState(() => _running = true);
       }
       widget.onSessionsChanged?.call();
+      unawaited(_refreshInbox());
       _scrollToBottom();
     } on OpError catch (e) {
       ws.toast(e.message, error: true);
@@ -866,6 +1043,256 @@ class _AiStudioViewState extends State<_AiConversation> {
         });
     }
   }
+
+  Future<void> _refreshInbox() async {
+    final link = ws.link, sid = _sessionId;
+    if (link == null || sid == null || !link.server.caps.contains('ai.inbox'))
+      return;
+    final generation = ++_inboxGeneration;
+    try {
+      final result = await link.call('ai.inbox', {'session_id': sid}) as Map;
+      if (!mounted ||
+          generation != _inboxGeneration ||
+          !identical(link, ws.link))
+        return;
+      setState(
+        () => _inbox = [
+          for (final row in result['items'] as List? ?? [])
+            if (row is Map) row.cast<String, dynamic>(),
+        ],
+      );
+      _inboxChanges.value++;
+    } on Object {
+      // Keep the last admitted inputs visible across a transient disconnect.
+    }
+  }
+
+  Future<void> _showInbox() => showPicker<void>(
+    context,
+    maxWidth: 540,
+    maxHeight: 560,
+    builder: (dialogContext) => ListenableBuilder(
+      listenable: _inboxChanges,
+      builder: (dialogContext, _) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                _running ? '待发送与保留的输入' : '任务已停止 · 输入已保留',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (_inboxBusy) const LinearProgressIndicator(minHeight: 2),
+            if (_inboxError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Text(
+                  _inboxError!,
+                  style: TextStyle(color: Ide.of(context).error, fontSize: 12),
+                ),
+              ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final item in _inbox)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SelectableText(
+                            (item['text'] as String? ?? '').trim().isEmpty
+                                ? '附件输入'
+                                : item['text'] as String,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${item['held'] == true || !_running
+                                ? '已保留 · 等待重新发送'
+                                : item['delivery'] == 'queue'
+                                ? '当前任务结束后'
+                                : '下一步优先'}\n'
+                            '${(item['runtime'] as Map?)?['provider_name'] ?? ''} / ${(item['runtime'] as Map?)?['model'] ?? '已选模型'}'
+                            ' · ${item['agent'] == 'plan' ? '规划' : '构建'} · ${item['permission_mode'] == 'auto' ? '自动执行' : '先询问'}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Ide.of(context).textDim,
+                            ),
+                          ),
+                          for (final attachment
+                              in (item['attachments'] as List? ?? [])
+                                  .whereType<Map>())
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                '附件 · ${attachment['label'] ?? '未命名附件'}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Ide.of(context).textDim,
+                                ),
+                              ),
+                            ),
+                          Wrap(
+                            alignment: WrapAlignment.end,
+                            spacing: 8,
+                            children: [
+                              if (!_running)
+                                TextButton(
+                                  onPressed: _inboxBusy || _sending
+                                      ? null
+                                      : () {
+                                          Navigator.pop(dialogContext);
+                                          _send('', item['id'] as String);
+                                        },
+                                  child: const Text('用当前选择重新发送'),
+                                ),
+                              if (_running &&
+                                  item['held'] != true &&
+                                  item['delivery'] == 'queue')
+                                TextButton(
+                                  onPressed: _inboxBusy
+                                      ? null
+                                      : () => _changeInbox(
+                                          item['id'] as String,
+                                          'steer',
+                                        ),
+                                  child: const Text('改为补充'),
+                                ),
+                              TextButton(
+                                onPressed: _inboxBusy
+                                    ? null
+                                    : () => _changeInbox(
+                                        item['id'] as String,
+                                        'cancel',
+                                      ),
+                                child: const Text('移除'),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 1),
+                        ],
+                      ),
+                    ),
+                  if (_inbox.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text('没有待发送输入'),
+                    ),
+                ],
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('关闭'),
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  Future<void> _changeInbox(String id, String action) async {
+    if (_inboxBusy) return;
+    final link = ws.link;
+    if (link == null) return;
+    _inboxBusy = true;
+    _inboxError = null;
+    _inboxChanges.value++;
+    try {
+      await link.call('ai.inbox', {
+        'session_id': _sessionId,
+        'id': id,
+        'action': action,
+      });
+      await _refreshInbox();
+    } on Object catch (e) {
+      if (mounted) _inboxError = e is OpError ? e.message : '更新失败，输入已保留，请重试。';
+    } finally {
+      if (mounted) {
+        _inboxBusy = false;
+        _inboxChanges.value++;
+      }
+    }
+  }
+
+  Future<void> _showComposerAttachments() => showPicker<void>(
+    context,
+    maxWidth: 520,
+    maxHeight: 460,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, update) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              '本条消息的附件',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final attachment in _attachments)
+                  ListTile(
+                    leading: Icon(
+                      attachment.mime.startsWith('image/')
+                          ? Icons.image_outlined
+                          : Icons.description_outlined,
+                    ),
+                    title: Text(attachment.label),
+                    subtitle: Text(
+                      attachment.bytes == null
+                          ? '文本上下文'
+                          : '${(attachment.bytes!.length / 1024).toStringAsFixed(0)} KiB',
+                    ),
+                    trailing: IconButton(
+                      tooltip: '移除 ${attachment.label}',
+                      onPressed: () {
+                        setState(() {
+                          _attachments.remove(attachment);
+                          _uploadedAttachments.remove(attachment);
+                        });
+                        update(() {});
+                      },
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  ),
+                if (_attachments.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text('没有待发送附件'),
+                  ),
+              ],
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('完成'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Future<void> _stop() async {
     final link = ws.link;
@@ -881,14 +1308,32 @@ class _AiStudioViewState extends State<_AiConversation> {
   }) async {
     final link = ws.link;
     if (link == null) return;
-    setState(() => _pendingPerm = null);
-    await ws.guard(
-      () => link.call('ai.approve', {
-        'id': q.id,
-        'allow': allow,
-        'always': always,
-      }),
-    );
+    if (_approvalBusy) return;
+    setState(() {
+      _approvalBusy = true;
+      _approvalError = null;
+    });
+    try {
+      await link
+          .call('ai.approve', {'id': q.id, 'allow': allow, 'always': always})
+          .timeout(const Duration(seconds: 20));
+      if (mounted && _pendingPerm?.id == q.id) {
+        setState(() => _pendingPerm = null);
+      }
+    } on Object catch (e) {
+      if (mounted && _pendingPerm?.id == q.id) {
+        setState(
+          () => _approvalError = e is OpError ? e.message : '审批提交失败，问题已保留，请重试。',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _approvalBusy = false);
+    }
+  }
+
+  void _showGrants() {
+    final link = ws.link, sid = _sessionId;
+    if (link != null && sid != null) showAiSessionGrants(context, link, sid);
   }
 
   Future<void> _revertTo(AiMessage msg) async {
@@ -1150,8 +1595,8 @@ class _AiStudioViewState extends State<_AiConversation> {
             ),
             child: Column(
               children: [
-                _buildWorkspaceBar(ide),
-                _buildMessageNavigation(ide, messages),
+                _buildWorkspaceBar(ide, compact: short),
+                _buildMessageNavigation(ide, messages, compact: short),
                 if (_loading) const LinearProgressIndicator(minHeight: 2),
                 if (_eventNote != null || _error != null)
                   MaterialBanner(
@@ -1183,7 +1628,6 @@ class _AiStudioViewState extends State<_AiConversation> {
                                 _liveTools.isNotEmpty ||
                                 _liveCompaction.isNotEmpty)
                               '@live',
-                            if (_pendingPerm != null) '@permission',
                           ],
                           itemBuilder: (context, index) {
                             if (index < messages.length) {
@@ -1226,27 +1670,7 @@ class _AiStudioViewState extends State<_AiConversation> {
                                 ),
                               );
                             }
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 760,
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: Space.m,
-                                    ),
-                                    child: _buildPermissionCard(
-                                      ide,
-                                      _pendingPerm!,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
+                            return const SizedBox.shrink();
                           },
                         ),
                 ),
@@ -1255,7 +1679,34 @@ class _AiStudioViewState extends State<_AiConversation> {
                       (t) => t.status != 'completed' && t.status != 'cancelled',
                     ))
                   _buildTodoBanner(ide, todos),
-                if (!short) _buildRuntimeBar(ide, prov),
+                if (!short)
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: constraints.maxHeight < 650 ? 90 : 180,
+                    ),
+                    child: SingleChildScrollView(
+                      child: _buildRuntimeBar(ide, prov),
+                    ),
+                  ),
+                if (_pendingPerm != null)
+                  _buildApprovalDock(
+                    ide,
+                    _pendingPerm!,
+                    compact: constraints.maxHeight < 650,
+                  ),
+                if (_inbox.isNotEmpty)
+                  SizedBox(
+                    height: 30,
+                    child: TextButton.icon(
+                      key: const ValueKey('ai-inbox-open'),
+                      onPressed: _showInbox,
+                      icon: const Icon(Icons.schedule_send_outlined, size: 15),
+                      label: Text(
+                        '${_inbox.length} 条${_running ? '待发送输入' : '保留的输入'} · 查看',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                  ),
                 _buildComposer(ide, prov, compact: short),
               ],
             ),
@@ -1276,10 +1727,11 @@ class _AiStudioViewState extends State<_AiConversation> {
 
   Widget _buildMessageNavigation(
     Ide ide,
-    List<AiMessage> messages,
-  ) => Container(
+    List<AiMessage> messages, {
+    bool compact = false,
+  }) => Container(
     key: const ValueKey('ai-message-navigation'),
-    height: 32,
+    height: compact ? 26 : 32,
     padding: const EdgeInsets.symmetric(horizontal: 8),
     child: ValueListenableBuilder<String?>(
       valueListenable: _scrollCtl.currentMessage,
@@ -1376,10 +1828,7 @@ class _AiStudioViewState extends State<_AiConversation> {
     ),
   );
 
-  bool get sentAttachmentsHaveImage =>
-      _attachments.any((a) => a.mime.startsWith('image/'));
-
-  Widget _buildWorkspaceBar(Ide ide) {
+  Widget _buildWorkspaceBar(Ide ide, {bool compact = false}) {
     final canPick =
         !_sending && (_session == null || _session!.messages.isEmpty);
     final native = ws.entry?.isLocal == true
@@ -1388,14 +1837,28 @@ class _AiStudioViewState extends State<_AiConversation> {
     final label = _workdir == '/'
         ? '根目录'
         : _workdir.split('/').where((p) => p.isNotEmpty).lastOrNull ?? _workdir;
+    final statusColor = _pendingPerm != null
+        ? ide.warn
+        : _running
+        ? ide.accent
+        : ide.ok;
+    final statusText = _pendingPerm != null
+        ? '等待批准'
+        : _running
+        ? '运行中'
+        : _session == null
+        ? '新会话'
+        : '已就绪';
     return Container(
       key: const ValueKey('ai-workspace-bar'),
       margin: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.m, 0),
-      padding: const EdgeInsets.symmetric(
+      padding: EdgeInsets.symmetric(
         horizontal: Space.m,
-        vertical: Space.s,
+        vertical: compact ? Space.xs : Space.s,
       ),
-      decoration: AiVisuals.surface(ide, selected: true),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: ide.border)),
+      ),
       child: Row(
         children: [
           Icon(Icons.folder_open_rounded, size: 16, color: ide.accent),
@@ -1404,38 +1867,47 @@ class _AiStudioViewState extends State<_AiConversation> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '工作目录',
-                  style: TextStyle(fontSize: 10.5, color: ide.textDim),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: ide.text,
+                // A short window keeps one line: the folder, with the full path in
+                // the tooltip of the button beside it.
+                Tooltip(
+                  message: native,
+                  child: Text(
+                    compact ? label : native,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: ide.text,
+                    ),
                   ),
-                ),
-                Text(
-                  native,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10.5, color: ide.textFaint),
                 ),
               ],
             ),
           ),
-          if (!canPick)
-            Padding(
-              padding: const EdgeInsets.only(right: Space.s),
-              child: Text(
-                '本会话固定',
-                style: TextStyle(fontSize: 10.5, color: ide.textFaint),
-              ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(Radii.m),
             ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                StatusDot(statusColor, size: 7),
+                const SizedBox(width: 5),
+                if (!compact)
+                  Text(
+                    statusText,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
           WorkbenchMenuButton<AiPathChoice>(
             key: const ValueKey('ai-workdir-menu'),
             enabled: canPick,
@@ -1506,9 +1978,18 @@ class _AiStudioViewState extends State<_AiConversation> {
                 setState(() => _runtimeExpanded = !_runtimeExpanded);
               if (value == 'models')
                 showAiSettingsDialog(context, app: ws.app, ws: ws);
+              if (value == 'grants') _showGrants();
+              if (value == 'pick-model') _chooseModel();
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'models', child: Text('模型与 API Key…')),
+              const PopupMenuItem(
+                value: 'pick-model',
+                child: Text('切换当前会话模型…'),
+              ),
+              if (_sessionId != null &&
+                  ws.link?.server.caps.contains('ai.permissions') == true)
+                const PopupMenuItem(value: 'grants', child: Text('本会话授权…')),
               const PopupMenuItem(value: 'details', child: Text('模型与上下文详情')),
               PopupMenuItem(
                 value: 'compact',
@@ -1544,9 +2025,13 @@ class _AiStudioViewState extends State<_AiConversation> {
         (_session?.model.isNotEmpty == true
             ? '未知提供商 / ${_session!.model}（旧会话）'
             : '尚未调用模型');
+    // A window the agent guessed from the model name is not the real one: say so
+    // in the number itself, not only in a tooltip nobody opens.
+    final guessed =
+        ctx != null && ctx.limit > 0 && ctx.limitSource != 'configured';
     final contextText = ctx == null
         ? '上下文：暂无统计（旧 agent / 尚未调用）'
-        : '上下文 ${ctx.estimated ? '≈' : ''}${_fmtTokens(ctx.tokens)} / ${ctx.limit > 0 ? _fmtTokens(ctx.limit) : '未知'} tokens${ratio != null ? ' · ${(ratio * 100).toStringAsFixed(1)}%' : ''}';
+        : '上下文 ${ctx.estimated ? '≈' : ''}${_fmtTokens(ctx.tokens)} / ${ctx.limit > 0 ? '${guessed ? '约 ' : ''}${_fmtTokens(ctx.limit)}' : '未知'} tokens${ratio != null ? ' · ${(ratio * 100).toStringAsFixed(1)}%' : ''}${guessed ? '（上限为估计值）' : ''}';
     return Container(
       key: const ValueKey('ai-runtime-bar'),
       width: double.infinity,
@@ -2193,15 +2678,21 @@ class _AiStudioViewState extends State<_AiConversation> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Space.s),
               child: Row(
+                key: const ValueKey('ai-waiting'),
                 children: [
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
+                  // Waiting for the user is not waiting for the model: say who
+                  // the run is waiting for, and do not spin while it is us.
+                  if (_pendingPerm == null)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    Icon(Icons.pause_circle_outline, size: 15, color: ide.warn),
                   const SizedBox(width: Space.m),
                   Text(
-                    '正在等待模型响应…',
+                    _pendingPerm == null ? '正在等待模型响应…' : '等待你的批准后继续',
                     style: TextStyle(fontSize: 12.5, color: ide.textDim),
                   ),
                 ],
@@ -2212,77 +2703,122 @@ class _AiStudioViewState extends State<_AiConversation> {
     );
   }
 
-  Widget _buildPermissionCard(Ide ide, AiPermissionQuestion q) {
-    return Container(
-      padding: const EdgeInsets.all(Space.l),
-      decoration: BoxDecoration(
-        color: ide.warn.withValues(alpha: ide.isDark ? 0.12 : 0.08),
-        borderRadius: BorderRadius.circular(Radii.l + 2),
-        border: Border.all(color: ide.warn.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.shield_outlined, size: 18, color: ide.warn),
-              const SizedBox(width: Space.s + 2),
-              Expanded(
-                child: Text(
-                  '需要授权执行 ${q.tool}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: ide.text,
+  Widget _buildApprovalDock(
+    Ide ide,
+    AiPermissionQuestion q, {
+    required bool compact,
+  }) {
+    final card = AiPermissionCard(
+      question: q,
+      workdir: ws.entry?.isLocal == true
+          ? ws.app.localAgent.nativePath(_root, _workdir)
+          : _workdir,
+      compact: true,
+      busy: _approvalBusy,
+      onDetails: () => showWorkbenchDialog<void>(
+        context: context,
+        builder: (dialogContext) => Dialog(
+          insetPadding: const EdgeInsets.all(12),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 780, maxHeight: 620),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: AiPermissionCard(
+                      question: q,
+                      workdir: _workdir,
+                      showActions: false,
+                      onDecide: ({required bool allow, bool always = false}) {},
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          if (q.reason.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(q.reason, style: TextStyle(fontSize: 12, color: ide.textDim)),
-          ],
-          const SizedBox(height: Space.s),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(Space.s + 2),
-            decoration: BoxDecoration(
-              color: ide.editor,
-              borderRadius: BorderRadius.circular(Radii.m),
-              border: Border.all(color: ide.border),
-            ),
-            child: SelectableText(
-              q.resource,
-              style: TextStyle(
-                fontFamily: Ide.mono,
-                fontFamilyFallback: Ide.monoFallback,
-                fontSize: 12,
-                color: ide.text,
-              ),
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('返回审批'),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: Space.m),
-          Wrap(
-            spacing: Space.s,
-            runSpacing: Space.s,
-            alignment: WrapAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => _approve(q, allow: false),
-                child: Text('拒绝', style: TextStyle(color: ide.error)),
+        ),
+      ),
+      onDecide: ({required bool allow, bool always = false}) =>
+          _approve(q, allow: allow, always: always),
+    );
+    return Container(
+      key: const ValueKey('ai-approval-dock'),
+      margin: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+      decoration: BoxDecoration(
+        color: ide.sideBar,
+        border: Border.all(color: ide.warn.withValues(alpha: .55)),
+        borderRadius: BorderRadius.circular(Radii.l),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!compact)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              color: ide.warn.withValues(alpha: .08),
+              child: Row(
+                children: [
+                  Icon(Icons.pause_circle_outline, size: 14, color: ide.warn),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      '任务已暂停 · 需要你的决定',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: ide.warn,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (_approvalBusy)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 1.8),
+                    ),
+                ],
               ),
-              OutlinedButton(
-                onPressed: () => _approve(q, allow: true, always: true),
-                child: const Text('本会话始终允许'),
+            ),
+          card,
+          if (!compact)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    q.reasonText,
+                    style: TextStyle(fontSize: 11, color: ide.textDim),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    q.alwaysLabel,
+                    style: TextStyle(fontSize: 10.5, color: ide.textFaint),
+                  ),
+                ],
               ),
-              FilledButton(
-                key: const ValueKey('ai-approve-once'),
-                onPressed: () => _approve(q, allow: true),
-                child: const Text('允许本次'),
+            ),
+          if (_approvalError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+              child: Text(
+                _approvalError!,
+                key: const ValueKey('ai-approval-error'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: ide.error),
               ),
-            ],
-          ),
+            ),
         ],
       ),
     );
@@ -2293,10 +2829,15 @@ class _AiStudioViewState extends State<_AiConversation> {
     return LayoutBuilder(
       builder: (_, box) {
         final narrow = box.maxWidth < 460;
+        if (compact) return _buildCompactComposer(ide, prov, box.maxWidth);
         return Container(
           key: const ValueKey('ai-composer'),
-          margin: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-          padding: const EdgeInsets.fromLTRB(12, 12, 8, 6),
+          margin: compact
+              ? const EdgeInsets.fromLTRB(6, 2, 6, 2)
+              : const EdgeInsets.fromLTRB(10, 6, 10, 10),
+          padding: compact
+              ? const EdgeInsets.fromLTRB(8, 4, 4, 2)
+              : const EdgeInsets.fromLTRB(12, 12, 8, 6),
           decoration: AiVisuals.surface(ide),
           child: Center(
             child: ConstrainedBox(
@@ -2394,6 +2935,8 @@ class _AiStudioViewState extends State<_AiConversation> {
                           style: TextStyle(fontSize: 12, color: ide.accent),
                         ),
                       ),
+                    if (_slashSuggestions(_inputCtl.text).isNotEmpty)
+                      _buildSlashSuggestions(ide),
                     Shortcuts(
                       shortcuts: const {
                         SingleActivator(LogicalKeyboardKey.keyV, control: true):
@@ -2417,7 +2960,7 @@ class _AiStudioViewState extends State<_AiConversation> {
                                 !HardwareKeyboard.instance.isShiftPressed &&
                                 !(_inputCtl.value.composing.isValid &&
                                     !_inputCtl.value.composing.isCollapsed)) {
-                              _send();
+                              _submitComposer();
                               return KeyEventResult.handled;
                             }
                             return KeyEventResult.ignored;
@@ -2470,12 +3013,12 @@ class _AiStudioViewState extends State<_AiConversation> {
                                     ),
                                   ],
                                 ),
+                            onChanged: (_) => setState(() {}),
                             decoration: InputDecoration(
-                              hintText: _running
-                                  ? '补充指令…'
-                                  : (_agentMode == 'plan'
-                                        ? '规划任务，不修改文件…'
-                                        : '向 AI 提问，或描述要完成的任务…'),
+                              hintText: AiComposerText.hint(
+                                running: _running,
+                                agentMode: _agentMode,
+                              ),
                               filled: false,
                               isCollapsed: true,
                               border: InputBorder.none,
@@ -2486,17 +3029,21 @@ class _AiStudioViewState extends State<_AiConversation> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: Space.s + 2),
+                    SizedBox(height: compact ? 3 : Space.s + 2),
+                    SizedBox(height: 30, child: _buildModelChoice(ide, prov)),
+                    const SizedBox(height: 4),
                     SizedBox(
-                      height: 32,
+                      height: compact ? 27 : 32,
                       child: Row(
                         children: [
-                          Expanded(child: _buildModelChoice(ide, prov)),
                           // Build / Plan switcher
                           _ModePill(
-                            label: _agentMode == 'plan'
-                                ? (narrow ? 'Plan' : 'Plan 规划')
-                                : (narrow ? 'Build' : 'Build 构建'),
+                            key: const ValueKey('ai-agent-mode'),
+                            tip: AiComposerText.agentTip(_agentMode),
+                            label: AiComposerText.agent(
+                              _agentMode,
+                              narrow: narrow,
+                            ),
                             icon: _agentMode == 'plan'
                                 ? Icons.architecture_rounded
                                 : Icons.build_circle_outlined,
@@ -2507,22 +3054,34 @@ class _AiStudioViewState extends State<_AiConversation> {
                                   : 'plan',
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          // Ask / Auto permission switcher
-                          _ModePill(
-                            label: _permMode == 'auto'
-                                ? (narrow ? 'Auto' : 'Auto 自动执行')
-                                : (narrow ? 'Ask' : 'Ask 询问确认'),
-                            icon: _permMode == 'auto'
-                                ? Icons.bolt_rounded
-                                : Icons.verified_user_outlined,
-                            color: _permMode == 'auto' ? ide.ok : ide.textDim,
-                            onTap: () => setState(
-                              () => _permMode = _permMode == 'auto'
-                                  ? 'ask'
-                                  : 'auto',
+                          if (box.maxWidth < 340)
+                            _buildNarrowModeMenu(ide)
+                          else ...[
+                            if (_running) ...[
+                              const SizedBox(width: 4),
+                              _buildDeliveryChoice(ide, narrow: narrow),
+                            ],
+                            const SizedBox(width: 4),
+                            // Ask / Auto permission switcher
+                            _ModePill(
+                              key: const ValueKey('ai-permission-mode'),
+                              tip: AiComposerText.permissionTip(_permMode),
+                              label: AiComposerText.permission(
+                                _permMode,
+                                narrow: narrow,
+                              ),
+                              icon: _permMode == 'auto'
+                                  ? Icons.bolt_rounded
+                                  : Icons.verified_user_outlined,
+                              color: _permMode == 'auto' ? ide.ok : ide.textDim,
+                              onTap: () => setState(
+                                () => _permMode = _permMode == 'auto'
+                                    ? 'ask'
+                                    : 'auto',
+                              ),
                             ),
-                          ),
+                          ],
+                          const Spacer(),
                           SizedBox(
                             width: 30,
                             child: WorkbenchMenuButton<String>(
@@ -2612,36 +3171,40 @@ class _AiStudioViewState extends State<_AiConversation> {
                             ),
                           ],
                           const SizedBox(width: 6),
-                          FilledButton(
-                            key: const ValueKey('ai-send-btn'),
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              minimumSize: const Size(0, 30),
-                            ),
-                            onPressed: _sending ? null : _send,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _running
-                                      ? Icons.subdirectory_arrow_left_rounded
-                                      : Icons.arrow_upward_rounded,
-                                  size: 15,
+                          Tooltip(
+                            message: AiComposerText.sendTip(running: _running),
+                            child: FilledButton(
+                              key: const ValueKey('ai-send-btn'),
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
                                 ),
-                                const SizedBox(width: 4),
-                                if (!narrow)
-                                  Text(
-                                    _sending
-                                        ? '准备中'
-                                        : _running
-                                        ? '引导'
-                                        : '发送',
-                                    style: const TextStyle(fontSize: 12.5),
+                                minimumSize: const Size(0, 30),
+                              ),
+                              onPressed: _sending ? null : _submitComposer,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _running
+                                        ? Icons.subdirectory_arrow_left_rounded
+                                        : Icons.arrow_upward_rounded,
+                                    size: 15,
                                   ),
-                              ],
+                                  const SizedBox(width: 4),
+                                  if (!narrow)
+                                    Text(
+                                      _running && _deliveryMode == 'queue'
+                                          ? '排队'
+                                          : AiComposerText.send(
+                                              running: _running,
+                                              sending: _sending,
+                                            ),
+                                      style: const TextStyle(fontSize: 12.5),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -2657,84 +3220,307 @@ class _AiStudioViewState extends State<_AiConversation> {
     );
   }
 
-  Widget _buildModelChoice(Ide ide, AiProvider? prov) => Row(
-    children: [
-      Expanded(
-        child: Tooltip(
-          message: prov == null
-              ? '选择模型'
-              : '${prov.name} / ${prov.model}${(_reasoningOverride ?? prov.reasoningEffort).isEmpty ? '' : ' · ${aiEffortLabel(_reasoningOverride ?? prov.reasoningEffort)}'}',
-          child: InkWell(
-            key: const ValueKey('ai-model-btn'),
-            onTap: () => showAiModelPicker(
-              context,
-              ws,
-              initialReasoning: _reasoningOverride,
-              onReasoningChanged: (value) => setState(() {
-                _reasoningOverride = value;
-                _reasoningOverrideSet = value != null;
-              }),
-            ),
-            borderRadius: BorderRadius.circular(4),
-            child: Row(
-              children: [
-                Icon(Icons.expand_more, size: 14, color: ide.textDim),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    prov == null || prov.model.isEmpty
-                        ? '选择模型…'
-                        : '${prov.name} / ${prov.model}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: prov == null ? ide.warn : ide.textDim,
-                    ),
-                  ),
+  Widget _buildCompactComposer(Ide ide, AiProvider? prov, double width) {
+    return Container(
+      key: const ValueKey('ai-composer'),
+      margin: const EdgeInsets.fromLTRB(5, 1, 5, 1),
+      padding: const EdgeInsets.fromLTRB(7, 2, 3, 2),
+      decoration: AiVisuals.surface(ide),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              key: const ValueKey('ai-prompt-input'),
+              controller: _inputCtl,
+              focusNode: _inputFocus,
+              minLines: 1,
+              maxLines: 1,
+              onSubmitted: (_) => _submitComposer(),
+              onChanged: (_) => setState(() {}),
+              style: TextStyle(fontSize: _chatFontSize, color: ide.text),
+              decoration: InputDecoration(
+                hintText: AiComposerText.hint(
+                  running: _running,
+                  agentMode: _agentMode,
                 ),
-                if (prov?.imageSupport() == true)
-                  Tooltip(
-                    message: '当前模型支持图片输入',
-                    child: Icon(Icons.image_outlined, size: 14, color: ide.ok),
-                  ),
-                if (prov?.imageSupport() == false)
-                  Tooltip(
-                    message: '当前模型不支持图片输入',
-                    child: Icon(
-                      Icons.image_not_supported_outlined,
-                      size: 14,
-                      color: ide.textFaint,
-                    ),
-                  ),
-              ],
+                isCollapsed: true,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+              ),
             ),
           ),
-        ),
+          WorkbenchMenuButton<String>(
+            key: const ValueKey('ai-compact-menu'),
+            tooltip: '对话选项',
+            padding: EdgeInsets.zero,
+            onSelected: (value) {
+              if (value == 'plan' || value == 'build')
+                setState(() => _agentMode = value);
+              if (value == 'ask' || value == 'auto')
+                setState(() => _permMode = value);
+              if (value == 'attach') _pickLocalFiles();
+              if (value == 'attachments') _showComposerAttachments();
+              if (value == 'paste') _paste();
+              if (value == 'model') _chooseModel();
+              if (value == 'queue' || value == 'steer')
+                setState(() => _deliveryMode = value);
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'model',
+                child: Text(
+                  prov?.model.isNotEmpty == true ? prov!.model : '选择模型…',
+                ),
+              ),
+              const PopupMenuItem(value: 'plan', child: Text('规划 · 只读')),
+              const PopupMenuItem(value: 'build', child: Text('构建 · 可改文件')),
+              const PopupMenuItem(value: 'ask', child: Text('先询问')),
+              const PopupMenuItem(value: 'auto', child: Text('自动执行')),
+              const PopupMenuItem(value: 'attach', child: Text('添加附件…')),
+              const PopupMenuItem(
+                value: 'paste',
+                child: Text('粘贴图片 / 文件 / 文本'),
+              ),
+              if (_attachments.isNotEmpty)
+                PopupMenuItem(
+                  value: 'attachments',
+                  child: Text('管理 ${_attachments.length} 个附件…'),
+                ),
+              if (_running) ...const [
+                PopupMenuItem(value: 'steer', child: Text('补充指令 · 下一步优先')),
+                PopupMenuItem(value: 'queue', child: Text('排队发送 · 当前任务结束后')),
+              ],
+            ],
+            icon: Badge.count(
+              count: _attachments.length,
+              isLabelVisible: _attachments.isNotEmpty,
+              child: Icon(Icons.tune_rounded, size: 16, color: ide.textDim),
+            ),
+          ),
+          if (_running)
+            IconBtn(
+              Icons.stop_rounded,
+              '停止当前运行',
+              _stop,
+              size: 16,
+              color: ide.error,
+            ),
+          FilledButton(
+            key: const ValueKey('ai-send-btn'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(30, 26),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            ),
+            onPressed: _sending ? null : _submitComposer,
+            child: const Icon(Icons.arrow_upward_rounded, size: 14),
+          ),
+        ],
       ),
-      Tooltip(
-        message: '模型与上下文详情',
-        child: InkWell(
-          onTap: () => setState(() => _runtimeExpanded = !_runtimeExpanded),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-            child: Text(
-              _session?.context?.ratio == null
-                  ? 'ⓘ'
-                  : '${(_session!.context!.ratio! * 100).round()}%',
-              key: const ValueKey('ai-context-indicator'),
-              style: TextStyle(
-                fontSize: 11,
-                color: (_session?.context?.ratio ?? 0) >= .85
-                    ? ide.warn
-                    : ide.textDim,
+    );
+  }
+
+  Widget _buildNarrowModeMenu(Ide ide) => WorkbenchMenuButton<String>(
+    key: const ValueKey('ai-mode-options'),
+    tooltip:
+        '${AiComposerText.permission(_permMode, narrow: false)} · ${_deliveryMode == 'queue' ? '排队发送' : '补充指令'}',
+    onSelected: (v) => setState(() {
+      if (v == 'ask' || v == 'auto') _permMode = v;
+      if (v == 'queue' || v == 'steer') _deliveryMode = v;
+    }),
+    itemBuilder: (_) => [
+      PopupMenuItem(
+        value: 'ask',
+        child: Text('${_permMode == 'ask' ? '✓ ' : ''}先询问'),
+      ),
+      PopupMenuItem(
+        value: 'auto',
+        child: Text('${_permMode == 'auto' ? '✓ ' : ''}自动执行'),
+      ),
+      if (_running) ...[
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'steer',
+          child: Text('${_deliveryMode == 'steer' ? '✓ ' : ''}补充 · 下一步优先'),
+        ),
+        PopupMenuItem(
+          value: 'queue',
+          child: Text('${_deliveryMode == 'queue' ? '✓ ' : ''}排队 · 当前任务结束后'),
+        ),
+      ],
+    ],
+    child: IgnorePointer(
+      child: _ModePill(
+        label: '选项',
+        icon: Icons.tune_rounded,
+        color: ide.textDim,
+        onTap: () {},
+      ),
+    ),
+  );
+
+  Widget _buildSlashSuggestions(Ide ide) {
+    final suggestions = _slashSuggestions(_inputCtl.text);
+    return Container(
+      key: const ValueKey('ai-slash-suggestions'),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      decoration: BoxDecoration(
+        color: ide.editor,
+        borderRadius: BorderRadius.circular(Radii.m),
+        border: Border.all(color: ide.border),
+      ),
+      child: Column(
+        children: [
+          for (final entry in suggestions)
+            InkWell(
+              onTap: () {
+                _inputCtl.text = '${entry.$1} ';
+                _inputCtl.selection = TextSelection.collapsed(
+                  offset: _inputCtl.text.length,
+                );
+                setState(() {});
+                _inputFocus.requestFocus();
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                child: Row(
+                  children: [
+                    Text(
+                      entry.$1,
+                      style: TextStyle(
+                        fontFamily: Ide.mono,
+                        fontSize: 12,
+                        color: ide.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        entry.$2,
+                        style: TextStyle(fontSize: 11, color: ide.textDim),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeliveryChoice(Ide ide, {required bool narrow}) =>
+      WorkbenchMenuButton<String>(
+        key: const ValueKey('ai-delivery-mode'),
+        tooltip: _deliveryMode == 'queue' ? '排队：当前任务结束后发送' : '补充：插入下一步模型上下文',
+        onSelected: (v) => setState(() => _deliveryMode = v),
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'steer', child: Text('补充指令 · 下一步优先')),
+          PopupMenuItem(value: 'queue', child: Text('排队发送 · 当前任务结束后')),
+        ],
+        child: IgnorePointer(
+          child: _ModePill(
+            label: narrow
+                ? (_deliveryMode == 'queue' ? '排队' : '投递')
+                : (_deliveryMode == 'queue' ? '排队发送' : '投递方式'),
+            tip: _deliveryMode == 'queue' ? '当前任务结束后发送' : '插入正在运行的任务下一步',
+            icon: _deliveryMode == 'queue'
+                ? Icons.schedule_send_outlined
+                : Icons.low_priority_rounded,
+            color: ide.textDim,
+            onTap: () {},
+          ),
+        ),
+      );
+
+  Widget _buildModelChoice(Ide ide, AiProvider? prov) {
+    final tooltip = prov == null
+        ? '选择模型'
+        : '${prov.name} / ${prov.model}${(_reasoningOverride ?? prov.reasoningEffort).isEmpty ? '' : ' · ${aiEffortLabel(_reasoningOverride ?? prov.reasoningEffort)}'}';
+    void open() => _chooseModel();
+    return Row(
+      children: [
+        Expanded(
+          child: Tooltip(
+            message: tooltip,
+            child: InkWell(
+              key: const ValueKey('ai-model-btn'),
+              onTap: open,
+              borderRadius: BorderRadius.circular(4),
+              child: Row(
+                children: [
+                  Icon(Icons.expand_more, size: 14, color: ide.textDim),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      prov == null || prov.model.isEmpty
+                          ? '选择模型…'
+                          : '${prov.name} / ${prov.model}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: prov == null ? ide.warn : ide.textDim,
+                      ),
+                    ),
+                  ),
+                  if (prov?.imageSupport() == true)
+                    Tooltip(
+                      message: '当前模型支持图片输入',
+                      child: Icon(
+                        Icons.image_outlined,
+                        size: 14,
+                        color: ide.ok,
+                      ),
+                    ),
+                  if (prov?.imageSupport() == false)
+                    Tooltip(
+                      message: '当前模型不支持图片输入',
+                      child: Icon(
+                        Icons.image_not_supported_outlined,
+                        size: 14,
+                        color: ide.textFaint,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
         ),
-      ),
-    ],
-  );
+        Tooltip(
+          message: '模型与上下文详情',
+          child: InkWell(
+            onTap: () => setState(() => _runtimeExpanded = !_runtimeExpanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Text(
+                _session?.context?.ratio == null
+                    ? 'ⓘ'
+                    : '${(_session!.context!.ratio! * 100).round()}%',
+                key: const ValueKey('ai-context-indicator'),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: (_session?.context?.ratio ?? 0) >= .85
+                      ? ide.warn
+                      : ide.textDim,
+                ),
+              ),
+            ),
+          ),
+        ),
+        IconButton(
+          key: const ValueKey('ai-settings-open'),
+          tooltip: 'AI 设置',
+          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          padding: EdgeInsets.zero,
+          onPressed: () => showAiSettingsDialog(context, app: ws.app, ws: ws),
+          icon: Icon(Icons.tune_rounded, size: 16, color: ide.textDim),
+        ),
+      ],
+    );
+  }
 
   String _fmtTokens(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
@@ -2745,19 +3531,22 @@ class _AiStudioViewState extends State<_AiConversation> {
 
 class _ModePill extends StatelessWidget {
   final String label;
+  final String tip;
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
   const _ModePill({
+    super.key,
     required this.label,
     required this.icon,
     required this.color,
     required this.onTap,
+    this.tip = '',
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    final pill = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(Radii.m),
       child: Container(
@@ -2782,6 +3571,12 @@ class _ModePill extends StatelessWidget {
           ],
         ),
       ),
+    );
+    return Semantics(
+      button: true,
+      label: tip.isEmpty ? label : '$label。$tip',
+      excludeSemantics: true,
+      child: tip.isEmpty ? pill : Tooltip(message: tip, child: pill),
     );
   }
 }

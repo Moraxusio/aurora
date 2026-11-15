@@ -51,13 +51,47 @@ const compactionSummaryRules = `Rules:
 
 const compactionKeepTokens = 15_000
 
-func buildCompactionPrompt(update bool) string {
+// conversationLanguage names the language a conversation is mostly written in
+// when it is not English, so the summary does not switch language halfway.
+// "" means leave the model to its default.
+func conversationLanguage(msgs []Message) string {
+	han, letters := 0, 0
+	for _, m := range msgs {
+		if m.Role != "user" && m.Role != "assistant" {
+			continue
+		}
+		for _, p := range m.Parts {
+			if p.Type != "text" || strings.HasPrefix(p.Text, "<system-reminder>") {
+				continue
+			}
+			for _, r := range p.Text {
+				switch {
+				case r >= 0x4E00 && r <= 0x9FFF:
+					han++
+					letters++
+				case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+					letters++
+				}
+			}
+		}
+	}
+	if letters > 0 && han*5 >= letters {
+		return "简体中文"
+	}
+	return ""
+}
+
+func buildCompactionPrompt(update bool, language string) string {
 	shared := []string{
 		"Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
 		compactionSummaryTemplate,
 		compactionSummaryRules,
 		"Do not continue the task or call tools.",
 		"Return only the structured summary in the requested format. Do not include a preamble, explanation, or other commentary.",
+	}
+	if language != "" {
+		// Headings stay as in the template: a later compaction parses them.
+		shared = append(shared, "Write the summary in "+language+" (keep the section headings, file paths, commands and identifiers exactly as they are).")
 	}
 	if !update {
 		return strings.Join(append([]string{
@@ -72,12 +106,34 @@ func buildCompactionPrompt(update bool) string {
 	}, shared...), "\n\n")
 }
 
-// EstimateTokens approximates token count (~4 bytes per token, matching OpenCode's Token.estimate).
+// EstimateTokens approximates token count: ~4 bytes per token like OpenCode's
+// Token.estimate, but a CJK character is a token or more on its own while
+// costing only 3 bytes, so the byte count alone under-reports Chinese text by a
+// third. The result is never below the byte estimate.
 func EstimateTokens(text string) int {
 	if len(text) == 0 {
 		return 0
 	}
-	return (len(text) + 3) / 4
+	byBytes := (len(text) + 3) / 4
+	wide := 0
+	for _, r := range text {
+		if r >= 0x2E80 && r <= 0xD7AF || r >= 0xF900 && r <= 0xFAFF || r >= 0xFF00 && r <= 0xFFEF {
+			wide++
+		}
+	}
+	if wide == 0 {
+		return byBytes
+	}
+	// each wide rune ~1 token; the rest of the bytes at 4 per token
+	other := len(text) - wide*3
+	if other < 0 {
+		other = 0
+	}
+	byRunes := wide + (other+3)/4
+	if byRunes > byBytes {
+		return byRunes
+	}
+	return byBytes
 }
 
 func EstimateMessagesTokens(msgs []Message) int {
@@ -311,7 +367,7 @@ func RunCompaction(ctx context.Context, s *Session, cfg ProviderConfig, absWorkd
 			break
 		}
 	}
-	prompt := buildCompactionPrompt(hasPrev)
+	prompt := buildCompactionPrompt(hasPrev, conversationLanguage(active))
 	keepID := chooseKeepID(active)
 
 	var reqMessages []Message

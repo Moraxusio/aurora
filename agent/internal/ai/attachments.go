@@ -283,6 +283,11 @@ func (e *Env) userParts(text string, atts []ContextAttachment) []Part {
 // (including active steering inboxes) keep the data. Never touch workspace files.
 func (e *Env) removeUnusedAttachmentsLocked(candidates map[string]bool) {
 	for _, session := range e.sessions {
+		for _, item := range session.Inbox {
+			for _, attachment := range item.Attachments {
+				delete(candidates, attachment.AttachmentID)
+			}
+		}
 		for _, message := range session.Messages {
 			for _, part := range message.Parts {
 				delete(candidates, part.AttachmentID)
@@ -291,6 +296,11 @@ func (e *Env) removeUnusedAttachmentsLocked(candidates map[string]bool) {
 	}
 	for _, run := range e.running {
 		for _, item := range run.inbox {
+			for _, attachment := range item.Attachments {
+				delete(candidates, attachment.AttachmentID)
+			}
+		}
+		for _, item := range run.queued {
 			for _, attachment := range item.Attachments {
 				delete(candidates, attachment.AttachmentID)
 			}

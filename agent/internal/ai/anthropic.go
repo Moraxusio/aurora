@@ -267,7 +267,7 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		errBody, _ := io.ReadAll(io.LimitReader(res.Body, 256*1024))
-		return LLMResponse{}, &HTTPStatusError{Status: res.StatusCode, Body: string(errBody)}
+		return LLMResponse{}, statusError(res, errBody)
 	}
 
 	type contentBlock struct {

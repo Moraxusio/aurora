@@ -91,8 +91,9 @@ void main() {
     expect(find.byType(NewSessionDialog), findsOneWidget);
     await t.tap(find.text('取消')); await t.pumpAndSettle();
     await guiCommand(t, '配置 AI 模型与密钥…');
-    expect(find.text('AI 模型与 OpenCode 协议配置'), findsOneWidget);
+    expect(find.text('AI 设置'), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.escape, physicalKey: PhysicalKeyboardKey.escape); await t.pumpAndSettle();
+    expect(find.text('AI 设置'), findsNothing);
     await guiCommand(t, '按文件名打开…');
     expect(find.byType(QuickOpen), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.escape, physicalKey: PhysicalKeyboardKey.escape); await t.pumpAndSettle();
@@ -101,6 +102,7 @@ void main() {
   });
 
   testWidgets('notifications fit the scaled production viewport', (t) async {
+    addTearDown(Toast.resetForTest);
     await pump(t, 1.5);
     Toast.show('操作完成，仍可继续编辑');
     await t.pumpAndSettle();
@@ -111,6 +113,18 @@ void main() {
     await t.pump();
     expect(t.getSize(text).width, greaterThan(200));
     expect(t.takeException(), isNull);
+    Toast.key.currentState!.removeCurrentSnackBar();
+    await close(t);
+  });
+
+  testWidgets('error notifications expose copy and duplicate messages are suppressed', (t) async {
+    addTearDown(Toast.resetForTest);
+    await pump(t, 1);
+    Toast.show('错误详情', error: true);
+    Toast.show('错误详情', error: true);
+    await t.pumpAndSettle();
+    expect(find.text('错误详情'), findsOneWidget);
+    expect(find.byType(SnackBarAction), findsOneWidget);
     Toast.key.currentState!.removeCurrentSnackBar();
     await close(t);
   });

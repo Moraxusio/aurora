@@ -49,83 +49,89 @@ class _AiWorkbenchState extends State<AiWorkbench> {
       final items = work.items.values.toList().reversed.toList();
       return Column(
         children: [
-          Container(
-            key: const ValueKey('ai-work-navigation'),
-            height: 44,
-            decoration: BoxDecoration(
-              color: ide.panel,
-              border: Border(bottom: BorderSide(color: ide.border)),
+          if (items.isNotEmpty)
+            Container(
+              key: const ValueKey('ai-work-navigation'),
+              height: 44,
+              decoration: BoxDecoration(
+                color: ide.panel,
+                border: Border(bottom: BorderSide(color: ide.border)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              child: Row(
+                children: [
+                  _WorkTab(
+                    key: const ValueKey('ai-work-main'),
+                    icon: Icons.chat_bubble_outline,
+                    label: root?.parentId.isNotEmpty == true ? '子代理' : '主对话',
+                    selected: work.selected == 'main',
+                    onTap: () => work.select('main'),
+                    waiting: root?.waiting == true,
+                    running: root?.running == true,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: items.isEmpty
+                        ? Text(
+                            '子代理与命令会显示在这里',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: ide.textFaint,
+                            ),
+                          )
+                        : ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(width: 4),
+                            itemBuilder: (_, index) {
+                              final item = items[index];
+                              final target = item.childId.isEmpty
+                                  ? 'work:${item.key}'
+                                  : 'session:${item.childId}';
+                              return _WorkTab(
+                                key: ValueKey('ai-work-tab-${item.key}'),
+                                icon: item.childId.isEmpty
+                                    ? Icons.terminal
+                                    : Icons.account_tree_outlined,
+                                label: item.title,
+                                selected: work.selected == target,
+                                status:
+                                    work.sessions[item.childId]?.running == true
+                                    ? AiWorkStatus.running
+                                    : item.status,
+                                waiting:
+                                    work.sessions[item.childId]?.waiting ==
+                                    true,
+                                onTap: () => work.openItem(item),
+                              );
+                            },
+                          ),
+                  ),
+                  IconButton(
+                    key: const ValueKey('ai-work-list'),
+                    tooltip: '所有工作 · 运行中与已完成',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 32,
+                      height: 32,
+                    ),
+                    onPressed: () => showPicker<void>(
+                      context,
+                      maxWidth: 500,
+                      maxHeight: 580,
+                      builder: (_) => _WorkPicker(work: work),
+                    ),
+                    icon: Badge(
+                      isLabelVisible: work.runningCount > 0,
+                      label: Text('${work.runningCount}'),
+                      child: const Icon(Icons.view_list_outlined, size: 18),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            child: Row(
-              children: [
-                _WorkTab(
-                  key: const ValueKey('ai-work-main'),
-                  icon: Icons.chat_bubble_outline,
-                  label: root?.parentId.isNotEmpty == true ? '子代理' : '主对话',
-                  selected: work.selected == 'main',
-                  onTap: () => work.select('main'),
-                  waiting: root?.waiting == true,
-                  running: root?.running == true,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: items.isEmpty
-                      ? Text(
-                          '子代理与命令会显示在这里',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 11, color: ide.textFaint),
-                        )
-                      : ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: items.length,
-                          separatorBuilder: (_, _) => const SizedBox(width: 4),
-                          itemBuilder: (_, index) {
-                            final item = items[index];
-                            final target = item.childId.isEmpty
-                                ? 'work:${item.key}'
-                                : 'session:${item.childId}';
-                            return _WorkTab(
-                              key: ValueKey('ai-work-tab-${item.key}'),
-                              icon: item.childId.isEmpty
-                                  ? Icons.terminal
-                                  : Icons.account_tree_outlined,
-                              label: item.title,
-                              selected: work.selected == target,
-                              status:
-                                  work.sessions[item.childId]?.running == true
-                                  ? AiWorkStatus.running
-                                  : item.status,
-                              waiting:
-                                  work.sessions[item.childId]?.waiting == true,
-                              onTap: () => work.openItem(item),
-                            );
-                          },
-                        ),
-                ),
-                IconButton(
-                  key: const ValueKey('ai-work-list'),
-                  tooltip: '所有工作 · 运行中与已完成',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 32,
-                    height: 32,
-                  ),
-                  onPressed: () => showPicker<void>(
-                    context,
-                    maxWidth: 500,
-                    maxHeight: 580,
-                    builder: (_) => _WorkPicker(work: work),
-                  ),
-                  icon: Badge(
-                    isLabelVisible: work.runningCount > 0,
-                    label: Text('${work.runningCount}'),
-                    child: const Icon(Icons.view_list_outlined, size: 18),
-                  ),
-                ),
-              ],
-            ),
-          ),
           Expanded(
             child: Stack(
               fit: StackFit.expand,

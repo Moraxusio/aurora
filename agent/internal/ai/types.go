@@ -53,6 +53,16 @@ type ProviderConfig struct {
 	ProxyMode       string            `json:"proxy_mode,omitempty"` // absent: legacy; system | agent | direct
 }
 
+// PermissionRule mirrors OpenCode's ordered allow/ask/deny rule. Rules are
+// sent per run so a client can keep project policy local without persisting
+// credentials or changing the wire-compatible provider payload.
+type PermissionRule struct {
+	Action   string `json:"action"`
+	Resource string `json:"resource"`
+	Effect   string `json:"effect"` // allow | ask | deny
+	Scope    string `json:"scope,omitempty"`
+}
+
 // Usage follows OpenCode's inclusive + breakdown token contract.
 type Usage struct {
 	InputTokens          int     `json:"input_tokens,omitempty"`
@@ -149,33 +159,41 @@ type ContextAttachment struct {
 }
 
 type InboxItem struct {
-	ID          string              `json:"id"`
-	Text        string              `json:"text"`
-	Agent       string              `json:"agent,omitempty"` // "build" | "plan"
-	Delivery    string              `json:"delivery"`        // "steer" | "queue"
-	Attachments []ContextAttachment `json:"attachments,omitempty"`
-	CreatedAt   int64               `json:"created_at"`
+	ID              string              `json:"id"`
+	Text            string              `json:"text"`
+	Agent           string              `json:"agent,omitempty"` // "build" | "plan"
+	Delivery        string              `json:"delivery"`        // "steer" | "queue"
+	Attachments     []ContextAttachment `json:"attachments,omitempty"`
+	CreatedAt       int64               `json:"created_at"`
+	PermissionMode  string              `json:"permission_mode,omitempty"`
+	PermissionRules []PermissionRule    `json:"permission_rules,omitempty"`
+	Runtime         *RuntimeInfo        `json:"runtime,omitempty"`
+	Held            bool                `json:"held,omitempty"` // derived for clients; requires explicit resend
+	// Credentials live only in memory for this admitted request.
+	Provider ProviderConfig `json:"-"`
 }
 
 type Session struct {
-	ID             string       `json:"id"`
-	ParentID       string       `json:"parent_id,omitempty"`
-	Title          string       `json:"title"`
-	Pinned         bool         `json:"pinned,omitempty"`
-	Root           string       `json:"root"`                      // Aurora root ID (e.g. "home")
-	Workdir        string       `json:"workdir"`                   // Root-relative path (e.g. "/project")
-	Agent          string       `json:"agent"`                     // "build" | "plan" | "explore" | "general"
-	PermissionMode string       `json:"permission_mode,omitempty"` // "ask" | "auto"
-	Model          string       `json:"model,omitempty"`
-	Protocol       string       `json:"protocol,omitempty"`
-	Todos          []TodoItem   `json:"todos,omitempty"`
-	TotalUsage     Usage        `json:"total_usage"`
-	LastInputToks  int          `json:"last_input_tokens,omitempty"`
-	Runtime        *RuntimeInfo `json:"runtime,omitempty"`
-	Context        *ContextInfo `json:"context,omitempty"`
-	Messages       []Message    `json:"messages"`
-	CreatedAt      int64        `json:"created_at"`
-	UpdatedAt      int64        `json:"updated_at"`
+	ID              string           `json:"id"`
+	ParentID        string           `json:"parent_id,omitempty"`
+	Title           string           `json:"title"`
+	Pinned          bool             `json:"pinned,omitempty"`
+	Root            string           `json:"root"`                      // Aurora root ID (e.g. "home")
+	Workdir         string           `json:"workdir"`                   // Root-relative path (e.g. "/project")
+	Agent           string           `json:"agent"`                     // "build" | "plan" | "explore" | "general"
+	PermissionMode  string           `json:"permission_mode,omitempty"` // "ask" | "auto"
+	PermissionRules []PermissionRule `json:"permission_rules,omitempty"`
+	Model           string           `json:"model,omitempty"`
+	Protocol        string           `json:"protocol,omitempty"`
+	Todos           []TodoItem       `json:"todos,omitempty"`
+	TotalUsage      Usage            `json:"total_usage"`
+	LastInputToks   int              `json:"last_input_tokens,omitempty"`
+	Runtime         *RuntimeInfo     `json:"runtime,omitempty"`
+	Context         *ContextInfo     `json:"context,omitempty"`
+	Messages        []Message        `json:"messages"`
+	Inbox           []InboxItem      `json:"inbox,omitempty"`
+	CreatedAt       int64            `json:"created_at"`
+	UpdatedAt       int64            `json:"updated_at"`
 }
 
 // SessionSummary is the lightweight metadata returned by ai.sessions.
@@ -222,6 +240,7 @@ type StreamEvent struct {
 	TotalUsage    *Usage              `json:"total_usage,omitempty"`
 	Runtime       *RuntimeInfo        `json:"runtime,omitempty"`
 	Context       *ContextInfo        `json:"context,omitempty"`
+	Inbox         []InboxItem         `json:"inbox,omitempty"`
 }
 
 // Explicit allowlist: credentials, account IDs, URLs and custom headers must
@@ -244,13 +263,19 @@ type ContextInfo struct {
 }
 
 type PermissionQuestion struct {
-	ID        string         `json:"id"`
-	SessionID string         `json:"session_id"`
-	MessageID string         `json:"message_id"`
-	CallID    string         `json:"call_id"`
-	Tool      string         `json:"tool"`
-	Action    string         `json:"action"`
-	Resource  string         `json:"resource"`
-	Reason    string         `json:"reason,omitempty"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	MessageID string `json:"message_id"`
+	CallID    string `json:"call_id"`
+	Tool      string `json:"tool"`
+	Action    string `json:"action"`
+	Resource  string `json:"resource"`
+	// Reason is English prose kept for older clients. ReasonCode is the stable
+	// name of the same reason so a client can show it in its own language.
+	Reason     string `json:"reason,omitempty"`
+	ReasonCode string `json:"reason_code,omitempty"`
+	// AlwaysScope is the pattern "allow for this session" would remember, so the
+	// button can say what it covers ("git *" or "*").
+	AlwaysScope string         `json:"always_scope,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }

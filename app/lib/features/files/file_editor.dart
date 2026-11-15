@@ -149,6 +149,8 @@ class FileEditorState extends State<FileEditor> {
   String? _etag;
   String _saved = '';
   bool _saving = false;
+  Timer? _saveIndicator;
+  DateTime? _saveStarted;
   final bool _readOnly = false; // a later step: open read-only (e.g. a file the user cannot write)
   String? _langName;
   bool _preview = false;
@@ -306,6 +308,7 @@ class FileEditorState extends State<FileEditor> {
 
   @override
   void dispose() {
+    _saveIndicator?.cancel();
     widget.ws.app.appearance.removeListener(_onSettings);
     _unwatch?.call();
     _controller.removeListener(_onChanged);
@@ -383,12 +386,21 @@ class FileEditorState extends State<FileEditor> {
     if (link == null) return widget.ws.toast('未连接，没有保存', error: true);
     final text = _controller.text;
     String? conflict;
+    _saveStarted = DateTime.now();
+    _saveIndicator?.cancel();
+    _saveIndicator = Timer(const Duration(milliseconds: 200), () {
+      if (mounted && _saving) setState(() {});
+    });
     setState(() => _saving = true);
     try {
       final r = (await link.call('fs.write', {'root': widget.root, 'path': widget.path, 'content': text, 'if_match': _etag}) as Map).cast<String, dynamic>();
       _etag = r['etag'] as String? ?? _etag;
       _saved = text;
-      widget.ws.toast('已保存 ${widget.path.split('/').last}');
+      // A clean dot in the tab is the normal success feedback. Avoid a toast
+      // for every Ctrl+S; only slow saves need an explicit confirmation.
+      if (_saveStarted != null && DateTime.now().difference(_saveStarted!) > const Duration(milliseconds: 600)) {
+        widget.ws.toast('已保存 ${widget.path.split('/').last}');
+      }
       widget.ws.filesRevision.value++; // the tree's size and time for this file
     } on OpError catch (e) {
       if (e.code == codeConflict) {
@@ -397,6 +409,7 @@ class FileEditorState extends State<FileEditor> {
         widget.ws.toast(e.message, error: true);
       }
     } finally {
+      _saveIndicator?.cancel();
       if (mounted) setState(() => _saving = false);
       _onChanged();
     }

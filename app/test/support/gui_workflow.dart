@@ -151,7 +151,7 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
     expect(find.byType(NewSessionDialog), findsOneWidget);
     await click(find.text('取消'));
     await guiCommand(t, '配置 AI 模型与密钥…');
-    expect(find.text('AI 模型与 OpenCode 协议配置'), findsOneWidget);
+    expect(find.text('AI 设置'), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.escape, physicalKey: PhysicalKeyboardKey.escape); await frames();
     Toast.show('GUI interaction audit complete'); await frames();
     expect(find.text('GUI interaction audit complete'), findsOneWidget);

@@ -127,4 +127,20 @@ void main() {
       expect(restored.ai.toJson(), Profile.fromJson(json).ai.toJson());
     },
   );
+
+  test('ordered permission rules survive sealed profile round trip', () {
+    final ai = AiSettings(
+      permissionRules: [
+        AiPermissionRule(action: 'shell', resource: '*', effect: 'ask'),
+        AiPermissionRule(action: 'shell', resource: 'git status *', effect: 'allow'),
+        AiPermissionRule(action: 'shell', resource: 'git push *', effect: 'deny', scope: 'project'),
+      ],
+    );
+    final restored = AiSettings.fromJson(ai.toJson());
+    expect(restored.permissionRules.map((r) => r.toJson()), [
+      {'action': 'shell', 'resource': '*', 'effect': 'ask'},
+      {'action': 'shell', 'resource': 'git status *', 'effect': 'allow'},
+      {'action': 'shell', 'resource': 'git push *', 'effect': 'deny', 'scope': 'project'},
+    ]);
+  });
 }

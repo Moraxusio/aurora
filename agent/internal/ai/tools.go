@@ -337,7 +337,7 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 	}
 
 	checkPerm := func(action, resource string, meta map[string]any) error {
-		eff, reason := tc.env.perms.Evaluate(tc.session.ID, tc.session.Agent, tc.session.PermissionMode, action, resource)
+		eff, reason := tc.env.perms.EvaluateWithRules(tc.session.ID, tc.session.Agent, tc.session.PermissionMode, action, resource, tc.session.PermissionRules)
 		if eff == "deny" {
 			return errors.New(reason)
 		}

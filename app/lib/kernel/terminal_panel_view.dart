@@ -250,24 +250,32 @@ class _TerminalPanelViewState extends State<TerminalPanelView> {
                                 setState(() => _sessionsWanted = !showSessions),
                             selected: showSessions,
                           ),
+                          // Three different things, three different glyphs:
+                          //   a bin   = this ends the process (local terminal only)
+                          //   an X    = close this view; a remote session keeps running
+                          //   a chevron = hide the whole panel; every session keeps running
                           if (hasTerminal)
-                            _action(
-                              Icons.delete_outline,
-                              ws.entry?.isLocal == true
-                                  ? '结束当前本地终端'
-                                  : '关闭终端视图（远程会话保留）',
-                              () => ws.closeTab(ws.terminalActiveId!),
-                            ),
+                            ws.entry?.isLocal == true
+                                ? _action(
+                                    Icons.delete_outline,
+                                    '结束当前本地终端（里面运行的程序会被结束）',
+                                    () => ws.closeTab(ws.terminalActiveId!),
+                                  )
+                                : _action(
+                                    Icons.close,
+                                    '关闭这个终端视图（服务器上的会话继续运行，可在会话列表重新打开）',
+                                    () => ws.closeTab(ws.terminalActiveId!),
+                                  ),
                           _action(
                             ws.terminalPanel.maximized
-                                ? Icons.keyboard_arrow_down
-                                : Icons.keyboard_arrow_up,
+                                ? Icons.close_fullscreen
+                                : Icons.open_in_full,
                             ws.terminalPanel.maximized ? '还原终端面板' : '最大化终端面板',
                             ws.toggleTerminalMaximized,
                           ),
                           _action(
-                            Icons.close,
-                            '隐藏终端面板（保留会话）',
+                            Icons.keyboard_arrow_down,
+                            '隐藏终端面板（所有会话保留，Ctrl+J 再显示）',
                             ws.hideTerminalPanel,
                           ),
                           const SizedBox(width: 4),

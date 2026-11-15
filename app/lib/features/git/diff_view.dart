@@ -13,6 +13,17 @@ import 'text_diff.dart';
 
 enum DiffLineKind { meta, hunk, context, add, del }
 
+/// Approximate the rendered monospace width without assuming every character
+/// is an ASCII cell. The old `length * 8.2` clipped Chinese and full-width
+/// punctuation because those glyphs occupy two cells in Cascadia's fallback.
+int diffDisplayCells(String text) {
+  var cells = 0;
+  for (final r in text.runes) {
+    cells += r >= 0x2E80 && r <= 0xD7AF || r >= 0xF900 && r <= 0xFAFF || r >= 0xFF00 && r <= 0xFFEF ? 2 : 1;
+  }
+  return cells;
+}
+
 class DiffLine {
   final DiffLineKind kind;
   final String text;
@@ -87,7 +98,10 @@ class DiffView extends StatelessWidget {
     final ide = Ide.of(context);
     if (lines.isEmpty) return EmptyHint(icon: Icons.difference_outlined, text: note ?? '没有差异');
     const mono = TextStyle(fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback, fontSize: 13, height: 1.4);
-    final width = lines.fold<int>(0, (m, l) => l.text.length > m ? l.text.length : m);
+    final width = lines.fold<int>(0, (m, l) {
+      final cells = diffDisplayCells(l.text);
+      return cells > m ? cells : m;
+    });
     return Scrollbar(
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,

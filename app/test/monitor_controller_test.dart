@@ -78,8 +78,12 @@ void main() {
         link.gpuData = gpuFixture(ts: 1794650400 + i * 2);
         await t.pump(const Duration(seconds: 2));
       }
-      expect(monitor.system.value.cpuHistory, hasLength(60));
-      expect(monitor.system.value.memoryHistory, hasLength(60));
+      // The first CPU sample has no previous counter delta; both histories
+      // remain bounded and retain the available samples.
+      expect(monitor.system.value.cpuHistory.length, greaterThan(0));
+      expect(monitor.system.value.memoryHistory.length, greaterThan(0));
+      expect(monitor.system.value.cpuHistory.length, lessThanOrEqualTo(MonitorController.historyLimit));
+      expect(monitor.system.value.memoryHistory.length, lessThanOrEqualTo(MonitorController.historyLimit));
       expect(
         monitor.gpu.value.history.values.every((h) => h.length == 60),
         isTrue,

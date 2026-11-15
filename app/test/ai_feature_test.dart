@@ -497,7 +497,11 @@ void main() {
       );
       await t.tap(find.text('gpt-5.2-codex'));
       await settle(t);
-      expect(app.profile.ai.activeProvider!.model, 'gpt-5.2-codex');
+      expect(
+        app.profile.ai.activeProvider!.model,
+        'claude-sonnet-4-5',
+        reason: '会话选择不应改写全局默认模型',
+      );
       expect(
         app.profile.ai.activeProvider!.models,
         contains('claude-sonnet-4-5'),
@@ -571,7 +575,7 @@ void main() {
       expect(find.text('任务进度 (1/2)'), findsOneWidget);
       expect(find.text('读取 src/main.dart'), findsOneWidget);
       expect(find.text('本步变更 1 个文件'), findsOneWidget);
-      expect(find.text('需要授权执行 edit'), findsOneWidget);
+      expect(find.text('修改文件 · src/main.dart'), findsOneWidget);
 
       // Approve pending permission inline
       await t.tap(find.byKey(const ValueKey('ai-approve-once')));
@@ -583,9 +587,9 @@ void main() {
       expect(approveCall.$2['allow'], isTrue);
 
       // Switch to Plan mode and send steering message
-      await t.tap(find.text('Build 构建'));
+      await t.tap(find.byKey(const ValueKey('ai-agent-mode')));
       await t.pump(const Duration(milliseconds: 50));
-      expect(find.text('Plan 规划'), findsOneWidget);
+      expect(find.text('规划 · 只读'), findsOneWidget);
 
       await t.enterText(
         find.byKey(const ValueKey('ai-prompt-input')),
@@ -620,7 +624,8 @@ void main() {
       );
       await t.tap(find.text('打开配置'));
       await t.pumpAndSettle();
-
+      await t.tap(find.byKey(const ValueKey('ai-settings-nav-models')));
+      await t.pumpAndSettle();
       await t.ensureVisible(find.text('拉取模型'));
       await t.tap(find.text('拉取模型'));
       await t.pumpAndSettle();
@@ -653,10 +658,13 @@ void main() {
       final key = app.profile.ai.activeProvider!.apiKey;
       await t.tap(find.text('配置'));
       await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('ai-settings-nav-models')));
+      await t.pumpAndSettle();
       await t.enterText(
         find.byKey(const ValueKey('ai-model-id')),
         'manual-model-fixture',
       );
+      await t.ensureVisible(find.byKey(const ValueKey('ai-add-model')));
       await t.ensureVisible(find.byKey(const ValueKey('ai-add-model')));
       await t.tap(find.byKey(const ValueKey('ai-add-model')));
       await t.pumpAndSettle();

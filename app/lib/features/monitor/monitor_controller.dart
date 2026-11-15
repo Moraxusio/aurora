@@ -94,8 +94,9 @@ class MonitorController {
   }
 
   bool _current(int generation) => !_disposed && generation == _generation;
+  static const historyLimit = 150;
   static List<double> _append(List<double> history, double value) =>
-      List.unmodifiable([...history.skip(history.length >= 60 ? 1 : 0), value]);
+      List.unmodifiable([...history.skip(history.length >= historyLimit ? 1 : 0), value]);
   static int _busy(List<int> cpu) =>
       cpu.fold(0, (a, b) => a + b) - cpu[3] - (cpu.length > 4 ? cpu[4] : 0);
 

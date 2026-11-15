@@ -192,7 +192,7 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('ai-select-directory')));
     await t.pumpAndSettle();
-    expect(find.byTooltip(RegExp('/project/src')), findsOneWidget);
+    expect(find.byTooltip('home : /project/src'), findsOneWidget);
     await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), 'hello');
     await t.tap(find.byKey(const ValueKey('ai-send-btn')));
     await t.pump(const Duration(milliseconds: 300));

@@ -204,7 +204,7 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 		if subscription {
 			return LLMResponse{}, subscriptionHTTPError(res.StatusCode, errBody)
 		}
-		return LLMResponse{}, &HTTPStatusError{Status: res.StatusCode, Body: string(errBody)}
+		return LLMResponse{}, statusError(res, errBody)
 	}
 
 	type respItem struct {

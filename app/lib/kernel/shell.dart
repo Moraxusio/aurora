@@ -26,6 +26,7 @@ import 'widgets.dart';
 import 'window_frame.dart';
 import 'workspace.dart';
 import 'tab_layout.dart';
+import 'tab_layout_menu.dart' show arrangementIcon, arrangementLabel, placementLabel;
 import 'tab_workspace_view.dart';
 import 'workbench_view.dart';
 import 'retained_pages.dart';
@@ -173,8 +174,9 @@ class _ShellState extends State<Shell> {
       Command(id: 'view.zoomIn', title: '放大界面', group: '外观', shortcut: 'Ctrl++', run: () => _zoom(.1)),
       Command(id: 'view.zoomOut', title: '缩小界面', group: '外观', shortcut: 'Ctrl+-', run: () => _zoom(-.1)),
       Command(id: 'view.zoomReset', title: '还原界面缩放', group: '外观', shortcut: 'Ctrl+0', run: () => app.appearance.set('uiScale', 1.0)),
+      // the server in front is not a place to switch to
       for (final s in app.servers)
-        Command(id: 'server.go.${s.id}', title: '切换到 ${s.name}', group: '服务器', icon: Icons.dns_outlined, run: () => app.select(s.id)),
+        if (s.id != app.selected) Command(id: 'server.go.${s.id}', title: '切换到 ${s.name}', group: '服务器', icon: Icons.dns_outlined, run: () => app.select(s.id)),
     ];
     if (ws != null) {
       out.addAll([
@@ -199,7 +201,7 @@ class _ShellState extends State<Shell> {
         Command(id: 'editor.splitDown', title: '向下分屏', group: '标签与布局', shortcut: 'Ctrl+Shift+\\', icon: Icons.horizontal_split_outlined, run: () => ws.splitGroup(SplitAxis.vertical)),
         Command(id: 'editor.focus', title: '放大当前视图 / 还原分屏', group: '视图', shortcut: 'Ctrl+Shift+Enter', icon: Icons.fit_screen_outlined, enabled: () => ws.split, run: ws.toggleFocusMode),
         for (final arrangement in EditorArrangement.values)
-          Command(id: 'editor.layout.${arrangement.name}', title: arrangementLabel(arrangement), group: '标签与布局', icon: Icons.dashboard_outlined, run: () => ws.arrangeEditors(arrangement)),
+          Command(id: 'editor.layout.${arrangement.name}', title: arrangementLabel(arrangement), group: '标签与布局', icon: arrangementIcon(arrangement), run: () => ws.arrangeEditors(arrangement)),
         for (final placement in TabPlacement.values)
           Command(id: 'editor.tabs.${placement.name}', title: placementLabel(placement), group: '标签与布局', icon: Icons.tab_outlined, run: () => ws.setTabPlacement(placement)),
         Command(id: 'tab.pin', title: '固定 / 取消固定当前标签', group: '标签与布局', icon: Icons.push_pin_outlined, enabled: () => ws.active != null, run: () => ws.pinTab(ws.active!.id)),
@@ -383,7 +385,14 @@ class _ShellState extends State<Shell> {
           left: narrow ? Space.m : 52,
           top: narrow ? 52 : 38,
           width: narrow ? width - Space.m * 2 : 340,
-          child: _ServerSwitcher(app: app, onClose: () => setState(() => _serversOpen = false), onAdd: _addServer),
+          child: _ServerSwitcher(app: app, onClose: () => setState(() => _serversOpen = false), onAdd: _addServer,
+            onOverview: (id) {
+              // the overview belongs to the server in front: bring it forward first
+              if (app.selected != id) app.select(id);
+              setState(() => _serversOpen = false);
+              final target = _spaces[id] ?? _ws;
+              if (target != null) target.openTab(overviewTab(target, widget.features));
+            }),
         ),
       ],
     ]);
@@ -669,13 +678,23 @@ class _ActivityBar extends StatelessWidget {
         width: 48,
         decoration: BoxDecoration(color: ide.activityBar, border: Border(right: BorderSide(color: ide.border))),
         child: Column(children: [
-          Expanded(child: SingleChildScrollView(child: Column(children: feats))),
-          if (secondary.isNotEmpty) SizedBox(width: 40, height: 40, child: WorkbenchMenuButton<Feature>(
-            tooltip: '更多工具', icon: Icon(Icons.more_horiz, size: 21, color: secondary.any((f) => f.id == current) ? ide.accent : ide.textDim),
-            onSelected: onPick, itemBuilder: (_) => [for (final f in secondary) PopupMenuItem(value: f,
-              child: Row(children: [Icon(f.icon, size: 17), const SizedBox(width: 12), Text(f.title)]))],
-          )),
-           rail(Icons.settings_outlined, '设置（Ctrl+,）', tap: () => ws.openTab(settingsTab(ws.app))),
+          // Monitoring, services, ports and proxy are what a server tool is for:
+          // they sit on the bar, after a thin rule, not behind a menu.
+          Expanded(child: SingleChildScrollView(child: Column(children: [
+            ...feats,
+            if (secondary.isNotEmpty) Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Divider(height: 1, color: ide.border),
+            ),
+            for (final f in secondary)
+              Builder(builder: (_) {
+                final st = ws.link == null ? FeatureState.available : ws.stateOf(f);
+                final usable = st == FeatureState.available || st == FeatureState.loading;
+                return rail(f.icon, usable ? f.title : '${f.title}（${_stateText(st)}）', on: current == f.id, dim: !usable, tap: () => onPick(f));
+              }),
+          ]))),
+          rail(Icons.tune_rounded, '服务器概览与设置', tap: onOverview),
+          rail(Icons.settings_outlined, '设置（Ctrl+,）', tap: () => ws.openTab(settingsTab(ws.app))),
           const SizedBox(height: Space.xs),
         ]),
       );
@@ -952,7 +971,9 @@ class _Welcome extends StatelessWidget {
 
     final st = ws.status;
     final subtitle = connected
-        ? [ws.link!.server.os, 'agent ${ws.link!.server.version}', ?st.addr].where((s) => s.isNotEmpty).join(' · ')
+        // The local agent listens on a random port: that address means nothing to
+        // the user, so only a remote server's is shown (the status bar tooltip has both).
+        ? [ws.link!.server.os, 'agent ${ws.link!.server.version}', if (ws.entry?.isLocal != true) ?st.addr].where((s) => s.isNotEmpty).join(' · ')
         : switch (st.state) {
             ConnState.connecting => '正在连接…',
             ConnState.waiting => '${st.retryIn?.inSeconds ?? 0} 秒后重试',
@@ -1068,7 +1089,7 @@ class _ActionCardState extends State<_ActionCard> {
             Expanded(
               child: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: ide.text)),
             ),
-            if (a.keys != null && !InputMode.isTouch(context)) ...[const SizedBox(width: Space.s), Text(a.keys!, style: TextStyle(fontSize: 11, color: ide.textFaint))],
+            if (a.keys != null && !InputMode.isTouch(context)) ...[const SizedBox(width: Space.s), KeyCaps(a.keys!)],
           ]),
         )),
       ),
@@ -1209,7 +1230,10 @@ class _PhoneTop extends StatelessWidget {
 class _ServerSwitcher extends StatelessWidget {
   final AppState app;
   final VoidCallback onClose, onAdd;
-  const _ServerSwitcher({required this.app, required this.onClose, required this.onAdd});
+
+  /// Opens the settings and services page of a server (by id).
+  final void Function(String id) onOverview;
+  const _ServerSwitcher({required this.app, required this.onClose, required this.onAdd, required this.onOverview});
 
   @override
   Widget build(BuildContext context) {
@@ -1238,7 +1262,10 @@ class _ServerSwitcher extends StatelessWidget {
                       leading: StatusDot(connColor(ide, app.status(s.id).state), size: 7),
                       label: s.name,
                       detail: s.isLocal ? '本地 agent · 当前 Windows 用户' : s.ssh?.host,
-                      trailing: s.id == p.selected ? Icon(Icons.check_rounded, size: 16, color: ide.accent) : null,
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (s.id == p.selected) Icon(Icons.check_rounded, size: 16, color: ide.accent),
+                        IconBtn(Icons.tune_rounded, '服务器概览与设置：服务开关、升级 agent、重新配对、卸载', () => onOverview(s.id), size: 15),
+                      ]),
                       onTap: () {
                         app.select(s.id);
                         onClose();

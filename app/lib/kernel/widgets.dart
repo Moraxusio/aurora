@@ -23,11 +23,26 @@ abstract final class AppNavigation {
 /// Messages at the bottom of the window. The key goes to MaterialApp.
 class Toast {
   static final key = GlobalKey<ScaffoldMessengerState>();
+  static String? _lastMessage;
+  static bool? _lastError;
+  static DateTime? _lastAt;
+
+  @visibleForTesting
+  static void resetForTest() {
+    _lastMessage = null;
+    _lastError = null;
+    _lastAt = null;
+    key.currentState?.clearSnackBars();
+  }
 
   static void show(String msg, {bool error = false}) {
     final m = key.currentState;
     if (m == null) return;
-    m.hideCurrentSnackBar();
+    final now = DateTime.now();
+    if (_lastMessage == msg && _lastError == error && _lastAt != null && now.difference(_lastAt!) < const Duration(seconds: 1)) return;
+    _lastMessage = msg;
+    _lastError = error;
+    _lastAt = now;
     // Let Scaffold constrain the width in its own scaled coordinate system.
     // Margins computed from View above the scale can consume the whole width.
     final context = AppNavigation.context ?? m.context;
@@ -43,6 +58,14 @@ class Toast {
           Expanded(child: SelectableText(msg, style: TextStyle(color: ide.text, fontSize: 13))),
         ]);
       }),
+      action: error
+          ? SnackBarAction(
+              label: '复制',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: msg));
+              },
+            )
+          : null,
     ), snackBarAnimationStyle: UiMotion.notification(context));
   }
 }
@@ -346,7 +369,11 @@ class PickerRow extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   final Widget child;
-  const PickerRow({super.key, required this.selected, required this.onTap, required this.child});
+
+  /// True when the list moves [selected] with the pointer itself (the command
+  /// palette): the ink then paints no hover colour of its own, so one row is lit.
+  final bool followsPointer;
+  const PickerRow({super.key, required this.selected, required this.onTap, required this.child, this.followsPointer = false});
 
   @override
   Widget build(BuildContext context) {
@@ -356,6 +383,7 @@ class PickerRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(Radii.m),
+        hoverColor: followsPointer ? Colors.transparent : null,
         child: Container(
           height: height,
           padding: const EdgeInsets.symmetric(horizontal: Space.m + 2),
@@ -379,6 +407,31 @@ void revealPickerRow(ScrollController c, int index, {double pad = Space.s}) {
   }
 }
 
+/// The keys of a shortcut written "Ctrl+Shift+P". A plain split on '+' breaks
+/// the shortcuts whose key IS the plus sign: "Ctrl++" is [Ctrl, +], not
+/// [Ctrl, '', '']. A '+' that follows another '+' or ends the text is a key.
+List<String> shortcutKeys(String text) {
+  final out = <String>[];
+  var cur = StringBuffer();
+  for (var i = 0; i < text.length; i++) {
+    final c = text[i];
+    if (c != '+') {
+      cur.write(c);
+      continue;
+    }
+    if (cur.isNotEmpty) {
+      out.add(cur.toString().trim());
+      cur = StringBuffer();
+    } else {
+      // a separator with nothing before it: this plus is the key itself
+      out.add('+');
+      if (i + 1 < text.length && text[i + 1] == '+') i++;
+    }
+  }
+  if (cur.isNotEmpty) out.add(cur.toString().trim());
+  return [for (final k in out) if (k.isNotEmpty) k];
+}
+
 /// A keyboard shortcut drawn as key caps: "Ctrl+Shift+P".
 class KeyCaps extends StatelessWidget {
   final String keys;
@@ -388,7 +441,7 @@ class KeyCaps extends StatelessWidget {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      for (final k in keys.split('+'))
+      for (final k in shortcutKeys(keys))
         Container(
           margin: const EdgeInsets.only(left: 3),
           padding: const EdgeInsets.symmetric(horizontal: 5),

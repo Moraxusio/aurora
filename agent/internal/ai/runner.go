@@ -22,6 +22,7 @@ const maxRunnerSteps = 60
 type activeRun struct {
 	cancel   context.CancelFunc
 	inbox    []InboxItem
+	queued   []InboxItem
 	provider ProviderConfig
 }
 
@@ -132,6 +133,13 @@ func (e *Env) unsubscribe(ch chan StreamEvent) {
 func (e *Env) broadcast(ev StreamEvent) {
 	e.init()
 	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.broadcastLocked(ev)
+}
+
+// Nonblocking fanout under the admission lock keeps terminal status ordered
+// before a new run's events.
+func (e *Env) broadcastLocked(ev StreamEvent) {
 	if s := e.sessions[ev.SessionID]; s != nil {
 		ev.SessionTitle = s.Title
 		for s.ParentID != "" {
@@ -165,13 +173,7 @@ func (e *Env) broadcast(ev StreamEvent) {
 			}
 		}
 	}
-	chans := make([]chan StreamEvent, 0, len(e.subs))
 	for ch := range e.subs {
-		chans = append(chans, ch)
-	}
-	e.mu.Unlock()
-
-	for _, ch := range chans {
 		select {
 		case ch <- ev:
 		default:
@@ -476,7 +478,35 @@ func (e *Env) GetSession(id string) (Session, bool, *PermissionQuestion, error) 
 		return Session{}, false, nil, fmt.Errorf("session not found: %s", id)
 	}
 	_, isRun := e.running[id]
-	return cloneSession(s), isRun, e.perms.PendingForSession(id), nil
+	out := cloneSession(s)
+	for i := range out.Inbox {
+		out.Inbox[i].Held = !e.inboxActiveLocked(id, out.Inbox[i].ID)
+	}
+	return out, isRun, e.perms.PendingForSession(id), nil
+}
+
+func (e *Env) inboxActiveLocked(sessionID, itemID string) bool {
+	run := e.running[sessionID]
+	if run == nil {
+		return false
+	}
+	for _, items := range [][]InboxItem{run.inbox, run.queued} {
+		for _, item := range items {
+			if item.ID == itemID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (e *Env) inboxSnapshotLocked(s *Session) []InboxItem {
+	items := append([]InboxItem(nil), s.Inbox...)
+	for i := range items {
+		items[i].Held = !e.inboxActiveLocked(s.ID, items[i].ID)
+		items[i].Provider = ProviderConfig{}
+	}
+	return items
 }
 
 func (e *Env) DeleteSession(id string) error {
@@ -500,6 +530,13 @@ func (e *Env) DeleteSession(id string) error {
 	attachmentCandidates := map[string]bool{}
 	for _, did := range toDelete {
 		if session := e.sessions[did]; session != nil {
+			for _, item := range session.Inbox {
+				for _, attachment := range item.Attachments {
+					if attachment.AttachmentID != "" {
+						attachmentCandidates[attachment.AttachmentID] = true
+					}
+				}
+			}
 			for _, message := range session.Messages {
 				for _, part := range message.Parts {
 					if part.AttachmentID != "" {
@@ -582,15 +619,17 @@ func formatUserContent(text string, attachments []ContextAttachment) string {
 
 // RunInput is the payload for ai.run.
 type RunInput struct {
-	SessionID      string              `json:"session_id,omitempty"`
-	Root           string              `json:"root,omitempty"`
-	Workdir        string              `json:"workdir,omitempty"`
-	Agent          string              `json:"agent,omitempty"`           // "build" | "plan"
-	PermissionMode string              `json:"permission_mode,omitempty"` // "ask" | "auto"
-	Text           string              `json:"text"`
-	Attachments    []ContextAttachment `json:"attachments,omitempty"`
-	Delivery       string              `json:"delivery,omitempty"` // "steer" | "queue"
-	Provider       ProviderConfig      `json:"provider"`
+	SessionID       string              `json:"session_id,omitempty"`
+	InboxID         string              `json:"inbox_id,omitempty"`
+	Root            string              `json:"root,omitempty"`
+	Workdir         string              `json:"workdir,omitempty"`
+	Agent           string              `json:"agent,omitempty"`           // "build" | "plan"
+	PermissionMode  string              `json:"permission_mode,omitempty"` // "ask" | "auto"
+	PermissionRules []PermissionRule    `json:"permission_rules,omitempty"`
+	Text            string              `json:"text"`
+	Attachments     []ContextAttachment `json:"attachments,omitempty"`
+	Delivery        string              `json:"delivery,omitempty"` // "steer" | "queue"
+	Provider        ProviderConfig      `json:"provider"`
 }
 
 // StartRun creates or resumes a session, enqueues the user prompt (supporting live steering
@@ -602,7 +641,7 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	if prepErr != nil {
 		return SessionSummary{}, prepErr
 	}
-	if strings.TrimSpace(in.Text) == "" && len(in.Attachments) == 0 {
+	if strings.TrimSpace(in.Text) == "" && len(in.Attachments) == 0 && in.InboxID == "" {
 		return SessionSummary{}, errors.New("prompt text must not be empty")
 	}
 	if strings.TrimSpace(in.Provider.Model) == "" {
@@ -619,6 +658,25 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	}
 
 	e.mu.Lock()
+	if in.InboxID != "" {
+		s := e.sessions[in.SessionID]
+		if s == nil || e.running[in.SessionID] != nil {
+			e.mu.Unlock()
+			return SessionSummary{}, errors.New("请等待任务停止后再发送保留的输入")
+		}
+		found := false
+		for _, item := range s.Inbox {
+			if item.ID == in.InboxID {
+				in.Text, in.Attachments = item.Text, item.Attachments
+				found = true
+				break
+			}
+		}
+		if !found {
+			e.mu.Unlock()
+			return SessionSummary{}, errors.New("待发送输入不存在或已经处理")
+		}
+	}
 	// Deletion uses the same lock: a shared reference must not disappear
 	// between validation and publishing this message/inbox entry.
 	if err := e.validateAttachments(in.Attachments); err != nil {
@@ -671,24 +729,36 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		e.sessions[s.ID] = s
 	}
 
-	prevAgent := s.Agent
-	s.Agent = agentMode
-	s.PermissionMode = permMode
-	s.Model = in.Provider.Model
-	s.Protocol = in.Provider.Protocol
-	s.UpdatedAt = time.Now().UnixMilli()
-
 	// If already running, push into activeRun.inbox for OpenCode-style live steering!
 	if ar, busy := e.running[s.ID]; busy {
-		ar.provider = in.Provider
-		ar.inbox = append(ar.inbox, InboxItem{
-			ID:          NewID("inb"),
-			Text:        in.Text,
-			Agent:       agentMode,
-			Delivery:    in.Delivery,
-			Attachments: in.Attachments,
-			CreatedAt:   time.Now().UnixMilli(),
-		})
+		item := InboxItem{
+			ID:              NewID("inb"),
+			Text:            in.Text,
+			Agent:           agentMode,
+			Delivery:        in.Delivery,
+			Attachments:     in.Attachments,
+			CreatedAt:       time.Now().UnixMilli(),
+			PermissionMode:  permMode,
+			PermissionRules: append([]PermissionRule(nil), in.PermissionRules...),
+			Provider:        in.Provider,
+			Runtime:         runtimeInfo(in.Provider),
+		}
+		if item.Delivery != "queue" {
+			item.Delivery = "steer"
+		}
+		s.Inbox = append(s.Inbox, item)
+		if err := e.persistSessionLocked(s); err != nil {
+			s.Inbox = s.Inbox[:len(s.Inbox)-1]
+			e.mu.Unlock()
+			return SessionSummary{}, err
+		}
+		if item.Delivery == "queue" {
+			ar.queued = append(ar.queued, item)
+		} else {
+			// "steer" is the interactive path: it is inserted before the next
+			// model step. Queue messages are held until the current turn finishes.
+			ar.inbox = append(ar.inbox, item)
+		}
 		sum := SessionSummary{
 			ID:           s.ID,
 			Title:        s.Title,
@@ -700,8 +770,29 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 			MessageCount: len(s.Messages),
 			UpdatedAt:    s.UpdatedAt,
 		}
+		pending := e.inboxSnapshotLocked(s)
 		e.mu.Unlock()
+		e.broadcast(StreamEvent{Type: "inbox.updated", SessionID: s.ID, Inbox: pending})
 		return sum, nil
+	}
+
+	before := *s
+	before.Messages = append([]Message(nil), s.Messages...)
+	before.Inbox = append([]InboxItem(nil), s.Inbox...)
+	prevAgent := s.Agent
+	s.Agent = agentMode
+	s.PermissionMode = permMode
+	s.PermissionRules = append([]PermissionRule(nil), in.PermissionRules...)
+	s.Model = in.Provider.Model
+	s.Protocol = in.Provider.Protocol
+	s.UpdatedAt = time.Now().UnixMilli()
+	if in.InboxID != "" {
+		for i, item := range s.Inbox {
+			if item.ID == in.InboxID {
+				s.Inbox = append(s.Inbox[:i], s.Inbox[i+1:]...)
+				break
+			}
+		}
 	}
 
 	// Inject Plan mode enter/leave reminder when switching agents (matching OpenCode's PlanPlugin)
@@ -734,7 +825,14 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		CreatedAt: time.Now().UnixMilli(),
 	}
 	s.Messages = append(s.Messages, userMsg)
-	_ = e.persistSessionLocked(s)
+	if err := e.persistSessionLocked(s); err != nil {
+		*s = before
+		if in.SessionID == "" {
+			delete(e.sessions, s.ID)
+		}
+		e.mu.Unlock()
+		return SessionSummary{}, err
+	}
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	ar := &activeRun{
@@ -855,21 +953,26 @@ func (e *Env) generateTitleAsync(sessionID, promptText string, cfg ProviderConfi
 	}
 }
 
+func (e *Env) finishRunLocked(sessionID string, owned *activeRun) {
+	if owned == nil || e.running[sessionID] != owned {
+		return
+	}
+	e.perms.CancelSession(sessionID)
+	delete(e.running, sessionID)
+	if s := e.sessions[sessionID]; s != nil {
+		_ = e.persistSessionLocked(s)
+	}
+	e.broadcastLocked(StreamEvent{Type: "session.status", SessionID: sessionID, Status: "idle"})
+}
+
 func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
+	e.mu.Lock()
+	owned := e.running[sessionID]
+	e.mu.Unlock()
 	defer func() {
-		e.perms.CancelSession(sessionID)
 		e.mu.Lock()
-		delete(e.running, sessionID)
-		s := e.sessions[sessionID]
-		if s != nil {
-			_ = e.persistSessionLocked(s)
-		}
+		e.finishRunLocked(sessionID, owned)
 		e.mu.Unlock()
-		e.broadcast(StreamEvent{
-			Type:      "session.status",
-			SessionID: sessionID,
-			Status:    "idle",
-		})
 	}()
 
 	type recentCall struct {
@@ -877,6 +980,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		args string
 	}
 	var lastCalls []recentCall
+	idleBoundary := false
 
 	for step := 0; step < maxRunnerSteps; step++ {
 		if ctx.Err() != nil {
@@ -890,11 +994,43 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			e.mu.Unlock()
 			return
 		}
-		// Drain any steering inbox messages submitted while running
+		// Move queued follow-ups only after the previous model/tool turn has
+		// completed. This keeps the two composer delivery modes meaningful.
+		if idleBoundary && len(ar.inbox) == 0 && len(ar.queued) > 0 {
+			ar.inbox = append(ar.inbox, ar.queued[0])
+			ar.queued = ar.queued[1:]
+		}
+		// Drain interactive steering messages submitted while running.
+		var delivered []Message
+		var pending []InboxItem
 		if len(ar.inbox) > 0 {
+			before := *s
+			before.Messages = append([]Message(nil), s.Messages...)
+			before.Inbox = append([]InboxItem(nil), s.Inbox...)
+			step = 0
+			lastCalls = nil
 			for _, item := range ar.inbox {
+				previousAgent := s.Agent
 				if item.Agent != "" && (item.Agent == "build" || item.Agent == "plan") {
 					s.Agent = item.Agent
+				}
+				if s.Agent != previousAgent {
+					reminder := PlanLeaveReminder
+					if s.Agent == "plan" {
+						reminder = PlanEnterReminder(filepath.Join(e.StateDir, "ai", "plans"))
+					}
+					s.Messages = append(s.Messages, Message{ID: NewID("msg"), SessionID: s.ID, Role: "user",
+						Parts: []Part{{Type: "text", ID: NewID("prt"), Text: reminder}}, CreatedAt: time.Now().UnixMilli()})
+				}
+				ar.provider = item.Provider
+				s.Model, s.Protocol = item.Provider.Model, item.Provider.Protocol
+				s.PermissionMode = item.PermissionMode
+				s.PermissionRules = append([]PermissionRule(nil), item.PermissionRules...)
+				for i, pending := range s.Inbox {
+					if pending.ID == item.ID {
+						s.Inbox = append(s.Inbox[:i], s.Inbox[i+1:]...)
+						break
+					}
 				}
 				um := Message{
 					ID:        NewID("msg"),
@@ -905,20 +1041,26 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 					CreatedAt: item.CreatedAt,
 				}
 				s.Messages = append(s.Messages, um)
-				umCopy := um
-				go e.broadcast(StreamEvent{
-					Type:      "message.added",
-					SessionID: s.ID,
-					MessageID: um.ID,
-					Message:   &umCopy,
-				})
+				delivered = append(delivered, um)
 			}
 			ar.inbox = nil
-			_ = e.persistSessionLocked(s)
+			if err := e.persistSessionLocked(s); err != nil {
+				*s = before
+				e.mu.Unlock()
+				e.recordError(sessionID, "", "无法保存待发送输入，任务已暂停；输入仍保留。")
+				return
+			}
+			pending = e.inboxSnapshotLocked(s)
 		}
 		sessSnap := cloneSession(s)
 		prov := ar.provider
 		e.mu.Unlock()
+		if len(delivered) > 0 {
+			e.broadcast(StreamEvent{Type: "inbox.updated", SessionID: sessionID, Inbox: pending})
+			for _, message := range delivered {
+				e.broadcast(StreamEvent{Type: "message.added", SessionID: sessionID, MessageID: message.ID, Message: &message})
+			}
+		}
 
 		rt, _, absWorkdir, err := e.resolveWorkspace(sessSnap.Root, sessSnap.Workdir)
 		if err != nil {
@@ -1154,7 +1296,6 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			CreatedAt: time.Now().UnixMilli(),
 		}
 
-		hasMoreInbox := false
 		var totalUsage Usage
 		e.mu.Lock()
 		if cur := e.sessions[sessionID]; cur != nil {
@@ -1176,9 +1317,6 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			cur.Context = contextState
 			totalUsage = cur.TotalUsage
 			_ = e.persistSessionLocked(cur)
-		}
-		if ar := e.running[sessionID]; ar != nil && len(ar.inbox) > 0 {
-			hasMoreInbox = true
 		}
 		e.mu.Unlock()
 
@@ -1203,8 +1341,19 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			return
 		}
 		// Continue loop if model made tool calls or user sent steering inbox messages
-		if len(toolCalls) == 0 && !hasMoreInbox {
-			return
+		idleBoundary = len(toolCalls) == 0
+		if idleBoundary {
+			// Admission and deciding to go idle share the same lock.
+			e.mu.Lock()
+			ar := e.running[sessionID]
+			done := ar == nil || (len(ar.inbox) == 0 && len(ar.queued) == 0)
+			if done {
+				e.finishRunLocked(sessionID, owned)
+			}
+			e.mu.Unlock()
+			if done {
+				return
+			}
 		}
 	}
 }
@@ -1240,15 +1389,16 @@ func (e *Env) recordError(sessionID, model, errMsg string) {
 func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov ProviderConfig, agentType, desc, prompt, parentCallID string, depth int) (string, string, error) {
 	now := time.Now().UnixMilli()
 	child := &Session{
-		ID:             NewID("ses"),
-		ParentID:       parent.ID,
-		Title:          desc,
-		Root:           parent.Root,
-		Workdir:        parent.Workdir,
-		Agent:          agentType,
-		PermissionMode: parent.PermissionMode,
-		Model:          prov.Model,
-		Protocol:       prov.Protocol,
+		ID:              NewID("ses"),
+		ParentID:        parent.ID,
+		Title:           desc,
+		Root:            parent.Root,
+		Workdir:         parent.Workdir,
+		Agent:           agentType,
+		PermissionMode:  parent.PermissionMode,
+		PermissionRules: append([]PermissionRule(nil), parent.PermissionRules...),
+		Model:           prov.Model,
+		Protocol:        prov.Protocol,
 		Messages: []Message{
 			{
 				ID:        NewID("msg"),

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,6 +74,40 @@ type ModelInfo struct {
 type HTTPStatusError struct {
 	Status int
 	Body   string
+	// RetryAfter is what the upstream asked for with a Retry-After header; zero
+	// when it sent none.
+	RetryAfter time.Duration
+}
+
+// maxRetryWait caps how long one Retry-After may hold a request: a gateway that
+// asks for an hour must not freeze the run.
+const maxRetryWait = 30 * time.Second
+
+// retryAfter reads a Retry-After header, in seconds or as an HTTP date. A
+// missing, malformed or non-positive value is zero; a large one is capped.
+func retryAfter(h http.Header, now time.Time) time.Duration {
+	v := strings.TrimSpace(h.Get("Retry-After"))
+	if v == "" {
+		return 0
+	}
+	var wait time.Duration
+	if n, err := strconv.Atoi(v); err == nil {
+		wait = time.Duration(n) * time.Second
+	} else if t, err := http.ParseTime(v); err == nil {
+		wait = t.Sub(now)
+	}
+	if wait <= 0 {
+		return 0
+	}
+	if wait > maxRetryWait {
+		wait = maxRetryWait
+	}
+	return wait
+}
+
+// statusError builds the error for a non-2xx response, remembering Retry-After.
+func statusError(res *http.Response, body []byte) *HTTPStatusError {
+	return &HTTPStatusError{Status: res.StatusCode, Body: string(body), RetryAfter: retryAfter(res.Header, time.Now())}
 }
 
 func (e *HTTPStatusError) Error() string {
@@ -330,6 +365,13 @@ func StreamLLM(ctx context.Context, req LLMRequest, proxyEnv func() map[string]s
 	var lastErr error
 	backoffs := []time.Duration{0, 1500 * time.Millisecond, 3500 * time.Millisecond}
 	for attempt, wait := range backoffs {
+		// A gateway that said how long to wait is believed, but never for less
+		// than our own backoff: Retry-After 1 after a 429 must not make the
+		// second try come sooner than it would have.
+		var he *HTTPStatusError
+		if errors.As(lastErr, &he) && he.RetryAfter > wait {
+			wait = he.RetryAfter
+		}
 		if wait > 0 {
 			select {
 			case <-ctx.Done():

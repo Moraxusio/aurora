@@ -1133,6 +1133,15 @@ class _TransferList extends StatelessWidget {
         SectionHeader('传输${transfers.active > 0 ? '（${transfers.active} 进行中）' : ''}', actions: [
           if (transfers.list.any((t) => t.finished)) IconBtn(Icons.clear_all, '清除已完成', transfers.clearFinished),
         ]),
+        if (transfers.aggregateFraction != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 3, 10, 1),
+            child: Row(children: [
+              Expanded(child: LinearProgressIndicator(value: transfers.aggregateFraction, minHeight: 3)),
+              const SizedBox(width: 8),
+              Text('${(transfers.aggregateFraction! * 100).round()}%', style: TextStyle(fontSize: 11, color: ide.textDim)),
+            ]),
+          ),
         for (final t in list)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 4, 2, 4),
@@ -1157,7 +1166,13 @@ class _TransferList extends StatelessWidget {
                     ]),
                 ]),
               ),
-              if (!t.finished) IconBtn(Icons.close, '取消', t.cancel) else IconBtn(Icons.close, '移除', () => transfers.remove(t)),
+              if (!t.finished)
+                IconBtn(Icons.close, '取消', t.cancel)
+              else if (t.error != null) ...[
+                IconBtn(Icons.refresh, '重试', t.retry),
+                IconBtn(Icons.close, '移除', () => transfers.remove(t)),
+              ] else
+                IconBtn(Icons.close, '移除', () => transfers.remove(t)),
             ]),
           ),
       ]),

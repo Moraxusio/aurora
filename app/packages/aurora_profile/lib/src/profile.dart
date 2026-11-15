@@ -720,6 +720,51 @@ class EditorSettings {
   }
 }
 
+/// One ordered permission rule. Rules are evaluated in order and the last
+/// matching rule wins, following OpenCode's permission model. Project rules
+/// are bound to both the server and project; unbound legacy rules do not leak.
+class AiPermissionRule {
+  String action;
+  String resource;
+  String effect; // allow | ask | deny
+  String scope; // global | project
+  String serverId;
+  String projectId;
+
+  AiPermissionRule({
+    required this.action,
+    required this.resource,
+    required this.effect,
+    this.scope = 'global',
+    this.serverId = '',
+    this.projectId = '',
+  });
+
+  factory AiPermissionRule.fromJson(Map<String, dynamic> j) => AiPermissionRule(
+    action: j['action'] as String? ?? 'shell',
+    resource: j['resource'] as String? ?? '*',
+    effect: const ['allow', 'ask', 'deny'].contains(j['effect'])
+        ? j['effect'] as String
+        : 'ask',
+    scope: j['scope'] == 'project' ? 'project' : 'global',
+    serverId: j['server_id'] as String? ?? '',
+    projectId: j['project_id'] as String? ?? '',
+  );
+
+  Map<String, dynamic> toJson() => {
+    'action': action,
+    'resource': resource,
+    'effect': effect,
+    if (scope != 'global') 'scope': scope,
+    if (serverId.isNotEmpty) 'server_id': serverId,
+    if (projectId.isNotEmpty) 'project_id': projectId,
+  };
+
+  bool appliesTo(String server, String? project) =>
+      scope == 'global' ||
+      (projectId.isNotEmpty && serverId == server && projectId == project);
+}
+
 /// Client-side LLM Agent settings (D-104). Sealed at rest inside profile.bin;
 /// API keys are sent per call over pinned TLS and never persisted on servers.
 class AiSettings {
@@ -732,6 +777,8 @@ class AiSettings {
   /// 'build' | 'plan'
   String defaultAgent;
   double chatFontSize;
+  List<AiPermissionRule> permissionRules;
+  String followUp;
 
   AiSettings({
     List<AiProvider>? providers,
@@ -739,7 +786,10 @@ class AiSettings {
     this.permissionMode = 'ask',
     this.defaultAgent = 'build',
     this.chatFontSize = 15,
-  }) : providers = providers ?? [];
+    List<AiPermissionRule>? permissionRules,
+    this.followUp = 'steer',
+  }) : providers = providers ?? [],
+       permissionRules = permissionRules ?? [];
 
   static const permissionModes = ['ask', 'auto'];
   static const agentModes = ['build', 'plan'];
@@ -757,7 +807,9 @@ class AiSettings {
       selectedProviderId == null &&
       permissionMode == 'ask' &&
       defaultAgent == 'build' &&
-      chatFontSize == 15;
+      chatFontSize == 15 &&
+      followUp == 'steer' &&
+      permissionRules.isEmpty;
 
   factory AiSettings.fromJson(Map<String, dynamic> j) {
     final pm = j['permission_mode'] as String?;
@@ -774,6 +826,11 @@ class AiSettings {
           j['chat_font_size'] is num && (j['chat_font_size'] as num).isFinite
           ? (j['chat_font_size'] as num).toDouble().clamp(9, 28)
           : 15,
+      permissionRules: [
+        for (final r in (j['permission_rules'] as List? ?? const []))
+          if (r is Map) AiPermissionRule.fromJson(r.cast<String, dynamic>()),
+      ],
+      followUp: j['follow_up'] == 'queue' ? 'queue' : 'steer',
     );
   }
 
@@ -784,6 +841,9 @@ class AiSettings {
     if (permissionMode != 'ask') 'permission_mode': permissionMode,
     if (defaultAgent != 'build') 'default_agent': defaultAgent,
     if (chatFontSize != 15) 'chat_font_size': chatFontSize,
+    if (followUp != 'steer') 'follow_up': followUp,
+    if (permissionRules.isNotEmpty)
+      'permission_rules': [for (final r in permissionRules) r.toJson()],
   };
 }
 

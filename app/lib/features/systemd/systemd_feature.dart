@@ -244,6 +244,7 @@ class _LogViewState extends State<LogView> {
   bool _loading = true;
   String? _error;
   bool _follow = false;
+  bool _newWhilePaused = false;
   int _lines = 300;
   Timer? _timer;
   final _scroll = ScrollController();
@@ -274,10 +275,12 @@ class _LogViewState extends State<LogView> {
     try {
       final r = (await link.call('log.tail', {'name': widget.unit, 'lines': _lines}) as Map).cast<String, dynamic>();
       if (!mounted) return;
+      final wasAtEnd = _stick;
       setState(() {
         _text = (r['lines'] as String?) ?? '';
         _error = r['exit_code'] != 0 && _text.isEmpty ? 'journalctl 没有返回内容（退出码 ${r['exit_code']}）。这个用户可能没有读日志的权限，或系统没有 journal。' : null;
         _loading = false;
+        _newWhilePaused = _follow && !wasAtEnd;
       });
       if (_stick) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -295,7 +298,10 @@ class _LogViewState extends State<LogView> {
   }
 
   void _setFollow(bool on) {
-    setState(() => _follow = on);
+    setState(() {
+      _follow = on;
+      if (on) _newWhilePaused = false;
+    });
     _timer?.cancel();
     if (on) {
       _stick = true;
@@ -337,7 +343,16 @@ class _LogViewState extends State<LogView> {
             },
           ),
           const Spacer(),
-          Text('${lines.length} 行', style: TextStyle(color: ide.textDim, fontSize: 11)),
+           Text('${lines.length} 行', style: TextStyle(color: ide.textDim, fontSize: 11)),
+           if (_newWhilePaused)
+             TextButton(
+               onPressed: () {
+                 _stick = true;
+                 setState(() => _newWhilePaused = false);
+                 if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+               },
+               child: const Text('有新日志 · 回到最新', style: TextStyle(fontSize: 11)),
+             ),
           IconBtn(_follow ? Icons.pause_circle_outline : Icons.play_circle_outline, _follow ? '停止跟随' : '跟随（每 3 秒刷新）', () => _setFollow(!_follow), color: _follow ? ide.accent : null),
           IconBtn(Icons.refresh, '刷新', _load),
           IconBtn(Icons.copy, '复制全部', lines.isEmpty ? null : () => copyText(lines.join('\n'), what: '已复制 ${lines.length} 行')),

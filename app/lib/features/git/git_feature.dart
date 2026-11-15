@@ -200,7 +200,7 @@ class _GitPanelState extends State<GitPanel> {
     if (_git.repo == null) {
       return EmptyHint(
         icon: Icons.fork_right,
-        text: _git.error ?? '在主目录下没有找到 git 仓库。\n在终端里 git clone 一个，或到文件树里对仓库文件夹选“作为仓库打开”。',
+        text: _git.error ?? '在当前工作区里没有找到 git 仓库。\n在终端里 git clone 或 git init 一个，再点“重新查找”。',
         actionLabel: '重新查找',
         onAction: _git.findRepos,
       );

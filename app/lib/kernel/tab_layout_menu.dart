@@ -12,6 +12,15 @@ String arrangementLabel(EditorArrangement a) => switch (a) {
   EditorArrangement.threeColumns => '三列',
   EditorArrangement.grid => '四宫格',
 };
+
+/// One glyph per layout, so a list of them can be told apart at a glance.
+IconData arrangementIcon(EditorArrangement a) => switch (a) {
+  EditorArrangement.single => Icons.crop_square,
+  EditorArrangement.columns => Icons.vertical_split_outlined,
+  EditorArrangement.rows => Icons.horizontal_split_outlined,
+  EditorArrangement.threeColumns => Icons.view_column_outlined,
+  EditorArrangement.grid => Icons.grid_view_outlined,
+};
 String placementLabel(TabPlacement p) => switch (p) {
   TabPlacement.top => '顶部',
   TabPlacement.bottom => '底部',

@@ -15,9 +15,11 @@ class Transfer extends ChangeNotifier {
   int done = 0;
   bool finished = false;
   bool cancelled = false;
+  bool queued = false;
   String? error;
   final Stopwatch sw = Stopwatch()..start();
   OpStream? _stream;
+  Future<void> Function(Transfer)? _retry;
 
   Transfer(this.upload, this.name, this.total);
 
@@ -51,12 +53,34 @@ class Transfer extends ChangeNotifier {
     _stream?.reset();
     _end();
   }
+
+  void retry() {
+    if (!finished || error == null) return;
+    done = 0;
+    error = null;
+    cancelled = false;
+    finished = false;
+    queued = false;
+    sw..reset()..start();
+    notifyListeners();
+    final run = _retry;
+    if (run != null) unawaited(run(this));
+  }
 }
 
 class Transfers extends ChangeNotifier {
   final List<Transfer> list = [];
 
   int get active => list.where((t) => !t.finished).length;
+
+  int get failed => list.where((t) => t.finished && t.error != null).length;
+
+  double? get aggregateFraction {
+    final known = list.where((t) => t.total > 0 && !t.cancelled).toList();
+    if (known.isEmpty) return null;
+    return known.fold<double>(0, (sum, t) => sum + t.done) /
+        known.fold<int>(0, (sum, t) => sum + t.total);
+  }
 
   void clearFinished() {
     list.removeWhere((t) => t.finished);
@@ -78,6 +102,7 @@ class Transfers extends ChangeNotifier {
   /// Sends [local] to [root]:[path]. [onDone] runs after a successful upload.
   Transfer upload(Link link, File local, int size, String root, String path, {VoidCallback? onDone}) {
     final t = _add(Transfer(true, path.split('/').last, size));
+    t._retry = (same) => _runUpload(same, link, local, root, path, onDone);
     unawaited(_runUpload(t, link, local, root, path, onDone));
     return t;
   }
@@ -110,6 +135,7 @@ class Transfers extends ChangeNotifier {
   /// Downloads [root]:[path] into [where] (a file path that does not exist yet).
   Transfer download(Link link, String root, String path, String where, int size, {VoidCallback? onDone}) {
     final t = _add(Transfer(false, path.split('/').last, size));
+    t._retry = (same) => _runDownload(same, link, root, path, where, onDone);
     unawaited(_runDownload(t, link, root, path, where, onDone));
     return t;
   }

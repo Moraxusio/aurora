@@ -27,32 +27,41 @@ const aiEfforts = <(String, String, String)>[
 String aiEffortLabel(String v) =>
     aiEfforts.firstWhere((e) => e.$1 == v, orElse: () => aiEfforts.first).$2;
 
-Future<void> showAiModelPicker(
+class AiModelSelection {
+  final String providerId, model;
+  final String? reasoning;
+  const AiModelSelection(this.providerId, this.model, this.reasoning);
+}
+
+Future<AiModelSelection?> showAiModelPicker(
   BuildContext context,
   Workspace ws, {
+  String? initialProviderId,
+  String? initialModel,
   String? initialReasoning,
-  ValueChanged<String?>? onReasoningChanged,
 }) {
-  return showPicker<void>(
+  return showPicker<AiModelSelection>(
     context,
     maxWidth: 480,
     maxHeight: 600,
     builder: (_) => _ModelPicker(
       ws: ws,
+      initialProviderId: initialProviderId,
+      initialModel: initialModel,
       initialReasoning: initialReasoning,
-      onReasoningChanged: onReasoningChanged,
     ),
   );
 }
 
 class _ModelPicker extends StatefulWidget {
   final Workspace ws;
+  final String? initialProviderId, initialModel;
   final String? initialReasoning;
-  final ValueChanged<String?>? onReasoningChanged;
   const _ModelPicker({
     required this.ws,
+    this.initialProviderId,
+    this.initialModel,
     this.initialReasoning,
-    this.onReasoningChanged,
   });
 
   @override
@@ -64,7 +73,8 @@ class _ModelPickerState extends State<_ModelPicker> {
   bool _fetching = false;
   String? _note;
   String? _reasoningOverride;
-  bool _reasoningChanged = false;
+  String? _providerId;
+  int _fetchGeneration = 0;
 
   Workspace get ws => widget.ws;
 
@@ -72,20 +82,17 @@ class _ModelPickerState extends State<_ModelPicker> {
   void initState() {
     super.initState();
     _reasoningOverride = widget.initialReasoning;
+    _providerId =
+        widget.initialProviderId ?? ws.app.aiSettings.activeProvider?.id;
+    _filter.addListener(_filterChanged);
   }
+
+  void _filterChanged() => setState(() {});
 
   @override
   void dispose() {
     _filter.dispose();
     super.dispose();
-  }
-
-  Future<void> _edit(void Function(AiSettings ai) f) async {
-    try {
-      await ws.app.update((p) => f(p.ai));
-    } on Object catch (e) {
-      Toast.show('保存失败：$e', error: true);
-    }
   }
 
   Future<void> _fetch(AiProvider prov) async {
@@ -94,6 +101,9 @@ class _ModelPickerState extends State<_ModelPicker> {
       setState(() => _note = '服务器未连接');
       return;
     }
+    final generation = ++_fetchGeneration;
+    bool active() =>
+        mounted && generation == _fetchGeneration && _providerId == prov.id;
     setState(() {
       _fetching = true;
       _note = null;
@@ -117,7 +127,9 @@ class _ModelPickerState extends State<_ModelPicker> {
           imageSupport[m['id'] as String] = m['supports_image'] as bool;
         }
       }
-      await _edit((ai) {
+      if (!active()) return;
+      await ws.app.update((profile) {
+        final ai = profile.ai;
         for (final p in ai.providers) {
           if (p.id == prov.id &&
               p.authMode == prov.authMode &&
@@ -137,7 +149,7 @@ class _ModelPickerState extends State<_ModelPicker> {
           }
         }
       });
-      if (mounted)
+      if (active())
         setState(
           () => _note = prov.isSubscription
               ? '内置订阅模型建议，非账号可用性校验；可手动输入模型 ID'
@@ -146,26 +158,20 @@ class _ModelPickerState extends State<_ModelPicker> {
               : '已获取 ${ids.length} 个模型',
         );
     } on OpError catch (e) {
-      if (mounted) setState(() => _note = e.message);
+      if (active()) setState(() => _note = e.message);
     } on Object catch (e) {
-      if (mounted)
+      if (active())
         setState(() => _note = e is StateError ? e.message : '拉取模型失败，请检查连接');
     } finally {
-      if (mounted) setState(() => _fetching = false);
+      if (active()) setState(() => _fetching = false);
     }
   }
 
   void _pickModel(AiProvider prov, String model) {
-    _edit((ai) {
-      ai.selectedProviderId = prov.id;
-      for (final p in ai.providers) {
-        if (p.id == prov.id) p.model = model;
-      }
-    });
-    widget.onReasoningChanged?.call(
-      _reasoningChanged ? _reasoningOverride : widget.initialReasoning,
+    Navigator.pop(
+      context,
+      AiModelSelection(prov.id, model, _reasoningOverride),
     );
-    Navigator.pop(context);
   }
 
   @override
@@ -175,7 +181,9 @@ class _ModelPickerState extends State<_ModelPicker> {
       listenable: ws.app,
       builder: (context, _) {
         final ai = ws.app.ready ? ws.app.profile.ai : AiSettings();
-        final prov = ai.activeProvider;
+        final prov =
+            ai.providers.where((p) => p.id == _providerId).firstOrNull ??
+            ai.activeProvider;
         if (prov == null) {
           return Padding(
             padding: const EdgeInsets.all(Space.xxl),
@@ -201,7 +209,11 @@ class _ModelPickerState extends State<_ModelPicker> {
           );
         }
         final q = _filter.text.trim().toLowerCase();
+        final selectedModel = prov.id == widget.initialProviderId
+            ? widget.initialModel ?? prov.model
+            : prov.model;
         final models = <String>{
+          if (selectedModel.isNotEmpty) selectedModel,
           if (prov.model.isNotEmpty) prov.model,
           ...prov.models,
         }.where((m) => q.isEmpty || m.toLowerCase().contains(q)).toList();
@@ -219,7 +231,7 @@ class _ModelPickerState extends State<_ModelPicker> {
               child: AiSectionHeading(
                 icon: Icons.memory_outlined,
                 title: '本次对话设置',
-                subtitle: '${prov.name} · 只影响下一次调用',
+                subtitle: '仅当前会话 · 应用于后续发送的消息',
                 trailing: IconBtn(
                   Icons.close,
                   '关闭',
@@ -247,8 +259,12 @@ class _ModelPickerState extends State<_ModelPicker> {
                           style: const TextStyle(fontSize: 12),
                         ),
                         selected: p.id == prov.id,
-                        onSelected: (_) =>
-                            _edit((a) => a.selectedProviderId = p.id),
+                        onSelected: (_) => setState(() {
+                          _providerId = p.id;
+                          _note = null;
+                          _fetching = false;
+                          _fetchGeneration++;
+                        }),
                       ),
                   ],
                 ),
@@ -296,13 +312,13 @@ class _ModelPickerState extends State<_ModelPicker> {
                     ),
                   for (final m in models)
                     PickerRow(
-                      selected: m == prov.model,
+                      selected: m == selectedModel,
                       onTap: () => _pickModel(prov, m),
                       child: Row(
                         children: [
                           SizedBox(
                             width: 18,
-                            child: m == prov.model
+                            child: m == selectedModel
                                 ? Icon(
                                     Icons.check_rounded,
                                     size: 15,
@@ -422,9 +438,7 @@ class _ModelPickerState extends State<_ModelPicker> {
                     onSelectionChanged: (v) {
                       setState(() {
                         _reasoningOverride = v.first;
-                        _reasoningChanged = true;
                       });
-                      widget.onReasoningChanged?.call(v.first);
                     },
                   ),
                 ],
@@ -463,7 +477,14 @@ class _ModelPickerState extends State<_ModelPicker> {
                       Navigator.pop(context);
                       showAiSettingsDialog(context, app: ws.app, ws: ws);
                     },
-                    child: const Text('管理密钥…'),
+                    child: const Text('管理连接…'),
+                  ),
+                  IconButton(
+                    tooltip: '应用到当前会话',
+                    onPressed: selectedModel.isEmpty
+                        ? null
+                        : () => _pickModel(prov, selectedModel),
+                    icon: Icon(Icons.check, color: ide.accent, size: 19),
                   ),
                 ],
               ),

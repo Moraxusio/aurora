@@ -703,3 +703,13 @@ v3 仓库（`aurora-v3`）的历史提交保留在本仓库里，提交号不变
 - 模型能力支持 `supports_image`、`supports_vision`、`vision`、`image_input`、`image_support`、`modalities`、`input_modalities` 及嵌套能力字段。能力以支持／不支持／未确认三态保存，不把模型名称当作能力证据。
 - 配置页只保存思考强度默认预设；对话选择通过临时 `reasoningOverride` 发送，不覆盖 profile。模型目录、输入区和工作目录栏统一使用 AI 视觉规范，原 API Key／OAuth、附件边界、会话状态和本地 agent 生命周期保持兼容。
 - 发布前复用本轮 AI 定向回归：AI 历史／设置／模型切换／配置保存、图片附件、工作目录浏览、中文输入法和 390px 窄屏测试；Go AI 协议、profile round-trip 与 Windows Release 编译已通过。正式包另核对版本、签名、ZIP、许可证、隔离启动及 GitHub 服务端资产摘要。
+
+### 3.21.0 Windows 已发布（2026-11-15）
+
+- 发布：https://github.com/Moraxusio/aurora/releases/tag/v3.21.0 。源码和标签指向干净提交 `c100ebc47a8ef91feaf8a62765e520031c743578`；客户端 `3.21.0+32100`，两类随包 agent 均为 3.21.0，发行签名密钥 ID `87828dfb18459372`。
+- Release 编译 62.7 秒，完整签名打包 75.6 秒；构建前后 1462 个源码文件摘要一致。客户端 AOT SHA-256 `a01a7aabb5dbc48d8c656ec7075cad26320211a6e1a832452ae50d941cba3ee4`。
+- 本地包 `C:\dev\VPS\release3\Aurora-3.21.0.zip`，32,111,531 字节，SHA-256 `22affa3bbbdc1541f78f0e21b88678bfae244dd6e4f056c99ac81404a4c99b12`；ZIP 33 个文件与目录逐项一致，签名、许可证和 OpenCode MIT 署名通过。
+- Linux amd64 agent：14,287,010 字节，SHA-256 `57e809cff8714f163163061395a8b22337914d082f815930e780300197eb51e1`；Windows amd64 本地 agent：13,348,864 字节，SHA-256 `17912788370329e52f8fa5103cb2bddf71fb4a1dd3dd701b6cd404588d32c91a`。两类验签通过，Go 元数据记录该 revision 和 `vcs.modified=false`，实际版本均为 3.21.0。
+- 正式包隔离启动成功，连接同包本地 agent 后正常退出；客户端和 agent 均为自有进程，GUI 异常记录 0，隔离 profile／实例未触及用户配置。
+- GitHub 先推送源码和标签，再上传草稿；3 项资产的大小和 SHA-256 均与 GitHub 服务端摘要一致后转为正式 latest。发布记录见 [20261115-release-3.21.0.json](performance/20261115-release-3.21.0.json)。
+- 3.20.0 正式包、三个预览、v2 工作区和 `release` 顶层 13 项保护基线未改变。临时 GitHub 授权已清理，Android 继续暂缓。

@@ -1,0 +1,94 @@
+{
+  "date": "2026-11-15",
+  "version": "3.21.0",
+  "platform": "Windows x64",
+  "source_revision": "c100ebc47a8ef91feaf8a62765e520031c743578",
+  "tag": "v3.21.0",
+  "release_url": "https://github.com/Moraxusio/aurora/releases/tag/v3.21.0",
+  "release_id": 445739512,
+  "published_at_utc": "2026-11-15T01:44:09Z",
+  "draft": false,
+  "prerelease": false,
+  "public_latest_verified": true,
+  "build": {
+    "target": "lib/main.dart",
+    "client_version": "3.21.0+32100",
+    "windows_build_seconds": 62.7,
+    "total_packaging_seconds": 75.6,
+    "source_files_checked_before_and_after_build": 1462,
+    "client_aot_sha256": "a01a7aabb5dbc48d8c656ec7075cad26320211a6e1a832452ae50d941cba3ee4",
+    "clean_before_and_after": true
+  },
+  "package": {
+    "directory": "C:/dev/VPS/release3/Aurora-3.21.0",
+    "zip_bytes": 32111531,
+    "zip_sha256": "22affa3bbbdc1541f78f0e21b88678bfae244dd6e4f056c99ac81404a4c99b12",
+    "zip_files_identical_to_directory": 33,
+    "opencode_mit_attribution_present": true,
+    "private_or_preview_files": 0,
+    "agents": [
+      {
+        "product": "aurora3-agent",
+        "platform": "linux/amd64",
+        "version": "3.21.0",
+        "bytes": 14287010,
+        "sha256": "57e809cff8714f163163061395a8b22337914d082f815930e780300197eb51e1",
+        "key_id": "87828dfb18459372",
+        "signature_verified": true,
+        "source_revision": "c100ebc47a8ef91feaf8a62765e520031c743578",
+        "vcs_modified": false
+      },
+      {
+        "product": "aurora3-local-agent",
+        "platform": "windows/amd64",
+        "version": "3.21.0",
+        "bytes": 13348864,
+        "sha256": "17912788370329e52f8fa5103cb2bddf71fb4a1dd3dd701b6cd404588d32c91a",
+        "key_id": "87828dfb18459372",
+        "signature_verified": true,
+        "source_revision": "c100ebc47a8ef91feaf8a62765e520031c743578",
+        "vcs_modified": false
+      }
+    ]
+  },
+  "formal_release_smoke": {
+    "isolated_profile_and_instance": true,
+    "client_started": true,
+    "agent_started": true,
+    "client_exited": true,
+    "agent_followed_client_exit": true,
+    "gui_error_records": 0
+  },
+  "publication": {
+    "source_and_tag_pushed": true,
+    "assets_verified_before_publication": true,
+    "public_latest_verified": true,
+    "assets": [
+      {
+        "name": "Aurora-3.21.0.zip",
+        "bytes": 32111531,
+        "sha256": "22affa3bbbdc1541f78f0e21b88678bfae244dd6e4f056c99ac81404a4c99b12",
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.21.0/Aurora-3.21.0.zip"
+      },
+      {
+        "name": "Aurora-3.21.0.zip.sha256",
+        "bytes": 85,
+        "sha256": "8bcf3a4582e7ef0be7fda4e9a77a2dfcf8f49144def8bd88cbdf08d6655c4253",
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.21.0/Aurora-3.21.0.zip.sha256"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 175,
+        "sha256": "ffbb6383d8104bdf1c858a7f0bf0a9c6572154e04d464d7000e8bb5c36e12342",
+        "url": "https://github.com/Moraxusio/aurora/releases/download/v3.21.0/SHA256SUMS.txt"
+      }
+    ]
+  },
+  "protection": {
+    "protected_artifacts_unchanged": 12,
+    "v2_clean": true,
+    "release_top_level_items": 13,
+    "credentials_migrated_or_reset": false,
+    "android_release": "deferred"
+  }
+}

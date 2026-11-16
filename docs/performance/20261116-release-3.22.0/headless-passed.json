@@ -1,0 +1,7 @@
+{
+  "signatures": true,
+  "ide": true,
+  "ai_harness": true,
+  "local_agent": true,
+  "source_revision": "6a0ad33b2bdb5beac4aef2865708b34a999446ea"
+}

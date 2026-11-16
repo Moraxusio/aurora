@@ -1,0 +1,43 @@
+{
+  "version": "3.22.0",
+  "source_revision": "6a0ad33b2bdb5beac4aef2865708b34a999446ea",
+  "tag": "v3.22.0",
+  "annotated_tag": true,
+  "source_and_tag_pushed_atomically": true,
+  "release_id": 446498094,
+  "release_url": "https://github.com/Moraxusio/aurora/releases/tag/v3.22.0",
+  "published_at_utc": "2026-11-16T01:08:32Z",
+  "public_latest_verified": true,
+  "draft": false,
+  "prerelease": false,
+  "verified_at_utc": "2026-11-16T01:09:15.5690572Z",
+  "assets": [
+    {
+      "name": "Aurora-3.22.0.zip",
+      "bytes": 36161679,
+      "sha256": "f5633065fbe646dcf0b82f21730fcbc70efacf5bebabd49db77a4469f6e6c438",
+      "id": 752943082,
+      "url": "https://github.com/Moraxusio/aurora/releases/download/v3.22.0/Aurora-3.22.0.zip",
+      "server_digest_verified": true,
+      "unauthenticated_download_verified": true
+    },
+    {
+      "name": "Aurora-3.22.0.zip.sha256",
+      "bytes": 85,
+      "sha256": "c4b7efe9fba32368dc0492540c791fcf6369e93a0f81664cb4bb6656aebaf901",
+      "id": 752943305,
+      "url": "https://github.com/Moraxusio/aurora/releases/download/v3.22.0/Aurora-3.22.0.zip.sha256",
+      "server_digest_verified": true,
+      "unauthenticated_download_verified": true
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "bytes": 177,
+      "sha256": "4a05cbb8b334c68920193b1f42f80863ae63b99b17a0b1b861a121eeaede05d3",
+      "id": 752943378,
+      "url": "https://github.com/Moraxusio/aurora/releases/download/v3.22.0/SHA256SUMS.txt",
+      "server_digest_verified": true,
+      "unauthenticated_download_verified": true
+    }
+  ]
+}

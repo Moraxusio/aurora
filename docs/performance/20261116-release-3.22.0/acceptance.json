@@ -1,0 +1,24 @@
+{
+  "all_passed": true,
+  "source_revision": "6a0ad33b2bdb5beac4aef2865708b34a999446ea",
+  "source_clean": true,
+  "checked_at_utc": "2026-11-16T01:06:51.4602024Z",
+  "go_production_key_signatures": true,
+  "dart_production_key_signatures_and_policy": true,
+  "linux_packaged_agent_version": "3.22.0",
+  "packaged_ide_smoke": true,
+  "real_dart_lsp_dap_initialize": true,
+  "packaged_ai_harness_smoke": true,
+  "packaged_local_agent_proxy_conpty_smoke": true,
+  "native_tray_checks_passed": 11,
+  "native_test_processes_remaining": 0,
+  "protected_archives_verified": 3,
+  "source_regression": {
+    "conditionally_skipped": 20,
+    "flutter_passed": 602,
+    "failed": 0,
+    "reused_from_accepted_production_inputs": true
+  },
+  "real_model_account_validation": "not completed",
+  "long_duration_stress_validation": "not completed"
+}

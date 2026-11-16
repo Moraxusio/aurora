@@ -1,0 +1,6 @@
+To https://github.com/Moraxusio/aurora.git
+   f287331..6a0ad33  main -> main
+ * [new tag]         v3.22.0 -> v3.22.0
+PASS uploaded size/SHA256 Aurora-3.22.0.zip
+PASS uploaded size/SHA256 Aurora-3.22.0.zip.sha256
+PASS uploaded size/SHA256 SHA256SUMS.txt

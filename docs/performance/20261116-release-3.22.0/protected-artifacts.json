@@ -1,0 +1,14 @@
+[
+  {
+    "Path": "C:\\dev\\VPS\\release3\\Aurora-3.21.4.zip",
+    "Hash": "087348A08F4F0AF051A89B81DDE7D5EB86A2136045D6199EBDB5C8EC2AA95AE1"
+  },
+  {
+    "Path": "C:\\dev\\VPS\\preview3\\Aurora-3.21.4-harness-preview1.zip",
+    "Hash": "78CA0C41012E5647CFD5080A47BA8B9F0F74A979F3C99EEAF6F747AF2A19FB7D"
+  },
+  {
+    "Path": "C:\\dev\\VPS\\preview3\\Aurora-3.22.0-ide-preview1.zip",
+    "Hash": "556AAA40DE28D07AE9DE5949E9CACC1A8E039348EDCA1F71F15077C754EDF42A"
+  }
+]

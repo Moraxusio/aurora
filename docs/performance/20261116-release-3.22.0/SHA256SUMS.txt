@@ -1,0 +1,2 @@
+f5633065fbe646dcf0b82f21730fcbc70efacf5bebabd49db77a4469f6e6c438  Aurora-3.22.0.zip
+c4b7efe9fba32368dc0492540c791fcf6369e93a0f81664cb4bb6656aebaf901  Aurora-3.22.0.zip.sha256

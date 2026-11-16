@@ -1,0 +1,34 @@
+**********************
+PowerShell 记录开始
+开始时间: 20261116090355
+用户名: FINNWE\finwe
+RunAs 用户: FINNWE\finwe
+配置名称: 
+计算机: FINNWE (Microsoft Windows NT 10.0.26300.0)
+主机应用程序: C:\Program Files\PowerShell\7\pwsh.dll -NoLogo -NoProfile -NonInteractive -Command $ErrorActionPreference = 'Stop'
+$work = 'C:\Users\finwe\AppData\Local\Temp\opencode\aurora-release-3.22.0'
+Remove-Item Env:AURORA3_TRUST_KEY,Env:AURORA3_AGENT_DIR,Env:AURORA3_LOCAL_AGENT_DIR -ErrorAction SilentlyContinue
+Start-Transcript -Path "$work\release-tray.txt" | Out-Null
+try {
+  & powershell -NoProfile -File app/tool/tray_test.ps1 -Exe "$work\extracted\Aurora-3.22.0\aurora.exe"
+  if ($LASTEXITCODE) { throw 'Formal Release tray verification failed' }
+  $remaining = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like "$work\extracted\*" })
+  if ($remaining.Count) { throw 'Formal test native processes remain' }
+  [ordered]@{ passed=$true;checks=11;fresh_zip_extraction=$true;local_task_exit_confirmation=$true;test_processes_remaining=0 } | ConvertTo-Json | Set-Content -LiteralPath "$work\native-passed.json" -Encoding utf8
+} finally { Stop-Transcript | Out-Null }
+进程 ID: 8020
+PSVersion: 7.6.10
+PSEdition: Core
+GitCommitId: 7.6.10
+OS: Microsoft Windows 10.0.26300
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+**********************
+PowerShell 记录结束
+结束时间: 20261116090359
+**********************

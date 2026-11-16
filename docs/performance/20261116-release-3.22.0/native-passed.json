@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "checks": 11,
+  "fresh_zip_extraction": true,
+  "local_task_exit_confirmation": true,
+  "test_processes_remaining": 0
+}

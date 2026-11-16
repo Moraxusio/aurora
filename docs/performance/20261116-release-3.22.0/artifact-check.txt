@@ -1,0 +1,69 @@
+**********************
+PowerShell 记录开始
+开始时间: 20261116090333
+用户名: FINNWE\finwe
+RunAs 用户: FINNWE\finwe
+配置名称: 
+计算机: FINNWE (Microsoft Windows NT 10.0.26300.0)
+主机应用程序: C:\Program Files\PowerShell\7\pwsh.dll -NoLogo -NoProfile -NonInteractive -Command $ErrorActionPreference = 'Stop'
+$env:PATH = 'C:\dev\VPS\go\go\bin;' + $env:PATH
+$work = 'C:\Users\finwe\AppData\Local\Temp\opencode\aurora-release-3.22.0'
+Start-Transcript -Path "$work\artifact-check.txt" | Out-Null
+try { & "$work\verify-artifact.ps1" } finally { Stop-Transcript | Out-Null }
+进程 ID: 28620
+PSVersion: 7.6.10
+PSEdition: Core
+GitCommitId: 7.6.10
+OS: Microsoft Windows 10.0.26300
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+{
+  "version": "3.22.0",
+  "source_revision": "6a0ad33b2bdb5beac4aef2865708b34a999446ea",
+  "clean_before_and_after": true,
+  "source_files_checked": 1621,
+  "accepted_production_inputs_unchanged": 1358,
+  "zip": "C:\\dev\\VPS\\release3\\Aurora-3.22.0.zip",
+  "zip_bytes": 36161679,
+  "zip_sha256": "f5633065fbe646dcf0b82f21730fcbc70efacf5bebabd49db77a4469f6e6c438",
+  "zip_files_matching_directory": 157,
+  "client_version": "3.22.0+32200",
+  "client_aot_sha256": "351f24217eac092d7a6c6e492047a76f1572a59c2fc2ece0bab2212d408a7a47",
+  "accepted_client_aot_identical": true,
+  "agents": [
+    {
+      "product": "aurora3-agent",
+      "version": "3.22.0",
+      "bytes": 15528098,
+      "sha256": "29b87f80098900abfae28bfd0554a7f48f372d3a5bbf38a7efe5a723990bbfb2",
+      "key_id": "87828dfb18459372",
+      "source_revision": "6a0ad33b2bdb5beac4aef2865708b34a999446ea",
+      "vcs_modified": false
+    },
+    {
+      "product": "aurora3-local-agent",
+      "version": "3.22.0",
+      "bytes": 14629888,
+      "sha256": "48c8673c9f06893c851d5213604419097a275f9af71b709632e4fb59131288d1",
+      "key_id": "87828dfb18459372",
+      "source_revision": "6a0ad33b2bdb5beac4aef2865708b34a999446ea",
+      "vcs_modified": false
+    }
+  ],
+  "licenses_verified": [
+    "re_editor",
+    "xterm",
+    "OpenCode"
+  ],
+  "unpacked_directory": "C:\\Users\\finwe\\AppData\\Local\\Temp\\opencode\\aurora-release-3.22.0\\extracted\\Aurora-3.22.0"
+}
+FORMAL_ARTIFACT_SOURCE_VERSION_ZIP_LICENSES_OK
+**********************
+PowerShell 记录结束
+结束时间: 20261116090337
+**********************

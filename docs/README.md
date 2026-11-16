@@ -21,6 +21,8 @@
 ## 版本与证据
 
 - [3.22.0 正式版本说明](releases/3.22.0.md)
+- [3.22.0 正式发布与公开下载复核](validation/2026-11-16-release-3.22.0.md)
+- [正式发布原始证据](performance/20261116-release-3.22.0/README.md)
 - [3.22.0-ide-preview1 版本说明](releases/3.22.0-ide-preview1.md)
 - [3.22.0-ide-preview1 完整包验收](validation/2026-11-16-package-ide-preview1.md)
 - [打包与 Release 原始证据](performance/20261116-package-ide-preview1/README.md)

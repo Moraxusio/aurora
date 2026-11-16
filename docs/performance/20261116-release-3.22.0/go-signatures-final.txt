@@ -1,0 +1,13 @@
+product: aurora3-agent
+channel: stable
+version: 3.22.0
+file: aurora3-agent-3.22.0-linux-amd64
+size: 15528098
+sha256: 29b87f80098900abfae28bfd0554a7f48f372d3a5bbf38a7efe5a723990bbfb2
+product: aurora3-local-agent
+channel: stable
+version: 3.22.0
+file: aurora3-local-agent-3.22.0-windows-amd64.exe
+size: 14629888
+sha256: 48c8673c9f06893c851d5213604419097a275f9af71b709632e4fb59131288d1
+3.22.0

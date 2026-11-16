@@ -1,0 +1,3 @@
+PASS draft size/SHA256 Aurora-3.22.0.zip
+PASS draft size/SHA256 Aurora-3.22.0.zip.sha256
+PASS draft size/SHA256 SHA256SUMS.txt

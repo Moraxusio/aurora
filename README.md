@@ -4,7 +4,7 @@ Windows 本地与 Linux 远程开发工作台：文件编辑、终端、Git、�
 
 当前版本：**[3.22.0，Windows x64](https://github.com/Moraxusio/aurora/releases/tag/v3.22.0)**。完整包包含同版本 Windows 本地 agent 和 Linux amd64 agent；完整解压后运行 **`aurora.exe`**。操作见 [开始使用](docs/guides/getting-started.md)，本轮成果见 [3.22.0 版本说明](docs/releases/3.22.0.md)。
 
-本轮完整候选已通过签名、文件一致性、真实 agent 冒烟及 Release 启动／退出检查，详细记录见 [候选完整包验收](docs/validation/2026-11-16-package-ide-preview1.md)。正式包从提交后的源码重新构建并附带构建信息、源码指纹和许可证。
+正式版已完成双 agent 验签、ZIP 一致性、真实 agent 冒烟、Release 启动／退出，以及三项 GitHub 资产的无认证下载复核；详见 [正式发布记录](docs/validation/2026-11-16-release-3.22.0.md)。包内附带构建信息、源码指纹和许可证。
 
 ## 文档
 

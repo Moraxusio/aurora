@@ -1,0 +1,49 @@
+**********************
+PowerShell 记录开始
+开始时间: 20261116090333
+用户名: FINNWE\finwe
+RunAs 用户: FINNWE\finwe
+配置名称: 
+计算机: FINNWE (Microsoft Windows NT 10.0.26300.0)
+主机应用程序: C:\Program Files\PowerShell\7\pwsh.dll -NoLogo -NoProfile -NonInteractive -Command $ErrorActionPreference = 'Stop'
+$env:PATH = 'C:\dev\VPS\tools\nasm-3.02;C:\dev\VPS\flutter\bin;C:\dev\VPS\flutter\bin\cache\dart-sdk\bin;C:\dev\VPS\go\go\bin;' + $env:PATH
+$work = 'C:\Users\finwe\AppData\Local\Temp\opencode\aurora-release-3.22.0'
+$package = 'C:\dev\VPS\release3\Aurora-3.22.0'
+Copy-Item -LiteralPath 'C:\Users\finwe\AppData\Local\Temp\opencode\aurora-package-20261116-ide-preview1\verify-signatures.dart' -Destination "$work\verify-signatures.dart"
+Remove-Item Env:AURORA3_TRUST_KEY -ErrorAction SilentlyContinue
+$env:AURORA3_LOCAL_AGENT_DIR = "$package\local-agent\windows-amd64"
+$env:HTTP_PROXY = 'http://127.0.0.1:18101'
+$env:HTTPS_PROXY = 'http://127.0.0.1:18102'
+$env:ALL_PROXY = 'socks5://127.0.0.1:18103'
+$env:NO_PROXY = 'system.fixture'
+Start-Transcript -Path "$work\headless-acceptance.txt" | Out-Null
+try {
+  & dart --packages=.dart_tool/package_config.json run "$work\verify-signatures.dart" $package
+  if ($LASTEXITCODE) { throw 'Formal Dart signature verification failed' }
+  & dart run tool/ide_agent_smoke.dart "$work\ide-smoke" 3.22.0
+  if ($LASTEXITCODE) { throw 'Formal IDE agent smoke failed' }
+  & dart run tool/ai_harness_smoke.dart "$work\ai-smoke"
+  if ($LASTEXITCODE) { throw 'Formal AI harness smoke failed' }
+  & dart run tool/local_agent_smoke.dart "$work\local-smoke"
+  if ($LASTEXITCODE) { throw 'Formal local agent smoke failed' }
+  [ordered]@{ signatures=$true; ide=$true; ai_harness=$true; local_agent=$true; source_revision=(& git rev-parse HEAD) } | ConvertTo-Json | Set-Content -LiteralPath "$work\headless-passed.json" -Encoding utf8
+} finally { Stop-Transcript | Out-Null }
+进程 ID: 5636
+PSVersion: 7.6.10
+PSEdition: Core
+GitCommitId: 7.6.10
+OS: Microsoft Windows 10.0.26300
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+
+
+
+**********************
+PowerShell 记录结束
+结束时间: 20261116090452
+**********************

@@ -8,6 +8,7 @@ package files
 
 import (
 	"encoding/json"
+	"sync"
 
 	"aurora3/internal/wire"
 )
@@ -28,6 +29,9 @@ type Auditor interface {
 // Env is everything the files service needs from the agent. Git is optional:
 // with Repos nil, search does not look for repositories.
 type Env struct {
+	StateDir       string
+	textMu         sync.Mutex
+	textRunning    int
 	Roots          []Root
 	UploadMaxBytes int64
 	Audit          Auditor

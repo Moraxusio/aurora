@@ -13,6 +13,7 @@
 // open, the file was replaced on the server: the reader refuses to mix the old
 // and new bytes and says so, rather than showing a page that never existed.
 import 'dart:async';
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:aurora_wire/aurora_wire.dart';
@@ -61,6 +62,9 @@ class RemoteRangeReader {
   final _cache = <int, Uint8List>{}; // insertion-ordered: the first key is the least recently used
   final _inflight = <int, Future<Uint8List>>{};
   final _streams = <DownloadStream>{};
+  final _waiting = Queue<Completer<void>>();
+  int _activeFetches = 0;
+  static const _maxFetches = 4;
   int requests = 0; // fs.download calls made (tests, diagnostics)
 
   RemoteRangeReader(this._open, this.root, this.path, {this.chunk = pdfChunk});
@@ -72,8 +76,7 @@ class RemoteRangeReader {
 
   /// Reads the first block: that gives the file's size and etag.
   Future<void> init() async {
-    final first = await _fetch(0);
-    _remember(0, first);
+    await _chunk(0);
   }
 
   /// The first [n] bytes (already fetched by [init]).
@@ -125,6 +128,7 @@ class RemoteRangeReader {
   }
 
   Future<Uint8List> _chunk(int i) {
+    if (_closed) return Future.error(OpError(codeUnavailable, '已取消'));
     final hit = _cache.remove(i);
     if (hit != null) {
       _cache[i] = hit; // now the most recent
@@ -133,6 +137,7 @@ class RemoteRangeReader {
     // The block body matters: an arrow would return the Future that
     // _inflight.remove gives back, which is this very Future, and wait on itself.
     return _inflight[i] ??= _fetch(i).then((d) {
+      if (_closed) throw OpError(codeUnavailable, '已取消');
       _remember(i, d);
       return d;
     }).whenComplete(() {
@@ -141,23 +146,44 @@ class RemoteRangeReader {
   }
 
   Future<Uint8List> _fetch(int i) async {
+    while (!_closed && _activeFetches >= _maxFetches) {
+      final ready = Completer<void>();
+      _waiting.add(ready);
+      await ready.future;
+    }
     if (_closed) throw OpError(codeUnavailable, '已取消');
+    _activeFetches++;
+    try {
+      return await _fetchRange(i);
+    } finally {
+      _activeFetches--;
+      if (_waiting.isNotEmpty) _waiting.removeFirst().complete();
+    }
+  }
+
+  Future<Uint8List> _fetchRange(int i) async {
     final offset = i * chunk;
     final want = i == 0 || size == 0 ? chunk : (size - offset < chunk ? size - offset : chunk);
     requests++;
     final s = await _open(root, path, offset, want);
     _streams.add(s);
     try {
+      if (_closed) throw OpError(codeUnavailable, '已取消');
       final meta = (await s.response() as Map).cast<String, dynamic>();
       final total = (meta['size'] as num).toInt();
       final tag = meta['etag'] as String?;
+      final len = (meta['length'] as num).toInt();
+      final expected = (total - offset).clamp(0, want);
+      if (total < 0 || total > pdfMaxFile || len != expected ||
+          (meta['offset'] != null && meta['offset'] != offset)) {
+        throw OpError(codeUnavailable, 'PDF 分块响应范围无效');
+      }
       if (i == 0 && size == 0) {
         size = total;
         etag = tag;
       } else if (total != size || tag != etag) {
         throw RemoteChanged();
       }
-      final len = (meta['length'] as num).toInt();
       final out = BytesBuilder(copy: false);
       var ended = false;
       while (true) {
@@ -165,6 +191,9 @@ class RemoteRangeReader {
         final f = await s.read();
         if (f == null) break;
         if (f.type == typeData) {
+          if (f.payload.length > len - out.length) {
+            throw OpError(codeUnavailable, 'PDF 分块响应超出请求长度');
+          }
           out.add(f.payload);
         } else if (f.type == typeEnd) {
           ended = true;
@@ -173,6 +202,9 @@ class RemoteRangeReader {
       }
       if (!ended || out.length != len) throw OpError(codeUnavailable, '读取不完整：${out.length} / $len 字节');
       return out.takeBytes();
+    } on Object {
+      s.reset();
+      rethrow;
     } finally {
       _streams.remove(s);
       unawaited(s.close().catchError((_) {}));
@@ -181,25 +213,31 @@ class RemoteRangeReader {
 
   /// The callback PDFium reads through: fills [buf] from [pos], returns how many bytes.
   Future<int> read(Uint8List buf, int pos, int n) async {
-    if (pos < 0 || pos >= size) return 0;
-    final end = (pos + n) < size ? pos + n : size;
-    var at = pos, filled = 0;
+    if (pos < 0 || pos >= size || n <= 0 || buf.isEmpty) return 0;
+    final end = pos + n.clamp(0, (size - pos).clamp(0, buf.length));
     final first = pos ~/ chunk, last = (end - 1) ~/ chunk;
-    final blocks = await Future.wait([for (var i = first; i <= last; i++) _chunk(i)]);
-    for (var i = first; i <= last; i++) {
-      final b = blocks[i - first];
-      final from = at - i * chunk;
-      final take = (b.length - from) < (end - at) ? b.length - from : end - at;
-      if (take <= 0) break;
-      buf.setRange(filled, filled + take, b, from);
-      filled += take;
-      at += take;
+    var next = first;
+    Future<void> worker() async {
+      while (next <= last) {
+        final i = next++;
+        final b = await _chunk(i);
+        final at = (i * chunk).clamp(pos, end);
+        final from = at - i * chunk;
+        final take = (end - at).clamp(0, b.length - from);
+        buf.setRange(at - pos, at - pos + take, b, from);
+      }
     }
-    return filled;
+    // Fill the caller's buffer as blocks arrive, without retaining a second
+    // whole-range list of blocks outside the bounded cache.
+    await Future.wait([for (var k = 0; k < _maxFetches && k <= last - first; k++) worker()]);
+    return end - pos;
   }
 
   void close() {
     _closed = true;
+    while (_waiting.isNotEmpty) {
+      _waiting.removeFirst().complete();
+    }
     for (final s in _streams.toList()) {
       s.reset();
     }

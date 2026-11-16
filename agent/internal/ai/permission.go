@@ -275,6 +275,11 @@ func (g *PermissionGate) EvaluateWithRules(sessionID, agentMode, permMode, actio
 			return "allow", ""
 		}
 		return "ask", reasonShellCommand
+	case "mcp":
+		if g.isRemembered(sessionID, action, resource) {
+			return "allow", ""
+		}
+		return "ask", "MCP 工具调用需要确认"
 	default:
 		return "allow", ""
 	}

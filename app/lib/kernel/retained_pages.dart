@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import 'retained_pane.dart';
 

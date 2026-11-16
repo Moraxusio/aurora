@@ -5,6 +5,31 @@
 // lines around each change in the usual unified form.
 import 'diff_view.dart';
 
+import 'package:flutter/foundation.dart';
+
+Future<void> _diffTail = Future.value();
+
+/// One bounded CPU worker keeps large comparisons off the UI isolate. Queued
+/// obsolete requests are skipped before launching another isolate.
+Future<List<DiffLine>> diffTextsAsync(
+  String before,
+  String after, {
+  bool Function()? active,
+}) {
+  final work = _diffTail.then((_) async {
+    if (active?.call() == false) return <DiffLine>[];
+    if (before.length + after.length > 8 * 1024 * 1024) {
+      throw StateError('差异内容超过 8 MiB 预算');
+    }
+    return compute(_diffPair, (before, after), debugLabel: 'aurora-text-diff');
+  });
+  _diffTail = work.then<void>((_) {}, onError: (Object _) {});
+  return work;
+}
+
+List<DiffLine> _diffPair((String, String) texts) =>
+    diffTexts(texts.$1, texts.$2);
+
 /// Lines of [oldText] and [newText] as a unified diff with [context] lines
 /// around each change. Two equal texts give no lines.
 List<DiffLine> diffTexts(String oldText, String newText, {int context = 3}) {
@@ -22,10 +47,13 @@ List<DiffLine> diffTexts(String oldText, String newText, {int context = 3}) {
     head++;
   }
   var tail = 0;
-  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] == b[b.length - 1 - tail]) {
+  while (tail < a.length - head &&
+      tail < b.length - head &&
+      a[a.length - 1 - tail] == b[b.length - 1 - tail]) {
     tail++;
   }
-  final ma = a.sublist(head, a.length - tail), mb = b.sublist(head, b.length - tail);
+  final ma = a.sublist(head, a.length - tail),
+      mb = b.sublist(head, b.length - tail);
   if (ma.isEmpty && mb.isEmpty) return [];
 
   // The middle: LCS table, or a plain replace when it would be too large.
@@ -42,7 +70,9 @@ List<DiffLine> diffTexts(String oldText, String newText, {int context = 3}) {
     final t = List.generate(n + 1, (_) => List<int>.filled(m + 1, 0));
     for (var i = n - 1; i >= 0; i--) {
       for (var j = m - 1; j >= 0; j--) {
-        t[i][j] = ma[i] == mb[j] ? t[i + 1][j + 1] + 1 : (t[i + 1][j] >= t[i][j + 1] ? t[i + 1][j] : t[i][j + 1]);
+        t[i][j] = ma[i] == mb[j]
+            ? t[i + 1][j + 1] + 1
+            : (t[i + 1][j] >= t[i][j + 1] ? t[i + 1][j] : t[i][j + 1]);
       }
     }
     var i = 0, j = 0;
@@ -111,12 +141,33 @@ List<DiffLine> diffTexts(String oldText, String newText, {int context = 3}) {
       end += run;
     }
     final slice = all.sublist(start, end);
-    final oldStart = slice.firstWhere((e) => e.$3 != null, orElse: () => (0, '', 0, 0)).$3 ?? 0;
-    final newStart = slice.firstWhere((e) => e.$4 != null, orElse: () => (0, '', 0, 0)).$4 ?? 0;
-    final oldLen = slice.where((e) => e.$3 != null).length, newLen = slice.where((e) => e.$4 != null).length;
-    out.add(DiffLine(DiffLineKind.hunk, '@@ -$oldStart,$oldLen +$newStart,$newLen @@'));
+    final oldStart =
+        slice.firstWhere((e) => e.$3 != null, orElse: () => (0, '', 0, 0)).$3 ??
+        0;
+    final newStart =
+        slice.firstWhere((e) => e.$4 != null, orElse: () => (0, '', 0, 0)).$4 ??
+        0;
+    final oldLen = slice.where((e) => e.$3 != null).length,
+        newLen = slice.where((e) => e.$4 != null).length;
+    out.add(
+      DiffLine(
+        DiffLineKind.hunk,
+        '@@ -$oldStart,$oldLen +$newStart,$newLen @@',
+      ),
+    );
     for (final e in slice) {
-      out.add(DiffLine(switch (e.$1) { 1 => DiffLineKind.add, 2 => DiffLineKind.del, _ => DiffLineKind.context }, e.$2, oldNo: e.$3, newNo: e.$4));
+      out.add(
+        DiffLine(
+          switch (e.$1) {
+            1 => DiffLineKind.add,
+            2 => DiffLineKind.del,
+            _ => DiffLineKind.context,
+          },
+          e.$2,
+          oldNo: e.$3,
+          newNo: e.$4,
+        ),
+      );
     }
     k = end;
   }

@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"aurora3/internal/filetxn"
 	"aurora3/internal/paths"
 	"aurora3/internal/wire"
 )
@@ -340,11 +341,22 @@ func (s *Env) fsRead(ctx context.Context, raw json.RawMessage) (any, error) {
 // writeAtomic writes data next to the target and renames it into place, so a
 // crash or full disk never leaves a half-written file.
 func writeAtomic(root *os.Root, rel string, r io.Reader, mode fs.FileMode) (int64, error) {
+	tmp, n, err := stageAtomic(root, rel, r, mode)
+	if err != nil {
+		return n, err
+	}
+	defer root.Remove(tmp)
+	return n, root.Rename(tmp, rel)
+}
+
+// Receive into a sibling file without occupying the shared commit lock. The
+// caller must revalidate its admitted version before making the file visible.
+func stageAtomic(root *os.Root, rel string, r io.Reader, mode fs.FileMode) (string, int64, error) {
 	dir, base := path.Split(rel)
 	tmp := path.Join(dir, partPrefix+wire.NewToken()[:12]+"-"+base+".part")
 	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
-		return 0, err
+		return "", 0, err
 	}
 	// The agent runs as root; the file keeps the owner it had, or gets the
 	// owner of its folder, so a save never hands someone's file to root.
@@ -358,14 +370,33 @@ func writeAtomic(root *os.Root, rel string, r io.Reader, mode fs.FileMode) (int6
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
-	if err == nil {
-		err = root.Rename(tmp, rel)
-	}
 	if err != nil {
 		_ = root.Remove(tmp)
-		return n, err
+		return "", n, err
 	}
-	return n, nil
+	return tmp, n, nil
+}
+
+// Captures a version even for explicit overwrites: an overwrite authorizes the
+// version seen when the request starts, not arbitrary changes during transfer.
+func admitTarget(root *os.Root, rel string, a *fsArgs) (fs.FileMode, error) {
+	filetxn.CommitMu.Lock()
+	defer filetxn.CommitMu.Unlock()
+	if err := filetxn.CheckReady(); err != nil {
+		return 0, err
+	}
+	mode, err := checkTarget(root, rel, a)
+	if err != nil {
+		return 0, err
+	}
+	if fi, err := root.Lstat(rel); err == nil {
+		a.IfMatch = etag(fi)
+	} else if os.IsNotExist(err) {
+		a.Create = true
+	} else {
+		return 0, fsErr(err)
+	}
+	return mode, nil
 }
 
 // ownerFor is who a file written at rel should belong to: its current owner
@@ -377,7 +408,7 @@ func checkTarget(root *os.Root, rel string, a *fsArgs) (fs.FileMode, error) {
 		return 0, wire.Errf(wire.CodeBadRequest, "不能写入根目录本身")
 	}
 	mode := fs.FileMode(0o644)
-	fi, err := root.Stat(rel)
+	fi, err := root.Lstat(rel)
 	switch {
 	case err == nil:
 		if !fi.Mode().IsRegular() {
@@ -412,11 +443,27 @@ func (s *Env) fsWrite(ctx context.Context, raw json.RawMessage) (any, error) {
 	if len(a.Content) > maxInlineBytes {
 		return nil, wire.Errf(wire.CodeBadRequest, "内容过大，请使用上传")
 	}
-	mode, err := checkTarget(root, rel, a)
+	mode, err := admitTarget(root, rel, a)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := writeAtomic(root, rel, strings.NewReader(a.Content), mode); err != nil {
+	tmp, _, err := stageAtomic(root, rel, strings.NewReader(a.Content), mode)
+	if err != nil {
+		return nil, fsErr(err)
+	}
+	defer root.Remove(tmp)
+	filetxn.CommitMu.Lock()
+	defer filetxn.CommitMu.Unlock()
+	if err := filetxn.CheckReady(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if _, err := checkTarget(root, rel, a); err != nil {
+		return nil, err
+	}
+	if err := root.Rename(tmp, rel); err != nil {
 		return nil, fsErr(err)
 	}
 	s.Audit.Write("fs.write", map[string]any{"root": a.Root, "path": rel, "bytes": len(a.Content)})
@@ -436,6 +483,11 @@ func validName(rel string) error {
 }
 
 func (s *Env) fsMkdir(ctx context.Context, raw json.RawMessage) (any, error) {
+	filetxn.CommitMu.Lock()
+	defer filetxn.CommitMu.Unlock()
+	if err := filetxn.CheckReady(); err != nil {
+		return nil, err
+	}
 	a, root, rel, err := s.fsPrep(raw)
 	if err != nil {
 		return nil, err
@@ -455,6 +507,11 @@ func (s *Env) fsMkdir(ctx context.Context, raw json.RawMessage) (any, error) {
 }
 
 func (s *Env) fsRename(ctx context.Context, raw json.RawMessage) (any, error) {
+	filetxn.CommitMu.Lock()
+	defer filetxn.CommitMu.Unlock()
+	if err := filetxn.CheckReady(); err != nil {
+		return nil, err
+	}
 	a, root, rel, err := s.fsPrep(raw)
 	if err != nil {
 		return nil, err
@@ -486,6 +543,11 @@ func (s *Env) fsRename(ctx context.Context, raw json.RawMessage) (any, error) {
 // fsCopy copies a file, or a folder with everything in it, inside one root.
 // Nothing is overwritten: a name already taken is a conflict.
 func (s *Env) fsCopy(ctx context.Context, raw json.RawMessage) (any, error) {
+	filetxn.CommitMu.Lock()
+	defer filetxn.CommitMu.Unlock()
+	if err := filetxn.CheckReady(); err != nil {
+		return nil, err
+	}
 	a, root, rel, err := s.fsPrep(raw)
 	if err != nil {
 		return nil, err
@@ -634,6 +696,11 @@ func (c ctxReader) Read(p []byte) (int, error) {
 }
 
 func (s *Env) fsDelete(ctx context.Context, raw json.RawMessage) (any, error) {
+	filetxn.CommitMu.Lock()
+	defer filetxn.CommitMu.Unlock()
+	if err := filetxn.CheckReady(); err != nil {
+		return nil, err
+	}
 	a, root, rel, err := s.fsPrep(raw)
 	if err != nil {
 		return nil, err
@@ -712,7 +779,7 @@ func (s *Env) fsUpload(ctx context.Context, st net.Conn, raw json.RawMessage) er
 	if a.Size < 0 || a.Size > s.UploadMaxBytes {
 		return wire.Errf(wire.CodeBadRequest, "文件超过上传上限")
 	}
-	mode, err := checkTarget(root, rel, a)
+	mode, err := admitTarget(root, rel, a)
 	if err != nil {
 		return err
 	}
@@ -726,19 +793,42 @@ func (s *Env) fsUpload(ctx context.Context, st net.Conn, raw json.RawMessage) er
 	}
 	start := time.Now()
 	fr := &frameReader{r: st, max: a.Size}
-	n, err := writeAtomic(root, rel, fr, mode)
+	tmp, n, err := stageAtomic(root, rel, fr, mode)
 	if err != nil {
 		if errors.Is(err, syscall.ENOSPC) {
 			return wire.Errf(wire.CodeConflict, "磁盘空间不足：写入文件失败")
 		}
 		return fsErr(err)
 	}
+	defer root.Remove(tmp)
+	filetxn.CommitMu.Lock()
+	if err := filetxn.CheckReady(); err != nil {
+		filetxn.CommitMu.Unlock()
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		filetxn.CommitMu.Unlock()
+		return err
+	}
+	if _, err := checkTarget(root, rel, a); err != nil {
+		filetxn.CommitMu.Unlock()
+		return err
+	}
+	if err := root.Rename(tmp, rel); err != nil {
+		filetxn.CommitMu.Unlock()
+		return fsErr(err)
+	}
 	s.Audit.Write("fs.upload", map[string]any{"root": a.Root, "path": rel, "bytes": n, "ms": time.Since(start).Milliseconds()})
 	fi, err := root.Lstat(rel)
+	var result any
+	if err == nil {
+		result = s.toEntry(root, rootDir, rel, fi)
+	}
+	filetxn.CommitMu.Unlock()
 	if err != nil {
 		return fsErr(err)
 	}
-	return wire.WriteJSON(st, wire.OKResponse(s.toEntry(root, rootDir, rel, fi)))
+	return wire.WriteJSON(st, wire.OKResponse(result))
 }
 
 func rootPath(s *Env, id string) string {

@@ -2,7 +2,7 @@
 // (windows/runner/win32_window.cpp), so the app draws the minimize, maximize
 // and close buttons, makes its title bars draggable, and gives the top edge
 // back its resize handle. Off Windows, or in tests, none of this shows.
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../theme/ide_theme.dart';
 import 'desktop_lifecycle.dart';

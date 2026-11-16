@@ -9,7 +9,7 @@
 // A client opens odd stream ids. Each stream starts with a 256 KiB window in
 // both directions; a receiver grows it with window updates.
 //
-// Performance (docs/DESIGN.md 5.3):
+// Performance (docs/archive/2026-11-16/DESIGN.md 5.3):
 //   - every stream announces a 4 MiB receive window when it opens, so one
 //     stream is not held to 256 KiB per round trip;
 //   - frames queued in one event-loop turn go out in one socket write, and

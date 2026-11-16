@@ -7,9 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
+
+	"aurora3/internal/filetxn"
 )
 
 var patchToolDef = ToolDef{
@@ -278,59 +279,38 @@ func execPatchTool(ctx context.Context, tc toolContext, raw json.RawMessage, che
 			return fail(err)
 		}
 	}
-	touched := map[string]bool{}
-	rollback := func(cause error) ToolExecResult {
-		var failures []string
-		for i := len(originals) - 1; i >= 0; i-- {
-			o := originals[i]
-			if !touched[o.path] {
-				continue
-			}
-			var err error
-			if o.exists {
-				err = atomicWriteFile(o.path, o.data, o.mode)
-			} else {
-				err = os.Remove(o.path)
-				if os.IsNotExist(err) {
-					err = nil
-				}
-			}
-			if err != nil {
-				failures = append(failures, o.path+": "+err.Error())
-			}
-		}
-		if len(failures) > 0 {
-			return fail(fmt.Errorf("patch failed: %v; rollback needs attention: %s", cause, strings.Join(failures, "; ")))
-		}
-		return fail(fmt.Errorf("patch failed and file changes were restored: %w", cause))
-	}
 	if err := ctx.Err(); err != nil {
 		return fail(err)
 	}
+	final := map[string]filetxn.State{}
 	var diffs []FileDiff
 	for _, c := range changes {
-		if err := ctx.Err(); err != nil {
-			return rollback(err)
-		}
 		if c.file.action != "Delete" {
-			if err := os.MkdirAll(filepath.Dir(c.dest), 0755); err != nil {
-				return rollback(err)
-			}
-			if err := atomicWriteFile(c.dest, c.after, c.mode); err != nil {
-				return rollback(err)
-			}
-			touched[c.dest] = true
+			final[c.dest] = filetxn.State{Exists: true, Data: c.after, Mode: c.mode}
 		}
 		if c.file.action == "Delete" || c.dest != c.src {
-			if err := os.Remove(c.src); err != nil {
-				return rollback(err)
-			}
-			touched[c.src] = true
+			final[c.src] = filetxn.State{}
 		}
 		diffs = append(diffs, c.diff)
 		if c.dest != c.src {
 			diffs = append(diffs, ComputeFileDiff(c.destDisplay, "", string(c.after)))
 		}
+	}
+	var batch []filetxn.Change
+	for _, o := range originals {
+		after, touched := final[o.path]
+		if !touched {
+			continue
+		}
+		c, err := o.change(tc.rootPath, after.Data, after.Exists)
+		if err != nil {
+			return fail(err)
+		}
+		c.After.Mode = after.Mode
+		batch = append(batch, c)
+	}
+	if err := tc.env.fileTransactions(tc.rootPath).CommitLocked(ctx, batch); err != nil {
+		return fail(fmt.Errorf("patch transaction failed: %w", err))
 	}
 	if tc.env.Audit != nil {
 		tc.env.Audit.Write("ai.patch", map[string]any{"session": tc.session.ID, "files": len(changes)})

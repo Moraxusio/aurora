@@ -30,8 +30,8 @@ $deps = & 'flutter' pub deps --no-dev --style=compact --directory (Join-Path $re
 if (@($deps).Count -lt 20) { throw "pub deps listed only $(@($deps).Count) packages" }
 foreach ($d in ($deps | Sort-Object name -Unique)) {
     if ($d.name -in 'aurora_install', 'aurora_profile', 'aurora_sub', 'aurora_tls', 'aurora_wire', 'aurora', 'flutter', 'flutter_localizations', 'flutter_web_plugins', 'sky_engine') { continue }
-    # xterm is vendored (app/third_party/xterm, patched): its licence is there.
-    $p = if ($d.name -eq 'xterm') { Join-Path $repo 'app\third_party\xterm' } else { Join-Path $pub "$($d.name)-$($d.version)" }
+    # Read the actual shipped copies for locally patched editor/terminal libraries.
+    $p = if ($d.name -in 'xterm', 're_editor') { Join-Path $repo "app\third_party\$($d.name)" } else { Join-Path $pub "$($d.name)-$($d.version)" }
     $lic = @('LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING') | ForEach-Object { Join-Path $p $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
     Add-License "Dart package $($d.name) $($d.version)" $lic
 }
@@ -64,8 +64,12 @@ Add-License 'OpenCode (ported in aurora3-agent internal/ai)' (Join-Path $repo 'a
 Push-Location (Join-Path $repo 'agent')
 try {
     $env:GOTOOLCHAIN = 'local'; $env:GOPROXY = 'off'; $env:GOOS = 'linux'; $env:GOARCH = 'amd64'; $env:CGO_ENABLED = '0'
-    $goList = & 'go' list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{end}}{{end}}' ./cmd/aurora3-agent | Sort-Object -Unique
-    if ($LASTEXITCODE) { throw 'go list' }
+    $goList = @(& 'go' list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{end}}{{end}}' ./cmd/aurora3-agent)
+    if ($LASTEXITCODE) { throw 'go list Linux agent' }
+    $env:GOOS = 'windows'
+    $goList += @(& 'go' list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{end}}{{end}}' ./cmd/aurora3-local-agent)
+    if ($LASTEXITCODE) { throw 'go list Windows local agent' }
+    $goList = $goList | Sort-Object -Unique
 } finally { Pop-Location; Remove-Item Env:GOOS, Env:GOARCH -ErrorAction SilentlyContinue }
 foreach ($m in $goList) {
     if (-not $m) { continue }
@@ -74,7 +78,7 @@ foreach ($m in $goList) {
     $esc = ($path -creplace '([A-Z])', '!$1').ToLower()
     $dirm = Join-Path $gomod "$esc@$ver"
     $lic = @('LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING') | ForEach-Object { Join-Path $dirm $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
-    Add-License "Go module $path $ver (in aurora3-agent)" $lic
+    Add-License "Go module $path $ver (in the Linux/Windows agents)" $lic
 }
 $tl = Join-Path $repo 'agent\tools\tmux\LICENSES.txt'
 if (Test-Path $tl) {

@@ -1,5 +1,5 @@
 name: aurora_sub
-description: Reads a proxy subscription (Clash YAML, or a list of share links) into nodes the agent can use (docs/DESIGN.md D-84 to D-88).
+description: Reads a proxy subscription (Clash YAML, or a list of share links) into nodes the agent can use.
 publish_to: 'none'
 version: 0.1.0
 

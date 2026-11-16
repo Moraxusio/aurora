@@ -46,6 +46,8 @@ Copy-Item (Join-Path $AgentDir 'amd64\*') (Join-Path $dest 'amd64')
 Copy-Item (Join-Path $repo 'LICENSE'), (Join-Path $repo 'NOTICE'), (Join-Path $windowsDir 'LICENSES.txt') $legal
 try {
   Push-Location (Join-Path $repo 'app')
+  & dart tool/ui_contract.dart
+  if ($LASTEXITCODE) { throw 'Aurora GUI contract failed' }
   & flutter build apk --release --split-per-abi --build-name $Version --build-number $BuildNumber
   if ($LASTEXITCODE) { throw 'flutter build apk' }
   New-Item -ItemType Directory -Force $Out | Out-Null

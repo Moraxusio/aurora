@@ -6,8 +6,88 @@ import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/range_server.dart';
+import 'support/fake_download.dart';
 
 void main() {
+  test('a large PDF read bounds concurrent range opens', () async {
+    final srv = Server(seq(400));
+    var active = 0, peak = 0;
+    final r = RemoteRangeReader((root, path, offset, length) async {
+      active++;
+      if (active > peak) peak = active;
+      await Future<void>.delayed(Duration.zero);
+      try {
+        return await srv.open(root, path, offset, length);
+      } finally {
+        active--;
+      }
+    }, 'home', '/large.pdf', chunk: 10);
+    await r.init();
+    final out = Uint8List(300);
+    expect(await r.read(out, 0, out.length), out.length);
+    expect(out, seq(300));
+    expect(peak, lessThanOrEqualTo(4));
+    r.close();
+  });
+
+  test('closing while open is pending resets the eventual stream', () async {
+    final srv = Server(seq(100));
+    final r = RemoteRangeReader(srv.open, 'home', '/a.pdf', chunk: 10);
+    await r.init();
+    final gate = srv.hold = Completer<void>();
+    final pending = r.read(Uint8List(5), 50, 5);
+    final checked = expectLater(pending, throwsA(isA<OpError>()));
+    r.close();
+    gate.complete();
+    await checked;
+    expect(srv.streams.last.wasReset, isTrue);
+  });
+
+  test('separate PDF reads share the same concurrency budget', () async {
+    final srv = Server(seq(400));
+    var active = 0, peak = 0;
+    final r = RemoteRangeReader((root, path, offset, length) async {
+      active++;
+      if (active > peak) peak = active;
+      await Future<void>.delayed(Duration.zero);
+      try {
+        return await srv.open(root, path, offset, length);
+      } finally {
+        active--;
+      }
+    }, 'home', '/large.pdf', chunk: 10);
+    await r.init();
+    final counts = await Future.wait([
+      for (var i = 1; i <= 20; i++) r.read(Uint8List(10), i * 10, 10),
+    ]);
+    expect(counts, everyElement(10));
+    expect(peak, lessThanOrEqualTo(4));
+    r.close();
+  });
+
+  test('range data cannot exceed its announced length', () async {
+    final stream = FakeDownload(
+      {'size': 100, 'etag': 'e1', 'offset': 0, 'length': 10},
+      [data(seq(11)), end()],
+    );
+    final r = RemoteRangeReader((_, _, _, _) async => stream, 'home', '/a.pdf', chunk: 10);
+    await expectLater(r.init(), throwsA(isA<OpError>()));
+    expect(stream.wasReset, isTrue);
+    expect(stream.reads, 1);
+    r.close();
+  });
+
+  test('an oversized range response is rejected before buffering it', () async {
+    final stream = FakeDownload(
+      {'size': 100, 'etag': 'e1', 'offset': 0, 'length': 100},
+      [data(seq(100)), end()],
+    );
+    final r = RemoteRangeReader((_, _, _, _) async => stream, 'home', '/a.pdf', chunk: 10);
+    await expectLater(r.init(), throwsA(isA<OpError>()));
+    expect(stream.wasReset, isTrue);
+    r.close();
+  });
+
   test('init fetches only the first block and learns the size', () async {
     final srv = Server(seq(100));
     final r = RemoteRangeReader(srv.open, 'home', '/a.pdf', chunk: 10);

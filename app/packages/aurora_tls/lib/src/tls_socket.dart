@@ -2,7 +2,7 @@
 // native engine (src/aurora_tls.c). dart:io's own SecureSocket stages every
 // byte through fixed 8 KiB rings and a round trip to its IO thread; here
 // ciphertext goes straight from the socket into the engine and plaintext
-// straight out (docs/PLAN.md section 6).
+// straight out (docs/archive/2026-11-16/PLAN.md section 6).
 import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';

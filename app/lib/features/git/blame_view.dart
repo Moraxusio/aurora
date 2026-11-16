@@ -2,10 +2,9 @@
 // that last changed it. Consecutive lines of one commit show its details once.
 // A click on a commit opens what it changed.
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../kernel/editor_tab.dart';
-import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'git_feature.dart' show CommitView;

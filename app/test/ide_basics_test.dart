@@ -115,6 +115,29 @@ void main() {
       final r = await findFiles(link, const [SearchFolder('home', '/project', 'project'), SearchFolder('data', '/other', 'other')], '');
       expect([for (final i in r) i.path], ['/other/b1']);
     });
+
+    test('multi-folder merge respects the exact result budget', () async {
+      link.onFind = (_) => {'files': ['/a', '/b', '/c']};
+      final r = await findFiles(link, const [
+        SearchFolder('home', '/project', 'project'),
+        SearchFolder('data', '/other', 'other'),
+      ], '', max: 3);
+      expect(r, hasLength(3));
+    });
+
+    testWidgets('typing invalidates an old reply before the debounce fires', (t) async {
+      final gate = Completer<Object?>();
+      link.hold['fs.find'] = gate;
+      link.onFind = (_) => {'files': ['/project/new.txt']};
+      await show(t, QuickOpen(ws: ws, folders: const [SearchFolder('home', '/project', 'project')]));
+      await t.enterText(find.byType(TextField), 'new');
+      gate.complete({'files': ['/project/old.txt']});
+      await t.pump(const Duration(milliseconds: 20));
+      expect(find.text('old.txt'), findsNothing);
+      await t.pump(const Duration(milliseconds: 150));
+      expect(find.text('new.txt'), findsOneWidget);
+      await settle(t);
+    });
   });
 
   group('search', () {

@@ -3,7 +3,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../theme/ide_theme.dart';

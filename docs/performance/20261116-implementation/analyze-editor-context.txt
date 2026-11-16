@@ -1,0 +1,35 @@
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|295|7|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|350|9|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|452|9|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|459|11|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|490|9|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|499|11|6|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|519|13|34|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|546|7|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|566|9|67|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|577|11|121|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|581|11|20|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|583|11|58|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|618|11|116|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|622|11|116|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|795|15|28|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|818|15|28|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|829|9|113|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|958|9|179|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|976|7|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|984|9|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1007|7|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1126|9|37|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1144|15|129|Statements in an if should be enclosed in a block.
+INFO|LINT|USE_NULL_AWARE_ELEMENTS|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1156|9|2|Use the null-aware marker '?' rather than a null check via an 'if'.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1173|9|18|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1201|9|87|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1211|7|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1218|9|7|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1498|7|46|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1579|11|33|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1639|7|240|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1659|7|41|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1729|7|14|Statements in an if should be enclosed in a block.
+INFO|LINT|CURLY_BRACES_IN_FLOW_CONTROL_STRUCTURES|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|1801|29|47|Statements in an if should be enclosed in a block.
+INFO|LINT|UNNECESSARY_BRACE_IN_STRING_INTERPS|C:\\build\\aurora\\app\\lib\\features\\ai\\ai_studio_view.dart|2107|23|9|Unnecessary braces in a string interpolation.

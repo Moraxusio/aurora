@@ -141,7 +141,7 @@ You are NO LONGER in Plan mode. The previous Plan restrictions no longer apply. 
 
 // BuildSystemPrompts constructs the multi-part system prompt array matching OpenCode's
 // runner + IdentityPlugin + OptimizePlugin + Environment + AGENTS.md discovery.
-func BuildSystemPrompts(agentName string, cfg ProviderConfig, absWorkdir string, toolNames []string) []string {
+func BuildSystemPrompts(agentName string, cfg ProviderConfig, absWorkdir string, toolNames []string, instructionContext ...string) []string {
 	if agentName == "title" {
 		return []string{PromptTitle}
 	}
@@ -195,7 +195,13 @@ func BuildSystemPrompts(agentName string, cfg ProviderConfig, absWorkdir string,
 	parts = append(parts, strings.Join(envLines, "\n"))
 
 	// Project instructions discovery (AGENTS.md / CLAUDE.md)
-	if inst := discoverInstructions(absWorkdir); inst != "" {
+	inst := ""
+	if len(instructionContext) > 0 {
+		inst = strings.Join(instructionContext, "\n\n")
+	} else {
+		inst = discoverInstructions(absWorkdir)
+	}
+	if inst != "" {
 		parts = append(parts, inst)
 	}
 
@@ -207,7 +213,7 @@ func discoverInstructions(absWorkdir string) string {
 	var found []string
 	for _, name := range candidates {
 		p := filepath.Join(absWorkdir, name)
-		b, err := os.ReadFile(p)
+		b, err := boundedProjectFile(absWorkdir, name, 24<<10)
 		if err != nil || len(b) == 0 {
 			continue
 		}

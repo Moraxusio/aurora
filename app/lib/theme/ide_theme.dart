@@ -5,6 +5,7 @@
 // the Material theme is built from the same values. Sizes come from [Space]
 // and [Radii] so panels, rows and menus line up on one grid.
 import 'package:flutter/material.dart';
+
 import 'workbench_tokens.dart';
 
 /// The 4 px spacing grid.
@@ -16,7 +17,11 @@ abstract final class Space {
 }
 
 abstract final class Radii {
-  static const double s = 2, m = 3, l = UiMetrics.controlRadius, island = 3, dialog = UiMetrics.surfaceRadius;
+  static const double s = 2,
+      m = UiMetrics.controlRadius,
+      l = UiMetrics.controlRadius,
+      island = UiMetrics.surfaceRadius,
+      dialog = UiMetrics.surfaceRadius;
 }
 
 class Ide extends ThemeExtension<Ide> {
@@ -33,7 +38,15 @@ class Ide extends ThemeExtension<Ide> {
   /// Menus, dialogs, the palette: anything that floats.
   final Color surface;
   final Color input, shadow;
-  final Color statusBar, statusText, error, warn, ok, addBg, delBg, addText, delText;
+  final Color statusBar,
+      statusText,
+      error,
+      warn,
+      ok,
+      addBg,
+      delBg,
+      addText,
+      delText;
 
   const Ide({
     required this.frame,
@@ -138,17 +151,35 @@ class Ide extends ThemeExtension<Ide> {
   /// The interface font: Segoe UI Variable on Windows 11, Segoe UI before it;
   /// Chinese falls back to YaHei UI, other platforms to their own sans.
   static const ui = 'Segoe UI Variable Text';
-  static const uiFallback = ['Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', 'Roboto'];
+  static const uiFallback = [
+    'Segoe UI',
+    'Microsoft YaHei UI',
+    'PingFang SC',
+    'Noto Sans CJK SC',
+    'Roboto',
+  ];
 
   /// Monospace for code, terminal and logs; Chinese falls back to the UI font.
   static const mono = 'Cascadia Mono';
-  static const monoFallback = ['Consolas', 'Microsoft YaHei UI', 'Noto Sans Mono CJK SC'];
+  static const monoFallback = [
+    'Consolas',
+    'Microsoft YaHei UI',
+    'Noto Sans Mono CJK SC',
+  ];
 
   /// The soft shadow of anything that floats over the islands.
   List<BoxShadow> get float => [
-        BoxShadow(color: shadow.withValues(alpha: isDark ? .32 : .12), blurRadius: 18, offset: const Offset(0, 6)),
-        BoxShadow(color: shadow.withValues(alpha: isDark ? .24 : .06), blurRadius: 4, offset: const Offset(0, 1)),
-      ];
+    BoxShadow(
+      color: shadow.withValues(alpha: isDark ? .32 : .12),
+      blurRadius: 18,
+      offset: const Offset(0, 6),
+    ),
+    BoxShadow(
+      color: shadow.withValues(alpha: isDark ? .24 : .06),
+      blurRadius: 4,
+      offset: const Offset(0, 1),
+    ),
+  ];
 
   @override
   Ide copyWith() => this;
@@ -243,22 +274,48 @@ ThemeData buildTheme(Brightness b) {
     dividerTheme: DividerThemeData(color: c.border, space: 1, thickness: 1),
     extensions: [c],
   );
-  final muted = TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.textDim);
+  final muted = TextStyle(
+    fontFamily: Ide.ui,
+    fontFamilyFallback: Ide.uiFallback,
+    color: c.textDim,
+  );
   return base.copyWith(
     textTheme: base.textTheme
         .copyWith(
           bodyLarge: const TextStyle(fontSize: 14, height: 1.45),
           bodyMedium: const TextStyle(fontSize: 13, height: 1.4),
           bodySmall: const TextStyle(fontSize: 12, height: 1.35),
-          labelLarge: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          labelLarge: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
           labelMedium: const TextStyle(fontSize: 12),
           labelSmall: const TextStyle(fontSize: 11, letterSpacing: 0.2),
-          titleSmall: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          titleMedium: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          titleLarge: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.2),
-          headlineSmall: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600, letterSpacing: -0.3),
+          titleSmall: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          titleMedium: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+          titleLarge: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+          ),
+          headlineSmall: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.3,
+          ),
         )
-        .apply(bodyColor: c.text, displayColor: c.text, fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback),
+        .apply(
+          bodyColor: c.text,
+          displayColor: c.text,
+          fontFamily: Ide.ui,
+          fontFamilyFallback: Ide.uiFallback,
+        ),
     iconTheme: IconThemeData(color: c.textDim, size: 18),
     appBarTheme: AppBarTheme(
       backgroundColor: c.frame,
@@ -269,14 +326,30 @@ ThemeData buildTheme(Brightness b) {
       toolbarHeight: 44,
       titleSpacing: 4,
       iconTheme: IconThemeData(color: c.textDim, size: 18),
-      titleTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 14, fontWeight: FontWeight.w600),
+      titleTextStyle: TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        color: c.text,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
     ),
     tooltipTheme: TooltipThemeData(
       waitDuration: UiMotion.tooltipWait,
       exitDuration: UiMotion.feedback,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.borderStrong), borderRadius: rm, boxShadow: c.float),
-      textStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 12),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.borderStrong),
+        borderRadius: rm,
+        boxShadow: c.float,
+      ),
+      textStyle: TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        color: c.text,
+        fontSize: 12,
+      ),
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: c.surface,
@@ -285,10 +358,28 @@ ThemeData buildTheme(Brightness b) {
       elevation: UiMetrics.menuElevation,
       position: PopupMenuPosition.under,
       menuPadding: UiMetrics.menuPadding,
-      shape: RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners, side: BorderSide(color: c.borderStrong.withValues(alpha: UiMetrics.surfaceBorderOpacity))),
-      textStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 13),
-      labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback,
-        fontSize: 13, color: states.contains(WidgetState.disabled) ? c.textFaint : c.text)),
+      shape: RoundedRectangleBorder(
+        borderRadius: UiMetrics.surfaceCorners,
+        side: BorderSide(
+          color: c.borderStrong.withValues(
+            alpha: UiMetrics.surfaceBorderOpacity,
+          ),
+        ),
+      ),
+      textStyle: TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        color: c.text,
+        fontSize: 13,
+      ),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontFamily: Ide.ui,
+          fontFamilyFallback: Ide.uiFallback,
+          fontSize: 13,
+          color: states.contains(WidgetState.disabled) ? c.textFaint : c.text,
+        ),
+      ),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: c.surface,
@@ -298,24 +389,53 @@ ThemeData buildTheme(Brightness b) {
       barrierColor: Colors.black.withValues(alpha: c.isDark ? 0.38 : 0.18),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      shape: RoundedRectangleBorder(borderRadius: const BorderRadius.all(Radius.circular(Radii.dialog)), side: BorderSide(color: c.borderStrong.withValues(alpha: 0.6))),
-      titleTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 16, fontWeight: FontWeight.w600),
-      contentTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.textDim, fontSize: 13, height: 1.5),
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.all(Radius.circular(Radii.dialog)),
+        side: BorderSide(color: c.borderStrong.withValues(alpha: 0.6)),
+      ),
+      titleTextStyle: TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        color: c.text,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
+      contentTextStyle: TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        color: c.textDim,
+        fontSize: 13,
+        height: 1.5,
+      ),
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
       showDragHandle: true,
       dragHandleColor: c.borderStrong,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: c.surface,
-      contentTextStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 13),
+      contentTextStyle: TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        color: c.text,
+        fontSize: 13,
+      ),
       behavior: SnackBarBehavior.floating,
       insetPadding: const EdgeInsets.only(top: 8, bottom: 40),
       elevation: UiMetrics.menuElevation,
-      shape: RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners, side: BorderSide(color: c.borderStrong.withValues(alpha: UiMetrics.surfaceBorderOpacity))),
+      shape: RoundedRectangleBorder(
+        borderRadius: UiMetrics.surfaceCorners,
+        side: BorderSide(
+          color: c.borderStrong.withValues(
+            alpha: UiMetrics.surfaceBorderOpacity,
+          ),
+        ),
+      ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       isDense: true,
@@ -323,20 +443,52 @@ ThemeData buildTheme(Brightness b) {
       fillColor: c.input,
       hoverColor: Colors.transparent,
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      border: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.border)),
-      enabledBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.border)),
-      focusedBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.accent, width: 1.4)),
-      errorBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.error)),
-      focusedErrorBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.error, width: 1.4)),
-      disabledBorder: OutlineInputBorder(borderRadius: rm, borderSide: BorderSide(color: c.border.withValues(alpha: 0.5))),
+      border: OutlineInputBorder(
+        borderRadius: rm,
+        borderSide: BorderSide(color: c.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: rm,
+        borderSide: BorderSide(color: c.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: rm,
+        borderSide: BorderSide(color: c.accent, width: 1.4),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: rm,
+        borderSide: BorderSide(color: c.error),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: rm,
+        borderSide: BorderSide(color: c.error, width: 1.4),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: rm,
+        borderSide: BorderSide(color: c.border.withValues(alpha: 0.5)),
+      ),
       labelStyle: muted.copyWith(fontSize: 13),
-      floatingLabelStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.accent, fontSize: 13),
+      floatingLabelStyle: TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        color: c.accent,
+        fontSize: 13,
+      ),
       helperStyle: muted.copyWith(fontSize: 11.5),
-      hintStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.textFaint, fontSize: 13),
+      hintStyle: TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        color: c.textFaint,
+        fontSize: 13,
+      ),
       prefixIconColor: c.textDim,
       suffixIconColor: c.textDim,
     ),
-    textSelectionTheme: TextSelectionThemeData(cursorColor: c.accent, selectionColor: c.selection, selectionHandleColor: c.accent),
+    textSelectionTheme: TextSelectionThemeData(
+      cursorColor: c.accent,
+      selectionColor: c.selection,
+      selectionHandleColor: c.accent,
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: c.isDark ? const Color(0xFF0078D4) : c.accent,
@@ -347,7 +499,12 @@ ThemeData buildTheme(Brightness b) {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         shape: const RoundedRectangleBorder(borderRadius: rm),
         elevation: 0,
-        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13, fontWeight: FontWeight.w500),
+        textStyle: const TextStyle(
+          fontFamily: Ide.ui,
+          fontFamilyFallback: Ide.uiFallback,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
@@ -357,8 +514,15 @@ ThemeData buildTheme(Brightness b) {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         minimumSize: const Size(64, 32),
-        shape: RoundedRectangleBorder(borderRadius: rm, side: BorderSide(color: c.borderStrong)),
-        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13),
+        shape: RoundedRectangleBorder(
+          borderRadius: rm,
+          side: BorderSide(color: c.borderStrong),
+        ),
+        textStyle: const TextStyle(
+          fontFamily: Ide.ui,
+          fontFamilyFallback: Ide.uiFallback,
+          fontSize: 13,
+        ),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -368,7 +532,11 @@ ThemeData buildTheme(Brightness b) {
         minimumSize: const Size(64, 32),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         shape: const RoundedRectangleBorder(borderRadius: rm),
-        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13),
+        textStyle: const TextStyle(
+          fontFamily: Ide.ui,
+          fontFamilyFallback: Ide.uiFallback,
+          fontSize: 13,
+        ),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -377,33 +545,73 @@ ThemeData buildTheme(Brightness b) {
         minimumSize: const Size(48, 32),
         padding: const EdgeInsets.symmetric(horizontal: 10),
         shape: const RoundedRectangleBorder(borderRadius: rm),
-        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13, fontWeight: FontWeight.w500),
+        textStyle: const TextStyle(
+          fontFamily: Ide.ui,
+          fontFamilyFallback: Ide.uiFallback,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
-      style: IconButton.styleFrom(foregroundColor: c.textDim, hoverColor: c.hover, shape: const RoundedRectangleBorder(borderRadius: rm)),
+      style: IconButton.styleFrom(
+        foregroundColor: c.textDim,
+        hoverColor: c.hover,
+        shape: const RoundedRectangleBorder(borderRadius: rm),
+      ),
     ),
     checkboxTheme: CheckboxThemeData(
       shape: const RoundedRectangleBorder(borderRadius: rs),
       side: BorderSide(color: c.textFaint, width: 1.3),
-      fillColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : Colors.transparent),
+      fillColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? c.accent : Colors.transparent,
+      ),
       checkColor: WidgetStateProperty.all(c.onAccent),
     ),
-    radioTheme: RadioThemeData(fillColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : c.textFaint)),
+    radioTheme: RadioThemeData(
+      fillColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? c.accent : c.textFaint,
+      ),
+    ),
     switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.onAccent : c.textDim),
-      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.accent : c.borderStrong),
+      thumbColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? c.onAccent : c.textDim,
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? c.accent : c.borderStrong,
+      ),
       trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
     ),
-    sliderTheme: SliderThemeData(activeTrackColor: c.accent, inactiveTrackColor: c.border, thumbColor: c.accent, overlayColor: c.accentSoft, trackHeight: 3),
+    sliderTheme: SliderThemeData(
+      activeTrackColor: c.accent,
+      inactiveTrackColor: c.border,
+      thumbColor: c.accent,
+      overlayColor: c.accentSoft,
+      trackHeight: 3,
+    ),
     scrollbarTheme: ScrollbarThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((s) => c.textDim.withValues(alpha: s.contains(WidgetState.dragged) ? 0.55 : (s.contains(WidgetState.hovered) ? 0.42 : 0.26))),
+      thumbColor: WidgetStateProperty.resolveWith(
+        (s) => c.textDim.withValues(
+          alpha: s.contains(WidgetState.dragged)
+              ? 0.55
+              : (s.contains(WidgetState.hovered) ? 0.42 : 0.26),
+        ),
+      ),
       radius: const Radius.circular(4),
-      thickness: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.hovered) || s.contains(WidgetState.dragged) ? 8 : 6),
+      thickness: WidgetStateProperty.resolveWith(
+        (s) =>
+            s.contains(WidgetState.hovered) || s.contains(WidgetState.dragged)
+            ? 8
+            : 6,
+      ),
       crossAxisMargin: 2,
       mainAxisMargin: 2,
     ),
-    progressIndicatorTheme: ProgressIndicatorThemeData(color: c.accent, linearTrackColor: c.border, circularTrackColor: Colors.transparent),
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: c.accent,
+      linearTrackColor: c.border,
+      circularTrackColor: Colors.transparent,
+    ),
     listTileTheme: ListTileThemeData(
       dense: true,
       iconColor: c.textDim,
@@ -417,17 +625,29 @@ ThemeData buildTheme(Brightness b) {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: rl, side: BorderSide(color: c.border)),
+      shape: RoundedRectangleBorder(
+        borderRadius: rl,
+        side: BorderSide(color: c.border),
+      ),
     ),
     chipTheme: ChipThemeData(
       backgroundColor: c.input,
       selectedColor: c.accentSoft,
       side: BorderSide(color: c.border),
       shape: const RoundedRectangleBorder(borderRadius: rm),
-      labelStyle: TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, color: c.text, fontSize: 12),
+      labelStyle: TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        color: c.text,
+        fontSize: 12,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 4),
     ),
-    badgeTheme: BadgeThemeData(backgroundColor: c.accent, textColor: c.onAccent, smallSize: 7),
+    badgeTheme: BadgeThemeData(
+      backgroundColor: c.accent,
+      textColor: c.onAccent,
+      smallSize: 7,
+    ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: SegmentedButton.styleFrom(
         side: BorderSide(color: c.borderStrong),
@@ -435,7 +655,11 @@ ThemeData buildTheme(Brightness b) {
         selectedForegroundColor: c.text,
         foregroundColor: c.textDim,
         shape: const RoundedRectangleBorder(borderRadius: rm),
-        textStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13),
+        textStyle: const TextStyle(
+          fontFamily: Ide.ui,
+          fontFamilyFallback: Ide.uiFallback,
+          fontSize: 13,
+        ),
       ),
     ),
     tabBarTheme: TabBarThemeData(
@@ -443,8 +667,17 @@ ThemeData buildTheme(Brightness b) {
       unselectedLabelColor: c.textDim,
       indicatorColor: c.accent,
       dividerColor: c.border,
-      labelStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13, fontWeight: FontWeight.w500),
-      unselectedLabelStyle: const TextStyle(fontFamily: Ide.ui, fontFamilyFallback: Ide.uiFallback, fontSize: 13),
+      labelStyle: const TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontFamily: Ide.ui,
+        fontFamilyFallback: Ide.uiFallback,
+        fontSize: 13,
+      ),
     ),
     menuTheme: MenuThemeData(
       style: MenuStyle(
@@ -453,18 +686,30 @@ ThemeData buildTheme(Brightness b) {
         shadowColor: WidgetStateProperty.all(c.shadow),
         elevation: WidgetStateProperty.all(UiMetrics.menuElevation),
         padding: WidgetStateProperty.all(UiMetrics.menuPadding),
-        shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners)),
-        side: WidgetStateProperty.all(BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
+        shape: WidgetStateProperty.all(
+          const RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners),
+        ),
+        side: WidgetStateProperty.all(
+          BorderSide(color: c.borderStrong.withValues(alpha: 0.7)),
+        ),
       ),
     ),
     dropdownMenuTheme: DropdownMenuThemeData(
       menuStyle: MenuStyle(
         backgroundColor: WidgetStateProperty.all(c.surface),
         surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
-        shape: WidgetStateProperty.all(const RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners)),
-        side: WidgetStateProperty.all(BorderSide(color: c.borderStrong.withValues(alpha: 0.7))),
+        shape: WidgetStateProperty.all(
+          const RoundedRectangleBorder(borderRadius: UiMetrics.surfaceCorners),
+        ),
+        side: WidgetStateProperty.all(
+          BorderSide(color: c.borderStrong.withValues(alpha: 0.7)),
+        ),
       ),
     ),
-    navigationBarTheme: NavigationBarThemeData(backgroundColor: c.frame, indicatorColor: c.accentSoft, surfaceTintColor: Colors.transparent),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: c.frame,
+      indicatorColor: c.accentSoft,
+      surfaceTintColor: Colors.transparent,
+    ),
   );
 }

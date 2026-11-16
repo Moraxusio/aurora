@@ -7,6 +7,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $Exe = (Resolve-Path $Exe).Path
+. (Join-Path $PSScriptRoot 'native_accessibility.ps1')
 
 Add-Type @'
 using System;
@@ -36,7 +37,7 @@ public static class Win {
 
 $cls = 'AURORA3_RUNNER_WIN32_WINDOW'
 $scope = 'tray-test-' + [guid]::NewGuid().ToString('N')
-$tmp = Join-Path ([IO.Path]::GetTempPath()) $scope
+$tmp = Join-Path $env:LOCALAPPDATA "Temp\opencode\$scope"
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $env:AURORA3_INSTANCE_SCOPE = $scope
 $env:LOCALAPPDATA = $tmp
@@ -86,6 +87,17 @@ try {
 
   # Tray menu 'exit' command id.
   [void][Win]::PostMessage($hwnd, 0x111, [IntPtr]31002, [IntPtr]::Zero)
+  # A connected local workspace asks before ending its managed tasks.
+  $script:exitButton = $false
+  $exitReady = WaitFor {
+    if ($first.HasExited) { return $true }
+    $script:exitButton = [NativeAccessible]::Names($hwnd) -contains '结束本地任务并退出'
+    return $script:exitButton
+  } 15000
+  Check 'exit request completes or asks to end local tasks' $exitReady
+  if ($script:exitButton) {
+    Check 'local-task exit confirmation invoked' ([NativeAccessible]::Invoke($hwnd, '结束本地任务并退出'))
+  }
   Check 'tray exit command ends the process' ($first.WaitForExit(15000))
 }
 catch {
@@ -93,10 +105,10 @@ catch {
   $script:fail++
 }
 finally {
-  if ($first -and -not $first.HasExited) { $first.Kill() }
-  Get-Process aurora -ErrorAction SilentlyContinue |
-    Where-Object { $_.Path -eq $Exe -and $_.StartTime -gt (Get-Date).AddMinutes(-3) -and $_.Id -eq $first.Id } |
-    ForEach-Object { $_.Kill() }
+  if ($first -and -not $first.HasExited) {
+    try { $first.Kill(); [void]$first.WaitForExit(5000) }
+    catch { if (-not $first.HasExited) { Write-Warning $_ } }
+  }
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
 if ($script:fail -gt 0) { Write-Host "FAILED: $script:fail"; exit 1 }

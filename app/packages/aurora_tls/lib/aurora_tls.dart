@@ -1,4 +1,4 @@
-/// TLS 1.3 client with certificate pinning (docs/DESIGN.md 5.3), on a
+/// TLS 1.3 client with certificate pinning (docs/archive/2026-11-16/DESIGN.md 5.3), on a
 /// bundled BoringSSL built by this package's build hook. Also Ed25519
 /// verification and SHA-256 for release signatures (D-3).
 library;

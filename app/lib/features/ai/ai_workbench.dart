@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../kernel/retained_pane.dart';
-import '../../kernel/widgets.dart';
 import '../../theme/ide_theme.dart';
 import 'ai_transcript.dart';
 import 'ai_visuals.dart';

@@ -1,4 +1,4 @@
-// The "走代理" box of the new-session dialog (docs/DESIGN.md D-47, D-48, D-49):
+// The "走代理" box of the new-session dialog (docs/archive/2026-11-16/DESIGN.md D-47, D-48, D-49):
 // it can be ticked only when the agent can honour it, and says why when it
 // cannot. Widget-level: what the dialog returns is what createSession sends.
 import 'dart:io';

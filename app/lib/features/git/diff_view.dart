@@ -2,10 +2,9 @@
 // numbers of both sides, and the changed lines. It is read-only; staging and
 // discarding happen in the change list.
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../kernel/editor_tab.dart';
-import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'git_model.dart';
@@ -164,6 +163,7 @@ class _DiffLoaderState extends State<_DiffLoader> {
   List<DiffLine>? _lines;
   String? _note;
   String? _error;
+  int _generation = 0;
 
   @override
   void initState() {
@@ -172,6 +172,7 @@ class _DiffLoaderState extends State<_DiffLoader> {
   }
 
   Future<void> _load() async {
+    final generation = ++_generation;
     final link = widget.ws.link;
     if (link == null) return setState(() => _error = '未连接');
     try {
@@ -190,7 +191,8 @@ class _DiffLoaderState extends State<_DiffLoader> {
           lines = [];
           _note = '二进制文件，或文件太大，不显示差异';
         } else {
-          lines = diffTexts(before.missing ? '' : before.text, after.missing ? '' : after.text);
+          lines = await diffTextsAsync(before.missing ? '' : before.text, after.missing ? '' : after.text,
+            active: () => mounted && generation == _generation && identical(link, widget.ws.link));
           if (lines.isEmpty) _note = before.missing && after.missing ? '这次提交里没有这个文件' : '内容没有变化（可能只改了权限）';
         }
       } else {
@@ -214,9 +216,11 @@ class _DiffLoaderState extends State<_DiffLoader> {
           if (r['truncated'] == true) _note = '差异太大，只显示了前 4 MB';
         }
       }
-      if (mounted) setState(() => _lines = lines);
-    } on OpError catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted && generation == _generation && identical(link, widget.ws.link)) setState(() => _lines = lines);
+    } on Object catch (e) {
+      if (mounted && generation == _generation && identical(link, widget.ws.link)) {
+        setState(() => _error = e is OpError ? e.message : '$e');
+      }
     }
   }
 

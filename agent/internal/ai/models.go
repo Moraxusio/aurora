@@ -28,16 +28,17 @@ type ToolDef struct {
 
 // LLMRequest is the normalized protocol-independent model invocation.
 type LLMRequest struct {
-	SessionID      string
-	AffinityID     string // parent/root session ID for prompt-cache routing
-	Initiator      string // "user" | "agent"
-	Provider       ProviderConfig
-	System         []string
-	Messages       []Message
-	Tools          []ToolDef
-	MaxTokens      int
-	Temperature    *float64
-	LoadAttachment func(Part) ([]byte, error)
+	SessionID       string
+	AffinityID      string // parent/root session ID for prompt-cache routing
+	Initiator       string // "user" | "agent"
+	Provider        ProviderConfig
+	System          []string
+	Messages        []Message
+	Tools           []ToolDef
+	MaxTokens       int
+	BudgetAuxiliary bool // title/compaction share tokens and cost, not tool steps
+	Temperature     *float64
+	LoadAttachment  func(Part) ([]byte, error)
 }
 
 // LLMDelta is emitted incrementally while streaming a model response.

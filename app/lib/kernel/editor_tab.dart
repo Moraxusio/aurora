@@ -1,7 +1,7 @@
 // One retained task. Documents belong to editors; terminals to the bottom panel.
 // The kernel keeps every open tab's widget alive while another is shown, so a
 // terminal keeps its screen and an editor its unsaved text.
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:aurora_profile/aurora_profile.dart';
 
 enum TabArea { editor, terminal, assistant }

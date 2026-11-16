@@ -4,6 +4,7 @@ package files
 
 import (
 	"aurora3/internal/paths"
+	"container/heap"
 	"errors"
 	"path"
 	"regexp"
@@ -214,7 +215,11 @@ func fuzzyScore(p, q string) int {
 	if q == "" {
 		return 0
 	}
-	lp, lq := strings.ToLower(p), strings.ToLower(strings.ReplaceAll(q, " ", ""))
+	return fuzzyScoreNormalized(p, strings.ToLower(strings.ReplaceAll(q, " ", "")))
+}
+
+func fuzzyScoreNormalized(p, lq string) int {
+	lp := strings.ToLower(p)
 	base := strings.LastIndexByte(lp, '/') + 1
 	depth := strings.Count(lp, "/")
 	// the whole query inside the file name wins
@@ -267,23 +272,57 @@ type found struct {
 	score int
 }
 
-// rankFiles returns the best max paths for q.
-func rankFiles(files []string, q string, max int) []found {
-	var out []found
+func betterMatch(a, b found) bool {
+	if a.score != b.score {
+		return a.score > b.score
+	}
+	return a.Path < b.Path
+}
+
+// The worst retained match is at the root, so only better candidates enter.
+type rankedFiles []found
+
+func (h rankedFiles) Len() int           { return len(h) }
+func (h rankedFiles) Less(i, j int) bool { return betterMatch(h[j], h[i]) }
+func (h rankedFiles) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *rankedFiles) Push(v any)        { *h = append(*h, v.(found)) }
+func (h *rankedFiles) Pop() any {
+	old := *h
+	v := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return v
+}
+
+// rankFiles keeps only the best limit paths: O(N log K), O(K) result space.
+func rankFiles(files []string, q string, limit int) []found {
+	if limit <= 0 || len(files) == 0 {
+		return nil
+	}
+	out := make(rankedFiles, 0, min(limit, len(files)))
+	normalized := strings.ToLower(strings.ReplaceAll(q, " ", ""))
 	for _, f := range files {
-		if s := fuzzyScore(f, q); s >= 0 {
-			out = append(out, found{Path: f, score: s})
+		score := 0
+		if q != "" {
+			score = fuzzyScoreNormalized(f, normalized)
+		}
+		if score < 0 {
+			continue
+		}
+		candidate := found{Path: f, score: score}
+		if len(out) < limit {
+			out = append(out, candidate)
+			if len(out) == limit {
+				heap.Init(&out)
+			}
+		} else if betterMatch(candidate, out[0]) {
+			out[0] = candidate
+			heap.Fix(&out, 0)
 		}
 	}
-	sort.SliceStable(out, func(a, b int) bool {
-		if out[a].score != out[b].score {
-			return out[a].score > out[b].score
-		}
-		return out[a].Path < out[b].Path
-	})
-	if len(out) > max {
-		out = out[:max]
+	if len(out) == 0 {
+		return nil
 	}
+	sort.Slice(out, func(i, j int) bool { return betterMatch(out[i], out[j]) })
 	return out
 }
 

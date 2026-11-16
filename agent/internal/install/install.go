@@ -1,7 +1,7 @@
 //go:build linux
 
 // Package install puts aurora3-agent on a Linux server in four stages
-// (docs/DESIGN.md 5.1; D-12, D-15 to D-17): probe, prepare, switch, confirm.
+// (docs/archive/2026-11-16/DESIGN.md 5.1; D-12, D-15 to D-17): probe, prepare, switch, confirm.
 // Either the new version runs and answers on its direct port, or the machine
 // is back where it was before the run. Only v3 names are written (D-71); v2's
 // files are looked at, never changed (D-75).

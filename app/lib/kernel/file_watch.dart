@@ -7,6 +7,7 @@
 import 'dart:async';
 
 import 'package:aurora_wire/aurora_wire.dart';
+import 'package:flutter/foundation.dart';
 
 typedef FileChanged = void Function();
 
@@ -22,12 +23,15 @@ class _Key {
 class FileWatch {
   final Link? Function() link;
   FileWatch(this.link);
+  final status = ValueNotifier<String?>(null);
 
   final Map<_Key, Set<FileChanged>> _watchers = {};
   OpStream? _stream;
+  OpStream? _pending;
   Link? _streamLink;
   bool _opening = false;
   bool _disposed = false;
+  int _generation = 0;
   Timer? _resend;
 
   static (String, String) _split(String path) {
@@ -82,38 +86,56 @@ class FileWatch {
     if (_stream == null || !identical(_streamLink, l)) {
       if (_opening) return;
       _drop();
+      final generation = _generation;
       _opening = true;
+      _streamLink = l;
+      OpStream? opened;
       try {
         final s = await l.open('fs.watch');
+        opened = s;
+        if (!_current(generation, l)) {
+          s.reset();
+          return;
+        }
+        _pending = s;
         await s.response();
-        if (_disposed) {
+        if (!_current(generation, l)) {
           s.reset();
           return;
         }
         _stream = s;
-        _streamLink = l;
+        _pending = null;
         unawaited(_read(s));
       } on Object {
+        opened?.reset();
         return; // an agent without the operation, no inotify, or no link: no notices
       } finally {
-        _opening = false;
+        if (generation == _generation) {
+          _opening = false;
+          _pending = null;
+        }
       }
     }
+    final stream = _stream;
     final dirs = {for (final k in _watchers.keys) '${k.root}\u0000${k.dir}'};
     try {
-      await _stream?.sendJson({
+      await stream?.sendJson({
         'type': 'set',
         'items': [for (final d in dirs) {'root': d.split('\u0000')[0], 'path': d.split('\u0000')[1]}],
       });
     } on Object {
-      _drop();
+      if (identical(stream, _stream)) _drop();
     }
   }
+
+  bool _current(int generation, Link l) =>
+      !_disposed && generation == _generation && identical(link(), l) && _watchers.isNotEmpty;
 
   Future<void> _read(OpStream s) async {
     try {
       while (true) {
         final f = await s.read();
+        if (!identical(_stream, s) || !identical(link(), _streamLink)) break;
         if (f == null) break;
         if (!f.isJson) continue;
         final m = (f.json() as Map).cast<String, dynamic>();
@@ -130,6 +152,12 @@ class FileWatch {
 
   void _event(Map<String, dynamic> m) {
     final type = m['type'];
+    if (type == 'status') {
+      final fallback = (m['fallback'] as num?)?.toInt() ?? 0;
+      status.value = fallback == 0 ? null :
+          '$fallback 个目录使用轮询监听，每目录最多检查 ${m['limit'] ?? 5000} 项';
+      return;
+    }
     final calls = <FileChanged>[];
     if (type == 'overflow') {
       for (final s in _watchers.values) {
@@ -152,6 +180,11 @@ class FileWatch {
   void debugEvent(Map<String, dynamic> m) => _event(m);
 
   void _drop() {
+    if (!_disposed) status.value = null;
+    _generation++;
+    _opening = false;
+    _pending?.reset();
+    _pending = null;
     _stream?.reset();
     _stream = null;
     _streamLink = null;
@@ -162,5 +195,6 @@ class FileWatch {
     _resend?.cancel();
     _drop();
     _watchers.clear();
+    status.dispose();
   }
 }

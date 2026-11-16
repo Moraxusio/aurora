@@ -1,5 +1,5 @@
 // Read-only NVIDIA details. Null values mean unavailable, never zero utilization.
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 
 import '../../theme/ide_theme.dart';

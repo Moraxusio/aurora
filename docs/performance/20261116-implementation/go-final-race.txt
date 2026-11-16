@@ -1,0 +1,5 @@
+ok  	aurora3/internal/ai	16.597s
+ok  	aurora3/internal/mcp	1.215s
+ok  	aurora3/internal/devtools	2.157s
+ok  	aurora3/internal/files	6.046s
+ok  	aurora3/internal/filetxn	1.581s

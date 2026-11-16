@@ -1,0 +1,51 @@
+**********************
+PowerShell 记录开始
+开始时间: 20261116082840
+用户名: FINNWE\finwe
+RunAs 用户: FINNWE\finwe
+配置名称: 
+计算机: FINNWE (Microsoft Windows NT 10.0.26300.0)
+主机应用程序: C:\Program Files\PowerShell\7\pwsh.dll -NoLogo -NoProfile -NonInteractive -Command $ErrorActionPreference = 'Stop'
+$work = 'C:\Users\finwe\AppData\Local\Temp\opencode\aurora-package-20261116-ide-preview1'
+Start-Transcript -Path "$work\artifact-check.txt" | Out-Null
+try {
+  & "$work\verify-artifact.ps1"
+} finally { Stop-Transcript | Out-Null }
+进程 ID: 22200
+PSVersion: 7.6.10
+PSEdition: Core
+GitCommitId: 7.6.10
+OS: Microsoft Windows 10.0.26300
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+{
+  "package": "C:\\dev\\VPS\\preview3\\Aurora-3.22.0-ide-preview1",
+  "zip": "C:\\dev\\VPS\\preview3\\Aurora-3.22.0-ide-preview1.zip",
+  "zip_bytes": 36049252,
+  "zip_sha256": "556aaa40de28d07ae9de5949e9cacc1a8e039348edca1f71f15077c754edf42a",
+  "archive_files_matching_directory": 134,
+  "source_files_rechecked": 1596,
+  "source_head": "f2873316253e80b9c217dea88eb8048c8dddb10f",
+  "source_working_tree": "uncommitted working tree",
+  "client_file_version": "3.22.0+32200",
+  "client_aot_sha256": "351f24217eac092d7a6c6e492047a76f1572a59c2fc2ece0bab2212d408a7a47",
+  "linux_agent_sha256": "c076437c905c04962894025cfa53e1ca513341f01970250a55587576e926ab02",
+  "local_agent_sha256": "d6768116357237dc8763b431610e70e4c3b6676a0278f6d57bcd42d1247427f2",
+  "signing_key_id": "87828dfb18459372",
+  "license_texts_verified": [
+    "re_editor",
+    "xterm",
+    "OpenCode"
+  ],
+  "unpacked_directory": "C:\\Users\\finwe\\AppData\\Local\\Temp\\opencode\\aurora-package-20261116-ide-preview1\\extracted\\Aurora-3.22.0-ide-preview1"
+}
+ARTIFACT_ZIP_SOURCE_VERSION_LICENSE_DOCS_OK
+**********************
+PowerShell 记录结束
+结束时间: 20261116082843
+**********************

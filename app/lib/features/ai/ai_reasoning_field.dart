@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 /// One editor for connection, model and session effort values.
 class AiReasoningField extends StatefulWidget {

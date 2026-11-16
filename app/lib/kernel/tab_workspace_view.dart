@@ -7,7 +7,7 @@ import 'package:flutter/gestures.dart'
         PointerScrollEvent,
         GestureBinding;
 import 'package:flutter/foundation.dart' show ValueListenable;
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/ide_theme.dart';
@@ -16,7 +16,6 @@ import 'tab_drag.dart';
 import 'tab_layout_menu.dart';
 import 'input_mode.dart';
 import 'tab_layout.dart';
-import 'widgets.dart';
 import 'workspace.dart';
 import 'editor_grid_geometry.dart';
 import 'retained_pane.dart';

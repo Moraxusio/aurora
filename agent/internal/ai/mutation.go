@@ -6,12 +6,34 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"sync"
+	"path/filepath"
 	"unicode/utf8"
+
+	"aurora3/internal/filetxn"
 )
 
 // Serialize file-tool commits, but never hold the lock while awaiting a user.
-var toolMutationMu sync.Mutex
+var toolMutationMu = &filetxn.CommitMu
+
+func (e *Env) fileTransactions(extra ...string) *filetxn.Manager {
+	roots := append([]string(nil), extra...)
+	for _, root := range e.Roots {
+		roots = append(roots, root.Path)
+	}
+	return filetxn.New(e.StateDir, roots)
+}
+
+func (o fileOriginal) change(root string, data []byte, exists bool) (filetxn.Change, error) {
+	rel, err := filepath.Rel(root, o.path)
+	if err != nil {
+		return filetxn.Change{}, err
+	}
+	return filetxn.Change{
+		Root: root, Path: rel,
+		Before: filetxn.State{Exists: o.exists, Data: o.data, Mode: o.mode},
+		After:  filetxn.State{Exists: exists, Data: data, Mode: o.mode},
+	}, nil
+}
 
 type fileOriginal struct {
 	path   string

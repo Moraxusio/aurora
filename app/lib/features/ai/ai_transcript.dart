@@ -4,7 +4,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/rendering.dart';
 
 class _ReadingAnchor {

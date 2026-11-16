@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"aurora3/internal/filetxn"
 	"aurora3/internal/paths"
 )
 
@@ -24,6 +24,7 @@ type activeRun struct {
 	inbox    []InboxItem
 	queued   []InboxItem
 	provider ProviderConfig
+	meter    *runMeter
 }
 
 // Env is the state and dependencies of the "ai" service on the agent.
@@ -34,27 +35,42 @@ type Env struct {
 	Proxy      func() map[string]string
 	AgentProxy func() map[string]string // explicit Aurora node; legacy local Proxy remains the system route
 
-	once       sync.Once
-	mu         sync.Mutex
-	sessions   map[string]*Session
-	running    map[string]*activeRun
-	subs       map[chan StreamEvent]struct{}
-	perms      *PermissionGate
-	snapshots  *SnapshotManager
-	activities map[string]StreamEvent
-	questions  map[string]*pendingQuestion
+	once               sync.Once
+	mu                 sync.Mutex
+	sessions           map[string]*Session
+	records            map[string]*sessionRecord
+	sessionErrors      map[string]error
+	sessionIO          map[string]chan struct{}
+	storeError         error
+	storeClock         uint64
+	beforeSessionWrite func(string) error // deterministic disk fault injection
+	running            map[string]*activeRun
+	maintenance        map[string]context.CancelFunc // exclusive manual compaction/revert
+	subs               map[chan StreamEvent]struct{}
+	perms              *PermissionGate
+	snapshots          *SnapshotManager
+	activities         map[string]StreamEvent
+	questions          map[string]*pendingQuestion
+	recoveryErr        error
+	proposalMu         sync.Mutex
+	proposalCancels    map[string]context.CancelFunc
 }
 
 func (e *Env) init() {
 	e.once.Do(func() {
 		e.sessions = map[string]*Session{}
+		e.records = map[string]*sessionRecord{}
+		e.sessionErrors = map[string]error{}
+		e.sessionIO = map[string]chan struct{}{}
 		e.running = map[string]*activeRun{}
+		e.maintenance = map[string]context.CancelFunc{}
 		e.subs = map[chan StreamEvent]struct{}{}
 		e.perms = NewPermissionGate()
 		e.activities = map[string]StreamEvent{}
 		e.questions = map[string]*pendingQuestion{}
 		e.snapshots = NewSnapshotManager(e.StateDir)
-		e.loadAllFromDisk()
+		e.recoveryErr = e.fileTransactions().Recover()
+		e.loadSessionIndex()
 	})
 }
 
@@ -63,48 +79,6 @@ func (e *Env) sessionsDir() string {
 		return ""
 	}
 	return filepath.Join(e.StateDir, "ai", "sessions")
-}
-
-func (e *Env) loadAllFromDisk() {
-	dir := e.sessionsDir()
-	if dir == "" {
-		return
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, ent := range entries {
-		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".json") {
-			continue
-		}
-		b, err := os.ReadFile(filepath.Join(dir, ent.Name()))
-		if err != nil {
-			continue
-		}
-		var s Session
-		if json.Unmarshal(b, &s) == nil && s.ID != "" {
-			recoverInterruptedTools(&s)
-			e.sessions[s.ID] = &s
-		}
-	}
-}
-
-func (e *Env) persistSessionLocked(s *Session) error {
-	dir := e.sessionsDir()
-	if dir == "" {
-		return nil
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	cp := cloneSession(s)
-	b, err := json.Marshal(&cp)
-	if err != nil {
-		return err
-	}
-	target := filepath.Join(dir, s.ID+".json")
-	return atomicWriteFile(target, b, 0o600)
 }
 
 func cloneSession(s *Session) Session {
@@ -180,17 +154,19 @@ func (e *Env) broadcastLocked(ev StreamEvent) {
 		select {
 		case ch <- ev:
 		default:
-			// Drop oldest delta if client reads slowly so stream never deadlocks the runner
-			if ev.Type != "text.delta" && ev.Type != "reasoning.delta" {
+			// A dropped event can be a terminal status, permission, or message,
+			// not just a delta. Discard the stale backlog and require a fresh
+			// snapshot for every session (the queue is shared across sessions).
+		drain:
+			for {
 				select {
 				case <-ch:
 				default:
-				}
-				select {
-				case ch <- ev:
-				default:
+					break drain
 				}
 			}
+			ch <- StreamEvent{Type: "sync.required"}
+			ch <- ev
 		}
 	}
 }
@@ -277,22 +253,16 @@ func (e *Env) ListSessions(includeChildren bool) []SessionSummary {
 			continue
 		}
 		_, isRun := e.running[s.ID]
-		out = append(out, SessionSummary{
-			ID:                s.ID,
-			ParentID:          s.ParentID,
-			Title:             s.Title,
-			Pinned:            s.Pinned,
-			Root:              s.Root,
-			Workdir:           s.Workdir,
-			Agent:             s.Agent,
-			Model:             s.Model,
-			Preview:           sessionPreview(s),
-			Running:           isRun,
-			PendingPermission: e.perms.PendingForSession(s.ID),
-			MessageCount:      len(s.Messages),
-			CreatedAt:         s.CreatedAt,
-			UpdatedAt:         s.UpdatedAt,
-		})
+		sum := sessionSummary(s)
+		if r := e.records[s.ID]; r != nil {
+			sum = r.index.Summary
+		}
+		sum.Running = isRun
+		sum.PendingPermission = e.perms.PendingForSession(s.ID)
+		if err := e.sessionErrors[s.ID]; err != nil {
+			sum.StorageError = err.Error()
+		}
+		out = append(out, sum)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Pinned != out[j].Pinned {
@@ -307,11 +277,16 @@ func (e *Env) ListSessions(includeChildren bool) []SessionSummary {
 func (e *Env) UpdateSessionMeta(id string, title *string, pinned *bool) (SessionSummary, error) {
 	e.init()
 	e.mu.Lock()
-	s, ok := e.sessions[id]
-	if !ok {
+	s := e.sessionLocked(id)
+	if s == nil {
 		e.mu.Unlock()
-		return SessionSummary{}, fmt.Errorf("session not found: %s", id)
+		return SessionSummary{}, e.sessionStorageError(id)
 	}
+	if e.maintenance[id] != nil {
+		e.mu.Unlock()
+		return SessionSummary{}, errors.New("会话正在维护")
+	}
+	beforeTitle, beforePinned := s.Title, s.Pinned
 	if title != nil {
 		t := strings.TrimSpace(*title)
 		if t == "" {
@@ -327,7 +302,11 @@ func (e *Env) UpdateSessionMeta(id string, title *string, pinned *bool) (Session
 		s.Pinned = *pinned
 	}
 	// Renaming or pinning is not activity: UpdatedAt stays, so the list does not reorder.
-	_ = e.persistSessionLocked(s)
+	if err := e.persistSessionLocked(s); err != nil {
+		s.Title, s.Pinned = beforeTitle, beforePinned
+		e.mu.Unlock()
+		return SessionSummary{}, err
+	}
 	sum := SessionSummary{ID: s.ID, Title: s.Title, Pinned: s.Pinned, Root: s.Root, Workdir: s.Workdir, Agent: s.Agent, Model: s.Model, MessageCount: len(s.Messages), CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt}
 	e.mu.Unlock()
 	e.broadcast(StreamEvent{Type: "session.title", SessionID: id, Title: sum.Title})
@@ -347,31 +326,42 @@ type SearchHit struct {
 // SearchSessions finds sessions whose title or conversation text contains every
 // word of query (case-insensitive). One hit per session, newest first.
 func (e *Env) SearchSessions(query string, limit int) []SearchHit {
+	hits, _ := e.searchSessionsContext(context.Background(), query, limit)
+	return hits
+}
+func (e *Env) searchSessionsContext(ctx context.Context, query string, limit int) ([]SearchHit, error) {
 	e.init()
 	words := strings.Fields(strings.ToLower(query))
 	if len(words) == 0 {
-		return nil
+		return nil, nil
 	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	var hits []SearchHit
-	for _, s := range e.sessions {
-		if s.ParentID != "" {
-			continue
+	summaries := e.ListSessions(false)
+	sort.Slice(summaries, func(i, j int) bool { return summaries[i].UpdatedAt > summaries[j].UpdatedAt })
+	for _, sum := range summaries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
-		all := strings.ToLower(s.Title)
+		s, err := e.searchSession(ctx, sum.ID)
+		if err != nil {
+			return nil, err
+		}
+		var allText strings.Builder
+		allText.WriteString(strings.ToLower(s.Title))
 		var texts []struct{ id, text string }
 		for _, m := range s.Messages {
 			for _, p := range m.Parts {
 				if (p.Type == "text" || p.Type == "compaction") && p.Text != "" && !strings.HasPrefix(p.Text, "<system-reminder>") {
-					all += "\n" + strings.ToLower(p.Text)
+					allText.WriteByte('\n')
+					allText.WriteString(strings.ToLower(p.Text))
 					texts = append(texts, struct{ id, text string }{m.ID, p.Text})
 				}
 			}
 		}
+		all := allText.String()
 		matched := true
 		for _, w := range words {
 			if !strings.Contains(all, w) {
@@ -405,12 +395,15 @@ func (e *Env) SearchSessions(query string, limit int) []SearchHit {
 			}
 		}
 		hits = append(hits, hit)
+		if len(hits) >= limit {
+			break
+		}
 	}
 	sort.Slice(hits, func(i, j int) bool { return hits[i].UpdatedAt > hits[j].UpdatedAt })
 	if len(hits) > limit {
 		hits = hits[:limit]
 	}
-	return hits
+	return hits, nil
 }
 
 // ExportMarkdown renders a session as one readable Markdown document.
@@ -476,12 +469,13 @@ func (e *Env) GetSession(id string) (Session, bool, *PermissionQuestion, error) 
 	e.init()
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	s, ok := e.sessions[id]
-	if !ok {
-		return Session{}, false, nil, fmt.Errorf("session not found: %s", id)
+	s := e.sessionLocked(id)
+	if s == nil {
+		return Session{}, false, nil, e.sessionStorageError(id)
 	}
 	_, isRun := e.running[id]
-	out := cloneSession(s)
+	var out Session
+	_ = e.sessionIOLocked(id, func() error { out = cloneSession(s); return nil })
 	for i := range out.Inbox {
 		out.Inbox[i].Held = !e.inboxActiveLocked(id, out.Inbox[i].ID)
 	}
@@ -518,43 +512,58 @@ func (e *Env) DeleteSession(id string) error {
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.waitSessionLocked(id)
+	if e.maintenance[id] != nil || e.maintenance["snapshots:gc"] != nil {
+		return errors.New("session maintenance is still stopping; retry after it finishes")
+	}
 	if _, ok := e.sessions[id]; !ok {
 		return nil
 	}
-	// Also delete any child subagent sessions
-	var toDelete []string
-	toDelete = append(toDelete, id)
-	for cid, cs := range e.sessions {
-		if cs.ParentID == id {
-			toDelete = append(toDelete, cid)
+	// Reserve the complete descendant set before releasing the admission lock.
+	toDelete := []string{id}
+	selected := map[string]bool{id: true}
+	for i := 0; i < len(toDelete); i++ {
+		for cid, cs := range e.sessions {
+			if cs.ParentID == toDelete[i] && !selected[cid] {
+				selected[cid] = true
+				toDelete = append(toDelete, cid)
+			}
 		}
 	}
-	dir := e.sessionsDir()
+	for _, did := range toDelete {
+		if e.running[did] != nil || e.maintenance[did] != nil || e.sessionIO[did] != nil {
+			return errors.New("会话正在停止或落盘，请等待完成后删除")
+		}
+	}
+	for _, did := range toDelete {
+		e.maintenance[did] = func() {}
+	}
+	defer func() {
+		for _, did := range toDelete {
+			delete(e.maintenance, did)
+		}
+	}()
 	attachmentCandidates := map[string]bool{}
 	for _, did := range toDelete {
-		if session := e.sessions[did]; session != nil {
-			for _, item := range session.Inbox {
-				for _, attachment := range item.Attachments {
-					if attachment.AttachmentID != "" {
-						attachmentCandidates[attachment.AttachmentID] = true
-					}
-				}
-			}
-			for _, message := range session.Messages {
-				for _, part := range message.Parts {
-					if part.AttachmentID != "" {
-						attachmentCandidates[part.AttachmentID] = true
-					}
-					for _, attachment := range part.Attachments {
-						attachmentCandidates[attachment.AttachmentID] = true
-					}
-				}
+		if r := e.records[did]; r != nil {
+			for _, ref := range r.index.Attachments {
+				attachmentCandidates[ref] = true
 			}
 		}
+		if s := e.sessions[did]; s != nil {
+			a, _ := sessionReferences(s)
+			for _, ref := range a {
+				attachmentCandidates[ref] = true
+			}
+		}
+	}
+	if err := e.deleteSessionsDiskLocked(id, toDelete); err != nil {
+		return err
+	}
+	for _, did := range toDelete {
 		delete(e.sessions, did)
-		if dir != "" {
-			_ = os.Remove(filepath.Join(dir, did+".json"))
-		}
+		delete(e.records, did)
+		delete(e.sessionErrors, did)
 	}
 	e.removeUnusedAttachmentsLocked(attachmentCandidates)
 	return nil
@@ -564,20 +573,34 @@ func (e *Env) StopSession(id string) bool {
 	e.init()
 	e.perms.CancelSession(id)
 	e.mu.Lock()
+	e.waitSessionLocked(id)
 	ar, ok := e.running[id]
+	maintenance := e.maintenance[id]
 	e.mu.Unlock()
 	if ok && ar.cancel != nil {
 		ar.cancel()
+		return true
+	}
+	if maintenance != nil {
+		maintenance()
 		return true
 	}
 	return false
 }
 
 func (e *Env) StopAll() {
+	e.proposalMu.Lock()
+	for _, cancel := range e.proposalCancels {
+		cancel()
+	}
+	e.proposalMu.Unlock()
 	e.init()
 	e.mu.Lock()
 	ids := make([]string, 0, len(e.running))
 	for id := range e.running {
+		ids = append(ids, id)
+	}
+	for id := range e.maintenance {
 		ids = append(ids, id)
 	}
 	e.mu.Unlock()
@@ -588,7 +611,8 @@ func (e *Env) StopAll() {
 
 func (e *Env) updateTodos(sessionID string, todos []TodoItem) {
 	e.mu.Lock()
-	s, ok := e.sessions[sessionID]
+	s := e.sessionLocked(sessionID)
+	ok := s != nil
 	if ok {
 		s.Todos = append([]TodoItem(nil), todos...)
 		s.UpdatedAt = time.Now().UnixMilli()
@@ -642,6 +666,9 @@ type RunInput struct {
 // if already running, just like OpenCode's inbox), and spawns the background runner goroutine.
 func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	e.init()
+	if e.recoveryErr != nil {
+		return SessionSummary{}, e.recoveryErr
+	}
 	var prepErr error
 	in.Provider, prepErr = prepareSubscription(in.Provider)
 	if prepErr != nil {
@@ -668,6 +695,16 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	}
 
 	e.mu.Lock()
+	e.waitSessionLocked(in.SessionID)
+	if in.SessionID != "" && e.sessionLocked(in.SessionID) == nil {
+		err := e.sessionStorageError(in.SessionID)
+		e.mu.Unlock()
+		return SessionSummary{}, err
+	}
+	if e.maintenance[in.SessionID] != nil || e.maintenance["snapshots:gc"] != nil {
+		e.mu.Unlock()
+		return SessionSummary{}, errors.New("会话正在压缩或回退，请等待完成后再发送")
+	}
 	if in.InboxID != "" {
 		s := e.sessions[in.SessionID]
 		if s == nil || e.running[in.SessionID] != nil {
@@ -786,6 +823,18 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		return sum, nil
 	}
 
+	_, _, budgetWork, budgetErr := e.resolveWorkspace(s.Root, s.Workdir)
+	var budgetConfig ExtensionConfig
+	if budgetErr == nil {
+		budgetConfig, _, budgetErr = loadExtensionConfig(budgetWork)
+	}
+	if budgetErr != nil {
+		if in.SessionID == "" {
+			delete(e.sessions, s.ID)
+		}
+		e.mu.Unlock()
+		return SessionSummary{}, budgetErr
+	}
 	before := *s
 	before.Messages = append([]Message(nil), s.Messages...)
 	before.Inbox = append([]InboxItem(nil), s.Inbox...)
@@ -845,10 +894,12 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		return SessionSummary{}, err
 	}
 
-	runCtx, cancel := context.WithCancel(context.Background())
+	meter := newRunMeter(budgetConfig)
+	runCtx, cancel := context.WithDeadline(context.Background(), meter.deadline)
 	ar := &activeRun{
 		cancel:   cancel,
 		provider: in.Provider,
+		meter:    meter,
 	}
 	e.running[s.ID] = ar
 
@@ -882,7 +933,7 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	})
 
 	if isFirstPrompt && strings.TrimSpace(firstPromptText) != "" {
-		go e.generateTitleAsync(sid, firstPromptText, provCopy)
+		go e.generateTitleAsync(sid, firstPromptText, provCopy, meter)
 	}
 
 	go e.runLoop(runCtx, sid, 0)
@@ -911,20 +962,25 @@ func fallbackTitle(text string) string {
 	return string(runes)
 }
 
-func (e *Env) generateTitleAsync(sessionID, promptText string, cfg ProviderConfig) {
+func (e *Env) generateTitleAsync(sessionID, promptText string, cfg ProviderConfig, meters ...*runMeter) {
 	cctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
 	temp := 0.3
-	resp, err := StreamLLM(cctx, LLMRequest{
-		SessionID:   sessionID,
-		Initiator:   "agent",
-		Provider:    cfg,
-		System:      []string{PromptTitle},
-		Messages:    []Message{{ID: NewID("msg"), Role: "user", Parts: []Part{{Type: "text", Text: promptText}}}},
-		MaxTokens:   80,
-		Temperature: &temp,
-	}, e.proxyFor(cfg), nil)
+	var meter *runMeter
+	if len(meters) > 0 {
+		meter = meters[0]
+	}
+	resp, err := streamBudgeted(cctx, LLMRequest{
+		SessionID:       sessionID,
+		Initiator:       "agent",
+		Provider:        cfg,
+		System:          []string{PromptTitle},
+		Messages:        []Message{{ID: NewID("msg"), Role: "user", Parts: []Part{{Type: "text", Text: promptText}}}},
+		MaxTokens:       80,
+		BudgetAuxiliary: true,
+		Temperature:     &temp,
+	}, e.proxyFor(cfg), nil, meter)
 	if err != nil {
 		return
 	}
@@ -948,7 +1004,7 @@ func (e *Env) generateTitleAsync(sessionID, promptText string, cfg ProviderConfi
 	}
 
 	e.mu.Lock()
-	s := e.sessions[sessionID]
+	s := e.sessionLocked(sessionID)
 	if s != nil {
 		s.Title = title
 		s.UpdatedAt = time.Now().UnixMilli()
@@ -965,12 +1021,13 @@ func (e *Env) generateTitleAsync(sessionID, promptText string, cfg ProviderConfi
 }
 
 func (e *Env) finishRunLocked(sessionID string, owned *activeRun) {
+	e.waitSessionLocked(sessionID)
 	if owned == nil || e.running[sessionID] != owned {
 		return
 	}
 	e.perms.CancelSession(sessionID)
 	delete(e.running, sessionID)
-	if s := e.sessions[sessionID]; s != nil {
+	if s := e.sessionLocked(sessionID); s != nil {
 		recoverInterruptedTools(s)
 		_ = e.persistSessionLocked(s)
 	}
@@ -993,6 +1050,12 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 	}
 	var lastCalls []recentCall
 	idleBoundary := false
+	var extensions *extensionRuntime
+	defer func() {
+		if extensions != nil {
+			extensions.close()
+		}
+	}()
 
 	for step := 0; step < maxRunnerSteps; step++ {
 		if ctx.Err() != nil {
@@ -1000,7 +1063,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		}
 
 		e.mu.Lock()
-		s := e.sessions[sessionID]
+		s := e.sessionLocked(sessionID)
 		ar := e.running[sessionID]
 		if s == nil || ar == nil {
 			e.mu.Unlock()
@@ -1019,7 +1082,6 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			before := *s
 			before.Messages = append([]Message(nil), s.Messages...)
 			before.Inbox = append([]InboxItem(nil), s.Inbox...)
-			step = 0
 			lastCalls = nil
 			for _, item := range ar.inbox {
 				previousAgent := s.Agent
@@ -1079,12 +1141,19 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			e.recordError(sessionID, prov.Model, err.Error())
 			return
 		}
+		if extensions == nil {
+			extensions, err = e.loadExtensions(ctx, rt.Path, absWorkdir, prov)
+			if err != nil {
+				e.recordError(sessionID, prov.Model, err.Error())
+				return
+			}
+		}
 
 		// Auto-compaction check before issuing step request (matching OpenCode's runner)
 		if depth == 0 && ShouldAutoCompact(&sessSnap, prov) {
 			if _, cerr := e.compactInternal(ctx, sessionID, prov, absWorkdir, false); cerr == nil {
 				e.mu.Lock()
-				if cur := e.sessions[sessionID]; cur != nil {
+				if cur := e.sessionLocked(sessionID); cur != nil {
 					sessSnap = cloneSession(cur)
 				}
 				e.mu.Unlock()
@@ -1092,13 +1161,14 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		}
 
 		tools := modelToolDefinitions(sessSnap.Agent, depth, prov)
+		tools = append(tools, extensions.definitions(sessSnap.Agent, prov)...)
 		toolNames := make([]string, len(tools))
 		declaredTools := map[string]bool{}
 		for i, t := range tools {
 			toolNames[i] = t.Name
 			declaredTools[t.Name] = true
 		}
-		sysPrompts := BuildSystemPrompts(sessSnap.Agent, prov, absWorkdir, toolNames)
+		sysPrompts := BuildSystemPrompts(sessSnap.Agent, prov, absWorkdir, toolNames, renderInstructions(extensions.instructions))
 		activeMsgs := BuildActiveHistory(sessSnap.Messages)
 
 		initiator := "user"
@@ -1107,15 +1177,13 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		}
 
 		startTree := ""
-		if depth == 0 && sessSnap.Agent == "build" {
-			startTree = e.snapshots.Capture(ctx, absWorkdir)
-		}
+		snapshotWarning := ""
 
 		asstMsgID := NewID("msg")
 		runtime := runtimeInfo(prov)
 		contextState := activeContext(&sessSnap, prov, contextOverhead(sysPrompts, tools))
 		e.mu.Lock()
-		if cur := e.sessions[sessionID]; cur != nil {
+		if cur := e.sessionLocked(sessionID); cur != nil {
 			cur.Runtime = runtime
 			cur.Context = contextState
 		}
@@ -1128,7 +1196,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			Context:   contextState,
 		})
 
-		llmResp, llmErr := StreamLLM(ctx, LLMRequest{
+		llmResp, llmErr := streamBudgeted(ctx, LLMRequest{
 			SessionID:      sessionID,
 			AffinityID:     sessSnap.ParentID,
 			Initiator:      initiator,
@@ -1162,7 +1230,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 					ToolName:   d.ToolName,
 				})
 			}
-		})
+		}, owned.meter)
 
 		if llmErr != nil {
 			if ctx.Err() != nil {
@@ -1194,6 +1262,19 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		progressMessage := Message{ID: asstMsgID, SessionID: sessionID, Role: "assistant",
 			Agent: sessSnap.Agent, Model: prov.Model, Runtime: runtime, Finish: "tool-running",
 			Parts: append([]Part(nil), llmResp.Parts...), CreatedAt: time.Now().UnixMilli()}
+		if depth == 0 && sessSnap.Agent == "build" {
+			for _, call := range toolCalls {
+				if call.ToolName == "write" || call.ToolName == "edit" || call.ToolName == "apply_patch" ||
+					call.ToolName == "shell" || call.ToolName == "subagent" || strings.HasPrefix(call.ToolName, "mcp_") {
+					var captureErr error
+					startTree, captureErr = e.snapshots.CaptureChecked(ctx, absWorkdir)
+					if captureErr != nil {
+						snapshotWarning = captureErr.Error()
+					}
+					break
+				}
+			}
+		}
 		if startTree != "" {
 			progressMessage.Snapshot = &StepSnapshot{Start: startTree}
 		}
@@ -1264,6 +1345,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 						messageID:  asstMsgID,
 						callID:     call.ToolCallID,
 						depth:      depth,
+						extensions: extensions,
 					}, call.ToolName, call.Input)
 				}
 			} else {
@@ -1276,6 +1358,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 					messageID:  asstMsgID,
 					callID:     call.ToolCallID,
 					depth:      depth,
+					extensions: extensions,
 				}, call.ToolName, call.Input)
 			}
 
@@ -1312,15 +1395,27 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		// Capture end-of-step shadow-git snapshot if tools ran
 		var stepSnap *StepSnapshot
 		if startTree != "" && len(toolCalls) > 0 {
-			endTree := e.snapshots.Capture(context.Background(), absWorkdir)
+			endTree, captureErr := e.snapshots.CaptureChecked(context.Background(), absWorkdir)
+			if captureErr != nil {
+				snapshotWarning = captureErr.Error()
+			}
 			if endTree != "" && endTree != startTree {
-				diffs, _ := e.snapshots.Diff(context.Background(), absWorkdir, startTree, endTree)
+				diffs, diffErr := e.snapshots.Diff(context.Background(), absWorkdir, startTree, endTree)
+				if diffErr != nil {
+					snapshotWarning = diffErr.Error()
+				}
 				stepSnap = &StepSnapshot{
 					Start: startTree,
 					End:   endTree,
 					Files: diffs,
 				}
 			}
+		}
+		if snapshotWarning != "" {
+			if stepSnap == nil {
+				stepSnap = &StepSnapshot{Start: startTree}
+			}
+			stepSnap.Warning = snapshotWarning
 		}
 
 		allParts := append(llmResp.Parts, resultParts...)
@@ -1345,7 +1440,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		var totalUsage Usage
 		var persistErr error
 		e.mu.Lock()
-		if cur := e.sessions[sessionID]; cur != nil {
+		if cur := e.sessionLocked(sessionID); cur != nil {
 			putStepMessage(cur, asstMsg)
 			cur.TotalUsage.Add(llmResp.Usage)
 			if llmResp.Usage.InputTokens > 0 {
@@ -1421,7 +1516,7 @@ func (e *Env) recordError(sessionID, model, errMsg string) {
 		CreatedAt: time.Now().UnixMilli(),
 	}
 	e.mu.Lock()
-	if s := e.sessions[sessionID]; s != nil {
+	if s := e.sessionLocked(sessionID); s != nil {
 		s.Messages = append(s.Messages, msg)
 		s.UpdatedAt = msg.CreatedAt
 		_ = e.persistSessionLocked(s)
@@ -1477,9 +1572,14 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 
 	e.mu.Lock()
 	e.sessions[child.ID] = child
+	var meter *runMeter
+	if run := e.running[parent.ID]; run != nil {
+		meter = run.meter
+	}
 	e.running[child.ID] = &activeRun{
 		cancel:   cancel,
 		provider: prov,
+		meter:    meter,
 	}
 	_ = e.persistSessionLocked(child)
 	e.mu.Unlock()
@@ -1489,7 +1589,7 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 	e.runLoop(childCtx, child.ID, depth)
 
 	e.mu.Lock()
-	finished := e.sessions[child.ID]
+	finished := e.sessionLocked(child.ID)
 	var report string
 	var runErr string
 	if finished != nil {
@@ -1527,21 +1627,32 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 func (e *Env) CompactSession(ctx context.Context, sessionID string, prov ProviderConfig) (Message, error) {
 	e.init()
 	e.mu.Lock()
-	s := e.sessions[sessionID]
+	s := e.sessionLocked(sessionID)
 	if s == nil {
 		e.mu.Unlock()
 		return Message{}, fmt.Errorf("session not found: %s", sessionID)
 	}
-	if _, busy := e.running[sessionID]; busy {
+	if e.running[sessionID] != nil || e.maintenance[sessionID] != nil || e.maintenance["snapshots:gc"] != nil {
 		e.mu.Unlock()
-		return Message{}, errors.New("cannot compact while session is running")
+		return Message{}, errors.New("cannot compact while session is running or under maintenance")
 	}
 	_, _, absWorkdir, err := e.resolveWorkspace(s.Root, s.Workdir)
-	e.mu.Unlock()
 	if err != nil {
+		e.mu.Unlock()
 		return Message{}, err
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	e.maintenance[sessionID] = cancel
+	e.mu.Unlock()
+	defer e.finishMaintenance(sessionID, cancel)
 	return e.compactInternal(ctx, sessionID, prov, absWorkdir, false)
+}
+
+func (e *Env) finishMaintenance(id string, cancel context.CancelFunc) {
+	cancel()
+	e.mu.Lock()
+	delete(e.maintenance, id)
+	e.mu.Unlock()
 }
 
 func (e *Env) compactInternal(ctx context.Context, sessionID string, prov ProviderConfig, absWorkdir string, overflow bool) (Message, error) {
@@ -1551,7 +1662,7 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 		return Message{}, prepErr
 	}
 	e.mu.Lock()
-	s := e.sessions[sessionID]
+	s := e.sessionLocked(sessionID)
 	if s == nil {
 		e.mu.Unlock()
 		return Message{}, fmt.Errorf("session not found: %s", sessionID)
@@ -1564,13 +1675,26 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 		SessionID: sessionID,
 	})
 
+	e.mu.Lock()
+	var meter *runMeter
+	if run := e.running[sessionID]; run != nil {
+		meter = run.meter
+	}
+	e.mu.Unlock()
+	if meter == nil {
+		cfg, _, err := loadExtensionConfig(absWorkdir)
+		if err != nil {
+			return Message{}, err
+		}
+		meter = newRunMeter(cfg)
+	}
 	compMsg, err := RunCompaction(ctx, &snap, prov, absWorkdir, overflow, e.proxyFor(prov), e.loadAttachment, func(delta string) {
 		e.broadcast(StreamEvent{
 			Type:      "compaction.delta",
 			SessionID: sessionID,
 			Delta:     delta,
 		})
-	})
+	}, meter)
 	if err != nil {
 		e.broadcast(StreamEvent{
 			Type:      "compaction.error",
@@ -1584,7 +1708,10 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 	var totalUsage Usage
 	compMsg.Runtime = runtimeInfo(prov)
 	e.mu.Lock()
-	if cur := e.sessions[sessionID]; cur != nil {
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	} else if cur := e.sessionLocked(sessionID); cur != nil {
+		before := *cur
 		cur.Messages = append(cur.Messages, compMsg)
 		if compMsg.Usage != nil {
 			cur.TotalUsage.Add(*compMsg.Usage)
@@ -1600,9 +1727,17 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 		cur.Runtime = compMsg.Runtime
 		totalUsage = cur.TotalUsage
 		cur.UpdatedAt = compMsg.CreatedAt
-		_ = e.persistSessionLocked(cur)
+		if err = e.persistSessionLocked(cur); err != nil {
+			*cur = before
+		}
+	} else {
+		err = fmt.Errorf("session not found: %s", sessionID)
 	}
 	e.mu.Unlock()
+	if err != nil {
+		e.broadcast(StreamEvent{Type: "compaction.error", SessionID: sessionID, Error: err.Error()})
+		return Message{}, err
+	}
 
 	cp := compMsg
 	e.broadcast(StreamEvent{
@@ -1622,10 +1757,22 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 // and truncates later messages from the session.
 func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, restoreFiles bool) (Session, int, error) {
 	e.init()
-	e.StopSession(sessionID)
+	if e.recoveryErr != nil {
+		return Session{}, 0, e.recoveryErr
+	}
 
 	e.mu.Lock()
-	s := e.sessions[sessionID]
+	e.waitSessionLocked(sessionID)
+	if e.maintenance[sessionID] != nil || e.maintenance["snapshots:gc"] != nil {
+		e.mu.Unlock()
+		return Session{}, 0, errors.New("会话正在压缩或回退，请等待完成")
+	}
+	if e.running[sessionID] != nil {
+		e.mu.Unlock()
+		e.StopSession(sessionID)
+		return Session{}, 0, errors.New("正在停止会话，请等待任务结束后重试回退")
+	}
+	s := e.sessionLocked(sessionID)
 	if s == nil {
 		e.mu.Unlock()
 		return Session{}, 0, fmt.Errorf("session not found: %s", sessionID)
@@ -1644,6 +1791,7 @@ func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, re
 
 	// Revert everything from `idx` onward if it's a user prompt or assistant turn
 	fileToTree := map[string]string{}
+	fileToEnd := map[string]string{}
 	for i := idx; i < len(s.Messages); i++ {
 		m := s.Messages[i]
 		if m.Snapshot != nil && m.Snapshot.Start != "" {
@@ -1651,32 +1799,41 @@ func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, re
 				if _, seen := fileToTree[f.File]; !seen {
 					fileToTree[f.File] = m.Snapshot.Start
 				}
+				fileToEnd[f.File] = m.Snapshot.End
 			}
 		}
 	}
 	_, _, absWorkdir, err := e.resolveWorkspace(s.Root, s.Workdir)
-	e.mu.Unlock()
 	if err != nil {
+		e.mu.Unlock()
 		return Session{}, 0, err
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	e.maintenance[sessionID] = cancel
+	e.mu.Unlock()
+	defer e.finishMaintenance(sessionID, cancel)
 
 	restoredCount := 0
+	var changes []filetxn.Change
 	if restoreFiles && len(fileToTree) > 0 {
-		if err := e.snapshots.RestoreFiles(ctx, absWorkdir, fileToTree); err != nil {
+		changes, err = e.snapshots.PlanRestore(ctx, absWorkdir, fileToTree, fileToEnd)
+		if err != nil {
 			return Session{}, 0, err
-		}
-		restoredCount = len(fileToTree)
-		if e.Audit != nil {
-			e.Audit.Write("ai.revert", map[string]any{"session": sessionID, "files": restoredCount})
 		}
 	}
 
 	e.mu.Lock()
-	s = e.sessions[sessionID]
+	if err := ctx.Err(); err != nil {
+		e.mu.Unlock()
+		return Session{}, restoredCount, err
+	}
+	s = e.sessionLocked(sessionID)
 	if s == nil {
 		e.mu.Unlock()
 		return Session{}, 0, fmt.Errorf("session not found: %s", sessionID)
 	}
+	next := *s
+	s = &next
 	if idx <= len(s.Messages) {
 		s.Messages = append([]Message(nil), s.Messages[:idx]...)
 	}
@@ -1696,9 +1853,21 @@ func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, re
 		}
 	}
 	s.UpdatedAt = time.Now().UnixMilli()
-	_ = e.persistSessionLocked(s)
+	// Persist the session checkpoint in the same undo journal as the files.
+	// Memory is published only after the complete batch has a commit marker.
+	if err := e.commitSessionRevertLocked(ctx, s, absWorkdir, changes); err != nil {
+		e.mu.Unlock()
+		return Session{}, 0, fmt.Errorf("revert transaction failed: %w", err)
+	}
+	e.sessions[sessionID] = s
+	if restoreFiles {
+		restoredCount = len(fileToTree)
+	}
 	out := cloneSession(s)
 	e.mu.Unlock()
+	if e.Audit != nil {
+		e.Audit.Write("ai.revert", map[string]any{"session": sessionID, "files": restoredCount})
+	}
 
 	e.broadcast(StreamEvent{
 		Type:      "session.reverted",

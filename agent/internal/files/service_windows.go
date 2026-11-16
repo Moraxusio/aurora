@@ -22,5 +22,9 @@ func (v svc) Operations() []service.Operation {
 		{Name: "fs.mkdir", Handle: e.fsMkdir}, {Name: "fs.rename", Handle: e.fsRename}, {Name: "fs.copy", Handle: e.fsCopy}, {Name: "fs.delete", Handle: e.fsDelete},
 		{Name: "fs.upload", Stream: e.fsUpload}, {Name: "fs.download", Stream: e.fsDownload}, {Name: "fs.watch", Stream: e.fsWatch},
 		{Name: "fs.search", Handle: e.fsSearch}, {Name: "fs.find", Handle: e.fsFind},
+		{Name: "fs.search.stream", Stream: e.fsSearchStream},
+		{Name: "fs.text", Stream: e.fsText}, {Name: "fs.commit", Stream: e.fsCommit},
+		{Name: "fs.refactor", Stream: e.fsCommit},
+		{Name: "fs.replace.preview", Stream: e.fsReplacePreview},
 	}
 }

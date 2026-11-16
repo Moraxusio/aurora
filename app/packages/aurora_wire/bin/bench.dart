@@ -1,6 +1,6 @@
 // Benchmark of the Dart client against the real Go entry
 // (agent/cmd/aurora3-testpeer). Same items as agent/cmd/aurora3-bench, so the
-// two clients can be compared (docs/DESIGN.md 5.3).
+// two clients can be compared (docs/archive/2026-11-16/DESIGN.md 5.3).
 //
 //   dart run bin/bench.dart <testpeer binary>         start a local peer
 //   dart run bin/bench.dart host:port pin token       use a running peer

@@ -2,13 +2,14 @@
 # Fails on engine accessibility errors as well as Dart/test failures.
 param([string]$Out = (Join-Path $env:LOCALAPPDATA ('Temp\aurora3\gui-audit-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))),
     [ValidateSet('interaction','foundation')][string]$Suite = 'interaction',
-    [switch]$Baseline)
+    [switch]$Baseline,
+    [switch]$TraceCPU)
 $ErrorActionPreference = 'Stop'
 $app = Split-Path -Parent $PSScriptRoot
 $Out = [IO.Path]::GetFullPath($Out)
 if (Test-Path $Out) { throw "Audit output already exists: $Out" }
 New-Item -ItemType Directory -Path $Out | Out-Null
-$sourceFiles = & git -C $app ls-files --cached --others --exclude-standard -- lib packages third_party windows assets pubspec.yaml pubspec.lock
+$sourceFiles = & git -C $app ls-files --cached --others --exclude-standard -- lib packages third_party windows assets test integration_test test_driver tool pubspec.yaml pubspec.lock
 if ($LASTEXITCODE) { throw 'Cannot enumerate audit sources' }
 $sourceHashes = @{}
 foreach ($file in ($sourceFiles | Sort-Object -Unique)) {
@@ -21,6 +22,8 @@ foreach ($name in @('AURORA3_INSTANCE_SCOPE', 'LOCALAPPDATA', 'APPDATA', 'AURORA
 }
 Push-Location $app
 try {
+    & dart tool/ui_contract.dart
+    if ($LASTEXITCODE) { throw 'Aurora GUI contract failed' }
     $env:AURORA3_INSTANCE_SCOPE = 'gui-audit-' + [guid]::NewGuid().ToString('N')
     $env:LOCALAPPDATA = Join-Path $Out 'profile\Local'
     $env:APPDATA = Join-Path $Out 'profile\Roaming'
@@ -29,11 +32,12 @@ try {
     $prefix = (Join-Path $Out 'gui').Replace('\', '/')
     $target = if ($Suite -eq 'foundation') { 'integration_test/gui_foundation_test.dart' } else { 'integration_test/gui_interaction_test.dart' }
     $budget = (-not $Baseline).ToString().ToLowerInvariant()
+    $trace = $TraceCPU.ToString().ToLowerInvariant()
     # Flutter's driver writes connection notices to stderr. Windows PowerShell
     # turns those into NativeCommandError; only the process exit code decides.
     $ErrorActionPreference = 'Continue'
     try {
-        & flutter drive --no-pub -d windows --profile "--target=$target" --driver=test_driver/perf_driver.dart "--dart-define=AURORA_REVIEW_OUT=$prefix" "--dart-define=AURORA_ENFORCE_BUDGET=$budget" *> "$Out\native.log"
+        & flutter drive --no-pub -d windows --profile "--target=$target" --driver=test_driver/perf_driver.dart "--dart-define=AURORA_REVIEW_OUT=$prefix" "--dart-define=AURORA_ENFORCE_BUDGET=$budget" "--dart-define=AURORA_TRACE_CPU=$trace" *> "$Out\native.log"
         $code = $LASTEXITCODE
     } finally { $ErrorActionPreference = 'Stop' }
     $log = [IO.File]::ReadAllText("$Out\native.log")

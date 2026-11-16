@@ -1,0 +1,31 @@
+**********************
+PowerShell 记录开始
+开始时间: 20261116083632
+用户名: FINNWE\finwe
+RunAs 用户: FINNWE\finwe
+配置名称: 
+计算机: FINNWE (Microsoft Windows NT 10.0.26300.0)
+主机应用程序: C:\Program Files\PowerShell\7\pwsh.dll -NoLogo -NoProfile -NonInteractive -Command $ErrorActionPreference = 'Stop'
+$work = 'C:\Users\finwe\AppData\Local\Temp\opencode\aurora-package-20261116-ide-preview1'
+Expand-Archive -LiteralPath C:\dev\VPS\preview3\Aurora-3.22.0-ide-preview1.zip -DestinationPath "$work\launcher-sandbox"
+Start-Transcript -Path "$work\release-launcher-isolated.txt" | Out-Null
+try {
+  & powershell -NoProfile -File "$work\verify-launcher.ps1" -Package "$work\launcher-sandbox\Aurora-3.22.0-ide-preview1"
+  if ($LASTEXITCODE) { throw 'Isolated launcher verification failed' }
+} finally { Stop-Transcript | Out-Null }
+进程 ID: 23332
+PSVersion: 7.6.10
+PSEdition: Core
+GitCommitId: 7.6.10
+OS: Microsoft Windows 10.0.26300
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+**********************
+PowerShell 记录结束
+结束时间: 20261116083704
+**********************

@@ -1,5 +1,5 @@
 /// Reads a proxy subscription into nodes the agent can use
-/// (docs/DESIGN.md D-84 to D-88). Pure Dart: no network and no Flutter.
+/// (docs/archive/2026-11-16/DESIGN.md D-84 to D-88). Pure Dart: no network and no Flutter.
 library;
 
 import 'src/clash.dart';

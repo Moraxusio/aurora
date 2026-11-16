@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 /// Geometry and motion are shared by every feature. Colours remain in Ide.
 abstract final class UiMetrics {
+  static const compactRow = 28.0, controlHeight = 32.0;
+  static const labelGap = 6.0, dialogInset = 12.0;
   static const controlRadius = 4.0, surfaceRadius = 6.0;
   static const menuRow = 32.0, touchRow = 44.0, menuIcon = 16.0;
   static const menuMinWidth = 200.0, menuMaxWidth = 360.0;

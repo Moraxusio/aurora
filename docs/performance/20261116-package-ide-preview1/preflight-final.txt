@@ -1,0 +1,55 @@
+**********************
+PowerShell 记录开始
+开始时间: 20261116082446
+用户名: FINNWE\finwe
+RunAs 用户: FINNWE\finwe
+配置名称: 
+计算机: FINNWE (Microsoft Windows NT 10.0.26300.0)
+主机应用程序: C:\Program Files\PowerShell\7\pwsh.dll -NoLogo -NoProfile -NonInteractive -Command $ErrorActionPreference = 'Stop'
+$work = 'C:\Users\finwe\AppData\Local\Temp\opencode\aurora-package-20261116-ide-preview1'
+Start-Transcript -Path "$work\preflight-final.txt" | Out-Null
+try {
+  & powershell -NoProfile -File tools/check-docs.ps1
+  if ($LASTEXITCODE) { throw 'Documentation check failed' }
+  & powershell -NoProfile -File tools/check-docs.ps1 -Root "$work\docs-fixture" -Package
+  if ($LASTEXITCODE) { throw 'Packaged documentation check failed' }
+  $files = @(Get-ChildItem tools -Filter *.ps1) + @(Get-ChildItem app/tool -Filter *.ps1)
+  foreach ($file in $files) {
+    $tokens = $null
+    $errors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$errors)
+    if ($errors.Count) { throw ($errors | Out-String) }
+  }
+  Write-Output "PowerShell syntax passed: $($files.Count) scripts"
+  & git -c core.safecrlf=false diff --check
+  if ($LASTEXITCODE) { throw 'Diff check failed' }
+  Get-FileHash C:\dev\VPS\release3\Aurora-3.21.4.zip,C:\dev\VPS\preview3\Aurora-3.21.4-harness-preview1.zip -Algorithm SHA256 | Format-List
+} finally { Stop-Transcript | Out-Null }
+进程 ID: 13144
+PSVersion: 7.6.10
+PSEdition: Core
+GitCommitId: 7.6.10
+OS: Microsoft Windows 10.0.26300
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+
+PowerShell syntax passed: 22 scripts
+
+
+Algorithm : SHA256
+Hash      : 087348A08F4F0AF051A89B81DDE7D5EB86A2136045D6199EBDB5C8EC2AA95AE1
+Path      : C:\dev\VPS\release3\Aurora-3.21.4.zip
+
+Algorithm : SHA256
+Hash      : 78CA0C41012E5647CFD5080A47BA8B9F0F74A979F3C99EEAF6F747AF2A19FB7D
+Path      : C:\dev\VPS\preview3\Aurora-3.21.4-harness-preview1.zip
+
+**********************
+PowerShell 记录结束
+结束时间: 20261116082448
+**********************

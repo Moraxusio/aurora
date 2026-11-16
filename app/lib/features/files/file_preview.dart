@@ -1,11 +1,10 @@
 // The rendered view next to the editor for Markdown and CSV/TSV files. It
 // draws the editor's current text, so it follows unsaved edits and never reads
 // the file again.
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
-import '../../kernel/widgets.dart';
 import '../../theme/ide_theme.dart';
 import 'csv_parse.dart';
 

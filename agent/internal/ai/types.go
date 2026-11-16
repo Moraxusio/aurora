@@ -76,6 +76,7 @@ type Usage struct {
 	ReasoningTokens      int     `json:"reasoning_tokens,omitempty"`
 	TotalTokens          int     `json:"total_tokens,omitempty"`
 	Cost                 float64 `json:"cost,omitempty"`
+	Estimated            bool    `json:"estimated,omitempty"`
 }
 
 func (u *Usage) Add(o Usage) {
@@ -87,6 +88,7 @@ func (u *Usage) Add(o Usage) {
 	u.ReasoningTokens += o.ReasoningTokens
 	u.TotalTokens += o.TotalTokens
 	u.Cost += o.Cost
+	u.Estimated = u.Estimated || o.Estimated
 }
 
 type TodoItem struct {
@@ -105,9 +107,10 @@ type FileDiff struct {
 }
 
 type StepSnapshot struct {
-	Start string     `json:"start,omitempty"`
-	End   string     `json:"end,omitempty"`
-	Files []FileDiff `json:"files,omitempty"`
+	Warning string     `json:"warning,omitempty"`
+	Start   string     `json:"start,omitempty"`
+	End     string     `json:"end,omitempty"`
+	Files   []FileDiff `json:"files,omitempty"`
 }
 
 // Part is one content block inside a Message.
@@ -202,6 +205,7 @@ type Session struct {
 
 // SessionSummary is the lightweight metadata returned by ai.sessions.
 type SessionSummary struct {
+	StorageError      string              `json:"storage_error,omitempty"`
 	ID                string              `json:"id"`
 	ParentID          string              `json:"parent_id,omitempty"`
 	Title             string              `json:"title"`

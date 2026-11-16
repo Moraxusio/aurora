@@ -4,6 +4,7 @@ package main
 
 import (
 	"aurora3/internal/ai"
+	"aurora3/internal/devtools"
 	"aurora3/internal/entry"
 	"aurora3/internal/files"
 	gitservice "aurora3/internal/git"
@@ -102,7 +103,7 @@ func run() error {
 	if err = cfg.Validate(); err != nil {
 		return err
 	}
-	fe := &files.Env{UploadMaxBytes: 64 << 30, Audit: entry.NewAudit("")}
+	fe := &files.Env{StateDir: boot.StateDir, UploadMaxBytes: 64 << 30, Audit: entry.NewAudit("")}
 	var srv *entry.Server
 	px := &proxysvc.Env{
 		Load: func() proxysvc.State {
@@ -127,16 +128,18 @@ func run() error {
 	ae := &ai.Env{StateDir: boot.StateDir, Audit: fe.Audit, Proxy: winlocal.ProxyEnv, AgentProxy: px.GitEnv}
 	te := &terminal.Env{Proxy: px.SessionEnv}
 	me := &monitor.Env{Audit: fe.Audit}
+	de := &devtools.Env{StateDir: boot.StateDir, Audit: fe.Audit, Proxy: winlocal.ProxyEnv}
 	for _, r := range roots {
 		fe.Roots = append(fe.Roots, files.Root{ID: r.ID, Label: r.Label, Path: r.Path})
 		ge.Roots = append(ge.Roots, gitservice.Root{ID: r.ID, Label: r.Label, Path: r.Path})
 		ae.Roots = append(ae.Roots, ai.Root{ID: r.ID, Label: r.Label, Path: r.Path})
 		te.Roots = append(te.Roots, terminal.Root{ID: r.ID, Path: r.Path})
+		de.Roots = append(de.Roots, devtools.Root{ID: r.ID, Path: r.Path})
 	}
 	fe.Repos = gitservice.Repos{Proxy: winlocal.ProxyEnv}
 	defer te.Close()
 	defer ae.StopAll()
-	srv, err = entry.New(cfg, configPath, Version, []service.Service{fe.Service(), ge.Service(), te.Service(), ae.Service(), me.Service(), px.Service()}, func(s string) error { _, err := exec.LookPath(s); return err }, nil, log.New(os.Stderr, "", log.LstdFlags))
+	srv, err = entry.New(cfg, configPath, Version, []service.Service{fe.Service(), ge.Service(), te.Service(), ae.Service(), me.Service(), px.Service(), de.Service()}, func(s string) error { _, err := exec.LookPath(s); return err }, nil, log.New(os.Stderr, "", log.LstdFlags))
 	if err != nil {
 		return err
 	}

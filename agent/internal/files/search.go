@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -103,7 +104,10 @@ func (s *Env) cachedFiles(ctx context.Context, abs string, maxAge time.Duration)
 		return c.files
 	}
 	listMu.Unlock()
-	files, _, _, _ := s.listFiles(ctx, abs)
+	files, _, truncated, walkErrors := s.listFiles(ctx, abs)
+	if ctx.Err() != nil || truncated || walkErrors > 0 {
+		return files // an incomplete scan must not poison the next quick-open
+	}
 	listMu.Lock()
 	defer listMu.Unlock()
 	if len(listCache) >= 6 {
@@ -216,8 +220,22 @@ func (s *Env) fsSearch(ctx context.Context, raw json.RawMessage) (any, error) {
 					skipped.Add(1)
 					continue
 				}
-				b, err := os.ReadFile(p)
+				f, err := os.Open(p)
 				if err != nil {
+					continue
+				}
+				opened, statErr := f.Stat()
+				if statErr != nil || !opened.Mode().IsRegular() || !os.SameFile(fi, opened) {
+					f.Close()
+					continue
+				}
+				b, err := io.ReadAll(io.LimitReader(f, searchFileMax+1))
+				f.Close()
+				if err != nil {
+					continue
+				}
+				if len(b) > searchFileMax {
+					skipped.Add(1)
 					continue
 				}
 				scanned.Add(1)
@@ -237,11 +255,18 @@ func (s *Env) fsSearch(ctx context.Context, raw json.RawMessage) (any, error) {
 				if len(ms) == 0 {
 					continue
 				}
-				if total.Add(int64(len(ms))) >= int64(a.Max) {
+				mu.Lock()
+				// Other workers can consume the budget while this file is
+				// matched. Reserve only the remaining results under the lock.
+				left = a.Max - int(total.Load())
+				if left > 0 {
+					ms = ms[:min(len(ms), left)]
+					total.Add(int64(len(ms)))
+					results = append(results, fileMatches{Path: relJoin(a.Path, rel), Matches: ms})
+				}
+				if total.Load() >= int64(a.Max) {
 					limitHit.Store(true)
 				}
-				mu.Lock()
-				results = append(results, fileMatches{Path: relJoin(a.Path, rel), Matches: ms})
 				mu.Unlock()
 			}
 		}()

@@ -1024,6 +1024,7 @@ class AiProvider {
     String? modelOverride,
     String? reasoningOverride,
     Map<String, bool>? capabilityDefaults,
+    bool extensionCapabilities = false,
   }) => {
     'id': id,
     'name': name,
@@ -1046,7 +1047,14 @@ class AiProvider {
       'reasoning_mode': modelOptions[modelOverride ?? model]!.reasoningMode,
     if ((modelOptions[modelOverride ?? model]?.thinkingBudget ?? 0) > 0)
       'thinking_budget': modelOptions[modelOverride ?? model]!.thinkingBudget,
-    'capabilities': effectiveCapabilities(modelOverride, capabilityDefaults),
+    'capabilities': {
+      for (final entry in effectiveCapabilities(
+        modelOverride,
+        capabilityDefaults,
+      ).entries)
+        if (extensionCapabilities || entry.key != 'skill' && entry.key != 'mcp')
+          entry.key: entry.value,
+    },
     if (effectiveContextWindow(modelOverride) > 0)
       'context_window': effectiveContextWindow(modelOverride),
     if (!isSubscription && maxTokens > 0) 'max_tokens': maxTokens,

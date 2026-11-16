@@ -6,7 +6,7 @@ import 'dart:convert';
 
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 
@@ -16,7 +16,11 @@ import '../features/files/file_ops.dart' show FileClipboard;
 import 'editor_tab.dart';
 import 'feature.dart';
 import 'file_watch.dart';
-import 'widgets.dart';
+import 'document_model.dart';
+import 'document_recovery.dart';
+import 'development/development_model.dart';
+import 'development/task_model.dart';
+import 'development/debug_model.dart';
 import 'tab_layout.dart';
 import 'terminal_panel_state.dart';
 import 'assistant_panel_state.dart';
@@ -128,6 +132,36 @@ class Workspace extends ChangeNotifier {
 
   /// Notices of files changed on the server, for open editors.
   late final FileWatch watch = FileWatch(() => link);
+  late final DocumentRegistry documents =
+      DocumentRegistry(serverId, () => link, app.documentRecovery, watch);
+  DevelopmentModel? _development;
+  DevelopmentModel get development => _development ??= DevelopmentModel(this);
+  TaskModel? _tasks;
+  TaskModel get tasks => _tasks ??= TaskModel(this);
+  DebugModel? _debugger;
+  DebugModel get debugger => _debugger ??= DebugModel(this);
+  bool _recoveryRestored = false;
+
+  Future<void> restoreRecovery(EditorTab Function(WorkspacePath file) build) async {
+    if (_recoveryRestored || _disposed) return;
+    _recoveryRestored = true;
+    void restore(List<DocumentRecovery> entries) {
+      if (_disposed) return;
+      for (final entry in entries.reversed) {
+        final path = WorkspacePath(root: entry.key.root, path: entry.key.path);
+        if (tab('file:${path.root}:${path.path}') == null) openTab(build(path));
+      }
+    }
+    try {
+      restore(await app.documentRecovery.list(serverId));
+    } on DocumentRecoveryScanError catch (e) {
+      restore(e.recovered);
+      if (!_disposed) toast('${e.unreadable.length} 个文档恢复记录无法读取，原记录已保留', error: true);
+    } on Object {
+      _recoveryRestored = false;
+      if (!_disposed) toast('部分文档恢复记录无法读取，原记录已保留', error: true);
+    }
+  }
 
   Workspace(this.app, this.serverId) {
     final e = entry;
@@ -159,6 +193,7 @@ class Workspace extends ChangeNotifier {
     }
     viewRevision++;
     watch.relink();
+    documents.relink();
     final l = link;
     if (l != null && !identical(l, _servicesFor)) {
       _servicesFor = l;
@@ -631,6 +666,14 @@ class Workspace extends ChangeNotifier {
     if (t.file != null && t.projects.length > 1) {
       t.projects.remove(key);
     } else {
+      if (t.file != null) {
+        try {
+          await documents.close(t.file!.root, t.file!.path);
+        } on Object {
+          toast('文档恢复记录无法清理，请检查磁盘后重试关闭', error: true);
+          return false;
+        }
+      }
       tabs.remove(t);
       for (final layout in _layouts.values) { layout.remove(id); }
       t.dispose();
@@ -923,7 +966,11 @@ class Workspace extends ChangeNotifier {
     filesRevision.dispose();
     fileClipboard.dispose();
     focusSearch.dispose();
+    _development?.dispose();
+    _debugger?.dispose();
+    _tasks?.dispose();
     watch.dispose();
+    documents.dispose();
     super.dispose();
   }
 }

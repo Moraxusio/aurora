@@ -3,9 +3,8 @@
 // tree takes time), so the dialog has a button that measures it with fs.du and
 // hands the result back so the tree can show it too.
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
-import '../../kernel/widgets.dart';
 import '../../theme/ide_theme.dart';
 import 'file_ops.dart';
 

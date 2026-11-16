@@ -9,7 +9,7 @@ import (
 var capabilityNames = []string{
 	"tool_calling", "image_input", "pdf_input", "read", "glob", "grep",
 	"write", "edit", "apply_patch", "shell", "webfetch", "websearch",
-	"todowrite", "subagent", "question",
+	"todowrite", "subagent", "question", "skill", "mcp",
 }
 
 func (p ProviderConfig) allows(name string) bool {

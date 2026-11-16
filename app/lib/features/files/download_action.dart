@@ -23,5 +23,6 @@ Future<void> downloadRemoteFile(Workspace ws, {required String root, required St
     final dot = name.lastIndexOf('.');
     where = dot > 0 ? '$dir${Platform.pathSeparator}${name.substring(0, dot)} ($i)${name.substring(dot)}' : '$dir${Platform.pathSeparator}$name ($i)';
   }
-  transfers.download(link, root, path, where, size, onDone: () => Toast.show('已下载 $name'));
+  transfers.download(link, root, path, where, size, currentLink: () => ws.link,
+    onDone: () => Toast.show('已下载 $name'));
 }

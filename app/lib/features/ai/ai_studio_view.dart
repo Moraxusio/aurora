@@ -6,12 +6,11 @@ import 'dart:convert';
 
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../kernel/editor_tab.dart';
-import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'ai_model_picker.dart';
@@ -181,7 +180,6 @@ class _AiStudioViewState extends State<_AiConversation> {
   bool _selectionExplicit = false;
   String? _reasoningOverride;
   bool _reasoningOverrideSet = false;
-  String? _editorId;
   bool _visible = true;
   final Map<AiMessage, (Ide, bool, double, Link?, Widget)> _messageCache = {};
   final _inputCtl = TextEditingController();
@@ -224,7 +222,6 @@ class _AiStudioViewState extends State<_AiConversation> {
           : AiProvider.fromJson(initial.toJson());
     }
     _chatFontSize = ws.app.appearance.value.chatFont;
-    _editorId = ws.editorActiveId;
     ws.addListener(_onWorkspaceChanged);
     ws.app.addListener(_onAppChanged);
     ws.app.appearance.addListener(_onAppearance);
@@ -279,9 +276,6 @@ class _AiStudioViewState extends State<_AiConversation> {
     if (_disposed || !mounted) return;
     if (!identical(ws.link, _streamLink)) {
       _initConnection();
-    } else if (_editorId != ws.editorActiveId) {
-      _editorId = ws.editorActiveId;
-      setState(() {});
     }
   }
 
@@ -540,6 +534,13 @@ class _AiStudioViewState extends State<_AiConversation> {
       return;
     }
     final sid = ev['session_id'] as String? ?? '';
+    // Queue overflow invalidates every session on this subscription.
+    if (type == 'sync.required' && sid.isEmpty) {
+      if (ws.link != null && _sessionId != null) {
+        unawaited(_loadSession(ws.link!, _sessionId!));
+      }
+      return;
+    }
     if (_sessionId == null ||
         (sid != _sessionId && ev['root_session_id'] != _sessionId))
       return;
@@ -893,6 +894,8 @@ class _AiStudioViewState extends State<_AiConversation> {
           await _paste();
         case 'active':
           await _attachActiveFile();
+        case 'selection':
+          await _attachActiveFile(selection: true);
         case 'remote':
           await _attachFileByPath();
         case 'send':
@@ -1160,6 +1163,7 @@ class _AiStudioViewState extends State<_AiConversation> {
         'text': text,
         if (attachments.isNotEmpty) 'attachments': attachments,
         'provider': prepared.toWireJson(
+          extensionCapabilities: link.server.caps.contains('ai.extensions'),
           reasoningOverride: sentReasoningSet ? sentReasoning : null,
           capabilityDefaults: sentDefaults,
         ),
@@ -1543,6 +1547,7 @@ class _AiStudioViewState extends State<_AiConversation> {
       await link.call('ai.compact', {
         'session_id': sid,
         'provider': prepared.toWireJson(
+          extensionCapabilities: link.server.caps.contains('ai.extensions'),
           reasoningOverride: reasoning,
           capabilityDefaults: defaults,
         ),
@@ -1558,14 +1563,33 @@ class _AiStudioViewState extends State<_AiConversation> {
     }
   }
 
-  Future<void> _attachActiveFile() async {
+  Future<void> _attachActiveFile({bool selection = false}) async {
     final link = ws.link;
     final activeFile = ws.tab(ws.editorActiveId ?? '')?.file;
-    if (link == null || activeFile == null) {
+    if (activeFile == null) {
       ws.toast('请先在编辑器中打开一个文件，或使用「浏览服务器文件」');
       return;
     }
     try {
+      final document = ws.documents.find(activeFile.root, activeFile.path);
+      if (document != null && document.phase.name == 'ready') {
+        final content = selection ? document.selectedText : document.text;
+        if (selection && content.isEmpty) throw StateError('请先在编辑器中选择文本');
+        if (utf8.encode(content).length > aiAttachmentLimit)
+          throw StateError('编辑缓冲超过附件大小上限');
+        _addAttachments([
+          AiAttachment(
+            kind: 'file',
+            label:
+                '${activeFile.name} · ${selection ? '选区' : '编辑缓冲'} v${document.version}${document.dirty ? '（未保存）' : ''}',
+            path: activeFile.path,
+            content: content,
+          ),
+        ]);
+        return;
+      }
+      if (selection) throw StateError('当前文件没有可用的编辑选区');
+      if (link == null) throw StateError('未连接，且当前文件没有已加载的编辑缓冲');
       _addAttachments([
         await readAiRemoteFile(link, activeFile.root, activeFile.path),
       ]);
@@ -2719,6 +2743,14 @@ class _AiStudioViewState extends State<_AiConversation> {
                 body: msg.error,
               ),
             ),
+          if (msg.snapshot?.warning.isNotEmpty == true)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '快照：${msg.snapshot!.warning}',
+                style: TextStyle(color: ide.warn),
+              ),
+            ),
           if (msg.snapshot != null && msg.snapshot!.files.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: Space.xs),
@@ -2978,7 +3010,6 @@ class _AiStudioViewState extends State<_AiConversation> {
   }
 
   Widget _buildComposer(Ide ide, AiProvider? prov, {bool compact = false}) {
-    final activeFile = ws.tab(ws.editorActiveId ?? '')?.file;
     return LayoutBuilder(
       builder: (_, box) {
         final narrow = box.maxWidth < 460;
@@ -3150,29 +3181,41 @@ class _AiStudioViewState extends State<_AiConversation> {
                               key: const ValueKey('ai-attach-menu'),
                               tooltip: '添加图片或文件',
                               onSelected: _action,
-                              itemBuilder: (_) => [
-                                if (activeFile != null)
+                              itemBuilder: (_) {
+                                // Editor switches do not invalidate session UI.
+                                // Resolve attachment context when opening the menu.
+                                final activeFile = ws
+                                    .tab(ws.editorActiveId ?? '')
+                                    ?.file;
+                                return [
+                                  if (activeFile != null)
+                                    PopupMenuItem(
+                                      value: 'active',
+                                      child: Text('附加当前文件：${activeFile.name}'),
+                                    ),
+                                  if (activeFile != null)
+                                    const PopupMenuItem(
+                                      value: 'selection',
+                                      child: Text('附加编辑器选区'),
+                                    ),
+                                  const PopupMenuItem(
+                                    value: 'local',
+                                    child: Text('选择本机图片 / 文件…'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'paste',
+                                    child: Text('粘贴图片 / 文件 / 文本'),
+                                  ),
                                   PopupMenuItem(
-                                    value: 'active',
-                                    child: Text('附加当前文件：${activeFile.name}'),
+                                    value: 'remote',
+                                    child: Text(
+                                      ws.entry?.isLocal == true
+                                          ? '浏览本机项目文件…'
+                                          : '浏览服务器文件…',
+                                    ),
                                   ),
-                                const PopupMenuItem(
-                                  value: 'local',
-                                  child: Text('选择本机图片 / 文件…'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'paste',
-                                  child: Text('粘贴图片 / 文件 / 文本'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'remote',
-                                  child: Text(
-                                    ws.entry?.isLocal == true
-                                        ? '浏览本机项目文件…'
-                                        : '浏览服务器文件…',
-                                  ),
-                                ),
-                              ],
+                                ];
+                              },
                               icon: Icon(
                                 Icons.add,
                                 size: 18,

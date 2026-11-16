@@ -13,7 +13,8 @@ class SearchFolder {
   final String label;
   const SearchFolder(this.root, this.path, this.label);
   @override
-  bool operator ==(Object other) => other is SearchFolder && other.root == root && other.path == path;
+  bool operator ==(Object other) =>
+      other is SearchFolder && other.root == root && other.path == path;
   @override
   int get hashCode => Object.hash(root, path);
 }
@@ -24,14 +25,21 @@ Future<List<SearchFolder>> searchFolders(Workspace ws) async {
   if (link == null) return const [];
   final project = ws.project;
   if (project != null) {
-    return [for (final f in project.folders) SearchFolder(f.root, f.path, f.path == '/' ? f.root : f.name)];
+    return [
+      for (final f in project.folders)
+        SearchFolder(f.root, f.path, f.path == '/' ? f.root : f.name),
+    ];
   }
   try {
     final r = await link.call('fs.roots') as Map;
     return [
       for (final x in (r['roots'] as List).cast<Map>())
         if (x['ok'] != false && x['path'] != '/')
-          SearchFolder(x['id'] as String, '/', (x['label'] as String?) ?? x['id'] as String),
+          SearchFolder(
+            x['id'] as String,
+            '/',
+            (x['label'] as String?) ?? x['id'] as String,
+          ),
     ];
   } on OpError {
     return const [];
@@ -40,7 +48,9 @@ Future<List<SearchFolder>> searchFolders(Workspace ws) async {
 
 /// A path shown to the user: the folder label, then the path inside it.
 String displayPath(SearchFolder f, String path) {
-  final inner = f.path == '/' ? path : (path.startsWith(f.path) ? path.substring(f.path.length) : path);
+  final inner = f.path == '/'
+      ? path
+      : (path.startsWith(f.path) ? path.substring(f.path.length) : path);
   final p = inner.startsWith('/') ? inner.substring(1) : inner;
   return '${f.label}/$p';
 }

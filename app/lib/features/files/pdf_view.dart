@@ -12,13 +12,12 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-import '../../kernel/widgets.dart';
 import '../../kernel/input_mode.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';

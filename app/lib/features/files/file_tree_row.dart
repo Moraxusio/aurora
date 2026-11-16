@@ -1,8 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'dart:math' as math;
 
 import '../../kernel/input_mode.dart';
-import '../../kernel/widgets.dart';
 import '../../theme/ide_theme.dart';
 
 /// File-specific visual hierarchy; other service lists keep their compact rows.

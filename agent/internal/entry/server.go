@@ -19,6 +19,7 @@ import (
 
 	"github.com/hashicorp/yamux"
 
+	"aurora3/internal/filetxn"
 	"aurora3/internal/p2p"
 	"aurora3/internal/paths"
 	"aurora3/internal/service"
@@ -61,6 +62,13 @@ func New(cfg *Config, cfgPath, version string, services []service.Service, lookP
 		audit = NewAudit(cfg.AuditLog)
 	}
 	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
+		return nil, err
+	}
+	roots := make([]string, 0, len(cfg.Roots))
+	for _, root := range cfg.Roots {
+		roots = append(roots, root.Path)
+	}
+	if err := filetxn.New(cfg.StateDir, roots).Recover(); err != nil {
 		return nil, err
 	}
 	cert, pin, err := wire.LoadOrCreateCert(cfg.StateDir, "agent")

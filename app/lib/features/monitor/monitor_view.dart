@@ -2,7 +2,7 @@
 // independently every 2 s while visible. CPU rates come from raw counter deltas;
 // old agents fall back to the basic GPU fields in sys.metrics.
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 
 import '../../kernel/editor_tab.dart';

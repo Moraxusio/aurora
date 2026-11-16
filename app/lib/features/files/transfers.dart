@@ -20,10 +20,13 @@ class Transfer extends ChangeNotifier {
   final Stopwatch sw = Stopwatch()..start();
   OpStream? _stream;
   Future<void> Function(Transfer)? _retry;
+  bool _running = false, _disposed = false;
+  Timer? _progressTimer;
 
   Transfer(this.upload, this.name, this.total);
 
-  double? get fraction => total <= 0 ? null : (done / total).clamp(0, 1).toDouble();
+  double? get fraction =>
+      total <= 0 ? null : (done / total).clamp(0, 1).toDouble();
 
   /// Bytes per second since the start.
   double get rate {
@@ -33,15 +36,21 @@ class Transfer extends ChangeNotifier {
 
   void _progress(int n) {
     done += n;
-    notifyListeners();
+    if (_disposed || finished) return;
+    _progressTimer ??= Timer(const Duration(milliseconds: 50), () {
+      _progressTimer = null;
+      if (!_disposed && !finished) notifyListeners();
+    });
   }
 
   void _end([String? err]) {
+    _progressTimer?.cancel();
+    _progressTimer = null;
     if (finished) return;
     finished = true;
     error = cancelled ? null : err;
     sw.stop();
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   /// Stops the transfer now; a partial download is deleted, a partial upload
@@ -55,21 +64,46 @@ class Transfer extends ChangeNotifier {
   }
 
   void retry() {
-    if (!finished || error == null) return;
+    if (_running || !finished || error == null || _disposed) return;
     done = 0;
     error = null;
     cancelled = false;
     finished = false;
     queued = false;
-    sw..reset()..start();
+    sw
+      ..reset()
+      ..start();
     notifyListeners();
     final run = _retry;
     if (run != null) unawaited(run(this));
+  }
+
+  @override
+  void dispose() {
+    cancel();
+    _disposed = true;
+    _retry = null;
+    super.dispose();
   }
 }
 
 class Transfers extends ChangeNotifier {
   final List<Transfer> list = [];
+  final int maxConcurrent;
+  final Future<void> Function(RandomAccessFile, List<int>) writeChunk;
+  int _running = 0;
+  bool _disposed = false;
+  final List<Completer<void>> _waiting = [];
+
+  Transfers({this.maxConcurrent = 3, this.writeChunk = _writeChunk})
+    : assert(maxConcurrent > 0);
+
+  static Future<void> _writeChunk(
+    RandomAccessFile file,
+    List<int> bytes,
+  ) async {
+    await file.writeFrom(bytes);
+  }
 
   int get active => list.where((t) => !t.finished).length;
 
@@ -83,99 +117,231 @@ class Transfers extends ChangeNotifier {
   }
 
   void clearFinished() {
-    list.removeWhere((t) => t.finished);
+    for (final t in list.where((t) => t.finished).toList()) {
+      t.removeListener(notifyListeners);
+      t.dispose();
+      list.remove(t);
+    }
     notifyListeners();
   }
 
   void remove(Transfer t) {
     list.remove(t);
+    t.removeListener(notifyListeners);
+    t.dispose();
     notifyListeners();
   }
 
   Transfer _add(Transfer t) {
+    if (_disposed) throw StateError('传输管理器已关闭');
     list.add(t);
     t.addListener(notifyListeners);
     notifyListeners();
     return t;
   }
 
+  @override
+  void dispose() {
+    _disposed = true;
+    for (final t in list) {
+      t.removeListener(notifyListeners);
+      t.dispose();
+    }
+    list.clear();
+    for (final waiter in _waiting) {
+      waiter.complete();
+    }
+    _waiting.clear();
+    super.dispose();
+  }
+
+  Future<void> _run(
+    Transfer t,
+    Future<void> Function() action,
+    VoidCallback? onDone,
+  ) async {
+    t._running = true;
+    var acquired = false;
+    String? error;
+    var success = false;
+    try {
+      if (_running >= maxConcurrent) {
+        t.queued = true;
+        notifyListeners();
+        final wait = Completer<void>();
+        _waiting.add(wait);
+        await wait.future;
+      } else {
+        _running++;
+      }
+      acquired = !_disposed;
+      t.queued = false;
+      if (_disposed || t.cancelled) return;
+      t.sw..reset()..start();
+      await action();
+      if (!t.cancelled) success = true;
+    } on Object catch (e) {
+      error = e is OpError ? e.message : '$e';
+    } finally {
+      t._stream?.reset();
+      t._stream = null;
+      t._running = false;
+      if (acquired) {
+        if (_waiting.isNotEmpty) {
+          _waiting.removeAt(0).complete();
+        } else {
+          _running--;
+        }
+      }
+      t._end(error);
+    }
+    if (success && !_disposed) onDone?.call();
+  }
+
+  Link _connection(Transfer t, Link? Function() source, [Link? expected]) {
+    if (_disposed || t.cancelled) throw StateError('传输已取消');
+    final link = source();
+    if (link == null || (expected != null && !identical(expected, link))) {
+      throw OpError(codeUnavailable, '连接已变化，请重试传输');
+    }
+    return link;
+  }
+
   /// Sends [local] to [root]:[path]. [onDone] runs after a successful upload.
-  Transfer upload(Link link, File local, int size, String root, String path, {VoidCallback? onDone}) {
+  Transfer upload(
+    Link link,
+    File local,
+    int size,
+    String root,
+    String path, {
+    VoidCallback? onDone,
+    Link? Function()? currentLink,
+  }) {
     final t = _add(Transfer(true, path.split('/').last, size));
-    t._retry = (same) => _runUpload(same, link, local, root, path, onDone);
-    unawaited(_runUpload(t, link, local, root, path, onDone));
+    final source = currentLink ?? () => link;
+    t._retry = (same) =>
+        _run(same, () => _runUpload(same, source, local, root, path), onDone);
+    unawaited(t._retry!(t));
     return t;
   }
 
-  Future<void> _runUpload(Transfer t, Link link, File local, String root, String path, VoidCallback? onDone) async {
-    try {
-      final s = await link.open('fs.upload', {'root': root, 'path': path, 'size': t.total}, Priority.bulk);
-      t._stream = s;
-      await s.response();
-      await for (final chunk in local.openRead()) {
-        final bytes = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
-        for (var off = 0; off < bytes.length; off += dataChunk) {
-          if (t.cancelled) return;
-          final end = off + dataChunk < bytes.length ? off + dataChunk : bytes.length;
-          await s.sendData(Uint8List.sublistView(bytes, off, end));
-          t._progress(end - off);
-        }
+  Future<void> _runUpload(
+    Transfer t,
+    Link? Function() source,
+    File local,
+    String root,
+    String path,
+  ) async {
+    final link = _connection(t, source);
+    t.total = await local.length();
+    _connection(t, source, link);
+    final s = await link.open('fs.upload', {
+      'root': root,
+      'path': path,
+      'size': t.total,
+    }, Priority.bulk);
+    t._stream = s;
+    _connection(t, source, link);
+    await s.response();
+    _connection(t, source, link);
+    await for (final chunk in local.openRead()) {
+      final bytes = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+      for (var off = 0; off < bytes.length; off += dataChunk) {
+        _connection(t, source, link);
+        final end = off + dataChunk < bytes.length
+            ? off + dataChunk
+            : bytes.length;
+        await s.sendData(Uint8List.sublistView(bytes, off, end));
+        t._progress(end - off);
       }
-      if (t.cancelled) return;
-      await s.sendEnd();
-      await s.response();
-      await s.close();
-      t._end();
-      onDone?.call();
-    } on Object catch (e) {
-      t._end(e is OpError ? e.message : '$e');
     }
+    _connection(t, source, link);
+    await s.sendEnd();
+    await s.response();
+    _connection(t, source, link);
+    await s.close();
   }
 
   /// Downloads [root]:[path] into [where] (a file path that does not exist yet).
-  Transfer download(Link link, String root, String path, String where, int size, {VoidCallback? onDone}) {
+  Transfer download(
+    Link link,
+    String root,
+    String path,
+    String where,
+    int size, {
+    VoidCallback? onDone,
+    Link? Function()? currentLink,
+  }) {
     final t = _add(Transfer(false, path.split('/').last, size));
-    t._retry = (same) => _runDownload(same, link, root, path, where, onDone);
-    unawaited(_runDownload(t, link, root, path, where, onDone));
+    final source = currentLink ?? () => link;
+    t._retry = (same) =>
+        _run(same, () => _runDownload(same, source, root, path, where), onDone);
+    unawaited(t._retry!(t));
     return t;
   }
 
-  Future<void> _runDownload(Transfer t, Link link, String root, String path, String where, VoidCallback? onDone) async {
-    final tmp = File('$where.aurora3-part');
-    IOSink? out;
+  Future<void> _runDownload(
+    Transfer t,
+    Link? Function() source,
+    String root,
+    String path,
+    String where,
+  ) async {
+    Directory? scratch;
+    RandomAccessFile? out;
     try {
-      final s = await link.open('fs.download', {'root': root, 'path': path}, Priority.bulk);
+      final link = _connection(t, source);
+      final s = await link.open('fs.download', {
+        'root': root,
+        'path': path,
+      }, Priority.bulk);
       t._stream = s;
+      _connection(t, source, link);
       final meta = await s.response() as Map;
+      _connection(t, source, link);
       t.total = (meta['length'] as num).toInt();
-      out = tmp.openWrite();
+      if (t.total < 0) throw StateError('下载大小无效');
+      scratch = await Directory(File(where).parent.path)
+          .createTemp('.aurora-download-');
+      final tmp = File('${scratch.path}/content.part');
+      out = await tmp.open(mode: FileMode.writeOnly);
       var ended = false;
       while (true) {
+        _connection(t, source, link);
         final f = await s.read();
         if (f == null) break;
+        _connection(t, source, link);
         if (f.type == typeData) {
-          out.add(f.payload);
+          if (t.done + f.payload.length > t.total) {
+            throw StateError('下载数据超过声明大小');
+          }
+          // Await disk completion before consuming another transport frame.
+          await writeChunk(out, f.payload);
           t._progress(f.payload.length);
         } else if (f.type == typeEnd) {
           ended = true;
           break;
+        } else {
+          throw StateError('下载帧类型无效');
         }
       }
+      await out.flush();
       await out.close();
       out = null;
-      if (t.cancelled) throw StateError('cancelled');
-      if (!ended || t.done != t.total) throw StateError('下载不完整：${t.done} / ${t.total} 字节');
+      _connection(t, source, link);
+      if (!ended || t.done != t.total) {
+        throw StateError('下载不完整：${t.done} / ${t.total} 字节');
+      }
+      if (await File(where).exists()) throw StateError('目标文件已存在，请选择其它名称');
+      _connection(t, source, link);
       await tmp.rename(where);
-      t._end();
-      onDone?.call();
-    } on Object catch (e) {
+    } finally {
       try {
         await out?.close();
-        if (await tmp.exists()) await tmp.delete();
+        if (scratch != null) await scratch.delete(recursive: true);
       } on Object {
         // best effort: the part file is only a temporary name
       }
-      t._end(e is OpError ? e.message : '$e');
     }
   }
 }

@@ -1,0 +1,41 @@
+00:00 +0: loading test\fetch_test.dart
+00:00 +0: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +1: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +2: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +3: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +4: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +5: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +6: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +7: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +8: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +9: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +10: test\fetch_test.dart: fetches the body, and follows a redirect
+00:00 +11: test\sub_test.dart: share links the whole subscription as one base64 block
+00:00 +12: test\sub_test.dart: share links URL-safe base64 without padding, with a line break in the middle
+00:00 +13: test\fetch_test.dart: says it is Clash Meta, because providers choose the format from that
+00:00 +14: test\sub_test.dart: share links Clash text that is itself base64 is read as Clash
+00:00 +15: test\fetch_test.dart: what comes back reads as a subscription
+00:00 +16: test\fetch_test.dart: what comes back reads as a subscription
+00:00 +17: test\fetch_test.dart: what comes back reads as a subscription
+00:00 +18: test\fetch_test.dart: what comes back reads as a subscription
+00:00 +19: test\sub_test.dart: nothing is quietly turned into a plain node a pinned certificate is carried into the node, in both formats
+00:00 +20: test\fetch_test.dart: a refusal says what it probably means
+00:00 +21: test\fetch_test.dart: a refusal says what it probably means
+00:00 +22: test\fetch_test.dart: a refusal says what it probably means
+00:00 +23: test\fetch_test.dart: a refusal says what it probably means
+00:00 +24: test\fetch_test.dart: a refusal says what it probably means
+00:00 +25: test\fetch_test.dart: a refusal says what it probably means
+00:00 +26: test\fetch_test.dart: a refusal says what it probably means
+00:00 +27: test\fetch_test.dart: a refusal says what it probably means
+00:00 +28: test\sub_test.dart: secrets the list the user reads has no secret in it
+00:00 +29: test\fetch_test.dart: a page that is far too large is refused, not read to the end
+00:00 +30: test\fetch_test.dart: a page that is far too large is refused, not read to the end
+00:00 +31: test\fetch_test.dart: a page that is far too large is refused, not read to the end
+00:00 +32: test\fetch_test.dart: a page that is far too large is refused, not read to the end
+00:00 +33: test\fetch_test.dart: a page that is far too large is refused, not read to the end
+00:01 +34: test\fetch_test.dart: a slow server is given up on at the timeout
+00:02 +35: test\fetch_test.dart: a server that hangs up mid-answer: dart:io puts the address in its message, ours does not
+00:02 +36: test\fetch_test.dart: a redirect to a file:// address, and a redirect loop, both end in a plain message
+00:02 +37: test\fetch_test.dart: only http and https
+00:02 +38: test\fetch_test.dart: no error message repeats the URL, which holds the account key
+00:04 +39: All tests passed!

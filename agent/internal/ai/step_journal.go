@@ -20,7 +20,7 @@ func putStepMessage(s *Session, message Message) {
 func (e *Env) checkpointStep(message Message) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	s := e.sessions[message.SessionID]
+	s := e.sessionLocked(message.SessionID)
 	if s == nil {
 		return nil
 	}

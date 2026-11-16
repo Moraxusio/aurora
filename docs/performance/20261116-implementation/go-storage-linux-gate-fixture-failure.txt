@@ -1,0 +1,60 @@
+?   	aurora3/cmd/aurora3-agent	[no test files]
+?   	aurora3/cmd/aurora3-bench	[no test files]
+?   	aurora3/cmd/aurora3-brokenagent	[no test files]
+?   	aurora3/cmd/aurora3-probe	[no test files]
+ok  	aurora3/cmd/aurora3-release	0.036s
+?   	aurora3/cmd/aurora3-sshpeer	[no test files]
+?   	aurora3/cmd/aurora3-testnode	[no test files]
+?   	aurora3/cmd/aurora3-testpeer	[no test files]
+?   	aurora3/cmd/aurora3-tlspeer	[no test files]
+?   	aurora3/cmd/aurora3-upgradecheck	[no test files]
+--- FAIL: TestSubscriptionAuxiliaryCalls (0.02s)
+    openai_oauth_test.go:243: compaction failed: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestRevertIsVersionCheckedAndCheckpointedAsOneBatch (0.05s)
+    revert_transaction_test.go:42: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestSessionJournalIncrementalReplayAndCheckpointRotation (0.01s)
+    session_store_test.go:22: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestSessionJournalTornTailAndCorruptionPreserveEvidence (0.00s)
+    session_store_test.go:61: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestSessionIndependentPersistenceAndSameSessionOrdering (0.00s)
+    session_store_test.go:115: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestSessionIndexLazySearchCacheAndAttachmentReferences (0.01s)
+    session_store_test.go:183: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestSnapshotServiceKeepsLazyReferencesAndBlocksUnknownRecords (0.03s)
+    session_store_test.go:244: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestSessionRevertTruncatesIncrementalHistoryAtomically (0.00s)
+    session_store_test.go:287: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestSessionIndexCorruptionRebuildsAndReadsDoNotRewrite (0.00s)
+    session_store_test.go:306: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestLargeSessionCanRevertAndDeleteWithinStorageBudget (0.02s)
+    session_store_test.go:362: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestSessionDeletePreflightsDescendantBudgetWithoutPartialDeletion (0.00s)
+    session_store_test.go:393: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+--- FAIL: TestHistoryPinRenameSearchExport (0.00s)
+    web_test.go:186: file transaction requires recovery before further changes: open /tmp/TestAdmissionPersistenceFailureRetainsInputs2130364679/001/not-a-directory/file-transactions: not a directory
+FAIL
+FAIL	aurora3/internal/ai	11.378s
+?   	aurora3/internal/bundle	[no test files]
+?   	aurora3/internal/devprocess	[no test files]
+ok  	aurora3/internal/devtools	0.137s
+ok  	aurora3/internal/entry	0.994s
+ok  	aurora3/internal/files	2.601s
+ok  	aurora3/internal/filetxn	1.166s
+ok  	aurora3/internal/git	0.267s
+ok  	aurora3/internal/install	6.204s
+ok  	aurora3/internal/mcp	0.229s
+ok  	aurora3/internal/monitor	0.275s
+ok  	aurora3/internal/netfwd	0.212s
+ok  	aurora3/internal/netproxy	7.312s
+ok  	aurora3/internal/p2p	1.370s
+ok  	aurora3/internal/paths	0.030s
+ok  	aurora3/internal/proxyroute	0.012s
+ok  	aurora3/internal/proxysvc	0.640s
+ok  	aurora3/internal/service	0.014s
+ok  	aurora3/internal/systemd	0.012s
+ok  	aurora3/internal/terminal	21.106s
+?   	aurora3/internal/testsvc	[no test files]
+ok  	aurora3/internal/update	0.102s
+ok  	aurora3/internal/upgrade	0.045s
+ok  	aurora3/internal/wire	15.166s
+FAIL

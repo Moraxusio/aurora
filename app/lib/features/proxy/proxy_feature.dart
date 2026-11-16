@@ -9,11 +9,10 @@ import 'dart:async';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_sub/aurora_sub.dart';
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../kernel/feature.dart';
 import '../../kernel/visible_polling.dart';
-import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'proxy_model.dart';

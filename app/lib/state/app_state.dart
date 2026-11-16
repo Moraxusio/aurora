@@ -16,6 +16,8 @@ import 'profile_access.dart';
 import 'upgrade_model.dart';
 import 'local_agent.dart';
 import 'appearance.dart';
+import '../kernel/document_recovery.dart';
+import '../kernel/development/development_store.dart';
 
 /// Where the signed agent builds are: `agent/` next to the executable in a
 /// release folder (M1.7), or AURORA3_AGENT_DIR for development.
@@ -100,6 +102,18 @@ class AppState extends ChangeNotifier implements ProfileAccess {
   /// Why the profile cannot be used (no keystore, unreadable file), or null.
   String? storeError;
   String? storePath;
+  DocumentRecoveryStore? _documentRecovery;
+  DevelopmentStore? _developmentStore;
+  DevelopmentStore get developmentStore => _developmentStore ??= storePath == null
+      ? DevelopmentStore.memory()
+      : DevelopmentStore.file(Directory('${File(storePath!).parent.path}/development'), platformSealer());
+  DocumentRecoveryStore get documentRecovery => _documentRecovery ??=
+      storePath == null
+          ? MemoryDocumentRecoveryStore()
+          : FileDocumentRecoveryStore(
+              Directory('${File(storePath!).parent.path}/documents'),
+              platformSealer(),
+            );
   bool storeUnreadable = false;
 
   final Map<String, Connection> _conns = {};

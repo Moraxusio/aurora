@@ -7,7 +7,7 @@ import 'dart:typed_data';
 
 import 'package:aurora_tls/aurora_tls.dart';
 
-/// The v3 release key (D-13, docs/DESIGN.md 5.10). Same bytes as
+/// The v3 release key (D-13, docs/archive/2026-11-16/DESIGN.md 5.10). Same bytes as
 /// agent/internal/update/pubkey.go; key_id 87828dfb18459372.
 const String releaseKeyBase64 = 'ZkXgb9QfuaRzm77NoOxMTOrB+8hMkbx2lc5gRTKdtrk=';
 

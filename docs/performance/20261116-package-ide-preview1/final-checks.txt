@@ -1,0 +1,92 @@
+**********************
+PowerShell 记录开始
+开始时间: 20261116084154
+用户名: FINNWE\finwe
+RunAs 用户: FINNWE\finwe
+配置名称: 
+计算机: FINNWE (Microsoft Windows NT 10.0.26300.0)
+主机应用程序: C:\Program Files\PowerShell\7\pwsh.dll -NoLogo -NoProfile -NonInteractive -Command $ErrorActionPreference = 'Stop'
+$work = 'C:\Users\finwe\AppData\Local\Temp\opencode\aurora-package-20261116-ide-preview1'
+$archive = 'C:\build\aurora\docs\performance\20261116-package-ide-preview1'
+$package = 'C:\dev\VPS\preview3\Aurora-3.22.0-ide-preview1'
+$logs = @('build.txt','artifact-summary.json','artifact-files.json','artifact-check.txt','go-signatures-linux-version.txt','packaged-agent-smokes.txt','local-agent-smoke-final.txt','ide-smoke-analyze.txt','release-tray-final.txt','release-launcher-msaa.txt','release-startup-ui.txt','preflight-final.txt','preflight.txt','release-window.txt','release-window-final.txt','release-launcher-final.txt','release-launcher-isolated.txt')
+foreach ($name in $logs) {
+  Copy-Item -LiteralPath (Join-Path $work $name) -Destination (Join-Path $archive $name)
+}
+foreach ($name in @('BUILD-INFO.json','SOURCE-HASHES.json')) {
+  Copy-Item -LiteralPath (Join-Path $package $name) -Destination (Join-Path $archive $name)
+}
+$sources = Get-Content -LiteralPath "$package\SOURCE-HASHES.json" -Raw | ConvertFrom-Json
+$changed = @()
+$unchanged = 0
+foreach ($property in $sources.PSObject.Properties) {
+  $actual = (Get-FileHash -LiteralPath (Join-Path 'C:\build\aurora' $property.Name) -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -eq $property.Value) { $unchanged++ } else { $changed += $property.Name }
+}
+$allowed = @('README.md','docs/README.md','docs/guides/acceptance.md','app/tool/tray_test.ps1')
+foreach ($name in $changed) {
+  if ($name -notin $allowed) { throw "Unexpected post-build source change: $name" }
+}
+[ordered]@{
+  build_input_files = 1596
+  unchanged_existing_inputs = $unchanged
+  changed_after_build = $changed
+  changes_are_documentation_and_acceptance_tools_only = $true
+  added_after_build = @('app/tool/native_accessibility.ps1','docs/validation/2026-11-16-package-ide-preview1.md','docs/performance/20261116-package-ide-preview1/')
+  original_zip_sha256 = (Get-FileHash -LiteralPath "$package.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$work\post-build-source-check.json" -Encoding utf8
+Copy-Item -LiteralPath "$work\post-build-source-check.json" -Destination $archive
+Get-Content -LiteralPath "$work\post-build-source-check.json"
+Start-Transcript -Path "$work\final-checks.txt" | Out-Null
+try {
+  & powershell -NoProfile -File tools/check-docs.ps1
+  if ($LASTEXITCODE) { throw 'Final documentation check failed' }
+  $scripts = @(Get-ChildItem tools -Filter *.ps1) + @(Get-ChildItem app/tool -Filter *.ps1)
+  foreach ($script in $scripts) {
+    $tokens = $null
+    $errors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile($script.FullName,[ref]$tokens,[ref]$errors)
+    if ($errors.Count) { throw ($errors | Out-String) }
+  }
+  Write-Output "PowerShell syntax passed: $($scripts.Count) scripts"
+  & git -c core.safecrlf=false diff --check
+  if ($LASTEXITCODE) { throw 'Final diff check failed' }
+  $expected = @{
+    'C:\dev\VPS\release3\Aurora-3.21.4.zip' = '087348a08f4f0af051a89b81dde7d5eb86a2136045d6199ebdb5c8ec2aa95ae1'
+    'C:\dev\VPS\preview3\Aurora-3.21.4-harness-preview1.zip' = '78ca0c41012e5647cfd5080a47ba8b9f0f74a979f3c99eeaf6f747af2a19fb7d'
+    "$package.zip" = '556aaa40de28d07ae9de5949e9cacc1a8e039348edca1f71f15077c754edf42a'
+  }
+  foreach ($file in $expected.Keys) {
+    $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($hash -ne $expected[$file]) { throw "Artifact hash changed: $file" }
+    Write-Output "PASS artifact hash $hash $file"
+  }
+  $leftovers = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like "$work\*" })
+  if ($leftovers.Count) { throw 'Acceptance-owned processes remain alive' }
+  Write-Output 'PASS no acceptance-owned native process remains'
+  Write-Output 'FINAL_DOCUMENTATION_SCRIPTS_DIFF_ARTIFACTS_CLEANUP_OK'
+} finally { Stop-Transcript | Out-Null }
+Copy-Item -LiteralPath "$work\final-checks.txt" -Destination $archive
+进程 ID: 17232
+PSVersion: 7.6.10
+PSEdition: Core
+GitCommitId: 7.6.10
+OS: Microsoft Windows 10.0.26300
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+
+PowerShell syntax passed: 23 scripts
+
+PASS artifact hash 087348a08f4f0af051a89b81dde7d5eb86a2136045d6199ebdb5c8ec2aa95ae1 C:\dev\VPS\release3\Aurora-3.21.4.zip
+PASS artifact hash 78ca0c41012e5647cfd5080a47ba8b9f0f74a979f3c99eeaf6f747af2a19fb7d C:\dev\VPS\preview3\Aurora-3.21.4-harness-preview1.zip
+PASS artifact hash 556aaa40de28d07ae9de5949e9cacc1a8e039348edca1f71f15077c754edf42a C:\dev\VPS\preview3\Aurora-3.22.0-ide-preview1.zip
+PASS no acceptance-owned native process remains
+FINAL_DOCUMENTATION_SCRIPTS_DIFF_ARTIFACTS_CLEANUP_OK
+**********************
+PowerShell 记录结束
+结束时间: 20261116084155
+**********************

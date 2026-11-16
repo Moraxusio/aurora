@@ -163,6 +163,8 @@ class GitModel extends ChangeNotifier {
   String? error;
   String? lastSyncOutput;
   bool _disposed = false;
+  int _readSequence = 0, _findSequence = 0;
+  final _readVersions = <String, int>{};
 
   Link? get _link => ws.link;
 
@@ -182,12 +184,15 @@ class GitModel extends ChangeNotifier {
   /// down and stops at 30).
   Future<void> findRepos() async {
     final l = _link;
-    if (l == null) return;
+    if (l == null || _disposed) return;
+    final sequence = ++_findSequence;
+    bool current() => !_disposed && sequence == _findSequence && identical(l, _link);
     loadingRepos = true;
     error = null;
     _notify();
     try {
       final roots = (await l.call('fs.roots') as Map)['roots'] as List;
+      if (!current()) return;
       final found = <GitRepo>[];
       for (final r in roots) {
         final id = (r as Map)['id'] as String;
@@ -197,6 +202,7 @@ class GitModel extends ChangeNotifier {
         if (r['path'] == '/' || (r['path'] as String?)?.startsWith('/mnt/') == true) continue;
         try {
           final res = await l.call('git.repos', {'root': id, 'path': '/'}) as Map;
+          if (!current()) return;
           for (final x in res['repos'] as List) {
             final m = (x as Map).cast<String, dynamic>();
             found.add(GitRepo(id, m['repo'] as String, m['name'] as String));
@@ -205,12 +211,16 @@ class GitModel extends ChangeNotifier {
           // a root that is not readable has no repositories to show
         }
       }
+      if (!current()) return;
       repos = found;
-      if (repo != null && !repos.any((r) => r.root == repo!.root && r.repo == repo!.repo)) repo = null;
-      repo ??= repos.isEmpty ? null : repos.first;
+      if (repo == null || !repos.any((r) => r.root == repo!.root && r.repo == repo!.repo)) {
+        _setRepo(repos.isEmpty ? null : repos.first);
+      }
     } on OpError catch (e) {
+      if (!current()) return;
       error = e.message;
     }
+    if (!current()) return;
     loadingRepos = false;
     _notify();
     if (repo != null) await refresh();
@@ -218,54 +228,63 @@ class GitModel extends ChangeNotifier {
 
   /// Opens a repository by path (from the file tree), whether or not it was found.
   Future<void> openRepo(GitRepo r) async {
+    _findSequence++;
+    loadingRepos = false;
     if (!repos.any((x) => x.root == r.root && x.repo == r.repo)) repos = [...repos, r];
-    repo = r;
-    status = null;
-    branches = [];
-    log = [];
+    _setRepo(r);
     _notify();
     await refresh();
   }
 
+  void _setRepo(GitRepo? r) {
+    repo = r;
+    _readVersions.clear();
+    status = null;
+    branches = [];
+    log = [];
+    stashes = [];
+    tags = [];
+    error = null;
+    lastSyncOutput = null;
+  }
+
   Future<void> select(GitRepo r) => openRepo(r);
 
-  Future<void> refresh() async {
+  Future<void> _readState(String op, Map<String, dynamic> extra, void Function(Map<String, dynamic>) apply, {bool isStatus = false}) async {
     final l = _link;
-    if (l == null || repo == null) return;
+    final target = repo;
+    if (l == null || target == null || _disposed) return;
+    final sequence = ++_readSequence;
+    _readVersions[op] = sequence;
+    bool current() => !_disposed && identical(l, _link) && identical(target, repo) && _readVersions[op] == sequence;
     try {
-      final st = await l.call('git.status', _args()) as Map;
-      status = GitStatus.fromJson(st.cast<String, dynamic>());
-      error = null;
+      final result = await l.call(op, {'root': target.root, 'repo': target.repo, ...extra}) as Map;
+      if (!current()) return;
+      apply(result.cast<String, dynamic>());
     } on OpError catch (e) {
-      error = e.message;
-      status = null;
+      if (!current()) return;
+      if (isStatus) {
+        error = e.message;
+        status = null;
+      } else {
+        ws.toast(e.message, error: true);
+      }
     }
-    _notify();
+    if (current()) _notify();
   }
 
-  Future<void> loadBranches() async {
-    final l = _link;
-    if (l == null || repo == null) return;
-    try {
-      final r = await l.call('git.branches', _args()) as Map;
-      branches = [for (final b in r['branches'] as List) GitBranch.fromJson((b as Map).cast<String, dynamic>())];
-    } on OpError catch (e) {
-      ws.toast(e.message, error: true);
-    }
-    _notify();
-  }
+  Future<void> refresh() => _readState('git.status', const {}, (r) {
+    status = GitStatus.fromJson(r);
+    error = null;
+  }, isStatus: true);
 
-  Future<void> loadLog({int max = 100}) async {
-    final l = _link;
-    if (l == null || repo == null) return;
-    try {
-      final r = await l.call('git.log', _args({'max': max})) as Map;
-      log = [for (final c in r['commits'] as List) GitCommit.fromJson((c as Map).cast<String, dynamic>())];
-    } on OpError catch (e) {
-      ws.toast(e.message, error: true);
-    }
-    _notify();
-  }
+  Future<void> loadBranches() => _readState('git.branches', const {}, (r) {
+    branches = [for (final b in r['branches'] as List) GitBranch.fromJson((b as Map).cast<String, dynamic>())];
+  });
+
+  Future<void> loadLog({int max = 100}) => _readState('git.log', {'max': max}, (r) {
+    log = [for (final c in r['commits'] as List) GitCommit.fromJson((c as Map).cast<String, dynamic>())];
+  });
 
   /// Runs a repository-changing call, shows an error as a message, and reads
   /// the status again. Returns whether it succeeded.
@@ -318,17 +337,9 @@ class GitModel extends ChangeNotifier {
 
   List<GitStash> stashes = [];
 
-  Future<void> loadStashes() async {
-    final l = _link;
-    if (l == null || repo == null) return;
-    try {
-      final r = await l.call('git.stash', _args({'action': 'list'})) as Map;
-      stashes = [for (final s in r['stashes'] as List) GitStash.fromJson((s as Map).cast<String, dynamic>())];
-    } on OpError catch (e) {
-      ws.toast(e.message, error: true);
-    }
-    _notify();
-  }
+  Future<void> loadStashes() => _readState('git.stash', {'action': 'list'}, (r) {
+    stashes = [for (final s in r['stashes'] as List) GitStash.fromJson((s as Map).cast<String, dynamic>())];
+  });
 
   /// push ([message], [untracked], [stagedOnly]) | apply | pop | drop of
   /// stash@{[index]}. apply and pop may stop on conflicts.
@@ -348,17 +359,9 @@ class GitModel extends ChangeNotifier {
 
   List<GitTag> tags = [];
 
-  Future<void> loadTags() async {
-    final l = _link;
-    if (l == null || repo == null) return;
-    try {
-      final r = await l.call('git.tag', _args({'action': 'list'})) as Map;
-      tags = [for (final t in r['tags'] as List) GitTag.fromJson((t as Map).cast<String, dynamic>())];
-    } on OpError catch (e) {
-      ws.toast(e.message, error: true);
-    }
-    _notify();
-  }
+  Future<void> loadTags() => _readState('git.tag', {'action': 'list'}, (r) {
+    tags = [for (final t in r['tags'] as List) GitTag.fromJson((t as Map).cast<String, dynamic>())];
+  });
 
   /// [message] makes an annotated tag. [rev] defaults to HEAD.
   Future<bool> createTag(String name, {String? rev, String? message}) async {

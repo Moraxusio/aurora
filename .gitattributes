@@ -3,3 +3,7 @@
 *.png binary
 *.woff2 binary
 *.ico binary
+
+# Preserve original evidence bytes and upstream vendored formatting.
+docs/performance/** -text -whitespace
+app/third_party/re_editor/** -whitespace

@@ -2,9 +2,8 @@
 // It shows what is about to happen (the patch, or the command and its folder),
 // says in Chinese why it is being asked, and says what "allow for this session"
 // would cover, so the choice is made on facts and not on a file name.
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
-import '../../kernel/widgets.dart';
 import '../../theme/ide_theme.dart';
 import '../git/diff_view.dart'
     show DiffLine, DiffLineKind, parseDiff, withoutFileHeader;

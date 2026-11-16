@@ -597,6 +597,16 @@ void main() {
         link.rpcCalls.where((c) => c.$1 == 'ai.get').length,
         greaterThan(before),
       );
+      final afterSessionSync = link.rpcCalls.where((c) => c.$1 == 'ai.get').length;
+      link.events.emit({'type': 'sync.required', 'session_id': ''});
+      for (var i = 0; i < 3; i++) {
+        await t.pump(const Duration(milliseconds: 30));
+      }
+      expect(
+        link.rpcCalls.where((c) => c.$1 == 'ai.get').length,
+        greaterThan(afterSessionSync),
+        reason: 'subscriber overflow requires a global snapshot refresh',
+      );
     },
   );
   testWidgets(

@@ -1,0 +1,111 @@
+{
+  "date": "2026-11-16",
+  "baseline_revision": "f2873316253e80b9c217dea88eb8048c8dddb10f",
+  "candidate": "uncommitted audit working tree",
+  "platform": "windows/amd64",
+  "cpu": "11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz",
+  "go": "go1.26.0",
+  "cgo_enabled": false,
+  "benchmark_command": "go test ./internal/ai ./internal/files -run '^$' -bench '^BenchmarkAudit' -benchmem -benchtime=500ms -count=3",
+  "summary_statistic": "median of three runs, independently for time and allocations",
+  "raw_before": "20261116-audit-go-before.txt",
+  "raw_after": "20261116-audit-go-after.txt",
+  "benchmarks": [
+    {
+      "name": "persist_100_messages",
+      "before_ns_per_op": 7943901,
+      "after_ns_per_op": 4541101,
+      "before_bytes_per_op": 3137917,
+      "after_bytes_per_op": 646932
+    },
+    {
+      "name": "persist_1000_messages",
+      "before_ns_per_op": 43288869,
+      "after_ns_per_op": 15308348,
+      "before_bytes_per_op": 31887812,
+      "after_bytes_per_op": 6924467
+    },
+    {
+      "name": "rank_100000_query_file_top_100",
+      "before_ns_per_op": 128687300,
+      "after_ns_per_op": 6001814,
+      "before_bytes_per_op": 12970056,
+      "after_bytes_per_op": 2808
+    },
+    {
+      "name": "rank_300000_query_file_top_100",
+      "before_ns_per_op": 514150250,
+      "after_ns_per_op": 25647890,
+      "before_bytes_per_op": 41248840,
+      "after_bytes_per_op": 2808
+    },
+    {
+      "name": "rank_300000_query_empty_top_100",
+      "before_ns_per_op": 472038550,
+      "after_ns_per_op": 5209006,
+      "before_bytes_per_op": 41248840,
+      "after_bytes_per_op": 2808
+    },
+    {
+      "name": "watch_signature_5000_entries",
+      "before_ns_per_op": 152481650,
+      "after_ns_per_op": 586208,
+      "before_bytes_per_op": 627898532,
+      "after_bytes_per_op": 240064
+    }
+  ],
+  "validation": {
+    "flutter_full": {
+      "command": "flutter test --no-pub --reporter expanded",
+      "passed": 504,
+      "conditionally_skipped": 20,
+      "failed": 0
+    },
+    "flutter_targeted_passed": 77,
+    "flutter_analyze": {
+      "command": "flutter analyze --no-pub --no-fatal-infos",
+      "errors": 0,
+      "warnings": 0,
+      "infos": 58
+    },
+    "go_windows": {
+      "command": "go test ./... -count=1",
+      "result": "passed"
+    },
+    "go_linux": {
+      "runtime": "Ubuntu-24.04 WSL",
+      "packages": ["./internal/ai", "./internal/files"],
+      "result": "passed",
+      "method": "Cross-compiled Linux test binaries using Windows Go, then executed each complete package test suite in WSL."
+    },
+    "go_vet_and_build": {
+      "targets": ["windows/amd64", "linux/amd64"],
+      "commands": ["go vet ./...", "go build ./..."],
+      "result": "passed"
+    },
+    "native_gui_foundation": {
+      "command": "app/tool/gui_audit.ps1 -Suite foundation",
+      "mode": "Windows Profile",
+      "result": "passed",
+      "synthetic_services_and_input": true,
+      "isolated_profile": true,
+      "source_unchanged_during_run": true,
+      "frames": 571,
+      "maximum_scenario_build_p95_us": 10590,
+      "maximum_scenario_raster_p95_us": 4635,
+      "frames_with_build_or_raster_over_16667_us": 0,
+      "raw_result": "20261116-audit-gui-foundation.json",
+      "log": "20261116-audit-native.txt",
+      "screenshot": "20261116-audit-gui-loaded.png",
+      "source_manifest": "20261116-audit-gui-sources.json",
+      "source_manifest_sha256": "a0e781e17d41c95e2878f2fcd7a2075dc35bede8329cf0a2dfde3d52209db444",
+      "comparison_baseline": "No same-run whole-app baseline; no whole-app speedup percentage claimed."
+    }
+  },
+  "measurement_boundaries": {
+    "persistence": "Real atomic write, fsync and rename; 100/1000 messages with approximately 4 KiB tool output per message.",
+    "ranking": "Deterministically shuffled generated paths; excludes directory enumeration and network latency.",
+    "watch_signature": "Stable DirEntry.Info fixtures; excludes filesystem enumeration and metadata latency. Baseline invokes the exact legacy concatenation helper, candidate invokes production streaming SHA-256.",
+    "whole_app_speedup_claimed": false
+  }
+}

@@ -1,0 +1,42 @@
+goos: windows
+goarch: amd64
+pkg: aurora3/internal/ai
+cpu: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+BenchmarkAuditPersistSession/messages_100-8         	     133	   4541101 ns/op	  643491 B/op	      22 allocs/op
+BenchmarkAuditPersistSession/messages_100-8         	     130	   4381790 ns/op	  646932 B/op	      23 allocs/op
+BenchmarkAuditPersistSession/messages_100-8         	     136	   4631521 ns/op	  749348 B/op	      26 allocs/op
+BenchmarkAuditPersistSession/messages_1000-8        	      38	  14938405 ns/op	 6924467 B/op	      29 allocs/op
+BenchmarkAuditPersistSession/messages_1000-8        	      44	  15308348 ns/op	 8383118 B/op	      37 allocs/op
+BenchmarkAuditPersistSession/messages_1000-8        	      36	  17077517 ns/op	 6330216 B/op	      26 allocs/op
+PASS
+ok  	aurora3/internal/ai	5.850s
+goos: windows
+goarch: amd64
+pkg: aurora3/internal/files
+cpu: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+BenchmarkAuditRankFiles/files_10000/query_""-8         	    5184	    104160 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_10000/query_""-8         	    6030	    108039 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_10000/query_""-8         	    5505	    107194 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_10000/query_"file"-8     	     927	    605529 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_10000/query_"file"-8     	    1014	    603604 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_10000/query_"file"-8     	     768	    745322 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_100000/query_""-8        	     956	    652953 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_100000/query_""-8        	     993	    620232 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_100000/query_""-8        	    1016	    670210 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_100000/query_"file"-8    	     105	   5811191 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_100000/query_"file"-8    	     100	   6001814 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_100000/query_"file"-8    	      98	   8065929 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_300000/query_""-8        	     109	   5209006 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_300000/query_""-8        	     120	   5109828 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_300000/query_""-8        	     112	   5469177 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_300000/query_"file"-8    	      20	  25647890 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_300000/query_"file"-8    	      22	  25979714 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditRankFiles/files_300000/query_"file"-8    	      22	  25364400 ns/op	    2808 B/op	       5 allocs/op
+BenchmarkAuditWatchSignature/entries_1000-8            	    5020	    116430 ns/op	   48064 B/op	    1002 allocs/op
+BenchmarkAuditWatchSignature/entries_1000-8            	    4647	    122578 ns/op	   48064 B/op	    1002 allocs/op
+BenchmarkAuditWatchSignature/entries_1000-8            	    5124	    123820 ns/op	   48064 B/op	    1002 allocs/op
+BenchmarkAuditWatchSignature/entries_5000-8            	     873	    586208 ns/op	  240064 B/op	    5002 allocs/op
+BenchmarkAuditWatchSignature/entries_5000-8            	    1032	    590726 ns/op	  240064 B/op	    5002 allocs/op
+BenchmarkAuditWatchSignature/entries_5000-8            	    1062	    584132 ns/op	  240064 B/op	    5002 allocs/op
+PASS
+ok  	aurora3/internal/files	18.879s

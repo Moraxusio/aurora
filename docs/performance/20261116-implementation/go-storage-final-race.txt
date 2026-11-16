@@ -1,0 +1,3 @@
+ok  	aurora3/internal/ai	41.638s
+ok  	aurora3/internal/files	5.586s
+ok  	aurora3/internal/filetxn	1.504s

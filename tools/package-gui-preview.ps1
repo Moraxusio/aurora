@@ -5,13 +5,15 @@ param(
     [Parameter(Mandatory)][string]$BaseRelease,
     [Parameter(Mandatory)][string]$Out,
     [string]$Suffix = 'gui-preview1',
-    [string]$NotesFile = 'GUI_FOUNDATION.md',
+    [string]$NotesFile = 'development/gui.md',
     [string]$Summary = '共享保活视口、监控独立快照、GPU 按需详情／惰性进程列表、局部重绘及本地 GUI 异常诊断。'
 )
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $Suffix -notmatch '^[a-zA-Z0-9-]+$') { throw 'Invalid candidate version/name' }
-if ($NotesFile -notmatch '^[a-zA-Z0-9_-]+\.md$') { throw 'Invalid notes filename' }
+if ($NotesFile -notmatch '^[a-zA-Z0-9_/-]+\.md$' -or [IO.Path]::IsPathRooted($NotesFile)) { throw 'Invalid notes filename' }
 $repo = Split-Path -Parent $PSScriptRoot
+& (Join-Path $PSScriptRoot 'check-docs.ps1')
+$notesName = "docs/$NotesFile"
 $BaseRelease = [IO.Path]::GetFullPath($BaseRelease)
 $Out = [IO.Path]::GetFullPath($Out)
 $name = "Aurora-$Version-$Suffix"
@@ -47,6 +49,8 @@ $build = [int]$parts[0] * 10000 + [int]$parts[1] * 100 + [int]$parts[2]
 $sources = Get-ClientSources
 Push-Location (Join-Path $repo 'app')
 try {
+    & dart tool/ui_contract.dart
+    if ($LASTEXITCODE) { throw 'Aurora GUI contract failed' }
     & flutter build windows --no-pub --release --target=lib/main.dart "--build-name=$Version" "--build-number=$build"
     if ($LASTEXITCODE) { throw 'Candidate Windows build failed' }
 } finally { Pop-Location }
@@ -72,7 +76,7 @@ Aurora $Version — Windows GUI 验收版（$Suffix），Windows x64
 命令面板可“复制界面诊断”。
 正式签名的本地／远程 agent 沿用 $($agent.version)，字节未改；本地 agent 随客户端退出。
 
-验收说明与已知边界：$NotesFile
+验收说明与已知边界：$notesName
 源代码：$repo（工作区改动）。本包为本地候选，尚未对外发布。
 许可证：LICENSE、NOTICE、LICENSES.txt，包含 OpenCode MIT 署名。
 "@ | Set-Content -LiteralPath "$dir\README.txt" -Encoding utf8
@@ -84,14 +88,14 @@ set "APPDATA=%~dp0review-data\Roaming"
 set "USERPROFILE=%~dp0review-data\Home"
 set "AURORA3_INSTANCE_SCOPE=$name"
 set "AURORA3_TRUST_KEY="
-set "AURORA3_AGENT_DIR=%~dp0agent\amd64"
+set "AURORA3_AGENT_DIR=%~dp0agent"
 set "AURORA3_LOCAL_AGENT_DIR=%~dp0local-agent\windows-amd64"
 if not exist "%LOCALAPPDATA%" mkdir "%LOCALAPPDATA%"
 if not exist "%APPDATA%" mkdir "%APPDATA%"
 if not exist "%USERPROFILE%" mkdir "%USERPROFILE%"
 start "" "%~dp0aurora.exe"
 "@ | Set-Content -LiteralPath "$dir\启动验收版.cmd" -Encoding ascii
-Copy-Item -LiteralPath (Join-Path $repo "docs\$NotesFile") -Destination $dir
+& (Join-Path $PSScriptRoot 'copy-package-docs.ps1') -Destination $dir -NotesFile "docs/$NotesFile"
 [pscustomobject]@{
     version = $Version
     candidate = $Suffix

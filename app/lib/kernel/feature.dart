@@ -1,4 +1,4 @@
-// The client's kernel contract (docs/DESIGN.md D-78). The kernel owns the
+// The client's kernel contract (docs/architecture/overview.md). The kernel owns the
 // connection, the layout, the editor tabs and the command palette. A feature
 // is a client for one agent service (D-45): it declares which service and
 // which operations it needs, and the kernel shows it only when the agent
@@ -7,7 +7,7 @@
 // agent's kernel (D-40).
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import 'workspace.dart';
 

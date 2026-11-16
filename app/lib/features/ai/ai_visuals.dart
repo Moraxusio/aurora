@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../theme/ide_theme.dart';
-import '../../theme/workbench_tokens.dart';
 
 /// Shared visual vocabulary for conversations, work, history and model settings.
 abstract final class AiVisuals {

@@ -1,12 +1,11 @@
 // The command palette (Ctrl+Shift+P): every command of every available
 // feature, plus the shell's own, filtered as you type. Arrow keys and Enter
 // work; so does a tap.
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/ide_theme.dart';
 import 'feature.dart';
-import 'widgets.dart';
 
 /// The commands run most recently, newest first. Kept for the life of the
 /// process: the palette opens on what was used last instead of an arbitrary
@@ -34,7 +33,11 @@ const _tailIds = {'diagnostics.copyGui'};
 /// rest in their own order, diagnostics at the end. With a query: every command
 /// whose letters appear in order in "group title", a whole-text hit first, then
 /// the earliest match.
-List<Command> rankCommands(List<Command> commands, String query, {List<String>? recent}) {
+List<Command> rankCommands(
+  List<Command> commands,
+  String query, {
+  List<String>? recent,
+}) {
   final list = commands.where((c) => c.enabled?.call() ?? true).toList();
   final q = query.trim().toLowerCase();
   if (q.isEmpty) {
@@ -72,7 +75,9 @@ List<Command> rankCommands(List<Command> commands, String query, {List<String>? 
       scored.add((first + (hay.contains(q) ? -100 : 0) + tail, n, c));
     }
   }
-  scored.sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
+  scored.sort(
+    (a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2),
+  );
   return [for (final s in scored) s.$3];
 }
 
@@ -81,22 +86,22 @@ List<Command> rankCommands(List<Command> commands, String query, {List<String>? 
 IconData commandIcon(Command c) => c.icon ?? groupIcon(c.group);
 
 IconData groupIcon(String group) => switch (group) {
-      '服务器' => Icons.dns_outlined,
-      '视图' => Icons.visibility_outlined,
-      '外观' => Icons.palette_outlined,
-      '终端' => Icons.terminal,
-      '文件' => Icons.folder_outlined,
-      '搜索' => Icons.search,
-      'Git' => Icons.fork_right,
-      'AI 助手' => Icons.auto_awesome_outlined,
-      '诊断' => Icons.bug_report_outlined,
-      '设置' => Icons.settings_outlined,
-      '标签与布局' => Icons.view_quilt_outlined,
-      '本机' => Icons.computer_outlined,
-      '监控' => Icons.monitor_heart_outlined,
-      '代理' => Icons.alt_route,
-      _ => Icons.circle_outlined,
-    };
+  '服务器' => Icons.dns_outlined,
+  '视图' => Icons.visibility_outlined,
+  '外观' => Icons.palette_outlined,
+  '终端' => Icons.terminal,
+  '文件' => Icons.folder_outlined,
+  '搜索' => Icons.search,
+  'Git' => Icons.fork_right,
+  'AI 助手' => Icons.auto_awesome_outlined,
+  '诊断' => Icons.bug_report_outlined,
+  '设置' => Icons.settings_outlined,
+  '标签与布局' => Icons.view_quilt_outlined,
+  '本机' => Icons.computer_outlined,
+  '监控' => Icons.monitor_heart_outlined,
+  '代理' => Icons.alt_route,
+  _ => Icons.circle_outlined,
+};
 
 /// Fixed width of the group column, so the groups and the key caps line up in
 /// every row instead of following the length of each title.
@@ -105,7 +110,11 @@ const double _keysWidth = 132;
 
 /// Opens the palette over [context]; runs the chosen command.
 Future<void> showPalette(BuildContext context, List<Command> commands) async {
-  final chosen = await showPicker<Command>(context, maxWidth: 640, builder: (_) => _Palette(commands: commands));
+  final chosen = await showPicker<Command>(
+    context,
+    maxWidth: 640,
+    builder: (_) => _Palette(commands: commands),
+  );
   if (chosen != null) {
     RecentCommands.used(chosen.id);
     await chosen.run();
@@ -142,7 +151,14 @@ class _PaletteState extends State<_Palette> {
   void _move(int d, int n) {
     if (n == 0) return;
     setState(() => _index = (_index + d + n) % n);
-    WidgetsBinding.instance.addPostFrameCallback((_) => revealPickerRow(_scroll, _index));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted)
+        revealPickerRow(
+          _scroll,
+          _index,
+          rowHeight: PickerRow.heightOf(context),
+        );
+    });
   }
 
   @override
@@ -150,58 +166,107 @@ class _PaletteState extends State<_Palette> {
     final ide = Ide.of(context);
     final shown = rankCommands(widget.commands, _text.text);
     if (_index >= shown.length) _index = shown.isEmpty ? 0 : shown.length - 1;
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.arrowDown): () => _move(1, shown.length),
-          const SingleActivator(LogicalKeyboardKey.arrowUp): () => _move(-1, shown.length),
-          const SingleActivator(LogicalKeyboardKey.escape): () => Navigator.pop(context),
-        },
-        child: PickerField(
-          controller: _text,
-          focusNode: _focus,
-          icon: Icons.keyboard_command_key,
-          hint: '输入命令…',
-          onSubmitted: (_) {
-            if (shown.isNotEmpty) Navigator.pop(context, shown[_index]);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+                _move(1, shown.length),
+            const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+                _move(-1, shown.length),
+            const SingleActivator(LogicalKeyboardKey.escape): () =>
+                Navigator.pop(context),
           },
+          child: PickerField(
+            controller: _text,
+            focusNode: _focus,
+            icon: Icons.keyboard_command_key,
+            hint: '输入命令…',
+            onSubmitted: (_) {
+              if (shown.isNotEmpty) Navigator.pop(context, shown[_index]);
+            },
+          ),
         ),
-      ),
-      const Divider(),
-      Flexible(
-        child: shown.isEmpty
-            ? Padding(padding: const EdgeInsets.all(Space.xxl), child: Text('没有匹配的命令', style: TextStyle(color: ide.textDim)))
-            : ListView.builder(
-                controller: _scroll,
-                shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(vertical: Space.s),
-                itemExtent: PickerRow.height,
-                itemCount: shown.length,
-                itemBuilder: (_, i) {
-                  final c = shown[i];
-                  // The pointer moves the one highlight; a second, hover-only
-                  // colour would leave two rows lit.
-                  return MouseRegion(
-                    onHover: (_) {
-                      if (_index != i) setState(() => _index = i);
-                    },
-                    child: PickerRow(
-                      followsPointer: true,
-                      selected: i == _index,
-                      onTap: () => Navigator.pop(context, c),
-                      child: Row(children: [
-                        SizedBox(width: 26, child: Icon(commandIcon(c), size: 16, color: i == _index ? ide.text : ide.textDim)),
-                        Expanded(child: Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: ide.text))),
-                        const SizedBox(width: Space.m),
-                        SizedBox(width: _groupWidth, child: Text(c.group, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: ide.textFaint))),
-                        const SizedBox(width: Space.m),
-                        SizedBox(width: _keysWidth, child: Align(alignment: Alignment.centerRight, child: c.shortcut == null ? null : FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: KeyCaps(c.shortcut!)))),
-                      ]),
-                    ),
-                  );
-                },
-              ),
-      ),
-    ]);
+        const Divider(),
+        Flexible(
+          child: shown.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(Space.xxl),
+                  child: Text('没有匹配的命令', style: TextStyle(color: ide.textDim)),
+                )
+              : ListView.builder(
+                  controller: _scroll,
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: Space.s),
+                  itemExtent: PickerRow.heightOf(context),
+                  itemCount: shown.length,
+                  itemBuilder: (_, i) {
+                    final c = shown[i];
+                    // The pointer moves the one highlight; a second, hover-only
+                    // colour would leave two rows lit.
+                    return MouseRegion(
+                      onHover: (_) {
+                        if (_index != i) setState(() => _index = i);
+                      },
+                      child: PickerRow(
+                        followsPointer: true,
+                        selected: i == _index,
+                        onTap: () => Navigator.pop(context, c),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 26,
+                              child: Icon(
+                                commandIcon(c),
+                                size: 16,
+                                color: i == _index ? ide.text : ide.textDim,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                c.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 13, color: ide.text),
+                              ),
+                            ),
+                            const SizedBox(width: Space.m),
+                            SizedBox(
+                              width: _groupWidth,
+                              child: Text(
+                                c.group,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: ide.textFaint,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: Space.m),
+                            SizedBox(
+                              width: _keysWidth,
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: c.shortcut == null
+                                    ? null
+                                    : FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerRight,
+                                        child: KeyCaps(c.shortcut!),
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
   }
 }

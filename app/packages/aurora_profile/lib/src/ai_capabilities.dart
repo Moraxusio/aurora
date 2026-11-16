@@ -15,6 +15,8 @@ const aiCapabilityDefaults = <String, bool>{
   'todowrite': true,
   'subagent': true,
   'question': true,
+  'skill': true,
+  'mcp': true,
 };
 
 Map<String, bool> aiCapabilityMap(Object? value) => {

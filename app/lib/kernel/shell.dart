@@ -4,10 +4,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../features/search/quick_open.dart';
+import '../features/files/file_editor.dart' show fileEditorTab;
 import '../features/ai/ai_feature.dart' show openNewAiSession, AiSessionSidebar;
 import '../features/terminal/terminal_feature.dart' show createSession, openSession, SessionList;
 import '../state/app_state.dart';
@@ -22,7 +23,6 @@ import 'input_mode.dart';
 import 'overview.dart';
 import 'palette.dart';
 import 'registry.dart';
-import 'widgets.dart';
 import 'window_frame.dart';
 import 'workspace.dart';
 import 'tab_layout.dart';
@@ -96,13 +96,14 @@ class _ShellState extends State<Shell> {
         body: '${widget.features.transfers.active} 个传输尚未完成。退出客户端会中断这些传输。点窗口的叉只隐藏到托盘，不会中断。', ok: '仍然退出');
       if (!ok || !mounted) return false;
     }
-    // Do not close any tab until every check passed: cancelling a later
-    // prompt must not destroy a buffer whose earlier prompt said discard.
+    // Hot exit: preserve dirty buffers in independent encrypted checkpoints.
+    // Explicit tab close still offers save/discard/cancel.
     for (final ws in _spaces.values.toList()) {
-      for (final tab in ws.tabs.toList()) {
-        if (tab.dirty.value && tab.confirmClose != null && !await tab.confirmClose!()) return false;
-        if (!mounted) return false;
+      if (!await ws.documents.flush()) {
+        Toast.show('未保存文档尚未写入恢复记录，请检查磁盘后重试退出', error: true);
+        return false;
       }
+      if (!mounted) return false;
     }
     for (final ws in _spaces.values.toList()) {
       if (!await ws.flushViews()) return false;
@@ -111,6 +112,9 @@ class _ShellState extends State<Shell> {
       if (!mounted || !await confirmDialog(context, title: '退出本机开发环境', body: '完全退出将结束本地终端、AI 和受管开发任务。隐藏到托盘则会继续运行。远程服务器任务不受影响。', ok: '结束本地任务并退出')) return false;
     }
     await app.localAgent.stop();
+    for (final ws in _spaces.values.toList()) {
+      if (!await ws.documents.flush()) return false;
+    }
     return true;
   }
 
@@ -325,6 +329,12 @@ class _ShellState extends State<Shell> {
   }
 
   Widget _layout(BuildContext context, Workspace ws, int mode, Ide ide) {
+    // Restore buffers even when disconnected or the file sidebar is hidden.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _spaces[ws.serverId] != ws) return;
+      ws.restoreFiles((f) => fileEditorTab(ws, root: f.root, path: f.path));
+      unawaited(ws.restoreRecovery((f) => fileEditorTab(ws, root: f.root, path: f.path)));
+    });
     final narrow = mode == 0;
     final side = _SideBar(ws: ws, features: widget.features, feature: _feature, onPickFeature: (f) => _pick(ws, f));
     final editor = RetainedPages(index: _spaces.values.toList().indexOf(ws), children: [

@@ -5,14 +5,13 @@
 import 'dart:async';
 
 import 'package:aurora_install/aurora_install.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../theme/ide_theme.dart';
 import '../ui/add_server.dart';
 import '../ui/upgrade_agent.dart';
 import 'editor_tab.dart';
 import 'registry.dart';
-import 'widgets.dart';
 import 'workspace.dart';
 
 EditorTab overviewTab(Workspace ws, Features features) => EditorTab(

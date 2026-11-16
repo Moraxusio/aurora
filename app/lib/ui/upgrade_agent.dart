@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
-import '../kernel/overlays.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../state/app_state.dart';
 import 'add_server.dart';

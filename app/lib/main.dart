@@ -1,11 +1,10 @@
 // Aurora 3 client (D-70). The window is the kernel's shell (lib/kernel); the
 // features (lib/features) plug into it (D-78). Windows desktop first (M1).
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import 'kernel/input_mode.dart';
 import 'kernel/registry.dart';
 import 'kernel/shell.dart';
-import 'kernel/widgets.dart';
 import 'kernel/desktop_lifecycle.dart';
 import 'kernel/window_frame.dart';
 import 'kernel/ui_diagnostics.dart';

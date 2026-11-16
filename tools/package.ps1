@@ -1,250 +1,165 @@
-# Builds the first-release folder (M1): the Windows client with the
-# aurora3-agent it installs, signed with the v3 release key (D-3, D-13).
-# Nothing is uploaded (G7.2).
-#
-#   powershell -File tools\package.ps1 -Version 3.0.0 [-Out dist] [-Key <release.key>]
-#
-# Layout of the output:
-#   Aurora-<version>\
-#     aurora.exe, flutter_windows.dll, aurora_tls.dll, data\   the client
-#     agent\amd64\  manifest.json, manifest.sig, aurora3-agent-<v>-linux-amd64
-#     agent\policy.json, policy.sig  signed upgrade policy
-#     local-agent\windows-amd64\  signed client-owned Windows backend
-#     LICENSES.txt  every third-party component and its licence
-#     README.txt
-# plus Aurora-<version>.zip and its SHA-256.
+# Full signed Windows client/backend bundle. Produces local artifacts only.
 param(
     [Parameter(Mandatory)][string]$Version,
     [string]$Out = $(if ($env:AURORA_RELEASE_OUT) { $env:AURORA_RELEASE_OUT } else { Join-Path (Split-Path -Parent $PSScriptRoot) 'dist' }),
-    # Release signing key (never commit it). Or set AURORA_RELEASE_KEY.
     [string]$Key = $env:AURORA_RELEASE_KEY,
-    [string]$Policy = ''
+    [string]$Policy = '',
+    [string]$NotesFile = '',
+    [switch]$NoArchive
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$go = 'go'
-$flutter = 'flutter'
-if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw "version must be MAJOR.MINOR.PATCH: $Version" }
+if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw 'Version must be MAJOR.MINOR.PATCH' }
 $parts = $Version.Split('.')
-if ([int]$parts[1] -gt 99 -or [int]$parts[2] -gt 99) { throw 'MINOR and PATCH must be 0-99 for the shared client build number' }
-$BuildNumber = [int]$parts[0] * 10000 + [int]$parts[1] * 100 + [int]$parts[2]
-if (-not $Key -or -not (Test-Path $Key)) { throw "release key not found: $Key" }
+if ([int]$parts[1] -gt 99 -or [int]$parts[2] -gt 99) { throw 'MINOR and PATCH must be 0-99' }
+$buildNumber = [int]$parts[0] * 10000 + [int]$parts[1] * 100 + [int]$parts[2]
+if (-not $Key -or -not (Test-Path -LiteralPath $Key -PathType Leaf)) { throw 'Release signing key not found' }
+$Key = (Resolve-Path -LiteralPath $Key).Path
+$Out = [IO.Path]::GetFullPath($Out)
 $dir = Join-Path $Out "Aurora-$Version"
-$zip = Join-Path $Out "Aurora-$Version.zip"
+$zip = "$dir.zip"
 foreach ($target in @($dir, $zip, "$zip.sha256")) {
-    if (Test-Path $target) { throw "$target exists; use another version (release artifacts are never overwritten)" }
+    if (Test-Path -LiteralPath $target) { throw "Artifact already exists: $target" }
 }
-$work = Join-Path $env:LOCALAPPDATA "Temp\aurora3\package-$Version"
-if (Test-Path $work) { Remove-Item $work -Recurse -Force }
-New-Item -ItemType Directory -Force $work, $dir | Out-Null
-
-# 1. The tmux bundle must be the pinned build (agent/tools/tmux/bundle.lock).
-$lock = Get-Content (Join-Path $repo 'agent\tools\tmux\bundle.lock') | Where-Object { $_ -match '^[0-9a-f]{64}\s' }
-foreach ($l in $lock) {
-    $want, $name = $l -split '\s+', 2
-    $file = Join-Path $repo "agent\internal\bundle\$name"
-    if ($name -eq 'tmux') {
-        # bundle.lock pins the unpacked binary; the bundle carries it gzipped
-        $gz = [IO.File]::OpenRead((Join-Path $repo 'agent\internal\bundle\tmux.gz'))
-        $z = New-Object IO.Compression.GZipStream($gz, [IO.Compression.CompressionMode]::Decompress)
-        $sha = [Security.Cryptography.SHA256]::Create()
-        $got = -join ($sha.ComputeHash($z) | ForEach-Object { $_.ToString('x2') })
-        $z.Close(); $gz.Close()
-    } else {
-        $sha = [Security.Cryptography.SHA256]::Create()
-        $got = -join ($sha.ComputeHash([IO.File]::ReadAllBytes($file)) | ForEach-Object { $_.ToString('x2') })
+if ($NotesFile) {
+    if (-not [IO.Path]::IsPathRooted($NotesFile)) { $NotesFile = Join-Path $repo $NotesFile }
+    if (-not (Test-Path -LiteralPath $NotesFile -PathType Leaf)) { throw 'Version notes not found' }
+}
+& (Join-Path $PSScriptRoot 'check-docs.ps1')
+function Get-BuildSources {
+    $files = & git -C $repo ls-files --cached --others --exclude-standard -- agent app/lib app/packages app/third_party app/windows app/assets app/tool app/test app/integration_test app/test_driver app/pubspec.yaml app/pubspec.lock app/AGENTS.md tools docs README.md AGENTS.md LICENSE NOTICE
+    if ($LASTEXITCODE) { throw 'Cannot enumerate build inputs' }
+    $hashes = [ordered]@{}
+    foreach ($file in ($files | Sort-Object -Unique)) {
+        $path = Join-Path $repo $file
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            $hashes[$file] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
     }
-    if ($got -ne $want) { throw "bundle $name is $got, bundle.lock says $want" }
+    return $hashes
 }
-Write-Output "tmux bundle matches bundle.lock"
+$sources = Get-BuildSources
+$sourceHead = (& git -C $repo rev-parse HEAD)
+if ($LASTEXITCODE) { throw 'Cannot identify build revision' }
+$sourceStatus = @(& git -C $repo status --porcelain)
+if ($LASTEXITCODE) { throw 'Cannot identify working tree state' }
 
-# 2. The agent, signed.
-$env:GOTOOLCHAIN = 'local'; $env:GOPROXY = 'off'; $env:CGO_ENABLED = '0'
-Push-Location (Join-Path $repo 'agent')
+$work = Join-Path $env:LOCALAPPDATA ('Temp\opencode\aurora-package-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $work, $dir -Force | Out-Null
+$saved = @{}
+foreach ($name in @('GOTOOLCHAIN', 'GOPROXY', 'CGO_ENABLED', 'GOOS', 'GOARCH')) {
+    $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+}
 try {
-    & $go build -o "$work\aurora3-release.exe" ./cmd/aurora3-release
-    if ($LASTEXITCODE) { throw 'build aurora3-release' }
-    $env:GOOS = 'linux'; $env:GOARCH = 'amd64'
-    & $go build -trimpath -ldflags "-s -w -X main.Version=$Version" -o "$work\aurora3-agent" ./cmd/aurora3-agent
-    if ($LASTEXITCODE) { throw 'build aurora3-agent' }
+    $lock = Get-Content (Join-Path $repo 'agent\tools\tmux\bundle.lock') | Where-Object { $_ -match '^[0-9a-f]{64}\s' }
+    foreach ($line in $lock) {
+        $want, $name = $line -split '\s+', 2
+        $path = Join-Path $repo "agent\internal\bundle\$name"
+        if ($name -eq 'tmux') {
+            $input = [IO.File]::OpenRead("$path.gz")
+            $stream = New-Object IO.Compression.GZipStream($input, [IO.Compression.CompressionMode]::Decompress)
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try { $got = -join ($sha.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) }
+            finally { $sha.Dispose(); $stream.Dispose(); $input.Dispose() }
+        } else { $got = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+        if ($got -ne $want) { throw "tmux bundle mismatch: $name" }
+    }
+    Write-Output 'tmux bundle matches bundle.lock'
+    $env:GOTOOLCHAIN = 'local'
+    $env:GOPROXY = 'off'
+    $env:CGO_ENABLED = '0'
     $env:GOOS = 'windows'
-    & $go build -trimpath -ldflags "-H=windowsgui -s -w -X main.Version=$Version" -o "$work\aurora3-local-agent.exe" ./cmd/aurora3-local-agent
-    if ($LASTEXITCODE) { throw 'build Windows local agent' }
-} finally { Pop-Location; Remove-Item Env:GOOS, Env:GOARCH -ErrorAction SilentlyContinue }
-& "$work\aurora3-release.exe" sign --key $Key --version $Version --arch amd64 --file "$work\aurora3-agent" --out "$dir\agent\amd64"
-if ($LASTEXITCODE) { throw 'sign' }
-# Checked with the release key compiled into the tools, as the client does.
-& "$work\aurora3-release.exe" verify --dir "$dir\agent\amd64"
-if ($LASTEXITCODE) { throw 'verify' }
-& "$work\aurora3-release.exe" sign --key $Key --product aurora3-local-agent --os windows --version $Version --arch amd64 --file "$work\aurora3-local-agent.exe" --out "$dir\local-agent\windows-amd64"
-if ($LASTEXITCODE) { throw 'sign Windows local agent' }
-& "$work\aurora3-release.exe" verify --product aurora3-local-agent --dir "$dir\local-agent\windows-amd64"
-if ($LASTEXITCODE) { throw 'verify Windows local agent' }
-$policyArgs = @('policy', '--key', $Key, '--out', "$dir\agent")
-if ($Policy) { $policyArgs += @('--input', $Policy) }
-& "$work\aurora3-release.exe" @policyArgs
-if ($LASTEXITCODE) { throw 'sign upgrade policy' }
+    $env:GOARCH = 'amd64'
+    Push-Location (Join-Path $repo 'agent')
+    try {
+        & go build -o "$work\aurora3-release.exe" ./cmd/aurora3-release
+        if ($LASTEXITCODE) { throw 'Release helper build failed' }
+        $env:GOOS = 'linux'
+        & go build -trimpath -ldflags "-s -w -X main.Version=$Version" -o "$work\aurora3-agent" ./cmd/aurora3-agent
+        if ($LASTEXITCODE) { throw 'Linux agent build failed' }
+        $env:GOOS = 'windows'
+        & go build -trimpath -ldflags "-H=windowsgui -s -w -X main.Version=$Version" -o "$work\aurora3-local-agent.exe" ./cmd/aurora3-local-agent
+        if ($LASTEXITCODE) { throw 'Windows local agent build failed' }
+    } finally { Pop-Location }
+    & "$work\aurora3-release.exe" sign --key $Key --version $Version --arch amd64 --file "$work\aurora3-agent" --out "$dir\agent\amd64"
+    if ($LASTEXITCODE) { throw 'Linux agent signing failed' }
+    & "$work\aurora3-release.exe" verify --dir "$dir\agent\amd64"
+    if ($LASTEXITCODE) { throw 'Linux agent verification failed' }
+    & "$work\aurora3-release.exe" sign --key $Key --product aurora3-local-agent --os windows --version $Version --arch amd64 --file "$work\aurora3-local-agent.exe" --out "$dir\local-agent\windows-amd64"
+    if ($LASTEXITCODE) { throw 'Local agent signing failed' }
+    & "$work\aurora3-release.exe" verify --product aurora3-local-agent --dir "$dir\local-agent\windows-amd64"
+    if ($LASTEXITCODE) { throw 'Local agent verification failed' }
+    $policyArgs = @('policy', '--key', $Key, '--out', "$dir\agent")
+    if ($Policy) { $policyArgs += @('--input', $Policy) }
+    & "$work\aurora3-release.exe" @policyArgs
+    if ($LASTEXITCODE) { throw 'Upgrade policy signing failed' }
 
-# 3. The client.
-Push-Location (Join-Path $repo 'app')
-try {
-    & $flutter build windows --release --target=lib/main.dart "--build-name=$Version" "--build-number=$BuildNumber"
-    if ($LASTEXITCODE) { throw 'flutter build' }
-} finally { Pop-Location }
-Copy-Item (Join-Path $repo 'app\build\windows\x64\runner\Release\*') $dir -Recurse
+    Push-Location (Join-Path $repo 'app')
+    try {
+        & dart tool/ui_contract.dart
+        if ($LASTEXITCODE) { throw 'Aurora GUI contract failed' }
+        & flutter build windows --no-pub --release --target=lib/main.dart "--build-name=$Version" "--build-number=$buildNumber"
+        if ($LASTEXITCODE) { throw 'Windows client build failed' }
+    } finally { Pop-Location }
+    Copy-Item (Join-Path $repo 'app\build\windows\x64\runner\Release\*') $dir -Recurse
+    & powershell -NoProfile -File (Join-Path $PSScriptRoot 'licenses.ps1') -Out "$dir\LICENSES.txt"
+    if ($LASTEXITCODE) { throw 'License collection failed' }
+    & (Join-Path $PSScriptRoot 'copy-package-docs.ps1') -Destination $dir -NotesFile $NotesFile
+    @"
+Aurora $Version — Windows x64
 
-# 4. Licences: every third-party component in the folder.
-& powershell -NoProfile -File (Join-Path $PSScriptRoot 'licenses.ps1') -Out "$dir\LICENSES.txt"
-if ($LASTEXITCODE) { throw 'licenses' }
-# Aurora's own licence (Apache-2.0 asks for the text and the NOTICE with every copy).
-Copy-Item (Join-Path $repo 'LICENSE'), (Join-Path $repo 'NOTICE') $dir
+运行 aurora.exe，选择“打开本机文件夹”开始。本地 agent 随客户端运行；
+点窗口关闭会隐藏到托盘，托盘“退出”完整结束本地受管终端和任务。
+远程开发通过“添加服务器”安装／连接 Linux amd64 agent。
 
-# 5. README.
-$m = Get-Content "$dir\agent\amd64\manifest.json" -Raw | ConvertFrom-Json
-@"
-Aurora $Version (Windows)
+文档入口：docs\README.md
+开始使用：docs\guides\getting-started.md
+开发工具：docs\guides\development-tools.md
+AI 协作：docs\guides\ai.md
+能力边界：docs\reference\compatibility.md
+本次变更：CHANGES.md（指定版本说明时提供）
 
-运行 aurora.exe。Windows 可直接打开本机文件夹，无需服务器或管理员安装。
-本地 agent 随客户端启动，完全退出客户端时结束其受管终端和任务，不提供 tmux 持久会话。
-优先使用已安装的 pwsh，否则回退 Windows PowerShell；使用用户本机开发环境与代理。
-远程开发仍可“添加服务器”，通过 SSH 安装 Linux agent，之后直接加密连接。
-
-- 支持的服务器：Linux x86-64（amd64），需要 systemd。
-- 服务器上只使用 v3 的名字：/usr/local/bin/aurora3-agent、aurora3-agent.service、
-  /etc/aurora3、/var/lib/aurora3，端口 17710。已有的 Aurora 2（aurora-agent）不受影响。
-- 保存的服务器和密码在 %LOCALAPPDATA%\Aurora3\profile.bin，用 Windows DPAPI 加密，
-  只有当前 Windows 用户能打开。
-
-本次更新（$Version）：
-- AI read 可读取工作区图片／PDF 并传给模型，支持 Chat、Responses 和 Anthropic 三种协议；
-  历史只保存不可变附件引用，切换到禁用媒体的模型时明确省略历史媒体。
-- 全局工具默认值与逐模型覆盖统一生效，输入接收时冻结能力、模型、权限与思考配置；
-  思考强度支持 high、max 等自由输入和档位映射，未知自定义值不会静默降级。
-- 新增多文件 apply_patch：新增、更新、删除及移动；逐文件批准、提交前重验、失败回滚。
-  write／edit 共用提交锁和原子写入，工具参数在执行前校验。
-- 新增结构化 question，支持单选、多选、自定义答案和取消；提交失败保留答案并可重试。
-  每个工具结果单独持久化，停止／重启后恢复，不自动重放结果未知的副作用。
-- grep／glob 有界遍历与输出，遵守逐文件权限；grep 支持字面文本、大小写、隐藏文件与上限。
-- AI 设置收敛为连接、模型、工具与权限、对话四页，网络出口收进连接页。
-  查看模型与设为默认分开；会话模型和思考强度先选择再应用，关闭取消。
-- 宽窄输入区、快捷命令和菜单共用操作逻辑；上下文详情按需实时弹出。
-  工具媒体惰性加载，PDF 附件打开实际阅读器。
-- 保活面板使用局部浮层与独立语义边界，隐藏时提示气泡一并退出原生无障碍树；
-  保留文档、草稿、撤销／重做和终端状态，修复提示气泡残留引发的 AXTree 错误。
-- 本轮工具链与显式能力设置需要 agent $Version；Windows 本地 agent 随包提供，
-  Linux 远程 agent 由用户确认升级。保留 OpenCode 兼容协议、请求标识与原有加密凭据。
-此前 AI 执行与工作台更新：
-- 审批摘要可查看完整命令／diff，提交时禁用决定按钮，失败保留并重试；
-  会话授权可查看和撤销，权限规则支持项目绑定、编辑和排序。
-- 补充输入在下一步骤投递；排队输入在当前任务结束后逐条投递，各自保持模型与权限。
-  待发送输入可查看、移除或改为补充，停止／重启 agent 后保留，重新发送时使用当前选择。
-- 未发送的会话选择和思考强度尚不跨客户端重启保存；已有 runtime 可恢复提供商和模型。
-- 新会话工作目录可从项目、agent 根目录或本机／服务器浏览器选择；开始后固定并明确显示。
-- 工作台共享保活视口，隐藏区域暂停刷新；系统／GPU 使用独立快照，详情按需构建、
-  长进程列表惰性显示。保留未保存文档、撤销／重做、固定标签、终端连接与异步关闭保护。
-- PDF 支持选择／手形、空格临时拖动、Ctrl+滚轮缩放、封面独立双页、阅读前进／后退、
-  会话标记及搜索选项；按文档身份保留本次客户端会话内的阅读位置和设置。
-- AI 顶部工作导航可切换主对话、子代理与 Shell 输出，完成任务仍可查看；分别保留草稿、
-  附件、连接和阅读锚点，从历史子会话可返回上级。长输出有独立复制及回到最新入口。
-- 菜单、弹窗、选择器、提示及 AI 表面统一深浅色、间距、6px 圆角和动效；菜单支持键盘、
-  勾选、窗口边缘避让与减少动画，后续操作等待退场完成，缩放后沿用统一坐标定位。
-- 本地 GUI 异常记录有界编号／类型／代码栈，命令面板可“复制界面诊断”；不记录正文、
-  配置或网络参数。原始 GPU 灰屏的具体异常尚未捕获，不能宣称其根因已确定修复。
-此前文件树、监控与代理更新：
-- 文件树长名称保留扩展名，深层缩进封顶，大小／时间对齐并适应侧栏宽度；增加活动文件标记、
-  定位当前文件及折叠全部，保留惰性列表、原文件操作与文档状态。
-- 本地 agent 提供 CPU、物理／提交内存、固定磁盘、进程监控和 Aurora 节点代理服务。
-  服务开关与节点在下次启动恢复，完全退出关闭代理监听和受管终端。
-- 新本地终端与 AI 提供商可选本机代理、Aurora agent 配置节点或直连；节点不可用明确报错。
-  直连清除继承代理变量；重开同名终端保持原出口，旧提供商配置和 API Key/OAuth 保留。
-- Linux 服务器与 Windows 本机支持 NVIDIA 多卡详情、显存／利用率趋势、温度、功耗、频率、
-  PCIe、ECC、MIG 与进程。需要驱动和 nvidia-smi，未知指标显示“—”；硬件兼容性仍待实机验证。
-此前 GUI 修复：
-- 修复 80–150% 整体缩放下的点击死区和右键菜单位置，统一绘制、命中及浮层坐标。
-  放大后的通知宽度、新建终端/AI 设置/快速打开命令弹窗正常。
-- 终端优先处理工作台保留快捷键，保留 Ctrl+C 和粘贴；文件预览占满正文且隐藏编辑器
-  不再抢焦点；从历史外部打开 AI 对话正确切回，同时保留旧草稿和未保存文档。
-- 修复设置/标签宽度滑块触发的 Windows 无障碍语义树错误，继续保留朗读与数值提示。
-此前工作台更新：
-- Windows 界面减法：文件工作区、新建、刷新和选项合为单条工具栏，目录树根节点单行，
-  文档标签下直接进入正文；AI 目录/选项合入消息导航，输入控制一行，模型与用量详情按需展开。
-- 侧栏跟手：所有分隔线按按下后的指针总位移和缩放比例定位，同帧高频事件不再丢位移，
-  第一像素响应，越界回拖不漂移；左右侧栏、终端、文档分组和纵向标签使用同一机制。
-- AI 历史在原侧栏切换，新建入口合并到原标题栏；中等窗口文件侧栏直接并排展开。
-  移除重复标题栏入口，活动栏齿轮或 Ctrl+, 直接打开设置。
-- 文件、终端和 AI 字号 9–28 实时预览，整体缩放 80–150%；按字段合并并延迟保存，
-  保留未保存文字、撤销记录、终端连接、AI 草稿、阅读位置和异步关闭保护。
-- 拖放显示五向停靠标记与边缘预览，松手才提交，Escape 可取消；延续单文档单视图与最多四组。
-既有功能：
-- 三区工作台：文档网格在中间，AI 对话独立放到右侧，终端及会话列表在底部，不替换文件树。
-  各区域独立维护活动项、焦点及保活宿主；隐藏、展开、缩放不清空未保存文字、终端连接或 AI 草稿。
-- 重新设计分屏与拖放：按钮及快捷键新建空视图，拖放才移动文档；正文中央移入、外侧 10% 拆分。
-  先预览、松手提交，Escape 取消后可重新拖动；唯一标签不能拆到自己，跨组最后标签不留下空旧组。
-  小幅缩放先压缩网格，真正窄屏才切单视图；正文独立裁剪，布局预设不重新分配标签。
-- AI 固定消息导航：上一条、下一条、消息锚点列表、回到最新；Alt+上下导航、Ctrl+End 回最新，
-  Ctrl+Alt+I 聚焦/隐藏 AI，Ctrl+1-4 返回文档；AI 放大后切换终端会先退出 AI 放大。
-- AI 缩放保持可见文字的阅读位置，流式输出和后台同步不抢回底部，不排队自动滚动动画。
-  活动计划默认一行，全部完成/取消后自动退出固定区域，不擅自切换 Build/Plan 或批准策略。
-  新建对话不删除旧草稿，保存后从历史打开复用原宿主，重命名和删除也关联同一对话。
-- AI 与终端均不参与文档分组、拖放或批量关闭；额外只记忆 AI 宽度与终端高度，不保存对话 ID、
-  输入或未保存正文。Ctrl+J 显示/隐藏终端，Ctrl+反引号聚焦，Ctrl+Shift+反引号新建。
-  异步连接不抢文件/弹窗焦点，旧连接结果不误关重开的视图；长期原生拖放、多屏 DPI、触摸及真机仍待实测。
-- 不新增依赖，原加密 API Key/OAuth、服务器和项目文件布局不迁移、不重置，保留 OpenCode MIT 署名。
-- Windows 可直接打开本机文件夹，使用本地 PowerShell、Git 和 AI，无需远程服务器。
-  本地 agent 随客户端更新；隐藏到托盘继续运行，完全退出结束受管任务，不提供 tmux 持久会话。
-- AI 长历史改为分块加载；工作面板显示子代理、shell 输出和代理来源，状态流可恢复。
-  提供商设置支持手动添加/搜索模型，拉取与手动模型合并，可选择本机或当前 agent 网络。
-  继续保留原加密配置、API Key 和 OAuth；首次增加本机入口前备份原加密 profile。
-- OpenAI / ChatGPT 设备码授权默认走本机网络/系统代理，可切换服务器出口并重试。
-  本机刷新不把 refresh 发给 agent；模型请求由当前本地 / 远程 agent 发出。获取设备码时的 403
-  不等于订阅无效，更换授权出口不保证解决所有上游限制。Windows PAC-only 暂不解析。
-- AI 输入框支持 Ctrl+V/菜单粘贴图片和复制的文件、本机选文件及服务器文件浏览。
-  支持 PNG/JPEG/GIF/WebP、PDF、UTF-8 文本/代码；单件 8 MiB、文本 256 KiB，
-  每条最多 8 件且合计 20 MiB。粘贴不上传，发送才分块上传；图片/PDF 需要模型支持。
-- 附件明文保留在当前 agent 的 AI 私有目录用于历史重放，库限额 512 MiB，不写工作目录；
-  删除会话保护共享引用。发送未成功或回退形成的孤儿附件尚无自动清理。
-- 新会话工作目录使用项目/根目录下拉和面包屑浏览，不再手输；已有会话目录固定。
-- 正文默认 15 px，支持持久化字号、复制回答、惰性历史及流式合帧，读历史不强制滚底，
-  中文组词时 Enter 不发送。上下文估算、累计用量、实际模型与下一次选择仍分开显示。
-- 继续复用 OpenCode（MIT）的设备码、Codex HTTP SSE 与协议实现；大 ChatGPT 请求
-  使用 zstd。尚未移植 WebSocket、browser callback 或 token-sharing。
-- 自动化测试与宽屏/手机组件截图通过；真实 ChatGPT 授权/对话、Windows 原生剪贴板
-  和 Android 真机尚未验证。令牌仍加密保存在本机，长任务到期需客户端下次调用刷新。
-- 远程完整 GPU 详情和 AI 网络出口选择要求 agent 3.19.0；随包 agent 统一为 $Version，由用户确认后升级。
-  旧 agent 保留基础 GPU 显示和旧代理行为，本地 agent 随客户端提供。
-代理功能：
-- 在“代理”页添加 Clash 订阅 URL，或粘贴节点链接；本机和远程工作区分别选择节点。
-  本地新终端选择“网络出口”；远程终端继续勾选“这个会话走代理”。远程 Git 跟随代理服务开关，
-  本地 Git 使用本机环境／系统代理。
-- 代理在所选工作区的本地／远程 agent 上运行，远程出口流量不经客户端转发。
-- 已支持 Trojan（TCP/TLS）、Hysteria2（含 Salamander）、VLESS 和 VMess AEAD
-  （TCP 或 WebSocket，可加 TLS）。Reality、XTLS Vision、gRPC、h2、XHTTP、端口跳跃、
-  旧版 VMess、Shadowsocks、TUIC、AnyTLS 等尚不支持；节点会留在列表并说明原因。
-- 订阅 URL 只加密存放在客户端；选中节点的凭据会发送给所选 agent，agent 重启后仍可使用。
-  “测速”也由所选 agent 执行，需要向它临时发送被测节点的参数。
-- 订阅更新会在连接恢复后同步已变化的节点；离线变化会保存在本机加密 profile 中。
-  代理变量保证在 bash 启动文件之后生效；其它 shell 的启动脚本仍可能覆盖变量。
-  已有会话不会因勾选而改成代理会话。
-- 连接服务器后会提示可用的 agent 更新，但只有用户明确确认才会执行。新 agent
-  通过当前加密连接接收签名版本，等待文件传输结束和 30 秒安静窗口后由独立进程
-  切换；失败会自动回滚。旧 agent 会打开 SSH 兼容升级向导，不会静默上传。
-- 3.2.0 及更早版本没有直连升级，需要使用 SSH 兼容向导；3.1.1 及更早版本也没有代理服务。
-
-内置 agent：$($m.file)
-  版本 $($m.version)，SHA-256 $($m.sha256)
-  由发布密钥 $($m.key_id) 签名（agent\amd64\manifest.sig）。
-
-本程序使用 Apache License 2.0（见 LICENSE 和 NOTICE）。第三方组件及许可证见 LICENSES.txt。
-"@ | Set-Content -Encoding utf8 "$dir\README.txt"
-
-# 6. Zip and hash.
-Compress-Archive -Path $dir -DestinationPath $zip
-$shaZip = [Security.Cryptography.SHA256]::Create()
-$fsZip = [IO.File]::OpenRead($zip)
-$h = -join ($shaZip.ComputeHash($fsZip) | ForEach-Object { $_.ToString('x2') })
-$fsZip.Close()
-"$h  Aurora-$Version.zip" | Set-Content -Encoding ascii "$zip.sha256"
-Remove-Item $work -Recurse -Force
-Write-Output "folder: $dir"
-Write-Output "zip:    $zip"
-Write-Output "sha256: $h"
+Windows 本地 agent、Linux amd64 agent 和客户端统一版本 $Version。
+两种 agent 和升级策略由发布密钥签名，客户端使用内置公钥验证。
+本脚本仅生成本地文件；签名 agent 不表示 Windows EXE 带有 Authenticode 签名。
+许可证：LICENSE、NOTICE、LICENSES.txt（保留 OpenCode MIT 署名）。
+"@ | Set-Content -LiteralPath "$dir\README.txt" -Encoding utf8
+    $after = Get-BuildSources
+    if ($sources.Count -ne $after.Count) { throw 'Build inputs changed during compilation' }
+    foreach ($file in $sources.Keys) {
+        if (-not $after.Contains($file) -or $sources[$file] -ne $after[$file]) { throw "Build input changed: $file" }
+    }
+    if ((& git -C $repo rev-parse HEAD) -ne $sourceHead -or
+        (@(& git -C $repo status --porcelain) -join "`n") -ne ($sourceStatus -join "`n")) {
+        throw 'Source revision or working tree state changed during compilation'
+    }
+    $sources | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$dir\SOURCE-HASHES.json" -Encoding utf8
+    $linux = Get-Content -LiteralPath "$dir\agent\amd64\manifest.json" -Raw | ConvertFrom-Json
+    $local = Get-Content -LiteralPath "$dir\local-agent\windows-amd64\manifest.json" -Raw | ConvertFrom-Json
+    [ordered]@{
+        version = $Version
+        channel = 'stable'
+        built_at_utc = [DateTime]::UtcNow.ToString('o')
+        source_head = $sourceHead
+        source_working_tree = $(if ($sourceStatus.Count) { 'uncommitted working tree' } else { 'clean' })
+        source_files_checked_before_and_after_build = $sources.Count
+        source_deleted_files = @(& git -C $repo diff --name-only --diff-filter=D)
+        client_aot_sha256 = (Get-FileHash -LiteralPath "$dir\data\app.so" -Algorithm SHA256).Hash.ToLowerInvariant()
+        agent_version = $Version
+        linux_agent_sha256 = $linux.sha256
+        local_agent_sha256 = $local.sha256
+        signing_key_id = $linux.key_id
+        document_entry = 'docs/README.md'
+    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$dir\BUILD-INFO.json" -Encoding utf8
+    if (-not $NoArchive) {
+        Compress-Archive -LiteralPath $dir -DestinationPath $zip
+        $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+        "$hash  Aurora-$Version.zip" | Set-Content -LiteralPath "$zip.sha256" -Encoding ascii
+        Write-Output "ZIP: $zip"
+        Write-Output "SHA256: $hash"
+    }
+    Write-Output "Folder: $dir"
+} finally {
+    foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
+    if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
+}

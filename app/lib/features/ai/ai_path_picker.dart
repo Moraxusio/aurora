@@ -1,6 +1,5 @@
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
-import '../../kernel/overlays.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../theme/ide_theme.dart';
 

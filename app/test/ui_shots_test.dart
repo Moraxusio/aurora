@@ -102,7 +102,7 @@ class ShotLink extends FileTreeLink {
             {'path': 'app/lib/theme/ide_theme.dart', 'x': 'M', 'y': '.'},
             {'path': 'app/lib/kernel/window_frame.dart', 'x': 'A', 'y': '.'},
             {'path': 'app/lib/features/monitor/monitor_view.dart', 'x': '.', 'y': 'M'},
-            {'path': 'docs/DESIGN.md', 'x': '.', 'y': 'M'},
+            {'path': 'docs/architecture/overview.md', 'x': '.', 'y': 'M'},
             {'path': 'app/test/ui_shots_test.dart', 'x': '?', 'y': '?'},
           ],
         };

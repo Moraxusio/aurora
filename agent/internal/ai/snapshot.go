@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"aurora3/internal/filetxn"
 )
 
 // SnapshotManager implements OpenCode's zero-pollution shadow-git snapshot system.
@@ -22,6 +24,71 @@ import (
 type SnapshotManager struct {
 	BaseDir string
 	mu      sync.Mutex
+	locks   map[string]*snapshotLease
+}
+
+// PlanRestore checks the current working file against the last AI-produced
+// snapshot when committed. Reading Git objects here never changes the worktree.
+func (m *SnapshotManager) PlanRestore(ctx context.Context, worktree string, first, last map[string]string) ([]filetxn.Change, error) {
+	if m == nil || m.BaseDir == "" {
+		return nil, fmt.Errorf("snapshot storage unavailable")
+	}
+	unlock := m.lock(worktree)
+	defer unlock()
+	gitDir, err := m.ensureRepo(ctx, worktree)
+	if err != nil {
+		return nil, err
+	}
+	read := func(tree, rel string) (filetxn.State, error) {
+		s := filetxn.State{UID: -1, GID: -1}
+		if tree == "" {
+			return s, fmt.Errorf("missing expected snapshot for %s", rel)
+		}
+		out, err := m.runGit(ctx, gitDir, worktree, nil, "--literal-pathspecs", "ls-tree", "-z", tree, "--", filepath.ToSlash(rel))
+		if err != nil {
+			return s, err
+		}
+		if len(out) == 0 {
+			return s, nil
+		}
+		meta, _, ok := strings.Cut(string(out), "\t")
+		fields := strings.Fields(meta)
+		if !ok || len(fields) != 3 || (fields[0] != "100644" && fields[0] != "100755") {
+			return s, fmt.Errorf("snapshot target is not a regular file: %s", rel)
+		}
+		sizeOut, err := m.runGit(ctx, gitDir, worktree, nil, "cat-file", "-s", fields[2])
+		if err != nil {
+			return s, err
+		}
+		size, err := strconv.ParseInt(strings.TrimSpace(string(sizeOut)), 10, 64)
+		if err != nil || size < 0 || size > filetxn.MaxFileBytes {
+			return s, fmt.Errorf("snapshot file exceeds transaction budget: %s", rel)
+		}
+		s.Data, err = m.runGit(ctx, gitDir, worktree, nil, "cat-file", "blob", fields[2])
+		s.Exists, s.Mode = true, 0o644
+		if fields[0] == "100755" {
+			s.Mode = 0o755
+		}
+		return s, err
+	}
+	var changes []filetxn.Change
+	for path, from := range first {
+		rel := filepath.Clean(filepath.FromSlash(path))
+		if rel == "." || !filepath.IsLocal(rel) {
+			return nil, fmt.Errorf("restore path escapes worktree: %s", path)
+		}
+		before, err := read(last[path], rel)
+		if err != nil {
+			return nil, err
+		}
+		after, err := read(from, rel)
+		if err != nil {
+			return nil, err
+		}
+		before.Mode = 0 // Git tracks executable only, not the complete disk mode.
+		changes = append(changes, filetxn.Change{Root: worktree, Path: rel, Before: before, After: after})
+	}
+	return changes, nil
 }
 
 func NewSnapshotManager(stateDir string) *SnapshotManager {
@@ -64,6 +131,13 @@ func (m *SnapshotManager) ensureRepo(ctx context.Context, worktree string) (stri
 }
 
 func (m *SnapshotManager) runGit(ctx context.Context, gitDir, worktree string, extraEnv []string, args ...string) ([]byte, error) {
+	out, truncated, err := m.runGitCapped(ctx, gitDir, worktree, extraEnv, filetxn.MaxFileBytes, args...)
+	if err == nil && truncated {
+		err = fmt.Errorf("git output exceeded %d bytes", filetxn.MaxFileBytes)
+	}
+	return out, err
+}
+func (m *SnapshotManager) runGitCapped(ctx context.Context, gitDir, worktree string, extraEnv []string, limit int, args ...string) ([]byte, bool, error) {
 	baseArgs := []string{"--git-dir=" + gitDir, "--work-tree=" + worktree}
 	baseArgs = append(baseArgs, args...)
 	cmd := quietCommandContext(ctx, "git", baseArgs...)
@@ -74,53 +148,38 @@ func (m *SnapshotManager) runGit(ctx context.Context, gitDir, worktree string, e
 	)
 	env = append(env, extraEnv...)
 	cmd.Env = env
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout, stderr := newSnapshotBuffer(limit), newSnapshotBuffer(16<<10)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git %s: %w (%s)", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return nil, stdout.truncated, fmt.Errorf("git %s: %w (%s)", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
-	return stdout.Bytes(), nil
+	return stdout.Bytes(), stdout.truncated, nil
 }
 
 // Capture records the current working tree into a content-addressed git tree SHA.
 // Best-effort: returns "" if git is missing or worktree is unsuitable (e.g. "/").
 func (m *SnapshotManager) Capture(ctx context.Context, worktree string) string {
+	tree, _ := m.CaptureChecked(ctx, worktree)
+	return tree
+}
+
+func (m *SnapshotManager) CaptureChecked(ctx context.Context, worktree string) (string, error) {
 	if m == nil || m.BaseDir == "" || worktree == "" || worktree == "/" {
-		return ""
+		return "", fmt.Errorf("此工作目录未启用快照")
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	unlock := m.lock(worktree)
+	defer unlock()
 
 	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	gitDir, err := m.ensureRepo(cctx, worktree)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	idxFile := filepath.Join(gitDir, "index.aurora")
-	env := []string{"GIT_INDEX_FILE=" + idxFile}
-
-	// Stage tracked + untracked (respecting .gitignore, skipping nested .git repos & giant binaries > 4 MiB via clean excludes)
-	// Using `git add --all --ignore-errors` on the shadow index.
-	_, err = m.runGit(cctx, gitDir, worktree, env,
-		"add", "--all", "--ignore-errors",
-		"--", ".",
-		":(exclude).git",
-		":(exclude)node_modules",
-		":(exclude).dart_tool",
-		":(exclude)build",
-		":(exclude)target",
-	)
-	if err != nil {
-		return ""
-	}
-	out, err := m.runGit(cctx, gitDir, worktree, env, "write-tree")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	tree, err := m.captureBounded(cctx, gitDir, worktree)
+	return tree, err
 }
 
 // Diff returns structured per-file diffs between two captured tree SHAs.
@@ -128,8 +187,8 @@ func (m *SnapshotManager) Diff(ctx context.Context, worktree, fromTree, toTree s
 	if m == nil || m.BaseDir == "" || fromTree == "" || toTree == "" || fromTree == toTree {
 		return nil, nil
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	unlock := m.lock(worktree)
+	defer unlock()
 
 	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -139,35 +198,30 @@ func (m *SnapshotManager) Diff(ctx context.Context, worktree, fromTree, toTree s
 		return nil, err
 	}
 
-	numstatOut, err := m.runGit(cctx, gitDir, worktree, nil, "diff-tree", "-r", "--numstat", "--no-renames", fromTree, toTree)
+	numstatOut, err := m.runGit(cctx, gitDir, worktree, nil, "diff-tree", "-r", "--numstat", "-z", "--no-renames", fromTree, toTree)
 	if err != nil {
 		return nil, err
 	}
-	statusOut, err := m.runGit(cctx, gitDir, worktree, nil, "diff-tree", "-r", "--name-status", "--no-renames", fromTree, toTree)
+	statusOut, err := m.runGit(cctx, gitDir, worktree, nil, "diff-tree", "-r", "--name-status", "-z", "--no-renames", fromTree, toTree)
 	if err != nil {
 		return nil, err
 	}
 
 	statusMap := map[string]string{}
-	for _, line := range strings.Split(strings.TrimSpace(string(statusOut)), "\n") {
-		if line == "" {
-			continue
+	statusFields := strings.Split(string(statusOut), "\x00")
+	for i := 0; i+1 < len(statusFields); i += 2 {
+		st := "modified"
+		switch statusFields[i] {
+		case "A":
+			st = "added"
+		case "D":
+			st = "deleted"
 		}
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) == 2 {
-			st := "modified"
-			switch parts[0] {
-			case "A":
-				st = "added"
-			case "D":
-				st = "deleted"
-			}
-			statusMap[parts[1]] = st
-		}
+		statusMap[statusFields[i+1]] = st
 	}
 
 	var diffs []FileDiff
-	for _, line := range strings.Split(strings.TrimSpace(string(numstatOut)), "\n") {
+	for _, line := range strings.Split(string(numstatOut), "\x00") {
 		if line == "" {
 			continue
 		}
@@ -182,20 +236,37 @@ func (m *SnapshotManager) Diff(ctx context.Context, worktree, fromTree, toTree s
 		if st == "" {
 			st = "modified"
 		}
-		var patch string
-		if pOut, err := m.runGit(cctx, gitDir, worktree, nil, "diff-tree", "-p", "--no-renames", "-U3", fromTree, toTree, "--", file); err == nil {
-			patch = string(pOut)
-			if len(patch) > 16*1024 {
-				patch = patch[:16*1024] + "\n...[diff truncated]"
-			}
-		}
 		diffs = append(diffs, FileDiff{
 			File:      file,
 			Additions: add,
 			Deletions: del,
 			Status:    st,
-			Patch:     patch,
 		})
+		if len(diffs) > 128 {
+			return nil, fmt.Errorf("快照差异超过 128 个文件事务预算")
+		}
+	}
+	// Same Git tree order as numstat; one bounded process supplies all patches.
+	patches, truncated, err := m.runGitCapped(cctx, gitDir, worktree, nil, 2<<20, "diff-tree", "-p", "--no-renames", "--no-ext-diff", "--no-textconv", "--no-color", "-U3", fromTree, toTree)
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(string(patches), "\ndiff --git ")
+	for i := range diffs {
+		patch := "...[diff omitted: output budget exceeded]"
+		if i < len(parts) && parts[i] != "" {
+			patch = parts[i]
+			if i > 0 {
+				patch = "diff --git " + patch
+			}
+			if len(patch) > 16<<10 {
+				patch = patch[:16<<10] + "\n...[diff truncated]"
+			}
+			if truncated && i == len(parts)-1 {
+				patch += "\n...[diff truncated]"
+			}
+		}
+		diffs[i].Patch = patch
 	}
 	return diffs, nil
 }
@@ -206,8 +277,8 @@ func (m *SnapshotManager) RestoreFiles(ctx context.Context, worktree string, fil
 	if m == nil || m.BaseDir == "" || len(fileToTree) == 0 {
 		return nil
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	unlock := m.lock(worktree)
+	defer unlock()
 
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -217,29 +288,42 @@ func (m *SnapshotManager) RestoreFiles(ctx context.Context, worktree string, fil
 		return err
 	}
 	cleanWorktree := filepath.Clean(worktree)
+	root, err := os.OpenRoot(cleanWorktree)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	// Share commit admission with write/edit/apply_patch. os.Root additionally
+	// prevents a replaced parent symlink from redirecting writes out of scope.
+	toolMutationMu.Lock()
+	defer toolMutationMu.Unlock()
+	if err := filetxn.CheckReady(); err != nil {
+		return err
+	}
 
 	for relFile, treeSHA := range fileToTree {
+		if err := cctx.Err(); err != nil {
+			return err
+		}
 		if treeSHA == "" {
 			continue
 		}
 		cleanRel := filepath.Clean(filepath.FromSlash(relFile))
-		if strings.HasPrefix(cleanRel, "..") || filepath.IsAbs(cleanRel) {
-			return fmt.Errorf("restore path escapes worktree: %s", relFile)
-		}
-		absTarget := filepath.Join(cleanWorktree, cleanRel)
-		if !strings.HasPrefix(absTarget, cleanWorktree+string(filepath.Separator)) && absTarget != cleanWorktree {
+		if cleanRel == "." || cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(filepath.Separator)) || filepath.IsAbs(cleanRel) {
 			return fmt.Errorf("restore path escapes worktree: %s", relFile)
 		}
 
 		// Check if the file existed in treeSHA
 		gitRel := filepath.ToSlash(cleanRel)
-		lsOut, err := m.runGit(cctx, gitDir, worktree, nil, "ls-tree", treeSHA, "--", gitRel)
+		lsOut, err := m.runGit(cctx, gitDir, worktree, nil, "--literal-pathspecs", "ls-tree", treeSHA, "--", gitRel)
 		if err != nil {
 			return err
 		}
 		if len(bytes.TrimSpace(lsOut)) == 0 {
 			// File was newly created after treeSHA -> remove it
-			_ = os.Remove(absTarget)
+			if err := root.Remove(cleanRel); err != nil && !os.IsNotExist(err) {
+				return err
+			}
 			continue
 		}
 		// File existed in treeSHA -> extract blob directly so we don't clobber unrelated index entries
@@ -247,17 +331,45 @@ func (m *SnapshotManager) RestoreFiles(ctx context.Context, worktree string, fil
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(absTarget), 0o755); err != nil {
+		if err := root.MkdirAll(filepath.Dir(cleanRel), 0o755); err != nil {
 			return err
 		}
 		mode := os.FileMode(0o644)
 		fields := strings.Fields(string(lsOut))
-		if len(fields) > 0 && strings.HasSuffix(fields[0], "755") {
+		if len(fields) == 0 || (fields[0] != "100644" && fields[0] != "100755") {
+			return fmt.Errorf("restore requires a regular file in snapshot: %s", relFile)
+		}
+		if fields[0] == "100755" {
 			mode = 0o755
 		}
-		if err := os.WriteFile(absTarget, blobOut, mode); err != nil {
+		if err := restoreAtomic(root, cleanRel, blobOut, mode); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// Rename replaces the final directory entry rather than following a symlink.
+// Every operation uses the same traversal-safe root, including temp cleanup.
+func restoreAtomic(root *os.Root, rel string, data []byte, mode os.FileMode) error {
+	tmp := filepath.Join(filepath.Dir(rel), ".aurora-ai-"+NewID("restore"))
+	f, err := root.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	defer root.Remove(tmp)
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Chmod(mode)
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	return root.Rename(tmp, rel)
 }

@@ -1,0 +1,12 @@
+goos: windows
+goarch: amd64
+pkg: aurora3/internal/ai
+cpu: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+BenchmarkAuditPersistSession/messages_100-8         	      98	   6189314 ns/op	   90289 B/op	     262 allocs/op
+BenchmarkAuditPersistSession/messages_100-8         	      84	   6044915 ns/op	   74338 B/op	     261 allocs/op
+BenchmarkAuditPersistSession/messages_100-8         	      87	   6245977 ns/op	   93145 B/op	     262 allocs/op
+BenchmarkAuditPersistSession/messages_1000-8        	      68	   7667743 ns/op	  843364 B/op	    2063 allocs/op
+BenchmarkAuditPersistSession/messages_1000-8        	      70	   7980183 ns/op	  835860 B/op	    2062 allocs/op
+BenchmarkAuditPersistSession/messages_1000-8        	      79	   7633705 ns/op	  807231 B/op	    2063 allocs/op
+PASS
+ok  	aurora3/internal/ai	5.051s

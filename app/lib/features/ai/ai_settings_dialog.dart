@@ -4,10 +4,9 @@ import 'dart:convert';
 
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 
-import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../state/app_state.dart';
 import '../../theme/ide_theme.dart';

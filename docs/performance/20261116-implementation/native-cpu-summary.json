@@ -1,0 +1,189 @@
+{
+  "diagnostic_only": true,
+  "frame_budget_enforced": false,
+  "sample_count": 525,
+  "sample_period_us": 1000,
+  "extent_us": 2010899,
+  "top_functions": [
+    {
+      "inclusiveTicks": 323,
+      "exclusiveTicks": 1,
+      "name": ".[Stub] InvokeDartCode",
+      "resolvedUrl": ""
+    },
+    {
+      "inclusiveTicks": 289,
+      "exclusiveTicks": 2,
+      "name": "_CustomZone.run",
+      "resolvedUrl": "org-dartlang-sdk:///flutter/third_party/dart/sdk/lib/async/zone.dart"
+    },
+    {
+      "inclusiveTicks": 288,
+      "exclusiveTicks": 0,
+      "name": "_CustomZone.runGuarded",
+      "resolvedUrl": "org-dartlang-sdk:///flutter/third_party/dart/sdk/lib/async/zone.dart"
+    },
+    {
+      "inclusiveTicks": 287,
+      "exclusiveTicks": 0,
+      "name": "dart.async._rootRun",
+      "resolvedUrl": "org-dartlang-sdk:///flutter/third_party/dart/sdk/lib/async/zone_root.dart"
+    },
+    {
+      "inclusiveTicks": 275,
+      "exclusiveTicks": 1,
+      "name": "LiveTestWidgetsFlutterBinding.handleDrawFrame",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter_test/lib/src/binding.dart"
+    },
+    {
+      "inclusiveTicks": 275,
+      "exclusiveTicks": 1,
+      "name": "_MixinApplication7&BindingBase&SchedulerBinding._invokeFrameCallback",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/scheduler/binding.dart"
+    },
+    {
+      "inclusiveTicks": 274,
+      "exclusiveTicks": 2,
+      "name": "dart.ui._drawFrame",
+      "resolvedUrl": "org-dartlang-sdk:///flutter/lib/ui/hooks.dart"
+    },
+    {
+      "inclusiveTicks": 274,
+      "exclusiveTicks": 0,
+      "name": "_MixinApplication7&BindingBase&SchedulerBinding._handleDrawFrame",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/scheduler/binding.dart"
+    },
+    {
+      "inclusiveTicks": 273,
+      "exclusiveTicks": 0,
+      "name": "dart.ui._invoke",
+      "resolvedUrl": "org-dartlang-sdk:///flutter/lib/ui/hooks.dart"
+    },
+    {
+      "inclusiveTicks": 273,
+      "exclusiveTicks": 1,
+      "name": "_MixinApplication7&BindingBase&SchedulerBinding.handleDrawFrame",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/scheduler/binding.dart"
+    },
+    {
+      "inclusiveTicks": 273,
+      "exclusiveTicks": 0,
+      "name": "_MixinApplication17&BindingBase&SchedulerBinding&ServicesBinding&GestureBinding&SemanticsBinding&RendererBinding.drawFrame",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/rendering/binding.dart"
+    },
+    {
+      "inclusiveTicks": 272,
+      "exclusiveTicks": 0,
+      "name": "PlatformDispatcher._drawFrame",
+      "resolvedUrl": "org-dartlang-sdk:///flutter/lib/ui/platform_dispatcher.dart"
+    },
+    {
+      "inclusiveTicks": 271,
+      "exclusiveTicks": 0,
+      "name": "_MixinApplication21&BindingBase&SchedulerBinding&ServicesBinding&GestureBinding&SemanticsBinding&RendererBinding&PaintingBinding&WidgetsBinding.drawFrame",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/binding.dart"
+    },
+    {
+      "inclusiveTicks": 271,
+      "exclusiveTicks": 0,
+      "name": "_MixinApplication17&BindingBase&SchedulerBinding&ServicesBinding&GestureBinding&SemanticsBinding&RendererBinding._handlePersistentFrameCallback",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/rendering/binding.dart"
+    },
+    {
+      "inclusiveTicks": 171,
+      "exclusiveTicks": 5,
+      "name": "ComponentElement.performRebuild",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/framework.dart"
+    },
+    {
+      "inclusiveTicks": 171,
+      "exclusiveTicks": 0,
+      "name": "Element.rebuild",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/framework.dart"
+    },
+    {
+      "inclusiveTicks": 161,
+      "exclusiveTicks": 0,
+      "name": "Element.updateChild",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/framework.dart"
+    },
+    {
+      "inclusiveTicks": 160,
+      "exclusiveTicks": 0,
+      "name": "PipelineOwner.flushLayout",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/rendering/object.dart"
+    },
+    {
+      "inclusiveTicks": 157,
+      "exclusiveTicks": 0,
+      "name": "RenderObject._layoutWithoutResize",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/rendering/object.dart"
+    },
+    {
+      "inclusiveTicks": 156,
+      "exclusiveTicks": 0,
+      "name": "_RenderLayoutBuilder.performLayout",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/layout_builder.dart"
+    },
+    {
+      "inclusiveTicks": 155,
+      "exclusiveTicks": 0,
+      "name": "PipelineOwner._enableMutationsToDirtySubtrees",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/rendering/object.dart"
+    },
+    {
+      "inclusiveTicks": 154,
+      "exclusiveTicks": 0,
+      "name": "invokeLayoutCallback.<anonymous closure>",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/rendering/object.dart"
+    },
+    {
+      "inclusiveTicks": 154,
+      "exclusiveTicks": 1,
+      "name": "BuildOwner.buildScope",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/framework.dart"
+    },
+    {
+      "inclusiveTicks": 154,
+      "exclusiveTicks": 0,
+      "name": "RenderObject.invokeLayoutCallback",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/rendering/object.dart"
+    },
+    {
+      "inclusiveTicks": 152,
+      "exclusiveTicks": 0,
+      "name": "MultiChildRenderObjectElement.update",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/framework.dart"
+    },
+    {
+      "inclusiveTicks": 152,
+      "exclusiveTicks": 0,
+      "name": "StatelessElement.update",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/framework.dart"
+    },
+    {
+      "inclusiveTicks": 152,
+      "exclusiveTicks": 0,
+      "name": "_LayoutBuilderElement._rebuildWithConstraints",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/layout_builder.dart"
+    },
+    {
+      "inclusiveTicks": 152,
+      "exclusiveTicks": 0,
+      "name": "_MixinApplication293&RenderBox&RenderObjectWithChildMixin&RenderObjectWithLayoutCallbackMixin&RenderAbstractLayoutBuilderMixin.layoutCallback",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/widgets/layout_builder.dart"
+    },
+    {
+      "inclusiveTicks": 151,
+      "exclusiveTicks": 0,
+      "name": "_MixinApplication292&RenderBox&RenderObjectWithChildMixin&RenderObjectWithLayoutCallbackMixin.runLayoutCallback",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/rendering/object.dart"
+    },
+    {
+      "inclusiveTicks": 151,
+      "exclusiveTicks": 0,
+      "name": "runLayoutCallback.<anonymous closure>",
+      "resolvedUrl": "file:///C:/dev/VPS/flutter/packages/flutter/lib/src/rendering/object.dart"
+    }
+  ]
+}

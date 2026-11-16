@@ -10,7 +10,7 @@ import 'dart:async';
 
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora_profile/aurora_profile.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:re_highlight/languages/bash.dart';
@@ -39,12 +39,18 @@ import 'package:re_highlight/styles/github.dart';
 import 'package:re_highlight/styles/vs2015.dart';
 
 import '../../kernel/editor_tab.dart';
-import '../../kernel/widgets.dart';
+import '../../kernel/document_model.dart';
+import '../../kernel/ai_edits.dart';
+import '../ai/ai_edit_review.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'file_kind.dart';
 import 'file_preview.dart';
 import 'file_viewers.dart';
+import 'document_merge.dart';
+import 'text_modes.dart';
+import '../development/language_actions.dart';
+import '../development/debug_panel.dart';
 
 /// The highlighter language for a file name, or null for plain text.
 ({String name, CodeHighlightThemeMode mode})? languageFor(String file) {
@@ -52,24 +58,47 @@ import 'file_viewers.dart';
   final dot = base.lastIndexOf('.');
   final ext = dot < 0 ? '' : base.substring(dot + 1);
   CodeHighlightThemeMode m(mode) => CodeHighlightThemeMode(mode: mode);
-  if (base == 'dockerfile' || base.startsWith('dockerfile.')) return (name: 'dockerfile', mode: m(langDockerfile));
-  if (base == 'makefile' || base == 'gnumakefile' || ext == 'mk') return (name: 'makefile', mode: m(langMakefile));
-  if (base == 'nginx.conf' || (ext == 'conf' && file.contains('nginx'))) return (name: 'nginx', mode: m(langNginx));
-  if (const {'.bashrc', '.profile', '.bash_profile', '.zshrc', '.bash_aliases'}.contains(base)) return (name: 'bash', mode: m(langBash));
+  if (base == 'dockerfile' || base.startsWith('dockerfile.'))
+    return (name: 'dockerfile', mode: m(langDockerfile));
+  if (base == 'makefile' || base == 'gnumakefile' || ext == 'mk')
+    return (name: 'makefile', mode: m(langMakefile));
+  if (base == 'nginx.conf' || (ext == 'conf' && file.contains('nginx')))
+    return (name: 'nginx', mode: m(langNginx));
+  if (const {
+    '.bashrc',
+    '.profile',
+    '.bash_profile',
+    '.zshrc',
+    '.bash_aliases',
+  }.contains(base))
+    return (name: 'bash', mode: m(langBash));
   return switch (ext) {
     'sh' || 'bash' || 'zsh' || 'env' => (name: 'bash', mode: m(langBash)),
     'py' || 'pyw' => (name: 'python', mode: m(langPython)),
     'go' => (name: 'go', mode: m(langGo)),
     'dart' => (name: 'dart', mode: m(langDart)),
-    'js' || 'mjs' || 'cjs' || 'jsx' => (name: 'javascript', mode: m(langJavascript)),
+    'js' ||
+    'mjs' ||
+    'cjs' ||
+    'jsx' => (name: 'javascript', mode: m(langJavascript)),
     'ts' || 'tsx' => (name: 'typescript', mode: m(langTypescript)),
     'json' || 'jsonc' => (name: 'json', mode: m(langJson)),
     'yml' || 'yaml' => (name: 'yaml', mode: m(langYaml)),
     'md' || 'markdown' => (name: 'markdown', mode: m(langMarkdown)),
-    'html' || 'htm' || 'xml' || 'svg' || 'xhtml' => (name: 'xml', mode: m(langXml)),
+    'html' ||
+    'htm' ||
+    'xml' ||
+    'svg' ||
+    'xhtml' => (name: 'xml', mode: m(langXml)),
     'css' || 'scss' => (name: 'css', mode: m(langCss)),
     'sql' => (name: 'sql', mode: m(langSql)),
-    'ini' || 'cfg' || 'toml' || 'service' || 'timer' || 'socket' || 'desktop' => (name: 'ini', mode: m(langIni)),
+    'ini' ||
+    'cfg' ||
+    'toml' ||
+    'service' ||
+    'timer' ||
+    'socket' ||
+    'desktop' => (name: 'ini', mode: m(langIni)),
     'conf' || 'properties' => (name: 'properties', mode: m(langProperties)),
     'c' || 'h' => (name: 'c', mode: m(langC)),
     'cc' || 'cpp' || 'cxx' || 'hpp' || 'hh' => (name: 'cpp', mode: m(langCpp)),
@@ -82,7 +111,13 @@ import 'file_viewers.dart';
 
 /// The tab for [path] under [root]. The editor's state is reached through a
 /// key so closing the tab can ask about unsaved changes.
-EditorTab fileEditorTab(Workspace ws, {required String root, required String path, int? line, int col = 1}) {
+EditorTab fileEditorTab(
+  Workspace ws, {
+  required String root,
+  required String path,
+  int? line,
+  int col = 1,
+}) {
   path = WorkspacePath.normalize(path);
   final id = 'file:$root:$path';
   final title = path.split('/').last;
@@ -91,16 +126,49 @@ EditorTab fileEditorTab(Workspace ws, {required String root, required String pat
   final kind = kindOf(path);
   if (kind != FileKind.text) {
     final (icon, view) = switch (kind) {
-      FileKind.image => (Icons.image_outlined, ImageViewer(ws: ws, root: root, path: path) as Widget),
-      FileKind.pdf => (Icons.picture_as_pdf_outlined, PdfFileViewer(ws: ws, root: root, path: path)),
-      FileKind.video => (Icons.movie_outlined, MediaUnsupported(ws: ws, root: root, path: path, kind: kind)),
-      _ => (Icons.audiotrack_outlined, MediaUnsupported(ws: ws, root: root, path: path, kind: kind)),
+      FileKind.image => (
+        Icons.image_outlined,
+        ImageViewer(ws: ws, root: root, path: path) as Widget,
+      ),
+      FileKind.pdf => (
+        Icons.picture_as_pdf_outlined,
+        PdfFileViewer(ws: ws, root: root, path: path),
+      ),
+      FileKind.video => (
+        Icons.movie_outlined,
+        MediaUnsupported(ws: ws, root: root, path: path, kind: kind),
+      ),
+      _ => (
+        Icons.audiotrack_outlined,
+        MediaUnsupported(ws: ws, root: root, path: path, kind: kind),
+      ),
     };
-    return EditorTab(id: id, title: title, icon: icon, tooltip: path, builder: (_) => view, file: file);
+    return EditorTab(
+      id: id,
+      title: title,
+      icon: icon,
+      tooltip: path,
+      builder: (_) => view,
+      file: file,
+    );
   }
   final key = GlobalKey<FileEditorState>();
-  final view = FileEditor(key: key, ws: ws, root: root, path: path, line: line, col: col);
-  final tab = EditorTab(id: id, title: title, icon: Icons.description_outlined, tooltip: path, builder: (_) => view, file: file);
+  final view = FileEditor(
+    key: key,
+    ws: ws,
+    root: root,
+    path: path,
+    line: line,
+    col: col,
+  );
+  final tab = EditorTab(
+    id: id,
+    title: title,
+    icon: Icons.description_outlined,
+    tooltip: path,
+    builder: (_) => view,
+    file: file,
+  );
   tab.confirmClose = () async {
     final st = key.currentState;
     if (st == null || !st.dirty) return true;
@@ -112,50 +180,137 @@ EditorTab fileEditorTab(Workspace ws, {required String root, required String pat
 
 /// Opens [root]:[path] and, for a text file, puts the cursor on [line] and
 /// [col] (1-based). Works whether or not the file is already open.
-void openFileAt(Workspace ws, {required String root, required String path, int? line, int col = 1}) {
+void openFileAt(
+  Workspace ws, {
+  required String root,
+  required String path,
+  int? line,
+  int col = 1,
+}) {
   final t = fileEditorTab(ws, root: root, path: path, line: line, col: col);
   final existing = ws.tab(t.id);
   ws.openTab(t);
   if (existing != null && line != null) existing.reveal?.call(line, col);
 }
+
 class FileEditor extends StatefulWidget {
   final Workspace ws;
   final String root;
   final String path;
   final int? line;
   final int col;
-  const FileEditor({super.key, required this.ws, required this.root, required this.path, this.line, this.col = 1});
+  const FileEditor({
+    super.key,
+    required this.ws,
+    required this.root,
+    required this.path,
+    this.line,
+    this.col = 1,
+  });
 
   @override
   State<FileEditor> createState() => FileEditorState();
 }
 
-enum _Phase { loading, ready, refused, failed }
+typedef _Phase = DocumentPhase;
 
 /// The line break a file uses: CRLF when its first line ends with one. Saving
 /// writes the same one back, so opening and saving a Windows-style file does
 /// not change every line.
 TextLineBreak lineBreakOf(String text) {
-  final n = text.indexOf('\n');
-  if (n > 0 && text.codeUnitAt(n - 1) == 0x0d) return TextLineBreak.crlf;
-  if (n < 0 && text.contains('\r')) return TextLineBreak.cr;
-  return TextLineBreak.lf;
+  return documentLineBreak(text);
 }
 
 class FileEditorState extends State<FileEditor> {
-  late CodeLineEditingController _controller;
-  _Phase _phase = _Phase.loading;
-  String _message = '';
-  String? _etag;
-  String _saved = '';
+  late DocumentModel _document;
+  CodeLineEditingController get _controller => _document.controller;
+  CodeLineEditingController? _listenedController;
+  final _editorFocus = FocusNode(debugLabel: 'file editor');
+  AiProposalOperation? _inlineRequest;
+  DateTime? _lastInline;
+  Future<void> _completeInline() async {
+    if (_inlineRequest != null) {
+      _inlineRequest!.cancel();
+      return;
+    }
+    final now = DateTime.now(), link = widget.ws.link;
+    if (link == null ||
+        _lastInline != null &&
+            now.difference(_lastInline!) < const Duration(seconds: 1))
+      return;
+    final selection = _controller.selection;
+    if (!selection.isCollapsed ||
+        _controller.isComposing ||
+        selection.extentOffset != _controller.extentLine.length) {
+      widget.ws.toast('将光标置于行尾后请求 AI 续写');
+      return;
+    }
+    _lastInline = now;
+    _document.snippet?.close();
+    _document.suggestInline(null);
+    final document = _document;
+    final snapshot = AiBufferSnapshot(document);
+    final op = AiProposalOperation(
+      [snapshot],
+      inline: true,
+      active: () => mounted && identical(link, widget.ws.link),
+      resultActive: () =>
+          !document.isClosed && identical(document.currentLink(), link),
+    );
+    setState(() => _inlineRequest = op);
+    try {
+      final result = await op.run(
+        link,
+        () => aiProposalArguments(
+          widget.ws,
+          snapshot,
+          'Continue at the caret.',
+          inline: true,
+        ),
+      );
+      if (mounted && result.chunks.isNotEmpty) _document.suggestInline(result);
+    } on Object catch (e) {
+      if (mounted) widget.ws.toast('$e', error: true);
+    } finally {
+      if (mounted) setState(() => _inlineRequest = null);
+    }
+  }
+
+  void _acceptInline() {
+    final suggestion = _document.inlineSuggestion;
+    if (suggestion == null) return;
+    try {
+      final caret = _controller.selection;
+      suggestion.accept(suggestion.pending.toList());
+      final inserted = suggestion.chunks.single.replacement;
+      final lines = inserted.split(RegExp(r'\r\n|\r|\n'));
+      _controller.selection = CodeLineSelection.collapsed(
+        index: caret.extentIndex + lines.length - 1,
+        offset: lines.length == 1
+            ? caret.extentOffset + inserted.length
+            : lines.last.length,
+      );
+      _document.suggestInline(null);
+      _editorFocus.requestFocus();
+    } on Object catch (e) {
+      widget.ws.toast('$e', error: true);
+    }
+  }
+
+  _Phase get _phase => _document.phase;
+  set _phase(_Phase value) => _document.phase = value;
+  String get _message => _document.message;
+  set _etag(String? value) => _document.etag = value;
   bool _saving = false;
   Timer? _saveIndicator;
   DateTime? _saveStarted;
-  final bool _readOnly = false; // a later step: open read-only (e.g. a file the user cannot write)
+  final bool _readOnly =
+      false; // a later step: open read-only (e.g. a file the user cannot write)
   String? _langName;
   bool _preview = false;
+  bool _largePreview = false;
 
-  bool get dirty => _phase == _Phase.ready && !_readOnly && _controller.text != _saved;
+  bool get dirty => !_readOnly && _document.dirty;
 
   int? _pendingLine;
   int _pendingCol = 1;
@@ -182,7 +337,8 @@ class FileEditorState extends State<FileEditor> {
 
   /// The cursor as (0-based line, 0-based column) (tests).
   @visibleForTesting
-  (int, int) get cursor => (_controller.selection.extentIndex, _controller.selection.extentOffset);
+  (int, int) get cursor =>
+      (_controller.selection.extentIndex, _controller.selection.extentOffset);
 
   @visibleForTesting
   set text(String v) => _controller.text = v;
@@ -197,7 +353,13 @@ class FileEditorState extends State<FileEditor> {
     if (_phase != _Phase.ready) return;
     final n = _controller.codeLines.length;
     final cur = _controller.selection.extentIndex + 1;
-    final v = await askText(context, title: '转到行（1–$n）', initial: '$cur', hint: '行号，或 行:列', ok: '转到');
+    final v = await askText(
+      context,
+      title: '转到行（1–$n）',
+      initial: '$cur',
+      hint: '行号，或 行:列',
+      ok: '转到',
+    );
     if (v == null) return;
     final m = RegExp(r'^\s*(\d+)\s*(?::\s*(\d+))?\s*$').firstMatch(v);
     if (m == null) return widget.ws.toast('请输入行号，例如 120 或 120:8', error: true);
@@ -206,60 +368,24 @@ class FileEditorState extends State<FileEditor> {
 
   /// The file mixes line breaks: saving makes them all [_lineBreak]. Said in
   /// the status bar, so it is not a silent change.
-  bool _mixedBreaks = false;
-  TextLineBreak _lineBreak = TextLineBreak.lf;
+  bool get _mixedBreaks => _document.mixedBreaks;
+  TextLineBreak get _lineBreak => _document.lineBreak;
   int _indent = 4;
 
   EditorSettings get _settings {
     final p = widget.ws.app.appearance.value;
-    return EditorSettings(fontSize: p.editorFont, wordWrap: p.wordWrap, tabSize: p.tabSize);
+    return EditorSettings(
+      fontSize: p.editorFont,
+      wordWrap: p.wordWrap,
+      tabSize: p.tabSize,
+    );
   }
-
-  /// Replaces the controller when the line break or indent differ: both are
-  /// fixed when a controller is made. Only before the text is loaded, so no
-  /// undo history or unsaved text is lost.
-  void _useLineBreak(TextLineBreak b) {
-    final indent = _settings.tabSize;
-    if (b == _lineBreak && indent == _indent) return;
-    _lineBreak = b;
-    _indent = indent;
-    _controller.removeListener(_onChanged);
-    _controller.dispose();
-    _controller = CodeLineEditingController(options: CodeLineOptions(lineBreak: b, indentSize: indent));
-    _controller.addListener(_onChanged);
-  }
-
-  void Function()? _unwatch;
 
   /// The file changed on the server after it was opened here, and the editor
   /// has unsaved text, so it was not reloaded: the banner offers the choice.
   /// "deleted": the file is gone.
-  String? _outside;
-  bool _checking = false;
-
-  /// A notice from fs.watch: compare the file's etag with the one loaded. A
-  /// save from this editor changes the etag too, but it updates [_etag] first.
-  Future<void> _checkOutside() async {
-    if (_phase != _Phase.ready || _saving || _checking || !mounted) return;
-    final link = widget.ws.link;
-    if (link == null) return;
-    _checking = true;
-    try {
-      final st = (await link.call('fs.stat', {'root': widget.root, 'path': widget.path}) as Map).cast<String, dynamic>();
-      final etag = st['etag'] as String?;
-      if (!mounted || _saving || etag == null || etag == _etag) return;
-      if (!dirty) {
-        // nothing to lose: show what is on the server now
-        await _reload(note: '${widget.path.split('/').last} 在服务器上被修改，已重新载入');
-      } else {
-        setState(() => _outside = 'changed');
-      }
-    } on OpError catch (e) {
-      if (mounted && e.code == codeNotFound) setState(() => _outside = 'deleted');
-    } finally {
-      _checking = false;
-    }
-  }
+  String? get _outside => _document.outside;
+  set _outside(String? value) => _document.outside = value;
 
   /// Loads the file again, keeping the cursor line.
   Future<void> _reload({String? note}) async {
@@ -270,7 +396,7 @@ class FileEditorState extends State<FileEditor> {
       _outside = null;
       _phase = _Phase.loading;
     });
-    await _load();
+    await _load(force: true);
     if (note != null && _phase == _Phase.ready) widget.ws.toast(note);
   }
 
@@ -278,9 +404,15 @@ class FileEditorState extends State<FileEditor> {
   void initState() {
     super.initState();
     _indent = _settings.tabSize;
-    _controller = CodeLineEditingController(options: CodeLineOptions(indentSize: _indent));
-    _controller.addListener(_onChanged);
-    _unwatch = widget.ws.watch.watch(widget.root, widget.path, _checkOutside);
+    _document = widget.ws.documents.open(
+      widget.root,
+      widget.path,
+      indent: _indent,
+    );
+    widget.ws.development;
+    _document.retainView();
+    _document.addListener(_onDocument);
+    _bindController();
     _shownSettings = _settingsKey;
     widget.ws.app.appearance.addListener(_onSettings);
     _load();
@@ -303,80 +435,75 @@ class FileEditorState extends State<FileEditor> {
   /// size applies to files opened after the change.)
   void _onSettings() {
     final k = _settingsKey;
-    if (_visible && k != _shownSettings && mounted) setState(() => _shownSettings = k);
+    if (_visible && k != _shownSettings && mounted)
+      setState(() => _shownSettings = k);
   }
 
   @override
   void dispose() {
     _saveIndicator?.cancel();
+    _inlineRequest?.cancel();
+    _editorFocus.dispose();
     widget.ws.app.appearance.removeListener(_onSettings);
-    _unwatch?.call();
-    _controller.removeListener(_onChanged);
-    _controller.dispose();
+    _listenedController?.removeListener(_onChanged);
+    _document.removeListener(_onDocument);
+    _document.releaseView();
     super.dispose();
   }
+
+  void _bindController() {
+    if (identical(_listenedController, _controller)) return;
+    _listenedController?.removeListener(_onChanged);
+    _listenedController = _controller;
+    _controller.addListener(_onChanged);
+  }
+
+  void _onDocument() {
+    if (!mounted) return;
+    final controllerChanged = !identical(_listenedController, _controller);
+    _bindController();
+    _langName = languageFor(widget.path)?.name;
+    final signature =
+        '${_phase.name}/$_outside/${_document.recovered}/${_document.recoveryError}'
+        '/${_document.encoding}/${_document.large}/${_document.languageSyncEligible}/${identityHashCode(_document.snippet)}/${identityHashCode(_document.inlineSuggestion)}';
+    if (controllerChanged || signature != _documentUi) {
+      _documentUi = signature;
+      setState(() {});
+    }
+    _onChanged();
+  }
+
+  String _documentUi = '';
 
   void _onChanged() {
     final t = widget.ws.tab('file:${widget.root}:${widget.path}');
     if (t != null) {
       t.dirty.value = dirty;
       final sel = _controller.selection;
-      final eol = switch (_lineBreak) { TextLineBreak.crlf => 'CRLF', TextLineBreak.cr => 'CR', _ => 'LF' };
-      t.status.value = 'Ln ${sel.extentIndex + 1}, Col ${sel.extentOffset + 1}   空格: $_indent   $eol${_mixedBreaks ? '（混合，保存时统一）' : ''}'
+      final eol = switch (_lineBreak) {
+        TextLineBreak.crlf => 'CRLF',
+        TextLineBreak.cr => 'CR',
+        _ => 'LF',
+      };
+      t.status.value =
+          'Ln ${sel.extentIndex + 1}, Col ${sel.extentOffset + 1}   空格: $_indent   $eol${_mixedBreaks ? '（混合，保存时统一）' : ''}'
           '${_langName == null ? '' : '   $_langName'}${_readOnly ? '   只读' : ''}';
     }
   }
 
-  Future<void> _load() async {
-    final link = widget.ws.link;
-    if (link == null) {
-      setState(() {
-        _phase = _Phase.failed;
-        _message = '未连接';
-      });
-      return;
+  Future<void> _load({bool force = false}) async {
+    if (_document.recoveryError != null && !force) {
+      await _document.retryRecovery();
+    } else {
+      await _document.load(force: force);
     }
-    try {
-      final r = (await link.call('fs.read', {'root': widget.root, 'path': widget.path}) as Map).cast<String, dynamic>();
-      if (!mounted) return;
-      if (r['binary'] == true) {
-        return setState(() {
-          _phase = _Phase.refused;
-          _message = '这个文件不是 UTF-8 文本（二进制，或 GBK 等其它编码），不能在这里编辑。\n用 Aurora 下载后，在本机用合适的工具打开。';
-        });
-      }
-      if (r['truncated'] == true) {
-        return setState(() {
-          _phase = _Phase.refused;
-          _message = '文件有 ${formatSize((r['size'] as num?) ?? 0)}，超过在线编辑的上限（512 KB）。\n要看日志的末尾，请用终端的 tail，或到“日志”里查看。';
-        });
-      }
-      final text = r['content'] as String? ?? '';
-      _etag = r['etag'] as String?;
-      _useLineBreak(lineBreakOf(text));
-      _mixedBreaks = _lineBreak == TextLineBreak.crlf ? RegExp(r'(?<!\r)\n').hasMatch(text) : text.contains('\r');
-      _controller.text = text;
-      // what the controller gives back for this text: the "unsaved" check
-      // compares like with like (a file that ends without a newline, or mixes
-      // line breaks, is not dirty the moment it opens)
-      _saved = _controller.text;
-      _controller.clearHistory();
-      _langName = languageFor(widget.path)?.name;
-      setState(() => _phase = _Phase.ready);
-      _onChanged();
-      final line = _pendingLine ?? widget.line;
-      final col = _pendingLine != null ? _pendingCol : widget.col;
-      _pendingLine = null;
-      if (line != null && line > 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => reveal(line, col));
-      }
-    } on OpError catch (e) {
-      if (mounted) {
-        setState(() {
-          _phase = _Phase.failed;
-          _message = e.message;
-        });
-      }
+    if (!mounted) return;
+    _onDocument();
+    final line = _pendingLine ?? widget.line;
+    final col = _pendingLine != null ? _pendingCol : widget.col;
+    _pendingLine = null;
+    if (line != null && line > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => reveal(line, col));
     }
   }
 
@@ -384,7 +511,6 @@ class FileEditorState extends State<FileEditor> {
     if (_phase != _Phase.ready || _readOnly || _saving) return;
     final link = widget.ws.link;
     if (link == null) return widget.ws.toast('未连接，没有保存', error: true);
-    final text = _controller.text;
     String? conflict;
     _saveStarted = DateTime.now();
     _saveIndicator?.cancel();
@@ -393,12 +519,12 @@ class FileEditorState extends State<FileEditor> {
     });
     setState(() => _saving = true);
     try {
-      final r = (await link.call('fs.write', {'root': widget.root, 'path': widget.path, 'content': text, 'if_match': _etag}) as Map).cast<String, dynamic>();
-      _etag = r['etag'] as String? ?? _etag;
-      _saved = text;
+      await _document.save();
       // A clean dot in the tab is the normal success feedback. Avoid a toast
       // for every Ctrl+S; only slow saves need an explicit confirmation.
-      if (_saveStarted != null && DateTime.now().difference(_saveStarted!) > const Duration(milliseconds: 600)) {
+      if (_saveStarted != null &&
+          DateTime.now().difference(_saveStarted!) >
+              const Duration(milliseconds: 600)) {
         widget.ws.toast('已保存 ${widget.path.split('/').last}');
       }
       widget.ws.filesRevision.value++; // the tree's size and time for this file
@@ -431,17 +557,33 @@ class FileEditorState extends State<FileEditor> {
           child: Text('$why\n\n直接保存会覆盖对方的修改。你可以先取消，把自己的修改复制出来，再重新载入。'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, 'cancel'), child: Text('取消', style: TextStyle(color: ide.textDim))),
-          OutlinedButton(onPressed: () => Navigator.pop(c, 'reload'), child: const Text('放弃我的修改，重新载入')),
-          FilledButton(style: FilledButton.styleFrom(backgroundColor: ide.error), onPressed: () => Navigator.pop(c, 'overwrite'), child: const Text('覆盖服务器上的文件')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, 'cancel'),
+            child: Text('取消', style: TextStyle(color: ide.textDim)),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(c, 'merge'),
+            child: const Text('比较并合并'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(c, 'reload'),
+            child: const Text('放弃我的修改，重新载入'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: ide.error),
+            onPressed: () => Navigator.pop(c, 'overwrite'),
+            child: const Text('覆盖服务器上的文件'),
+          ),
         ],
       ),
     );
     if (choice == 'reload') {
       setState(() => _phase = _Phase.loading);
-      await _load();
+      await _load(force: true);
     } else if (choice == 'overwrite') {
       await _overwrite();
+    } else if (choice == 'merge' && mounted) {
+      await showDocumentMerge(context, _document);
     }
   }
 
@@ -450,7 +592,9 @@ class FileEditorState extends State<FileEditor> {
   Future<void> _overwrite() async {
     final link = widget.ws.link;
     if (link == null) return;
-    final cur = await widget.ws.guard(() => link.call('fs.stat', {'root': widget.root, 'path': widget.path}));
+    final cur = await widget.ws.guard(
+      () => link.call('fs.stat', {'root': widget.root, 'path': widget.path}),
+    );
     final etag = ((cur as Map?)?['etag']) as String?;
     if (etag == null) return;
     _etag = etag;
@@ -464,9 +608,18 @@ class FileEditorState extends State<FileEditor> {
       builder: (c) => AlertDialog(
         title: Text('${widget.path.split('/').last} 有未保存的修改'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, 'cancel'), child: Text('取消', style: TextStyle(color: ide.textDim))),
-          OutlinedButton(onPressed: () => Navigator.pop(c, 'discard'), child: const Text('不保存')),
-          FilledButton(onPressed: () => Navigator.pop(c, 'save'), child: const Text('保存')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, 'cancel'),
+            child: Text('取消', style: TextStyle(color: ide.textDim)),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(c, 'discard'),
+            child: const Text('不保存'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, 'save'),
+            child: const Text('保存'),
+          ),
         ],
       ),
     );
@@ -482,19 +635,60 @@ class FileEditorState extends State<FileEditor> {
     final ide = Ide.of(context);
     switch (_phase) {
       case _Phase.loading:
-        return const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)));
+        return const Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        );
       case _Phase.refused:
-        return EmptyHint(icon: Icons.block, text: _message);
+        if (_largePreview) {
+          return LargeTextReader(
+            ws: widget.ws,
+            document: _document,
+            onBack: () => setState(() => _largePreview = false),
+          );
+        }
+        return Column(
+          children: [
+            Expanded(
+              child: EmptyHint(icon: Icons.block, text: _message),
+            ),
+            if (widget.ws.link?.server.caps.contains('fs.text') == true)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton(
+                      onPressed: () => chooseTextEncoding(context, _document),
+                      child: const Text('选择读取编码'),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(() => _largePreview = true),
+                      child: const Text('大文件阅读模式'),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
       case _Phase.failed:
-        return EmptyHint(icon: Icons.error_outline, text: _message, actionLabel: '重试', onAction: () {
-          setState(() => _phase = _Phase.loading);
-          _load();
-        });
+        return EmptyHint(
+          icon: Icons.error_outline,
+          text: _message,
+          actionLabel: '重试',
+          onAction: () {
+            setState(() => _phase = _Phase.loading);
+            _load();
+          },
+        );
       case _Phase.ready:
         break;
     }
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final lang = languageFor(widget.path);
+    final lang = _document.large ? null : languageFor(widget.path);
     final style = CodeEditorStyle(
       fontFamily: Ide.mono,
       fontFamilyFallback: Ide.monoFallback,
@@ -514,108 +708,428 @@ class FileEditorState extends State<FileEditor> {
             ),
     );
     final pk = previewOf(widget.path);
-    return Column(children: [
-      if (pk != PreviewKind.none)
-        Container(
-          height: 28,
-          color: ide.tabBar,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: Row(children: [
-            const Spacer(),
-            TextButton.icon(
-              onPressed: () => setState(() => _preview = !_preview),
-              icon: Icon(_preview ? Icons.edit_outlined : Icons.visibility_outlined, size: 15),
-              label: Text(_preview ? '编辑' : (pk == PreviewKind.markdown ? '预览' : '表格')),
+    return Column(
+      children: [
+        TextModeToolbar(document: _document),
+        LanguageToolbar(ws: widget.ws, document: _document),
+        if (_document.recovered || _document.recoveryError != null)
+          Container(
+            color: ide.selection.withValues(alpha: .35),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.restore, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _document.recoveryError ?? '已恢复上次未保存的编辑内容',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                if (_document.recoveryError != null)
+                  TextButton(
+                    onPressed: () async {
+                      await _document.retryRecovery();
+                      if (mounted) setState(() {});
+                    },
+                    child: const Text('重试'),
+                  ),
+              ],
             ),
-          ]),
-        ),
-      if (_readOnly || _saving)
-        Container(
-          height: 24,
-          color: ide.tabBar,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          alignment: Alignment.centerLeft,
-          child: Text(_saving ? '正在保存…' : '只读', style: TextStyle(color: ide.textDim, fontSize: 12)),
-        ),
-      if (_outside != null)
-        Container(
-          key: const ValueKey('outside'),
-          color: ide.warn.withValues(alpha: 0.14),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-          child: Row(children: [
-            Icon(Icons.warning_amber, size: 15, color: ide.warn),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _outside == 'deleted' ? '这个文件已在服务器上被删除或移走。编辑器里的内容还在。' : '这个文件在服务器上被别的程序修改了，你这里还有未保存的修改。',
-                style: const TextStyle(fontSize: 12),
-              ),
+          ),
+        if (pk != PreviewKind.none)
+          Container(
+            height: 28,
+            color: ide.tabBar,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              children: [
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => setState(() => _preview = !_preview),
+                  icon: Icon(
+                    _preview ? Icons.edit_outlined : Icons.visibility_outlined,
+                    size: 15,
+                  ),
+                  label: Text(
+                    _preview
+                        ? '编辑'
+                        : (pk == PreviewKind.markdown ? '预览' : '表格'),
+                  ),
+                ),
+              ],
             ),
-            if (_outside == 'changed')
-              TextButton(
-                onPressed: () async {
-                  if (await confirmDialog(context, title: '放弃你的修改？', body: '载入服务器上的新内容，你未保存的修改会丢失。', ok: '放弃并重新载入', danger: true)) {
-                    await _reload();
-                  }
-                },
-                child: const Text('重新载入'),
+          ),
+        if (_readOnly || _saving)
+          Container(
+            height: 24,
+            color: ide.tabBar,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _saving ? '正在保存…' : '只读',
+              style: TextStyle(color: ide.textDim, fontSize: 12),
+            ),
+          ),
+        if (_outside != null)
+          Container(
+            key: const ValueKey('outside'),
+            color: ide.warn.withValues(alpha: 0.14),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber, size: 15, color: ide.warn),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _outside == 'deleted'
+                        ? '这个文件已在服务器上被删除或移走。编辑器里的内容还在。'
+                        : '这个文件在服务器上被别的程序修改了，你这里还有未保存的修改。',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                if (_outside == 'changed')
+                  TextButton(
+                    onPressed: () => showDocumentMerge(context, _document),
+                    child: const Text('比较并合并'),
+                  ),
+                if (_outside == 'changed')
+                  TextButton(
+                    onPressed: () async {
+                      if (await confirmDialog(
+                        context,
+                        title: '放弃你的修改？',
+                        body: '载入服务器上的新内容，你未保存的修改会丢失。',
+                        ok: '放弃并重新载入',
+                        danger: true,
+                      )) {
+                        await _reload();
+                      }
+                    },
+                    child: const Text('重新载入'),
+                  ),
+                if (_outside == 'deleted')
+                  TextButton(
+                    onPressed: () async {
+                      // no etag: the agent writes the file as a new one
+                      _etag = null;
+                      setState(() => _outside = null);
+                      await save();
+                    },
+                    child: const Text('重新创建'),
+                  ),
+                if (_outside == 'changed')
+                  TextButton(
+                    onPressed: () => setState(() => _outside = null),
+                    child: const Text('保留我的修改'),
+                  ),
+              ],
+            ),
+          ),
+        if (widget.ws.link?.server.caps.contains('ai.propose') == true)
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              TextButton.icon(
+                onPressed: () => openAiEditReview(widget.ws, _document),
+                icon: const Icon(Icons.auto_fix_high, size: 16),
+                label: const Text('AI 修改…'),
               ),
-            if (_outside == 'deleted')
               TextButton(
-                onPressed: () async {
-                  // no etag: the agent writes the file as a new one
-                  _etag = null;
-                  setState(() => _outside = null);
-                  await save();
-                },
-                child: const Text('重新创建'),
+                onPressed: _completeInline,
+                child: Text(
+                  _inlineRequest == null ? 'AI 行内续写 · Alt+\\' : '取消 AI 续写',
+                ),
               ),
-            if (_outside == 'changed') TextButton(onPressed: () => setState(() => _outside = null), child: const Text('保留我的修改')),
-          ]),
-        ),
-      // One viewport, two stable layers. An offstage Expanded sibling still
-      // consumes half the height and can retain keyboard focus behind preview.
-      Expanded(
-        child: Stack(fit: StackFit.expand, children: [
-          Offstage(
-            key: const ValueKey('editor'),
-            offstage: _preview && pk != PreviewKind.none,
-            child: TickerMode(enabled: !_preview || pk == PreviewKind.none,
-              child: ExcludeFocus(excluding: _preview && pk != PreviewKind.none,
-                child: CallbackShortcuts(
-                  bindings: {
-                    const SingleActivator(LogicalKeyboardKey.keyS, control: true): save,
-                    const SingleActivator(LogicalKeyboardKey.keyG, control: true): goToLine,
-                    const SingleActivator(LogicalKeyboardKey.keyZ, alt: true): toggleWrap,
-                  },
-                  child: CodeEditor(
-                    controller: _controller,
-                    style: style,
-                    readOnly: _readOnly,
-                    wordWrap: _wrap ?? _settings.wordWrap,
-                    autofocus: true,
-                    findBuilder: (context, controller, readOnly) => _FindPanel(controller: controller, readOnly: readOnly),
-                    indicatorBuilder: (context, editingController, chunkController, notifier) => Row(children: [
-                      DefaultCodeLineNumber(controller: editingController, notifier: notifier),
-                      DefaultCodeChunkIndicator(width: 18, controller: chunkController, notifier: notifier),
-                    ]),
-                    chunkAnalyzer: const DefaultCodeChunkAnalyzer(),
-                    padding: const EdgeInsets.only(left: 4, right: 12),
-                    verticalScrollbarWidth: 10,
-                    horizontalScrollbarHeight: 10,
+              if (_document.inlineSuggestion case final suggestion?) ...[
+                Tooltip(
+                  message: suggestion.chunks.single.replacement,
+                  child: const Text('AI 建议 · Tab 接受 · Esc 拒绝'),
+                ),
+                TextButton(onPressed: _acceptInline, child: const Text('接受续写')),
+                TextButton(
+                  onPressed: () => _document.suggestInline(null),
+                  child: const Text('拒绝续写'),
+                ),
+              ],
+            ],
+          ),
+        if (_document.snippet case final snippet?)
+          ListenableBuilder(
+            listenable: snippet,
+            builder: (_, _) => Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Text('片段 · Tab 下一项 · Esc 结束'),
+                ),
+                if (snippet.current?.choices.isNotEmpty == true)
+                  PopupMenuButton<String>(
+                    tooltip: '选择片段字段值',
+                    onSelected: (value) {
+                      snippet.choose(value);
+                      _editorFocus.requestFocus();
+                    },
+                    itemBuilder: (_) => [
+                      for (final choice in snippet.current!.choices)
+                        PopupMenuItem(
+                          value: choice,
+                          child: Text(choice.isEmpty ? '（空）' : choice),
+                        ),
+                    ],
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('选择字段值…'),
+                    ),
+                  ),
+                IconBtn(Icons.navigate_before, '上一个片段字段', () {
+                  snippet.advance(backward: true);
+                  _editorFocus.requestFocus();
+                }),
+                IconBtn(Icons.navigate_next, '下一个片段字段', () {
+                  snippet.advance();
+                  _editorFocus.requestFocus();
+                }),
+                IconBtn(Icons.close, '结束片段编辑', snippet.close),
+              ],
+            ),
+          ),
+        // One viewport, two stable layers. An offstage Expanded sibling still
+        // consumes half the height and can retain keyboard focus behind preview.
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Offstage(
+                key: const ValueKey('editor'),
+                offstage: _preview && pk != PreviewKind.none,
+                child: TickerMode(
+                  enabled: !_preview || pk == PreviewKind.none,
+                  child: ExcludeFocus(
+                    excluding: _preview && pk != PreviewKind.none,
+                    child: CallbackShortcuts(
+                      bindings: {
+                        const SingleActivator(
+                          LogicalKeyboardKey.backslash,
+                          alt: true,
+                        ): _completeInline,
+                        if (_document.snippet == null &&
+                            _document.inlineSuggestion != null) ...{
+                          const SingleActivator(LogicalKeyboardKey.tab):
+                              _acceptInline,
+                          const SingleActivator(
+                            LogicalKeyboardKey.escape,
+                          ): () =>
+                              _document.suggestInline(null),
+                        },
+                        if (_document.snippet != null) ...{
+                          const SingleActivator(LogicalKeyboardKey.tab): () =>
+                              _document.snippet?.advance(),
+                          const SingleActivator(
+                            LogicalKeyboardKey.tab,
+                            shift: true,
+                          ): () =>
+                              _document.snippet?.advance(backward: true),
+                          const SingleActivator(
+                            LogicalKeyboardKey.escape,
+                          ): () =>
+                              _document.snippet?.close(),
+                        },
+                        const SingleActivator(
+                          LogicalKeyboardKey.keyS,
+                          control: true,
+                        ): save,
+                        const SingleActivator(
+                          LogicalKeyboardKey.keyG,
+                          control: true,
+                        ): goToLine,
+                        const SingleActivator(
+                          LogicalKeyboardKey.keyZ,
+                          alt: true,
+                        ): toggleWrap,
+                        const SingleActivator(
+                          LogicalKeyboardKey.space,
+                          control: true,
+                        ): () => runLanguageAction(
+                          context,
+                          widget.ws,
+                          _document,
+                          LanguageAction.completion,
+                        ),
+                        const SingleActivator(LogicalKeyboardKey.f12): () =>
+                            runLanguageAction(
+                              context,
+                              widget.ws,
+                              _document,
+                              LanguageAction.definition,
+                            ),
+                        const SingleActivator(LogicalKeyboardKey.f2): () =>
+                            runLanguageAction(
+                              context,
+                              widget.ws,
+                              _document,
+                              LanguageAction.rename,
+                            ),
+                        const SingleActivator(
+                          LogicalKeyboardKey.keyF,
+                          alt: true,
+                          shift: true,
+                        ): () => runLanguageAction(
+                          context,
+                          widget.ws,
+                          _document,
+                          LanguageAction.format,
+                        ),
+                        const SingleActivator(LogicalKeyboardKey.f9): () =>
+                            toggleCursorBreakpoint(widget.ws, _document),
+                        const SingleActivator(LogicalKeyboardKey.f5): () {
+                          if (widget.ws.debugger.stopped) {
+                            widget.ws.debugger
+                                .control('continue')
+                                .catchError(
+                                  (Object e) =>
+                                      widget.ws.toast('$e', error: true),
+                                );
+                          } else if (!widget.ws.debugger.active) {
+                            startConfiguredDebug(context, widget.ws);
+                          }
+                        },
+                        const SingleActivator(
+                          LogicalKeyboardKey.f5,
+                          shift: true,
+                        ): widget.ws.debugger.stop,
+                        const SingleActivator(LogicalKeyboardKey.f10): () =>
+                            widget.ws.debugger
+                                .control('next')
+                                .catchError(
+                                  (Object e) =>
+                                      widget.ws.toast('$e', error: true),
+                                ),
+                        const SingleActivator(LogicalKeyboardKey.f11): () =>
+                            widget.ws.debugger
+                                .control('stepIn')
+                                .catchError(
+                                  (Object e) =>
+                                      widget.ws.toast('$e', error: true),
+                                ),
+                        const SingleActivator(
+                          LogicalKeyboardKey.f11,
+                          shift: true,
+                        ): () => widget.ws.debugger
+                            .control('stepOut')
+                            .catchError(
+                              (Object e) => widget.ws.toast('$e', error: true),
+                            ),
+                      },
+                      child: CodeEditor(
+                        ghostText: _document
+                            .inlineSuggestion
+                            ?.chunks
+                            .single
+                            .replacement,
+                        focusNode: _editorFocus,
+                        shortcutOverrideActions: {
+                          CodeShortcutIndentIntent:
+                              CallbackAction<CodeShortcutIndentIntent>(
+                                onInvoke: (_) {
+                                  final snippet = _document.snippet;
+                                  if (snippet != null) {
+                                    snippet.advance();
+                                  } else if (_document.inlineSuggestion !=
+                                      null) {
+                                    _acceptInline();
+                                  } else {
+                                    _controller.applyIndent();
+                                  }
+                                  return null;
+                                },
+                              ),
+                          CodeShortcutOutdentIntent:
+                              CallbackAction<CodeShortcutOutdentIntent>(
+                                onInvoke: (_) {
+                                  final snippet = _document.snippet;
+                                  if (snippet != null) {
+                                    snippet.advance(backward: true);
+                                  } else {
+                                    _controller.applyOutdent();
+                                  }
+                                  return null;
+                                },
+                              ),
+                          if (_document.snippet != null ||
+                              _document.inlineSuggestion != null)
+                            CodeShortcutEscIntent:
+                                CallbackAction<CodeShortcutEscIntent>(
+                                  onInvoke: (_) {
+                                    _document.snippet?.close();
+                                    _document.suggestInline(null);
+                                    return null;
+                                  },
+                                ),
+                        },
+                        controller: _controller,
+                        style: style,
+                        readOnly: _readOnly,
+                        wordWrap: _document.large
+                            ? false
+                            : _wrap ?? _settings.wordWrap,
+                        autofocus: true,
+                        findBuilder: (context, controller, readOnly) =>
+                            _FindPanel(
+                              controller: controller,
+                              readOnly: readOnly,
+                            ),
+                        indicatorBuilder:
+                            (
+                              context,
+                              editingController,
+                              chunkController,
+                              notifier,
+                            ) => Row(
+                              children: [
+                                if (widget.ws.debugger.supported)
+                                  BreakpointGutter(
+                                    ws: widget.ws,
+                                    document: _document,
+                                    notifier: notifier,
+                                  ),
+                                DefaultCodeLineNumber(
+                                  controller: editingController,
+                                  notifier: notifier,
+                                ),
+                                DefaultCodeChunkIndicator(
+                                  width: 18,
+                                  controller: chunkController,
+                                  notifier: notifier,
+                                ),
+                              ],
+                            ),
+                        chunkAnalyzer: const DefaultCodeChunkAnalyzer(),
+                        padding: const EdgeInsets.only(left: 4, right: 12),
+                        verticalScrollbarWidth: 10,
+                        horizontalScrollbarHeight: 10,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              if (_preview && pk != PreviewKind.none)
+                Positioned.fill(
+                  key: const ValueKey('preview'),
+                  child: pk == PreviewKind.markdown
+                      ? MarkdownPreview(text: _controller.text)
+                      : CsvPreview(
+                          text: _controller.text,
+                          tabSeparated: extOf(widget.path) == 'tsv',
+                        ),
+                ),
+            ],
           ),
-          if (_preview && pk != PreviewKind.none)
-            Positioned.fill(key: const ValueKey('preview'),
-              child: pk == PreviewKind.markdown
-                  ? MarkdownPreview(text: _controller.text)
-                  : CsvPreview(text: _controller.text, tabSeparated: extOf(widget.path) == 'tsv')),
-        ]),
-      ),
-    ]);
+        ),
+      ],
+    );
   }
 }
 
@@ -626,68 +1140,124 @@ class _FindPanel extends StatelessWidget implements PreferredSizeWidget {
   const _FindPanel({required this.controller, required this.readOnly});
 
   @override
-  Size get preferredSize => Size(double.infinity, controller.value == null ? 0 : (controller.value!.replaceMode ? 72 : 38));
+  Size get preferredSize => Size(
+    double.infinity,
+    controller.value == null ? 0 : (controller.value!.replaceMode ? 72 : 38),
+  );
 
   @override
   Widget build(BuildContext context) {
     final v = controller.value;
     if (v == null) return const SizedBox.shrink();
     final ide = Ide.of(context);
-    final result = v.result == null ? '无结果' : '${v.result!.index + 1}/${v.result!.matches.length}';
-    Widget field(TextEditingController c, FocusNode? f, String hint, {List<Widget> tail = const []}) => SizedBox(
-          height: 30,
-          child: TextField(
-            controller: c,
-            focusNode: f,
-            style: const TextStyle(fontSize: 13),
-            decoration: InputDecoration(
-              hintText: hint,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              suffixIcon: tail.isEmpty ? null : Row(mainAxisSize: MainAxisSize.min, children: tail),
-            ),
+    final result = v.result == null
+        ? '无结果'
+        : '${v.result!.index + 1}/${v.result!.matches.length}';
+    Widget field(
+      TextEditingController c,
+      FocusNode? f,
+      String hint, {
+      List<Widget> tail = const [],
+    }) => SizedBox(
+      height: 30,
+      child: TextField(
+        controller: c,
+        focusNode: f,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          hintText: hint,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 6,
           ),
-        );
+          suffixIcon: tail.isEmpty
+              ? null
+              : Row(mainAxisSize: MainAxisSize.min, children: tail),
+        ),
+      ),
+    );
     Widget toggle(String label, bool on, VoidCallback tap) => InkWell(
-          onTap: tap,
+      onTap: tap,
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        width: 26,
+        height: 22,
+        alignment: Alignment.center,
+        margin: const EdgeInsets.only(right: 2),
+        decoration: BoxDecoration(
+          color: on ? ide.selection : null,
           borderRadius: BorderRadius.circular(3),
-          child: Container(
-            width: 26,
-            height: 22,
-            alignment: Alignment.center,
-            margin: const EdgeInsets.only(right: 2),
-            decoration: BoxDecoration(color: on ? ide.selection : null, borderRadius: BorderRadius.circular(3), border: on ? Border.all(color: ide.accent) : null),
-            child: Text(label, style: TextStyle(fontSize: 11, color: on ? ide.text : ide.textDim)),
-          ),
-        );
+          border: on ? Border.all(color: ide.accent) : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 11, color: on ? ide.text : ide.textDim),
+        ),
+      ),
+    );
     return Container(
       color: ide.sideBar,
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-      child: Column(children: [
-        Row(children: [
-          Expanded(
-            child: field(controller.findInputController, controller.findInputFocusNode, '查找', tail: [
-              toggle('Aa', v.option.caseSensitive, controller.toggleCaseSensitive),
-              toggle('.*', v.option.regex, controller.toggleRegex),
-            ]),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: field(
+                  controller.findInputController,
+                  controller.findInputFocusNode,
+                  '查找',
+                  tail: [
+                    toggle(
+                      'Aa',
+                      v.option.caseSensitive,
+                      controller.toggleCaseSensitive,
+                    ),
+                    toggle('.*', v.option.regex, controller.toggleRegex),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 56,
+                child: Text(
+                  result,
+                  style: TextStyle(fontSize: 12, color: ide.textDim),
+                ),
+              ),
+              IconBtn(Icons.keyboard_arrow_up, '上一个', controller.previousMatch),
+              IconBtn(Icons.keyboard_arrow_down, '下一个', controller.nextMatch),
+              if (!readOnly)
+                IconBtn(
+                  v.replaceMode ? Icons.unfold_less : Icons.find_replace,
+                  '替换',
+                  controller.replaceMode,
+                ),
+              IconBtn(Icons.close, '关闭', controller.close),
+            ],
           ),
-          const SizedBox(width: 8),
-          SizedBox(width: 56, child: Text(result, style: TextStyle(fontSize: 12, color: ide.textDim))),
-          IconBtn(Icons.keyboard_arrow_up, '上一个', controller.previousMatch),
-          IconBtn(Icons.keyboard_arrow_down, '下一个', controller.nextMatch),
-          if (!readOnly) IconBtn(v.replaceMode ? Icons.unfold_less : Icons.find_replace, '替换', controller.replaceMode),
-          IconBtn(Icons.close, '关闭', controller.close),
-        ]),
-        if (v.replaceMode && !readOnly) ...[
-          const SizedBox(height: 4),
-          Row(children: [
-            Expanded(child: field(controller.replaceInputController, null, '替换为')),
-            const SizedBox(width: 8),
-            OutlinedButton(onPressed: controller.replaceMatch, child: const Text('替换')),
-            const SizedBox(width: 6),
-            OutlinedButton(onPressed: controller.replaceAllMatches, child: const Text('全部替换')),
-          ]),
+          if (v.replaceMode && !readOnly) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: field(controller.replaceInputController, null, '替换为'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: controller.replaceMatch,
+                  child: const Text('替换'),
+                ),
+                const SizedBox(width: 6),
+                OutlinedButton(
+                  onPressed: controller.replaceAllMatches,
+                  child: const Text('全部替换'),
+                ),
+              ],
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }

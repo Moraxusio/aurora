@@ -1,5 +1,5 @@
 import 'package:aurora_profile/aurora_profile.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import 'ai_reasoning_field.dart';
 
@@ -19,6 +19,8 @@ const aiCapabilityLabels = <String, (String, String)>{
   'todowrite': ('任务计划', '维护当前任务的进度'),
   'subagent': ('子代理', '将子任务交给独立上下文'),
   'question': ('询问用户', '选项、自由回答与多选'),
+  'skill': ('项目技能', '按需读取用户和项目的技能指令'),
+  'mcp': ('MCP 扩展', '连接配置的服务并使用工具、资源与提示词'),
 };
 
 class AiCapabilityEditor extends StatelessWidget {

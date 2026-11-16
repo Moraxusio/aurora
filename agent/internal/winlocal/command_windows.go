@@ -59,7 +59,8 @@ func StartCommand(args []string, cwd string, env []string, out io.Writer) (*Comm
 	if err := windows.CreatePipe(&rd, &wr, &sa, 0); err != nil {
 		return nil, err
 	}
-	defer windows.CloseHandle(wr)
+	outputFile := os.NewFile(uintptr(wr), "shell-output-child")
+	defer outputFile.Close()
 	read := os.NewFile(uintptr(rd), "shell-output")
 	nul, _ := windows.UTF16PtrFromString("NUL")
 	input, err := windows.CreateFile(nul, windows.GENERIC_READ, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, &sa, windows.OPEN_EXISTING, 0, 0)
@@ -67,13 +68,48 @@ func StartCommand(args []string, cwd string, env []string, out io.Writer) (*Comm
 		read.Close()
 		return nil, err
 	}
-	defer windows.CloseHandle(input)
-	job, err := NewJob()
+	inputFile := os.NewFile(uintptr(input), "shell-input")
+	defer inputFile.Close()
+	p, err := StartStdioCommand(args, cwd, env, inputFile, outputFile, outputFile)
 	if err != nil {
 		read.Close()
 		return nil, err
 	}
-	p := &Command{job: job, read: read, copied: make(chan struct{})}
+	p.read = read
+	p.copied = make(chan struct{})
+	go func() { defer close(p.copied); _, _ = io.Copy(out, read) }()
+	return p, nil
+}
+
+// StartStdioCommand binds the process to its kill-on-close job at creation.
+// Only private, inheritable duplicates of the three selected streams escape.
+func StartStdioCommand(args []string, cwd string, env []string, input, output, stderr *os.File) (*Command, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("empty process command")
+	}
+	handles := make([]windows.Handle, 3)
+	for i, file := range []*os.File{input, output, stderr} {
+		if err := windows.DuplicateHandle(windows.CurrentProcess(), windows.Handle(file.Fd()),
+			windows.CurrentProcess(), &handles[i], 0, true, windows.DUPLICATE_SAME_ACCESS); err != nil {
+			for _, h := range handles {
+				if h != 0 {
+					windows.CloseHandle(h)
+				}
+			}
+			return nil, err
+		}
+	}
+	defer func() {
+		for _, h := range handles {
+			windows.CloseHandle(h)
+		}
+	}()
+	job, err := NewJob()
+	if err != nil {
+		return nil, err
+	}
+	p := &Command{job: job, copied: make(chan struct{})}
+	close(p.copied)
 	ok := false
 	defer func() {
 		if !ok {
@@ -85,7 +121,6 @@ func StartCommand(args []string, cwd string, env []string, out io.Writer) (*Comm
 		return nil, err
 	}
 	defer attrs.Delete()
-	handles := []windows.Handle{input, wr}
 	if err = attrs.Update(windows.PROC_THREAD_ATTRIBUTE_HANDLE_LIST, unsafe.Pointer(&handles[0]), uintptr(len(handles))*unsafe.Sizeof(handles[0])); err != nil {
 		return nil, err
 	}
@@ -95,9 +130,9 @@ func StartCommand(args []string, cwd string, env []string, out io.Writer) (*Comm
 	si := windows.StartupInfoEx{}
 	si.Cb = uint32(unsafe.Sizeof(si))
 	si.Flags = windows.STARTF_USESTDHANDLES
-	si.StdInput = input
-	si.StdOutput = wr
-	si.StdErr = wr
+	si.StdInput = handles[0]
+	si.StdOutput = handles[1]
+	si.StdErr = handles[2]
 	si.ProcThreadAttributeList = attrs.List()
 	quoted := []string{}
 	for _, arg := range args {
@@ -123,7 +158,6 @@ func StartCommand(args []string, cwd string, env []string, out io.Writer) (*Comm
 	windows.CloseHandle(pi.Thread)
 	p.process = pi.Process
 	ok = true
-	go func() { defer close(p.copied); _, _ = io.Copy(out, read) }()
 	return p, nil
 }
 func (p *Command) Wait() error {

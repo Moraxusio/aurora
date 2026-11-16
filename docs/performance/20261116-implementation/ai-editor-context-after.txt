@@ -1,0 +1,53 @@
+00:00 +0: loading C:/build/aurora/app/test/ai_input_test.dart
+00:00 +0: C:/build/aurora/app/test/ai_input_test.dart: attachment sniffing rejects oversized, binary and credential files
+00:00 +1: C:/build/aurora/app/test/ai_input_test.dart: large attachments use bounded data frames and tiny run references
+00:00 +2: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:01 +3: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:01 +4: C:/build/aurora/app/test/ai_runtime_test.dart: failed event handshake releases stream before retrying the healthy link
+00:02 +5: C:/build/aurora/app/test/ai_runtime_test.dart: failed event handshake releases stream before retrying the healthy link
+00:02 +6: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:02 +7: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:02 +8: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:02 +9: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:02 +10: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:02 +11: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:02 +12: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:02 +13: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:03 +14: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:03 +15: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:03 +16: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:03 +17: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:03 +18: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:03 +19: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:03 +20: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:03 +21: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:04 +22: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:04 +23: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:04 +24: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:04 +25: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:05 +26: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:05 +27: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:05 +28: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:05 +29: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:06 +30: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:06 +31: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:06 +32: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:06 +33: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:06 +34: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:06 +35: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:07 +36: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:07 +37: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:07 +38: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:07 +39: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:08 +40: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:08 +41: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:08 +42: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:08 +43: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:08 +44: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:09 +45: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:09 +46: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:09 +47: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:09 +48: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:09 +49: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+00:10 +50: C:/build/aurora/app/test/workbench_visual_test.dart: (tearDownAll)
+00:10 +50: All tests passed!

@@ -1,0 +1,38 @@
+Building Windows application...                                   147.7s
+√ Built build\windows\x64\runner\Profile\aurora.exe
+VMServiceFlutterDriver: Connecting to Flutter application at http://127.0.0.1:64081/mBMOCB8FHnQ=/
+VMServiceFlutterDriver: Isolate found with number: 7947958256037847
+VMServiceFlutterDriver: Isolate 7947958256037847 is runnable.
+VMServiceFlutterDriver: Isolate is paused at start.
+VMServiceFlutterDriver: Attempting to resume isolate
+00:00 +0: production desktop monitor and concurrent workbench frame budgets
+VMServiceFlutterDriver: Connected to Flutter application.
+01:32 +1: (tearDownAll)
+Warning: integration_test plugin was not detected.
+
+If you're running the tests with `flutter drive`, please make sure your tests
+are in the `integration_test/` directory of your package and use
+`flutter test $path_to_test` to run it instead.
+
+If you're running the tests with Android instrumentation or XCTest, this means
+that you are not capturing test results properly! See the following link for
+how to set up the integration_test plugin:
+
+https://docs.flutter.dev/testing/integration-tests
+
+01:32 +2: All tests passed!
+All tests passed.
+The Flutter CLI developer tool uses Google Analytics to report usage and diagnostic
+data along with package dependencies, and crash reporting to send basic crash
+reports. This data is used to help improve the Dart platform, Flutter framework,
+and related tools.
+
+Telemetry is not sent on the very first run. To disable reporting of telemetry,
+run this terminal command:
+
+    flutter --disable-analytics
+
+If you opt out of telemetry, an opt-out event will be sent, and then no further
+information will be sent. This data is collected in accordance with the Google
+Privacy Policy (https://policies.google.com/privacy).
+

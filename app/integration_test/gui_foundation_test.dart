@@ -26,6 +26,7 @@ import '../test/support/monitor_workflow.dart';
 import '../test/support/workspace_fixture.dart';
 import '../test/ai_runtime_test.dart' show EventStream;
 import 'native_window.dart';
+import 'native_cpu_trace.dart';
 
 class _ConcurrentLink extends MonitorWorkbenchLink {
   final events = EventStream();
@@ -115,10 +116,16 @@ void main() {
       final samples = <Map<String, Object>>[];
       Future<void> measure(String name, Future<void> Function() task) async {
         await settle();
+        final cpu =
+            const bool.fromEnvironment('AURORA_TRACE_CPU') &&
+                name.startsWith('retained editor')
+            ? await NativeCpuTrace.start()
+            : null;
         timings.clear();
         final watch = Stopwatch()..start();
         await task();
         watch.stop();
+        if (cpu != null) await cpu.finish('$output-editor-cpu.json');
         await t.pump(const Duration(milliseconds: 1200));
         final builds =
             timings.map((f) => f.buildDuration.inMicroseconds).toList()..sort();
@@ -323,6 +330,8 @@ void main() {
             'native_engine': true,
             'production_root': true,
             'profile': const bool.fromEnvironment('dart.vm.profile'),
+            'frame_budget_enforced': enforce,
+            'cpu_trace_enabled': const bool.fromEnvironment('AURORA_TRACE_CPU'),
             'physical_size': {
               'width': t.view.physicalSize.width,
               'height': t.view.physicalSize.height,

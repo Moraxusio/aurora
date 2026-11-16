@@ -12,6 +12,7 @@ class AiSessionSummary {
   String agent;
   String model;
   String preview;
+  final String storageError;
   bool running;
   AiPermissionQuestion? pendingPermission;
   int messageCount;
@@ -28,6 +29,7 @@ class AiSessionSummary {
     required this.agent,
     this.model = '',
     this.preview = '',
+    this.storageError = '',
     this.running = false,
     this.pendingPermission,
     this.messageCount = 0,
@@ -45,6 +47,7 @@ class AiSessionSummary {
     agent: j['agent'] as String? ?? 'build',
     model: j['model'] as String? ?? '',
     preview: j['preview'] as String? ?? '',
+    storageError: j['storage_error'] as String? ?? '',
     running: j['running'] == true,
     pendingPermission: j['pending_permission'] is Map
         ? AiPermissionQuestion.fromJson(
@@ -142,13 +145,20 @@ class AiFileDiff {
 }
 
 class AiStepSnapshot {
+  final String warning;
   final String start;
   final String end;
   final List<AiFileDiff> files;
 
-  const AiStepSnapshot({this.start = '', this.end = '', this.files = const []});
+  const AiStepSnapshot({
+    this.start = '',
+    this.end = '',
+    this.files = const [],
+    this.warning = '',
+  });
 
   factory AiStepSnapshot.fromJson(Map<String, dynamic> j) => AiStepSnapshot(
+    warning: j['warning'] as String? ?? '',
     start: j['start'] as String? ?? '',
     end: j['end'] as String? ?? '',
     files: [

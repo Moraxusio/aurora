@@ -1,4 +1,4 @@
-// The client side of the proxy (docs/DESIGN.md D-83 to D-90) against the real
+// The client side of the proxy (docs/archive/2026-11-16/DESIGN.md D-83 to D-90) against the real
 // agent entry with the real proxy service (agent/cmd/aurora3-testpeer), and a
 // subscription served by a local HTTP server, as a provider would. The agent's
 // own node is a Trojan server written for this test; it records what it was

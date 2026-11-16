@@ -10,7 +10,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:aurora_wire/aurora_wire.dart' as w;
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
 
@@ -18,7 +18,6 @@ import '../../kernel/editor_tab.dart';
 import '../../kernel/feature.dart';
 import '../../kernel/input_mode.dart';
 import '../../kernel/visible_polling.dart';
-import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../kernel/workbench_shortcuts.dart';
 import '../../theme/ide_theme.dart';

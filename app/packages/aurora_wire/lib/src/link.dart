@@ -1,4 +1,4 @@
-// The direct link (docs/DESIGN.md 5.3): TCP with no delay, TLS 1.3 trusted by
+// The direct link (docs/archive/2026-11-16/DESIGN.md 5.3): TCP with no delay, TLS 1.3 trusted by
 // certificate pin, one Hello exchange, then a yamux session. Every operation
 // opens a stream and starts with a Request frame (agent/internal/wire).
 import 'dart:async';
@@ -141,7 +141,7 @@ class Link {
     try {
       // TLS 1.3 in the bundled BoringSSL; trust is the pin alone
       // (wire.PinnedTLS). dart:io's SecureSocket is not used: it caps
-      // throughput (docs/PLAN.md section 6).
+      // throughput (docs/archive/2026-11-16/PLAN.md section 6).
       sock = await TlsSocket.connect(ep.host, ep.port, pin, timeout: timeout);
     } on TlsException catch (e) {
       throw DialException(

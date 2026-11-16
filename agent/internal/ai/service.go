@@ -40,6 +40,10 @@ func (s svc) Operations() []service.Operation {
 		{Name: "ai.history", Stream: s.opHistory},
 		{Name: "ai.delete", Handle: s.opDelete},
 		{Name: "ai.run", Handle: s.opRun},
+		{Name: "ai.propose", Stream: s.opPropose},
+		{Name: "ai.extensions", Handle: s.opExtensions},
+		{Name: "ai.mcp.probe", Handle: s.opMCPProbe},
+		{Name: "ai.snapshots.prune", Handle: s.opPruneSnapshots},
 		{Name: "ai.stop", Handle: s.opStop},
 		{Name: "ai.approve", Handle: s.opApprove},
 		{Name: "ai.inbox", Handle: s.opInbox},
@@ -75,12 +79,16 @@ func (s svc) opInbox(_ context.Context, raw json.RawMessage) (any, error) {
 	}
 	s.init()
 	s.mu.Lock()
-	session := s.sessions[in.SessionID]
+	session := s.sessionLocked(in.SessionID)
 	if session == nil {
 		s.mu.Unlock()
 		return nil, wire.Errf(wire.CodeNotFound, "会话不存在")
 	}
 	if in.Action != "" {
+		if s.maintenance[in.SessionID] != nil {
+			s.mu.Unlock()
+			return nil, wire.Errf(wire.CodeConflict, "会话正在维护")
+		}
 		if in.Action != "cancel" && in.Action != "steer" && in.Action != "queue" {
 			s.mu.Unlock()
 			return nil, wire.Errf(wire.CodeBadRequest, "不支持的投递操作")
@@ -176,7 +184,7 @@ func (s svc) opUpdate(_ context.Context, raw json.RawMessage) (any, error) {
 	return map[string]any{"session": sum}, nil
 }
 
-func (s svc) opSearch(_ context.Context, raw json.RawMessage) (any, error) {
+func (s svc) opSearch(ctx context.Context, raw json.RawMessage) (any, error) {
 	var in struct {
 		Query string `json:"query"`
 		Limit int    `json:"limit"`
@@ -184,7 +192,8 @@ func (s svc) opSearch(_ context.Context, raw json.RawMessage) (any, error) {
 	if err := decodeArgs(raw, &in); err != nil {
 		return nil, err
 	}
-	return map[string]any{"hits": s.SearchSessions(in.Query, in.Limit)}, nil
+	hits, err := s.searchSessionsContext(ctx, in.Query, in.Limit)
+	return map[string]any{"hits": hits}, err
 }
 
 func (s svc) opExport(_ context.Context, raw json.RawMessage) (any, error) {

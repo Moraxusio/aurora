@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
-import 'overlays.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../theme/ide_theme.dart';
 import 'editor_tab.dart';

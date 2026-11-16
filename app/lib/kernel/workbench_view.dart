@@ -1,6 +1,6 @@
 // A VS Code-style workbench: editor grid above, independent terminal panel
 // below. Fixed keyed hosts survive hide/maximize, server and window changes.
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import 'tab_workspace_view.dart';
 import 'terminal_panel_state.dart';

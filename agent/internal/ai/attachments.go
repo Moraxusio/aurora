@@ -290,6 +290,14 @@ func (e *Env) userParts(text string, atts []ContextAttachment) []Part {
 // to attachments from the removed messages are candidates; shared references
 // (including active steering inboxes) keep the data. Never touch workspace files.
 func (e *Env) removeUnusedAttachmentsLocked(candidates map[string]bool) {
+	if e.validateSessionReferencesLocked() != nil {
+		return
+	}
+	for _, r := range e.records {
+		for _, id := range r.index.Attachments {
+			delete(candidates, id)
+		}
+	}
 	for _, session := range e.sessions {
 		for _, item := range session.Inbox {
 			for _, attachment := range item.Attachments {

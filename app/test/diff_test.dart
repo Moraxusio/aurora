@@ -13,6 +13,11 @@ String show(List<DiffLine> l) => l.map((x) => switch (x.kind) {
     }).join('\n');
 
 void main() {
+  test('background diff matches the synchronous algorithm and skips stale queued work', () async {
+    const before = 'one\ntwo\nthree\n', after = 'one\nchanged\nthree\n';
+    expect(show(await diffTextsAsync(before, after)), show(diffTexts(before, after)));
+    expect(await diffTextsAsync(before, after, active: () => false), isEmpty);
+  });
   group('parseDiff', () {
     const sample = 'diff --git a/a.txt b/a.txt\n'
         'index 1111111..2222222 100644\n'

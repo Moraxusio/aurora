@@ -17,12 +17,11 @@ import 'package:aurora_install/aurora_install.dart' show compareVersions, parseV
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../kernel/feature.dart';
 import '../../kernel/input_mode.dart';
-import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../kernel/retained_pages.dart';
 import '../../theme/ide_theme.dart';
@@ -132,7 +131,10 @@ class _FileTreeState extends State<FileTree> {
     if (_restoring != key) {
       _restoring = key;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && ws.projectKey == key) ws.restoreFiles((f) => fileEditorTab(ws, root: f.root, path: f.path));
+        if (mounted && ws.projectKey == key) {
+          ws.restoreFiles((f) => fileEditorTab(ws, root: f.root, path: f.path));
+          unawaited(ws.restoreRecovery((f) => fileEditorTab(ws, root: f.root, path: f.path)));
+        }
       });
     }
     return RetainedPages(index: keys.indexOf(key), children: [
@@ -667,7 +669,7 @@ class _FileTreePageState extends State<_FileTreePage> {
         if (choice == 'all') replaceAll = true;
       }
       final size = await f.length();
-      widget.transfers.upload(link, f, size, dir.root, dir.child(name), onDone: () {
+      widget.transfers.upload(link, f, size, dir.root, dir.child(name), currentLink: () => ws.link, onDone: () {
         if (mounted) _load(dir);
       });
     }
@@ -1051,6 +1053,9 @@ class _FileTreePageState extends State<_FileTreePage> {
     final rows = [for (final r in _roots) ..._rows(r, 0)];
     final clip = ws.fileClipboard.value;
     return Column(children: [
+      ValueListenableBuilder<String?>(valueListenable: ws.watch.status, builder: (_, status, _) =>
+        status == null ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.all(8),
+          child: Text(status, style: TextStyle(color: ide.warn, fontSize: 11)))),
       ProjectWorkspaceBar(ws: ws, actions: [
           IconBtn(Icons.note_add_outlined, '新建文件', target == null ? null : () => _newFile(target)),
           IconBtn(Icons.refresh, '刷新', _refreshAll),

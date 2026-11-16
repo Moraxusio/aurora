@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"aurora3/internal/filetxn"
 	"aurora3/internal/paths"
 	"aurora3/internal/proxyroute"
 )
@@ -53,6 +54,7 @@ type toolContext struct {
 	messageID  string
 	callID     string
 	depth      int
+	extensions *extensionRuntime
 }
 
 // ToolDefinitions returns OpenCode's exact tool names, descriptions, and JSON schemas
@@ -368,7 +370,8 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 	}
 	declared := false
 	var definition ToolDef
-	for _, tool := range modelToolDefinitions(tc.session.Agent, tc.depth, tc.provider) {
+	definitions := append(modelToolDefinitions(tc.session.Agent, tc.depth, tc.provider), tc.extensions.definitions(tc.session.Agent, tc.provider)...)
+	for _, tool := range definitions {
 		if tool.Name == name {
 			declared, definition = true, tool
 			break
@@ -454,6 +457,10 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 	case "question":
 		res = execQuestionTool(ctx, tc, rawInput)
 	default:
+		if tc.extensions != nil && (name == "skill" || strings.HasPrefix(name, "mcp_")) {
+			res = tc.extensions.execute(ctx, name, rawInput, checkPerm)
+			break
+		}
 		return ToolExecResult{
 			Output:  fmt.Sprintf("Unknown tool %q. Use one of the declared tools.", name),
 			IsError: true,
@@ -461,6 +468,19 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 	}
 
 	if !res.IsError {
+		if name == "read" {
+			var in struct {
+				Path string `json:"path"`
+				File string `json:"filePath"`
+			}
+			_ = json.Unmarshal(rawInput, &in)
+			if in.Path == "" {
+				in.Path = in.File
+			}
+			if target, _, err := resolveToolPath(tc, in.Path, false); err == nil {
+				res.Output += nestedReadInstructions(tc, target)
+			}
+		}
 		dir := "head"
 		if name == "shell" {
 			dir = "tail"
@@ -676,10 +696,11 @@ func execWriteTool(ctx context.Context, tc toolContext, rawInput json.RawMessage
 	if err := original.revalidate(tc); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+	change, err := original.change(tc.rootPath, []byte(in.Content), true)
+	if err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
-	if err := atomicWriteFile(abs, []byte(in.Content), original.mode); err != nil {
+	if err := tc.env.fileTransactions(tc.rootPath).CommitLocked(ctx, []filetxn.Change{change}); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 	if tc.env.Audit != nil {
@@ -740,7 +761,11 @@ func execEditTool(ctx context.Context, tc toolContext, rawInput json.RawMessage,
 	if err := original.revalidate(tc); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
-	if err := atomicWriteFile(abs, []byte(editRes.Content), original.mode); err != nil {
+	change, err := original.change(tc.rootPath, []byte(editRes.Content), true)
+	if err != nil {
+		return ToolExecResult{Output: err.Error(), IsError: true}
+	}
+	if err := tc.env.fileTransactions(tc.rootPath).CommitLocked(ctx, []filetxn.Change{change}); err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
 	if tc.env.Audit != nil {

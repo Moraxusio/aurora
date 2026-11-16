@@ -360,7 +360,7 @@ func chooseKeepID(active []Message) string {
 }
 
 // RunCompaction summarizes the active conversation into a new compaction checkpoint Message.
-func RunCompaction(ctx context.Context, s *Session, cfg ProviderConfig, absWorkdir string, overflow bool, proxyEnv func() map[string]string, load func(Part) ([]byte, error), onDelta func(string)) (Message, error) {
+func RunCompaction(ctx context.Context, s *Session, cfg ProviderConfig, absWorkdir string, overflow bool, proxyEnv func() map[string]string, load func(Part) ([]byte, error), onDelta func(string), meters ...*runMeter) (Message, error) {
 	active := BuildActiveHistory(s.Messages)
 	if len(active) == 0 {
 		return Message{}, fmt.Errorf("nothing to compact yet")
@@ -402,20 +402,25 @@ func RunCompaction(ctx context.Context, s *Session, cfg ProviderConfig, absWorkd
 	}
 
 	sys := BuildSystemPrompts(s.Agent, cfg, absWorkdir, nil)
-	resp, err := StreamLLM(ctx, LLMRequest{
-		SessionID:      s.ID,
-		AffinityID:     s.ParentID,
-		Initiator:      "agent",
-		Provider:       cfg,
-		System:         sys,
-		Messages:       reqMessages,
-		MaxTokens:      8192,
-		LoadAttachment: load,
+	var meter *runMeter
+	if len(meters) > 0 {
+		meter = meters[0]
+	}
+	resp, err := streamBudgeted(ctx, LLMRequest{
+		SessionID:       s.ID,
+		AffinityID:      s.ParentID,
+		Initiator:       "agent",
+		Provider:        cfg,
+		System:          sys,
+		Messages:        reqMessages,
+		MaxTokens:       8192,
+		BudgetAuxiliary: true,
+		LoadAttachment:  load,
 	}, proxyEnv, func(d LLMDelta) {
 		if d.Type == "text" && d.Text != "" && onDelta != nil {
 			onDelta(d.Text)
 		}
-	})
+	}, meter)
 	if err != nil {
 		return Message{}, err
 	}

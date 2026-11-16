@@ -7,16 +7,16 @@
 import 'dart:async';
 
 import 'package:aurora_wire/aurora_wire.dart';
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../kernel/feature.dart';
-import '../../kernel/widgets.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'ai_models.dart';
 import 'ai_settings_dialog.dart';
 import 'ai_studio_view.dart';
 import 'ai_visuals.dart';
+import 'ai_extensions.dart';
 
 class AiFeature extends Feature {
   const AiFeature();
@@ -30,30 +30,57 @@ class AiFeature extends Feature {
   @override
   String get service => 'ai';
   @override
-  List<String> get ops => const ['ai.sessions', 'ai.get', 'ai.run', 'ai.stream', 'ai.stop', 'ai.approve'];
+  List<String> get ops => const [
+    'ai.sessions',
+    'ai.get',
+    'ai.run',
+    'ai.stream',
+    'ai.stop',
+    'ai.approve',
+  ];
 
   @override
   SideBarView? sideBar(BuildContext context, Workspace ws) => null;
 
   @override
   void open(Workspace ws) {
-    if (ws.assistantTabs.isEmpty) { openNewAiSession(ws); } else { ws.showAssistantPanel(); }
+    if (ws.assistantTabs.isEmpty) {
+      openNewAiSession(ws);
+    } else {
+      ws.showAssistantPanel();
+    }
   }
 
   @override
   List<Command> commands(Workspace ws) => [
-        Command(id: 'ai.new', title: '新建 AI 智能体会话', group: 'AI 助手', icon: Icons.auto_awesome_rounded, run: () => openNewAiSession(ws)),
-        Command(
-          id: 'ai.settings',
-          title: '配置 AI 模型与密钥…',
-          group: 'AI 助手',
-          icon: Icons.key_rounded,
-          run: () {
-            final ctx = AppNavigation.context;
-            if (ctx != null) showAiSettingsDialog(ctx, app: ws.app, ws: ws);
-          },
-        ),
-      ];
+    Command(
+      id: 'ai.extensions',
+      title: 'AI 项目指令、技能、MCP 与运行预算…',
+      group: 'AI 助手',
+      enabled: () => ws.link?.server.caps.contains('ai.extensions') == true,
+      run: () async {
+        final context = AppNavigation.context;
+        if (context != null) await openAiExtensions(context, ws);
+      },
+    ),
+    Command(
+      id: 'ai.new',
+      title: '新建 AI 智能体会话',
+      group: 'AI 助手',
+      icon: Icons.auto_awesome_rounded,
+      run: () => openNewAiSession(ws),
+    ),
+    Command(
+      id: 'ai.settings',
+      title: '配置 AI 模型与密钥…',
+      group: 'AI 助手',
+      icon: Icons.key_rounded,
+      run: () {
+        final ctx = AppNavigation.context;
+        if (ctx != null) showAiSettingsDialog(ctx, app: ws.app, ws: ws);
+      },
+    ),
+  ];
 }
 
 void openNewAiSession(Workspace ws) {
@@ -64,7 +91,12 @@ class AiSessionSidebar extends StatefulWidget {
   final Workspace ws;
   final VoidCallback? onOpened;
   final bool showNewButton;
-  const AiSessionSidebar({super.key, required this.ws, this.onOpened, this.showNewButton = true});
+  const AiSessionSidebar({
+    super.key,
+    required this.ws,
+    this.onOpened,
+    this.showNewButton = true,
+  });
 
   @override
   State<AiSessionSidebar> createState() => _AiSessionSidebarState();
@@ -77,6 +109,7 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
   OpStream? _stream;
   Link? _streamLink;
   bool _disposed = false;
+  int _linkSeq = 0, _reloadSeq = 0;
   Timer? _reloadDebounce;
 
   final _searchCtl = TextEditingController();
@@ -115,24 +148,44 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
   }
 
   Future<void> _syncLink() async {
+    final sequence = ++_linkSeq;
+    _reloadSeq++;
+    _searchSeq++;
+    _reloadDebounce?.cancel();
+    _searchDebounce?.cancel();
     _stream?.reset();
     _stream = null;
     final link = ws.link;
     _streamLink = link;
+    setState(() {
+      _sessions = [];
+      _hits = null;
+      _searching = false;
+      _error = null;
+      _loading = link != null;
+    });
     if (link == null) {
       if (mounted) setState(() => _loading = false);
       return;
     }
     await _reload();
-    unawaited(_listenEvents(link));
+    if (_disposed || sequence != _linkSeq || !identical(link, ws.link)) return;
+    unawaited(_listenEvents(link, sequence));
+    if (_searchCtl.text.trim().isNotEmpty) _onSearchChanged(_searchCtl.text);
   }
 
   Future<void> _reload() async {
     final link = ws.link;
     if (link == null) return;
+    final sequence = ++_reloadSeq;
+    bool current() =>
+        mounted &&
+        !_disposed &&
+        sequence == _reloadSeq &&
+        identical(link, ws.link);
     try {
       final res = await link.call('ai.sessions') as Map;
-      if (!mounted) return;
+      if (!current()) return;
       final list = [
         for (final x in (res['sessions'] as List? ?? const []))
           if (x is Map) AiSessionSummary.fromJson(x.cast<String, dynamic>()),
@@ -143,7 +196,7 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
         _error = null;
       });
     } on OpError catch (e) {
-      if (mounted) {
+      if (current()) {
         setState(() {
           _error = e.message;
           _loading = false;
@@ -161,34 +214,50 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
     });
   }
 
-  Future<void> _listenEvents(Link link) async {
+  Future<void> _listenEvents(Link link, int sequence) async {
+    OpStream? opened;
     try {
       final st = await link.open('ai.stream');
+      opened = st;
       await st.response();
-      if (_disposed || !identical(link, ws.link)) {
+      if (_disposed || sequence != _linkSeq || !identical(link, ws.link)) {
         st.reset();
         return;
       }
       _stream = st;
+      // Events may have occurred between the initial list and subscription.
+      unawaited(_reload());
       while (!_disposed) {
         final f = await st.read();
+        if (sequence != _linkSeq ||
+            !identical(st, _stream) ||
+            !identical(link, ws.link))
+          break;
         if (f == null) break;
         if (!f.isJson) continue;
         final ev = (f.json() as Map).cast<String, dynamic>();
         final type = ev['type'] as String? ?? '';
-        if (type == 'session.status' || type == 'session.title' || type == 'message.added' || type == 'permission.ask' || type == 'session.reverted') {
+        if (type == 'sync.required' ||
+            type == 'session.status' ||
+            type == 'session.title' ||
+            type == 'message.added' ||
+            type == 'permission.ask' ||
+            type == 'session.reverted') {
           _scheduleReload();
         }
       }
     } on Object {
       // reconnect is handled by _onWs
+    } finally {
+      opened?.reset();
+      if (identical(opened, _stream)) _stream = null;
     }
   }
 
   void _onSearchChanged(String q) {
     _searchDebounce?.cancel();
+    _searchSeq++; // a pending old result is invalid even before debounce fires
     if (q.trim().isEmpty) {
-      _searchSeq++;
       setState(() {
         _hits = null;
         _searching = false;
@@ -196,7 +265,10 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
       return;
     }
     setState(() => _searching = true);
-    _searchDebounce = Timer(const Duration(milliseconds: 300), () => _runSearch(q.trim()));
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () => _runSearch(q.trim()),
+    );
   }
 
   Future<void> _runSearch(String q) async {
@@ -204,8 +276,9 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
     if (link == null) return;
     final seq = ++_searchSeq;
     try {
-      final res = await link.call('ai.search', {'query': q, 'limit': 50}) as Map;
-      if (!mounted || seq != _searchSeq) return;
+      final res =
+          await link.call('ai.search', {'query': q, 'limit': 50}) as Map;
+      if (!mounted || seq != _searchSeq || !identical(link, ws.link)) return;
       setState(() {
         _hits = [
           for (final x in (res['hits'] as List? ?? const []))
@@ -214,7 +287,7 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
         _searching = false;
       });
     } on OpError catch (e) {
-      if (mounted && seq == _searchSeq) {
+      if (mounted && seq == _searchSeq && identical(link, ws.link)) {
         setState(() => _searching = false);
         ws.toast(e.message, error: true);
       }
@@ -237,14 +310,21 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
       return true;
     });
     if (deleted != true) return;
-    ws.dropTabs((t) => t.isAssistant && (t.taskKey == s.id || t.id == 'ai:${s.id}'));
+    ws.dropTabs(
+      (t) => t.isAssistant && (t.taskKey == s.id || t.id == 'ai:${s.id}'),
+    );
     if (mounted) await _reload();
   }
 
   Future<void> _rename(AiSessionSummary s) async {
     final link = ws.link;
     if (link == null) return;
-    final t = await askText(context, title: '重命名会话', initial: s.title, hint: '会话标题');
+    final t = await askText(
+      context,
+      title: '重命名会话',
+      initial: s.title,
+      hint: '会话标题',
+    );
     if (t == null || t.isEmpty || t == s.title || !mounted) return;
     final renamed = await ws.guard(() async {
       await link.call('ai.update', {'id': s.id, 'title': t});
@@ -252,7 +332,8 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
     });
     if (renamed != true) return;
     for (final tab in ws.assistantTabs) {
-      if (tab.taskKey == s.id || tab.id == 'ai:${s.id}') ws.updateTabTitle(tab.id, t);
+      if (tab.taskKey == s.id || tab.id == 'ai:${s.id}')
+        ws.updateTabTitle(tab.id, t);
     }
     if (mounted) await _reload();
   }
@@ -260,7 +341,9 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
   Future<void> _togglePin(AiSessionSummary s) async {
     final link = ws.link;
     if (link == null) return;
-    await ws.guard(() => link.call('ai.update', {'id': s.id, 'pinned': !s.pinned}));
+    await ws.guard(
+      () => link.call('ai.update', {'id': s.id, 'pinned': !s.pinned}),
+    );
     await _reload();
   }
 
@@ -268,21 +351,43 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
     final link = ws.link;
     if (link == null) return;
     final res = await ws.guard(() => link.call('ai.export', {'id': s.id}));
-    if (res is Map) copyText(res['markdown'] as String? ?? '', what: '已把会话复制为 Markdown');
+    if (res is Map)
+      copyText(res['markdown'] as String? ?? '', what: '已把会话复制为 Markdown');
   }
 
-  void _open(String id, String title) { ws.openTab(aiStudioTab(ws, sessionId: id, title: title)); widget.onOpened?.call(); }
-  void _new() { openNewAiSession(ws); widget.onOpened?.call(); }
+  void _open(String id, String title) {
+    ws.openTab(aiStudioTab(ws, sessionId: id, title: title));
+    widget.onOpened?.call();
+  }
+
+  void _new() {
+    openNewAiSession(ws);
+    widget.onOpened?.call();
+  }
 
   List<MenuItem> _menu(AiSessionSummary s) => [
-        MenuItem('打开', () => _open(s.id, s.title), icon: Icons.open_in_new_rounded),
-        MenuItem(s.pinned ? '取消置顶' : '置顶', () => _togglePin(s), icon: s.pinned ? Icons.push_pin : Icons.push_pin_outlined),
-        MenuItem('重命名…', () => _rename(s), icon: Icons.drive_file_rename_outline),
-        MenuItem('复制为 Markdown', () => _export(s), icon: Icons.copy_all_rounded),
-        if (s.running) MenuItem('停止运行', () => ws.guard(() => ws.link!.call('ai.stop', {'id': s.id})), icon: Icons.stop_rounded),
-        const MenuItem.separator(),
-        MenuItem('删除…', () => _delete(s), icon: Icons.delete_outline_rounded, danger: true),
-      ];
+    MenuItem('打开', () => _open(s.id, s.title), icon: Icons.open_in_new_rounded),
+    MenuItem(
+      s.pinned ? '取消置顶' : '置顶',
+      () => _togglePin(s),
+      icon: s.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+    ),
+    MenuItem('重命名…', () => _rename(s), icon: Icons.drive_file_rename_outline),
+    MenuItem('复制为 Markdown', () => _export(s), icon: Icons.copy_all_rounded),
+    if (s.running)
+      MenuItem(
+        '停止运行',
+        () => ws.guard(() => ws.link!.call('ai.stop', {'id': s.id})),
+        icon: Icons.stop_rounded,
+      ),
+    const MenuItem.separator(),
+    MenuItem(
+      '删除…',
+      () => _delete(s),
+      icon: Icons.delete_outline_rounded,
+      danger: true,
+    ),
+  ];
 
   Widget _searchBox(Ide ide) {
     return Padding(
@@ -297,20 +402,35 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
           decoration: InputDecoration(
             isDense: true,
             hintText: '搜索历史对话…',
-            prefixIcon: Icon(Icons.search_rounded, size: 16, color: ide.textFaint),
+            prefixIcon: Icon(
+              Icons.search_rounded,
+              size: 16,
+              color: ide.textFaint,
+            ),
             prefixIconConstraints: const BoxConstraints(minWidth: 32),
             suffixIcon: _searchCtl.text.isEmpty
                 ? null
                 : (_searching
-                    ? const Padding(padding: EdgeInsets.all(9), child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.6)))
-                    : IconButton(
-                        padding: EdgeInsets.zero,
-                        icon: Icon(Icons.close_rounded, size: 14, color: ide.textFaint),
-                        onPressed: () {
-                          _searchCtl.clear();
-                          _onSearchChanged('');
-                        },
-                      )),
+                      ? const Padding(
+                          padding: EdgeInsets.all(9),
+                          child: SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 1.6),
+                          ),
+                        )
+                      : IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.close_rounded,
+                            size: 14,
+                            color: ide.textFaint,
+                          ),
+                          onPressed: () {
+                            _searchCtl.clear();
+                            _onSearchChanged('');
+                          },
+                        )),
           ),
         ),
       ),
@@ -318,17 +438,32 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
   }
 
   Widget _groupHeader(Ide ide, String text, {IconData? icon}) => Padding(
-        padding: const EdgeInsets.fromLTRB(Space.l, Space.m, Space.l, 2),
-        child: Row(children: [
-          if (icon != null) ...[Icon(icon, size: 11, color: ide.textFaint), const SizedBox(width: 4)],
-          Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: ide.textFaint, letterSpacing: 0.3)),
-        ]),
-      );
+    padding: const EdgeInsets.fromLTRB(Space.l, Space.m, Space.l, 2),
+    child: Row(
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 11, color: ide.textFaint),
+          const SizedBox(width: 4),
+        ],
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: ide.textFaint,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _row(Ide ide, AiSessionSummary s) {
     final active = ws.tab(ws.assistantPanel.active ?? '');
     final selected = active?.id == 'ai:${s.id}' || active?.taskKey == s.id;
-    final busy = s.pendingPermission != null ? ide.warn : (s.running ? ide.accent : null);
+    final busy = s.pendingPermission != null
+        ? ide.warn
+        : (s.running ? ide.accent : null);
     return ContextArea(
       items: () => _menu(s),
       child: Padding(
@@ -340,41 +475,109 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
           hoverColor: selected ? Colors.transparent : ide.hover,
           child: Container(
             padding: const EdgeInsets.fromLTRB(Space.m, 7, Space.s, 7),
-            decoration: selected ? AiVisuals.surface(ide, selected: true) : null,
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              SizedBox(
-                width: 16,
-                height: 18,
-                child: Center(
-                  child: s.running && s.pendingPermission == null
-                      ? const AiStatusMark(AiWorkStatus.running, label: false)
-                      : (busy != null ? StatusDot(busy, size: 7) : (s.pinned ? Icon(Icons.push_pin, size: 12, color: ide.accent) : Icon(Icons.chat_bubble_outline_rounded, size: 12, color: ide.textFaint))),
-                ),
-              ),
-              const SizedBox(width: Space.s),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Expanded(child: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: ide.text))),
-                    const SizedBox(width: 6),
-                    Text(relativeTime(s.updatedAt ~/ 1000), style: TextStyle(fontSize: 10.5, color: ide.textFaint)),
-                  ]),
-                  const SizedBox(height: 2),
-                  Text(
-                    s.pendingPermission != null ? '等待你批准：${s.pendingPermission!.tool}' : (s.preview.isEmpty ? s.workdir : s.preview),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11.5, color: s.pendingPermission != null ? ide.warn : ide.textDim, height: 1.35),
+            decoration: selected
+                ? AiVisuals.surface(ide, selected: true)
+                : null,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 18,
+                  child: Center(
+                    child: s.running && s.pendingPermission == null
+                        ? const AiStatusMark(AiWorkStatus.running, label: false)
+                        : (busy != null
+                              ? StatusDot(busy, size: 7)
+                              : (s.pinned
+                                    ? Icon(
+                                        Icons.push_pin,
+                                        size: 12,
+                                        color: ide.accent,
+                                      )
+                                    : Icon(
+                                        Icons.chat_bubble_outline_rounded,
+                                        size: 12,
+                                        color: ide.textFaint,
+                                      ))),
                   ),
-                  const SizedBox(height: 3),
-                  Row(children: [
-                    _Tag(s.parentId.isNotEmpty ? '子代理' : s.agent == 'plan' ? 'Plan' : 'Build', s.agent == 'plan' ? ide.warn : ide.textDim),
-                    const SizedBox(width: 5),
-                    Flexible(child: Text(s.workdir, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: ide.textFaint))),
-                  ]),
-                ]),
-              ),
-            ]),
+                ),
+                const SizedBox(width: Space.s),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              s.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: ide.text,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            relativeTime(s.updatedAt ~/ 1000),
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: ide.textFaint,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        s.pendingPermission != null
+                            ? '等待你批准：${s.pendingPermission!.tool}'
+                            : (s.storageError.isNotEmpty
+                                ? '会话读取失败（原记录已保留）：${s.storageError}'
+                                : s.preview.isEmpty ? s.workdir : s.preview),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: s.pendingPermission != null
+                              ? ide.warn
+                              : ide.textDim,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          _Tag(
+                            s.parentId.isNotEmpty
+                                ? '子代理'
+                                : s.agent == 'plan'
+                                ? 'Plan'
+                                : 'Build',
+                            s.agent == 'plan' ? ide.warn : ide.textDim,
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              s.workdir,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: ide.textFaint,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -382,43 +585,76 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
   }
 
   Widget _hitRow(Ide ide, AiSearchHit h) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Space.xs, vertical: 1),
-        child: InkWell(
-          key: ValueKey('ai-hit-${h.sessionId}'),
-          onTap: () => _open(h.sessionId, h.title),
-          borderRadius: BorderRadius.circular(Radii.m),
-          hoverColor: ide.hover,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Space.m, vertical: 7),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(h.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: ide.text)),
-              if (h.snippet.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(h.snippet, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: ide.textDim, height: 1.35)),
-              ],
-            ]),
-          ),
+    padding: const EdgeInsets.symmetric(horizontal: Space.xs, vertical: 1),
+    child: InkWell(
+      key: ValueKey('ai-hit-${h.sessionId}'),
+      onTap: () => _open(h.sessionId, h.title),
+      borderRadius: BorderRadius.circular(Radii.m),
+      hoverColor: ide.hover,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Space.m, vertical: 7),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              h.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: ide.text,
+              ),
+            ),
+            if (h.snippet.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                h.snippet,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: ide.textDim,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
         ),
-      );
+      ),
+    ),
+  );
 
   Widget _list(Ide ide) {
-    final children = <Widget>[];
+    final entries = <Object>[];
     final pinned = _sessions.where((s) => s.pinned).toList();
     if (pinned.isNotEmpty) {
-      children.add(_groupHeader(ide, '置顶', icon: Icons.push_pin));
-      children.addAll(pinned.map((s) => _row(ide, s)));
+      entries.add('置顶');
+      entries.addAll(pinned);
     }
     String? last;
     for (final s in _sessions.where((s) => !s.pinned)) {
       final g = aiDayGroup(s.updatedAt);
       if (g != last) {
-        children.add(_groupHeader(ide, g));
+        entries.add(g);
         last = g;
       }
-      children.add(_row(ide, s));
+      entries.add(s);
     }
-    children.add(const SizedBox(height: Space.xl));
-    return ListView(children: children);
+    return ListView.builder(
+      itemCount: entries.length + 1,
+      itemBuilder: (_, index) {
+        if (index == entries.length) return const SizedBox(height: Space.xl);
+        final entry = entries[index];
+        return entry is AiSessionSummary
+            ? _row(ide, entry)
+            : _groupHeader(
+                ide,
+                entry as String,
+                icon: entry == '置顶' ? Icons.push_pin : null,
+              );
+      },
+    );
   }
 
   @override
@@ -427,8 +663,21 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
     return LinkGate(
       ws: ws,
       builder: (context, _) {
-        if (_loading) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
-        if (_error != null) return EmptyHint(icon: Icons.error_outline_rounded, text: _error!, actionLabel: '重试', onAction: _reload);
+        if (_loading)
+          return const Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        if (_error != null)
+          return EmptyHint(
+            icon: Icons.error_outline_rounded,
+            text: _error!,
+            actionLabel: '重试',
+            onAction: _reload,
+          );
         final newButton = Padding(
           padding: const EdgeInsets.fromLTRB(Space.s, Space.xs, Space.s, 0),
           child: SizedBox(
@@ -449,17 +698,27 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
           );
         }
         final searching = _hits != null;
-        return Column(children: [
-          if (widget.showNewButton) newButton,
-          _searchBox(ide),
-          Expanded(
-            child: searching
-                ? (_hits!.isEmpty
-                    ? EmptyHint(icon: Icons.search_off_rounded, text: _searching ? '搜索中…' : '没有找到包含这些词的对话')
-                    : ListView(children: [_groupHeader(ide, '找到 ${_hits!.length} 个对话'), for (final h in _hits!) _hitRow(ide, h)]))
-                : _list(ide),
-          ),
-        ]);
+        return Column(
+          children: [
+            if (widget.showNewButton) newButton,
+            _searchBox(ide),
+            Expanded(
+              child: searching
+                  ? (_hits!.isEmpty
+                        ? EmptyHint(
+                            icon: Icons.search_off_rounded,
+                            text: _searching ? '搜索中…' : '没有找到包含这些词的对话',
+                          )
+                        : ListView(
+                            children: [
+                              _groupHeader(ide, '找到 ${_hits!.length} 个对话'),
+                              for (final h in _hits!) _hitRow(ide, h),
+                            ],
+                          ))
+                  : _list(ide),
+            ),
+          ],
+        );
       },
     );
   }
@@ -472,8 +731,18 @@ class _Tag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-        decoration: BoxDecoration(color: color.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(Radii.s)),
-        child: Text(text, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: color)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.13),
+      borderRadius: BorderRadius.circular(Radii.s),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(
+        fontSize: 9.5,
+        fontWeight: FontWeight.w700,
+        color: color,
+      ),
+    ),
+  );
 }

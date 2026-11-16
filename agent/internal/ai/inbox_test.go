@@ -98,6 +98,8 @@ func TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel(t *testing.T) {
 		t.Fatalf("admission altered active task: %#v", sess)
 	}
 	raw, _ := os.ReadFile(filepath.Join(env.StateDir, "ai", "sessions", sum.ID+".json"))
+	log, _ := os.ReadFile(filepath.Join(env.StateDir, "ai", "sessions", sum.ID+".journal"))
+	raw = append(raw, log...)
 	if strings.Contains(string(raw), "never-save-this") {
 		t.Fatal("queued credentials persisted")
 	}
@@ -153,7 +155,7 @@ func TestStoppedInboxSurvivesReloadAndCanBeCancelled(t *testing.T) {
 	env.init()
 	env.sessions["s"] = &Session{ID: "s", Inbox: []InboxItem{{ID: "q", Text: "retained", Delivery: "queue",
 		Provider: ProviderConfig{APIKey: "not-on-disk"}, Runtime: &RuntimeInfo{Model: "m"}}}}
-	if err := env.persistSessionLocked(env.sessions["s"]); err != nil {
+	if err := persistFixture(env, env.sessions["s"]); err != nil {
 		t.Fatal(err)
 	}
 	reloaded := &Env{StateDir: env.StateDir}
@@ -181,6 +183,16 @@ func TestAdmissionPersistenceFailureRetainsInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := &Env{StateDir: state, Roots: []Root{{ID: "work", Path: dir}}}
+	t.Cleanup(func() {
+		// Startup recovery now latches this invalid-state-directory fault too.
+		// Repair this test's path and release the process-wide write gate.
+		if err := os.Remove(state); err != nil && !os.IsNotExist(err) {
+			t.Error(err)
+		}
+		if err := env.fileTransactions().Recover(); err != nil {
+			t.Error(err)
+		}
+	})
 	provider := ProviderConfig{Model: "model", Protocol: "openai-chat", BaseURL: "http://127.0.0.1:1"}
 	if _, err := env.StartRun(RunInput{Root: "work", Workdir: "/", Text: "first", Provider: provider}); err == nil {
 		t.Fatal("unsaved first input was accepted")

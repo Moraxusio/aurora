@@ -1,0 +1,17 @@
+{
+  "build_input_files": 1596,
+  "unchanged_existing_inputs": 1592,
+  "changed_after_build": [
+    "app/tool/tray_test.ps1",
+    "docs/guides/acceptance.md",
+    "docs/README.md",
+    "README.md"
+  ],
+  "changes_are_documentation_and_acceptance_tools_only": true,
+  "added_after_build": [
+    "app/tool/native_accessibility.ps1",
+    "docs/validation/2026-11-16-package-ide-preview1.md",
+    "docs/performance/20261116-package-ide-preview1/"
+  ],
+  "original_zip_sha256": "556aaa40de28d07ae9de5949e9cacc1a8e039348edca1f71f15077c754edf42a"
+}

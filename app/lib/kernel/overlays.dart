@@ -1,11 +1,10 @@
 import 'dart:math' as math;
 import 'dart:ui' show SemanticsRole;
 
-import 'package:flutter/material.dart';
+import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/ide_theme.dart';
-import '../theme/workbench_tokens.dart';
 import 'input_mode.dart';
 
 /// One modal entry point keeps motion, focus traversal and reduced-motion policy

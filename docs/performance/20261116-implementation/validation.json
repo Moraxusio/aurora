@@ -1,0 +1,83 @@
+{
+  "date": "2026-11-16",
+  "base_head": "f2873316253e80b9c217dea88eb8048c8dddb10f",
+  "source_directory": "C:\\build\\aurora",
+  "working_tree_uncommitted": true,
+  "flutter": {
+    "passed": 602,
+    "skipped": 20,
+    "failed": 0,
+    "log": "flutter-delivery-all.txt"
+  },
+  "analysis": {
+    "errors": 0,
+    "warnings": 0,
+    "infos": 202,
+    "log": "flutter-delivery-analyze.txt"
+  },
+  "gui_contract": {
+    "source_files": 129,
+    "passed": true
+  },
+  "packages": {
+    "aurora_profile": { "passed": 57, "skipped": 0 },
+    "aurora_wire": { "passed": 23, "skipped": 21 },
+    "aurora_install": { "passed": 7, "skipped": 21 },
+    "aurora_sub": { "passed": 39, "skipped": 0 }
+  },
+  "agent": {
+    "windows_test_vet_build": "passed",
+    "linux_test_vet_build": "passed",
+    "race_packages": ["ai", "mcp", "devtools", "files", "filetxn"],
+    "race_result": "passed",
+    "real_adapter": "Dart LSP and DAP"
+  },
+  "native": {
+    "result": "passed",
+    "log": "native-final.txt",
+    "data": "native-final.json",
+    "frames": 541,
+    "scenarios": 4,
+    "frame_budget_enforced": true,
+    "cpu_trace_enabled": false,
+    "p95_budget_us": 16667,
+    "max_build_budget_us": 100000,
+    "frames_over_16667_us": 1,
+    "editor_switch_build_p95_us": 12080,
+    "editor_switch_raster_p95_us": 4899,
+    "source_fingerprint_files": 1201,
+    "source_fingerprint_matches_at_delivery": true,
+    "screenshots_reviewed": [
+      "native-final-loaded.png",
+      "native-final-zoom-85.png",
+      "native-final-zoom-150.png"
+    ]
+  },
+  "static": {
+    "gofmt_files": 74,
+    "dart_formatted_files": 50,
+    "powershell_parsed_scripts": 19,
+    "git_diff_check": "passed"
+  },
+  "preserved_packages": [
+    {
+      "path": "C:\\dev\\VPS\\release3\\Aurora-3.21.4.zip",
+      "sha256": "087348a08f4f0af051a89b81dde7d5eb86a2136045d6199ebdb5c8ec2aa95ae1",
+      "verified_unchanged": true,
+      "contains_this_unreleased_work": false
+    },
+    {
+      "path": "C:\\dev\\VPS\\preview3\\Aurora-3.21.4-harness-preview1.zip",
+      "sha256": "78ca0c41012e5647cfd5080a47ba8b9f0f74a979f3c99eeaf6f747af2a19fb7d",
+      "verified_unchanged": true,
+      "contains_this_unreleased_work": false
+    }
+  ],
+  "not_validated": [
+    "Real model device authorization, subscription eligibility, vision and coding-task success rate",
+    "Long-duration weak-network and slow-disk stress",
+    "24-hour leak test",
+    "Android release build"
+  ],
+  "capability_boundaries": "../../validation/2026-11-16-implementation.md"
+}

@@ -1,7 +1,7 @@
 # Aurora 文档
 
-> 类型：文档索引 | 状态：生效 | 维护：项目维护者 | 更新：2026-11-16
-> 适用：3.22.0 正式版及后续维护
+> 类型：文档索引 | 状态：生效 | 维护：项目维护者 | 更新：2026-11-18
+> 适用：3.24.0 正式版及后续维护
 
 ## 按任务阅读
 
@@ -20,6 +20,7 @@
 
 ## 版本与证据
 
+- [3.24.0 正式版本说明](releases/3.24.0.md)
 - [3.24.0-workbench-preview1：功能修复与工作台重构](releases/3.24.0-workbench-preview1.md)
 - [非 AI 功能与 GUI 重构验收](validation/2026-11-16-workbench-redesign.md)
 - [工作台重构原始证据](performance/20261116-workbench-redesign/README.md)

@@ -1,0 +1,739 @@
+00:00 +0: loading C:/build/aurora/app/test/ai_auth_test.dart
+00:00 +0: C:/build/aurora/app/test/ai_auth_test.dart: explicit route requires capability and preserves legacy provider settings
+00:00 +1: C:/build/aurora/app/test/ai_auth_test.dart: server OAuth refresh carries the selected route without replacing API keys
+00:00 +2: C:/build/aurora/app/test/ai_auth_test.dart: concurrent refresh saves once and preserves each caller model
+00:00 +3: C:/build/aurora/app/test/ai_auth_test.dart: deleted provider cannot be resurrected by a late refresh
+00:00 +4: C:/build/aurora/app/test/ai_auth_test.dart: failed credential save refuses to use rotated access
+00:00 +5: C:/build/aurora/app/test/ai_auth_test.dart: device login polls once then returns credential
+00:00 +6: C:/build/aurora/app/test/ai_auth_test.dart: device login polls once then returns credential
+00:00 +7: C:/build/aurora/app/test/ai_auth_test.dart: device login polls once then returns credential
+00:00 +8: C:/build/aurora/app/test/ai_auth_test.dart: device login polls once then returns credential
+00:01 +9: C:/build/aurora/app/test/ai_auth_test.dart: device login polls once then returns credential
+00:01 +10: C:/build/aurora/app/test/ai_auth_test.dart: device login polls once then returns credential
+00:01 +11: C:/build/aurora/app/test/ai_auth_test.dart: device login polls once then returns credential
+00:01 +12: C:/build/aurora/app/test/ai_auth_test.dart: device login polls once then returns credential
+00:01 +13: C:/build/aurora/app/test/ai_auth_test.dart: device login polls once then returns credential
+00:03 +14: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:03 +15: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:04 +16: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:04 +17: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:04 +18: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:04 +19: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:04 +20: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:04 +21: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:04 +22: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:04 +23: C:/build/aurora/app/test/ai_composer_test.dart: conversation view while a permission is pending the run says it waits for the user, not for the model
+00:04 +24: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:05 +25: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:06 +26: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:06 +27: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:07 +28: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:07 +29: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:07 +30: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:08 +31: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:08 +32: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:08 +33: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:10 +34: C:/build/aurora/app/test/ai_edits_test.dart: review generates, accepts and saves with narrow or short viewport (360.0)
+00:11 +35: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:11 +36: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:12 +37: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:12 +38: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:13 +39: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:14 +40: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:14 +41: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:14 +42: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:14 +43: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:15 +44: C:/build/aurora/app/test/ai_extensions_test.dart: project shortcuts reuse the draft and protect it on close
+00:15 +45: C:/build/aurora/app/test/ai_feature_test.dart: history reuses, renames and deletes a saved draft host; failed delete retains it
+00:16 +46: C:/build/aurora/app/test/ai_feature_test.dart: history reuses, renames and deletes a saved draft host; failed delete retains it
+00:16 +47: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:17 +48: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:17 +49: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:17 +50: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:17 +51: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:17 +52: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:19 +53: C:/build/aurora/app/test/ai_feature_test.dart: the composer shows the model and thinking strength, and the picker changes both
+00:20 +54: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:20 +55: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:21 +56: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:22 +57: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:22 +58: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:23 +59: C:/build/aurora/app/test/ai_interaction_test.dart: editing another provider saves its draft without switching the default
+00:23 +60: C:/build/aurora/app/test/ai_interaction_test.dart: editing another provider saves its draft without switching the default
+00:23 +61: C:/build/aurora/app/test/ai_interaction_test.dart: editing another provider saves its draft without switching the default
+00:24 +62: C:/build/aurora/app/test/ai_interaction_test.dart: editing another provider saves its draft without switching the default
+00:25 +63: C:/build/aurora/app/test/ai_interaction_test.dart: editing another provider saves its draft without switching the default
+00:25 +64: C:/build/aurora/app/test/ai_interaction_test.dart: editing another provider saves its draft without switching the default
+00:26 +65: C:/build/aurora/app/test/ai_interaction_test.dart: editing another provider saves its draft without switching the default
+00:26 +66: C:/build/aurora/app/test/ai_interaction_test.dart: editing another provider saves its draft without switching the default
+00:27 +67: C:/build/aurora/app/test/ai_interaction_test.dart: editing another provider saves its draft without switching the default
+00:27 +68: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 1280.0 dark
+00:27 +69: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 1280.0 dark
+00:27 +70: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 1280.0 dark
+00:28 +71: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 1280.0 dark
+00:28 +72: C:/build/aurora/app/test/ai_interaction_test.dart: dirty state covers text edits and discard preserves saved provider
+00:28 +73: C:/build/aurora/app/test/ai_input_test.dart: AI attaches unsaved buffer from the workspace document
+00:28 +74: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 1280.0 light
+00:29 +75: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 1280.0 light
+00:29 +76: C:/build/aurora/app/test/ai_interaction_test.dart: outdated catalog cannot overwrite provider after switching away and back
+00:30 +77: C:/build/aurora/app/test/ai_interaction_test.dart: outdated catalog cannot overwrite provider after switching away and back
+00:30 +78: C:/build/aurora/app/test/ai_interaction_test.dart: outdated catalog cannot overwrite provider after switching away and back
+00:30 +79: C:/build/aurora/app/test/ai_interaction_test.dart: outdated catalog cannot overwrite provider after switching away and back
+00:30 +80: C:/build/aurora/app/test/ai_input_test.dart: chat font menu persists its selection in sealed-profile settings
+00:31 +81: C:/build/aurora/app/test/ai_input_test.dart: chat font menu persists its selection in sealed-profile settings
+00:31 +82: C:/build/aurora/app/test/ai_input_test.dart: chat font menu persists its selection in sealed-profile settings
+00:31 +83: C:/build/aurora/app/test/ai_interaction_test.dart: browsing model picker then cancel changes neither default nor session
+00:31 +84: C:/build/aurora/app/test/ai_interaction_test.dart: browsing model picker then cancel changes neither default nor session
+00:31 +85: C:/build/aurora/app/test/ai_interaction_test.dart: browsing model picker then cancel changes neither default nor session
+00:31 +86: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:33 +87: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:33 +88: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:33 +89: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:33 +90: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:33 +91: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:33 +92: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:33 +93: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:33 +94: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:34 +95: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:34 +96: C:/build/aurora/app/test/ai_oauth_client_test.dart: default auth is local and switching to server ignores the late local result
+00:35 +97: C:/build/aurora/app/test/ai_permission_card_test.dart: permission card an edit shows the lines that change, not just the file name
+00:35 +98: C:/build/aurora/app/test/ai_permission_card_test.dart: permission card an edit shows the lines that change, not just the file name
+00:35 +99: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:35 +100: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:36 +101: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:36 +102: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:37 +103: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:37 +104: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:37 +105: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:37 +106: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:37 +107: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:38 +108: C:/build/aurora/app/test/ai_runtime_test.dart: budget stop shows its receipt and explicit recovery actions
+00:38 +109: C:/build/aurora/app/test/ai_sidebar_audit_test.dart: history from a replaced connection cannot overwrite the new list
+00:39 +110: C:/build/aurora/app/test/ai_sidebar_audit_test.dart: history from a replaced connection cannot overwrite the new list
+00:40 +111: C:/build/aurora/app/test/ai_sidebar_audit_test.dart: history from a replaced connection cannot overwrite the new list
+00:41 +112: C:/build/aurora/app/test/ai_sidebar_audit_test.dart: history from a replaced connection cannot overwrite the new list
+00:41 +113: C:/build/aurora/app/test/ai_sidebar_audit_test.dart: history from a replaced connection cannot overwrite the new list
+00:41 +114: C:/build/aurora/app/test/ai_transcript_test.dart: distant message anchors navigate directly without laying out the whole history
+00:41 +115: C:/build/aurora/app/test/ai_transcript_test.dart: distant message anchors navigate directly without laying out the whole history
+00:42 +116: C:/build/aurora/app/test/ai_transcript_test.dart: distant message anchors navigate directly without laying out the whole history
+00:42 +117: C:/build/aurora/app/test/ai_transcript_test.dart: distant message anchors navigate directly without laying out the whole history
+00:42 +118: C:/build/aurora/app/test/ai_transcript_test.dart: distant message anchors navigate directly without laying out the whole history
+00:43 +119: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:43 +120: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:43 +121: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+PdfDocument initial load: PdfDocumentRefKey(report.pdf) (568 ms)
+00:44 +122: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:44 +123: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:44 +124: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:45 +125: C:/build/aurora/app/test/ai_runtime_test.dart: working shell and child agents show live output and finish independently
+00:45 +126: C:/build/aurora/app/test/ai_runtime_test.dart: working shell and child agents show live output and finish independently
+00:45 +127: C:/build/aurora/app/test/ai_runtime_test.dart: working shell and child agents show live output and finish independently
+00:45 +128: C:/build/aurora/app/test/ai_runtime_test.dart: working shell and child agents show live output and finish independently
+00:45 +129: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:46 +130: C:/build/aurora/app/test/ai_runtime_test.dart: main, child and long output keep independent drafts and reading anchors
+00:48 +131: C:/build/aurora/app/test/ai_runtime_test.dart: main, child and long output keep independent drafts and reading anchors
+00:48 +132: C:/build/aurora/app/test/ai_runtime_test.dart: main, child and long output keep independent drafts and reading anchors
+00:48 +133: C:/build/aurora/app/test/ai_interaction_test.dart: unfinished rule form participates in save and discard protection
+00:48 +134: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:49 +135: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:49 +136: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:49 +137: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:50 +138: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:50 +139: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:51 +140: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:51 +141: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:52 +142: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:53 +143: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:53 +144: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:54 +145: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:54 +146: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:55 +147: C:/build/aurora/app/test/assistant_dock_test.dart: editor, assistant and terminal are distinct regions with retained drafts and focus
+00:55 +148: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:55 +149: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:55 +150: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:56 +151: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:56 +152: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:56 +153: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:56 +154: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +155: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +156: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +157: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +158: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +159: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +160: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +161: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +162: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +163: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:58 +164: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +165: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +166: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +167: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +168: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +169: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +170: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +171: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +172: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +173: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +174: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +175: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +176: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +177: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +178: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +179: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +180: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +181: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +182: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +183: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +184: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +185: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +186: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +187: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +188: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +189: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +190: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +191: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +192: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +193: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +194: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +195: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +196: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +197: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +198: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +199: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +200: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +201: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +202: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +203: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +204: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +205: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +206: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +207: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +208: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +209: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +210: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +211: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:59 +212: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+01:00 +213: C:/build/aurora/app/test/desktop_lifecycle_test.dart: visibility and explicit exit dispatch use the installed Dart guard
+01:01 +214: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +215: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +216: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +217: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +218: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +219: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +220: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +221: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +222: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +223: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +224: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +225: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +226: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:02 +227: C:/build/aurora/app/test/development_model_test.dart: LSP snippet completion accounts for additional edits, CRLF and one insertion undo
+01:05 +228: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +229: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +230: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +231: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +232: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +233: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +234: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +235: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +236: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +237: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +238: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +239: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +240: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:05 +241: C:/build/aurora/app/test/development_widgets_test.dart: short Problems panel scrolls to logs and cancelled edit review closes
+01:06 +242: C:/build/aurora/app/test/document_lifecycle_test.dart: recreating an editor preserves the controller, selection and undo history
+01:06 +243: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +244: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +245: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +246: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +247: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +248: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +249: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +250: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +251: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +252: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +253: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +254: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:08 +255: C:/build/aurora/app/test/document_merge_test.dart: merge fits 360.0 at enlarged text scale and remains undoable
+01:09 +256: C:/build/aurora/app/test/development_widgets_test.dart: development tabs, config and result view fit 1280.0 at enlarged text scale
+01:09 +257: C:/build/aurora/app/test/development_widgets_test.dart: development tabs, config and result view fit 1280.0 at enlarged text scale
+01:09 +258: C:/build/aurora/app/test/development_widgets_test.dart: editor F9 and visible gutter share persisted breakpoint state
+01:10 +259: C:/build/aurora/app/test/development_widgets_test.dart: language edit review accepts buffers with undo
+01:11 +260: C:/build/aurora/app/test/editor_transactions_test.dart: dragging the sole document onto its own edge cannot make an empty group
+01:11 +261: C:/build/aurora/app/test/editor_transactions_test.dart: edge drop of another groups last document moves that group atomically
+01:11 +262: C:/build/aurora/app/test/editor_transactions_test.dart: pane geometry compresses continuously instead of switching every other group off
+01:11 +263: C:/build/aurora/app/test/editor_transactions_test.dart: drop policy rejects stale structural transactions and task panels
+01:11 +264: C:/build/aurora/app/test/file_kind_test.dart: kindOf images, pdf, video, audio by extension, case-insensitive
+01:11 +265: C:/build/aurora/app/test/file_kind_test.dart: kindOf text, unknown and dotfiles open as text
+01:11 +266: C:/build/aurora/app/test/file_kind_test.dart: kindOf only the last path segment counts
+01:11 +267: C:/build/aurora/app/test/file_kind_test.dart: previewOf markdown and csv/tsv
+01:11 +268: C:/build/aurora/app/test/file_kind_test.dart: parseCsv plain rows and a missing final newline
+01:11 +269: C:/build/aurora/app/test/file_kind_test.dart: parseCsv quoted fields: commas, doubled quotes and line breaks
+01:11 +270: C:/build/aurora/app/test/file_kind_test.dart: parseCsv CRLF, BOM and empty fields
+01:11 +271: C:/build/aurora/app/test/file_kind_test.dart: parseCsv delimiter is guessed: tab and semicolon
+01:11 +272: C:/build/aurora/app/test/file_kind_test.dart: parseCsv ragged rows widen the table; empty input has no rows
+01:11 +273: C:/build/aurora/app/test/file_kind_test.dart: parseCsv maxRows stops early and says so
+01:12 +274: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +275: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +276: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +277: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +278: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +279: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +280: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +281: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +282: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +283: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +284: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +285: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +286: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +287: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +288: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +289: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +290: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +291: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:13 +292: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:14 +293: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:14 +294: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:14 +295: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:14 +296: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:14 +297: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:14 +298: C:/build/aurora/app/test/file_manager_test.dart: a file row shows its size; a folder shows none until measured
+01:15 +299: C:/build/aurora/app/test/file_tree_test.dart: reveal expands deep ancestors and collapse preserves the open document
+01:17 +300: C:/build/aurora/app/test/file_tree_test.dart: reveal expands deep ancestors and collapse preserves the open document
+01:17 +301: C:/build/aurora/app/test/file_tree_test.dart: reveal expands deep ancestors and collapse preserves the open document
+01:17 +302: C:/build/aurora/app/test/file_tree_test.dart: reveal expands deep ancestors and collapse preserves the open document
+01:17 +303: C:/build/aurora/app/test/file_tree_test.dart: reveal expands deep ancestors and collapse preserves the open document
+01:17 +304: C:/build/aurora/app/test/file_tree_test.dart: reveal expands deep ancestors and collapse preserves the open document
+01:17 +305: C:/build/aurora/app/test/file_tree_test.dart: reveal expands deep ancestors and collapse preserves the open document
+01:18 +306: C:/build/aurora/app/test/file_tree_test.dart: reveal expands deep ancestors and collapse preserves the open document
+01:18 +307: C:/build/aurora/app/test/file_viewers_test.dart: each kind of file gets its own tab view
+01:18 +308: C:/build/aurora/app/test/file_viewers_test.dart: each kind of file gets its own tab view
+01:18 +309: C:/build/aurora/app/test/file_viewers_test.dart: each kind of file gets its own tab view
+01:18 +310: C:/build/aurora/app/test/file_viewers_test.dart: each kind of file gets its own tab view
+01:19 +311: C:/build/aurora/app/test/file_viewers_test.dart: each kind of file gets its own tab view
+01:19 +312: C:/build/aurora/app/test/file_viewers_test.dart: each kind of file gets its own tab view
+01:19 +313: C:/build/aurora/app/test/file_viewers_test.dart: each kind of file gets its own tab view
+01:20 +314: C:/build/aurora/app/test/git_extra_test.dart: a lazily opened merge tab stays bound to its original repository through save and stage
+01:20 +315: C:/build/aurora/app/test/git_extra_test.dart: a lazily opened merge tab stays bound to its original repository through save and stage
+01:20 +316: C:/build/aurora/app/test/git_extra_test.dart: a lazily opened merge tab stays bound to its original repository through save and stage
+01:20 +317: C:/build/aurora/app/test/git_extra_test.dart: a lazily opened merge tab stays bound to its original repository through save and stage
+01:21 +318: C:/build/aurora/app/test/git_extra_test.dart: a lazily opened merge tab stays bound to its original repository through save and stage
+01:21 +319: C:/build/aurora/app/test/git_extra_test.dart: a lazily opened merge tab stays bound to its original repository through save and stage
+01:21 +320: C:/build/aurora/app/test/file_tree_test.dart: overlapping folders have unique row keys and share file buffers
+01:21 +321: C:/build/aurora/app/test/file_manager_test.dart: calculate size: the folder and the sizes under it appear, and size sorting can use them
+01:21 +322: C:/build/aurora/app/test/file_manager_test.dart: calculate size: the folder and the sizes under it appear, and size sorting can use them
+01:21 +323: C:/build/aurora/app/test/file_manager_test.dart: calculate size: the folder and the sizes under it appear, and size sorting can use them
+01:21 +324: C:/build/aurora/app/test/file_manager_test.dart: calculate size: the folder and the sizes under it appear, and size sorting can use them
+01:21 +325: C:/build/aurora/app/test/file_manager_test.dart: calculate size: the folder and the sizes under it appear, and size sorting can use them
+01:21 +326: C:/build/aurora/app/test/git_extra_test.dart: merge view both sides, and an undecided block is saved unchanged
+01:22 +327: C:/build/aurora/app/test/git_extra_test.dart: merge view both sides, and an undecided block is saved unchanged
+01:22 +328: C:/build/aurora/app/test/git_extra_test.dart: merge view both sides, and an undecided block is saved unchanged
+01:22 +329: C:/build/aurora/app/test/file_manager_test.dart: Ctrl-click selects several rows and the footer totals them; Escape clears the clipboard
+01:22 +330: C:/build/aurora/app/test/file_manager_test.dart: Ctrl-click selects several rows and the footer totals them; Escape clears the clipboard
+01:22 +331: C:/build/aurora/app/test/file_viewers_test.dart: an image is downloaded, decoded and shown with its size
+01:22 +332: C:/build/aurora/app/test/file_viewers_test.dart: an image is downloaded, decoded and shown with its size
+01:22 +333: C:/build/aurora/app/test/file_viewers_test.dart: an image is downloaded, decoded and shown with its size
+01:22 +334: C:/build/aurora/app/test/file_tree_test.dart: large directories build only viewport rows
+01:23 +335: C:/build/aurora/app/test/file_tree_test.dart: large directories build only viewport rows
+01:23 +336: C:/build/aurora/app/test/file_viewers_test.dart: a broken image says so and offers a download
+01:23 +337: C:/build/aurora/app/test/file_manager_test.dart: F2 renames; a file with unsaved text open is not renamed from under the editor
+01:23 +338: C:/build/aurora/app/test/file_manager_test.dart: F2 renames; a file with unsaved text open is not renamed from under the editor
+01:23 +339: C:/build/aurora/app/test/file_manager_test.dart: F2 renames; a file with unsaved text open is not renamed from under the editor
+01:24 +340: C:/build/aurora/app/test/file_manager_test.dart: properties shows size, time, permissions and owner; a folder can be measured from it
+01:25 +341: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:26 +342: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:26 +343: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:26 +344: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:26 +345: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:26 +346: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:29 +347: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:29 +348: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:29 +349: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:29 +350: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:29 +351: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +352: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +353: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +354: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +355: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +356: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +357: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +358: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +359: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +360: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:30 +361: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:31 +362: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:31 +363: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:31 +363: C:/build/aurora/app/test/gui_workflow_test.dart: production GUI workflow across live zoom, menus, panels and retained state
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following TestFailure was thrown running a test:
+Expected: exactly one matching candidate
+  Actual: _WidgetPredicateWidgetFinder:<Found 0 widgets with widget matching predicate: []>
+   Which: means none were found but one was expected
+
+When the exception was thrown, this was the stack:
+#4      exerciseGui.click (file:///C:/build/aurora/app/test/support/gui_workflow.dart:34:5)
+#5      exerciseGui (file:///C:/build/aurora/app/test/support/gui_workflow.dart:45:11)
+<asynchronous suspension>
+#6      main.<anonymous closure> (file:///C:/build/aurora/app/test/gui_workflow_test.dart:16:22)
+<asynchronous suspension>
+#7      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#8      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+This was caught by the test expectation on the following line:
+  file:///C:/build/aurora/app/test/support/gui_workflow.dart line 34
+The test description was:
+  production GUI workflow across live zoom, menus, panels and retained state
+════════════════════════════════════════════════════════════════════════════════════════════════════
+01:31 +363 -1: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:31 +363 -1: C:/build/aurora/app/test/gui_workflow_test.dart: production GUI workflow across live zoom, menus, panels and retained state [E]
+  Test failed. See exception logs above.
+  The test description was: production GUI workflow across live zoom, menus, panels and retained state
+  
+01:31 +364 -1: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:32 +365 -1: C:/build/aurora/app/test/gui_routing_test.dart: production command palette can open feature dialogs using the active navigator
+01:35 +366 -1: C:/build/aurora/app/test/monitor_gpu_test.dart: slow GPU never blocks system refresh and requests do not overlap
+01:35 +367 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:36 +368 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:36 +369 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:36 +370 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:36 +371 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:37 +372 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:37 +373 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:37 +374 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:38 +375 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:38 +376 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:38 +377 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:39 +378 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:39 +379 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:40 +380 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:41 +381 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:41 +382 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:41 +383 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:41 +384 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:42 +385 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:42 +386 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:42 +387 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:42 +388 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:42 +389 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:42 +390 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:43 +391 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:43 +392 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:43 +393 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:43 +394 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:43 +395 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:45 +396 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+01:45 +397 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +398 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +399 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +400 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +401 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +402 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +403 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +404 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +405 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +406 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +407 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +408 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +409 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +410 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:45 +411 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:48 +411 -1: C:/build/aurora/app/test/proxy_e2e_test.dart: E2E subscription -> node chosen -> a proxied session reaches the node; a plain one does not
+  Skip: run through app/tool/proxy_e2e.ps1
+01:48 +411 ~1 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:48 +411 ~1 -1: C:/build/aurora/app/test/proxy_e2e_test.dart: E2E switching the node moves new sessions, and the agent audit has no secret
+  Skip: run through app/tool/proxy_e2e.ps1
+01:48 +411 ~2 -1: C:/build/aurora/app/test/overlays_test.dart: keyboard skips disabled entries, wraps, activates and restores focus
+01:48 +412 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.5 DPR
+01:48 +413 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.5 DPR
+01:49 +414 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.5 DPR
+01:49 +415 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:49 +416 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:49 +417 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:49 +418 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:49 +419 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:50 +420 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:50 +421 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:51 +422 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (547 ms)
+01:52 +423 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:52 +424 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:53 +425 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+PdfViewer: Loaded 5 of 5 pages in 155 ms
+01:53 +426 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:54 +427 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:56 +428 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:56 +429 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: mouse selection, hand dragging and temporary space pan remain distinct
+01:56 +430 ~2 -1: C:/build/aurora/app/test/proxy_virtualization_test.dart: large subscriptions build visible rows only and filtering keeps working
+01:57 +430 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: wheel scroll, control zoom and first touch drag work without switching tools
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (413 ms)
+01:57 +431 ~2 -1: C:/build/aurora/app/test/proxy_virtualization_test.dart: large subscriptions build visible rows only and filtering keeps working
+01:57 +431 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: wheel scroll, control zoom and first touch drag work without switching tools
+PdfViewer: Loaded 5 of 5 pages in 90 ms
+01:58 +432 ~2 -1: C:/build/aurora/app/test/proxy_virtualization_test.dart: large subscriptions build visible rows only and filtering keeps working
+01:59 +433 ~2 -1: C:/build/aurora/app/test/proxy_virtualization_test.dart: large subscriptions build visible rows only and filtering keeps working
+01:59 +434 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.0 DPR
+01:59 +435 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: wheel scroll, control zoom and first touch drag work without switching tools
+01:59 +436 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: wheel scroll, control zoom and first touch drag work without switching tools
+02:00 +437 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:00 +438 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:01 +438 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (401 ms)
+02:01 +439 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:01 +440 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:01 +441 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:01 +442 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:01 +442 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+PdfViewer: Loaded 5 of 5 pages in 76 ms
+02:01 +443 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:01 +444 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:01 +445 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:01 +446 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:01 +447 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / dark / 1.5 DPR
+02:02 +448 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:02 +449 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:04 +450 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:04 +451 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:04 +452 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:04 +453 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:04 +454 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:04 +455 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:05 +456 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:05 +457 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:07 +458 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:07 +459 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:07 +460 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (407 ms)
+02:07 +461 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+PdfViewer: Loaded 5 of 5 pages in 91 ms
+02:09 +462 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:10 +463 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:10 +464 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:10 +465 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:10 +466 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: facing pages, navigation history and session bookmarks survive reopening in a narrow pane
+02:10 +467 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(900.0, 700.0) / dark / 1.5 DPR
+02:11 +467 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (406 ms)
+02:12 +468 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:13 +469 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:13 +470 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:13 +471 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:13 +472 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:15 +473 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:15 +474 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:16 +475 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:16 +476 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:17 +477 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search options distinguish case and whole words
+02:17 +478 ~2 -1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(900.0, 700.0) / light / 1.5 DPR
+02:18 +479 ~2 -1: C:/build/aurora/app/test/shell_retention_test.dart: side bar and editor switches do not rebuild unrelated retained bodies
+02:18 +479 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a PDF opens, shows its page count, and the page box jumps
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (395 ms)
+PdfViewer: Loaded 5 of 5 pages in 68 ms
+02:19 +480 ~2 -1: C:/build/aurora/app/test/shell_retention_test.dart: side bar and editor switches do not rebuild unrelated retained bodies
+02:19 +481 ~2 -1: C:/build/aurora/app/test/shell_retention_test.dart: side bar and editor switches do not rebuild unrelated retained bodies
+02:19 +482 ~2 -1: C:/build/aurora/app/test/shell_retention_test.dart: side bar and editor switches do not rebuild unrelated retained bodies
+02:19 +483 ~2 -1: C:/build/aurora/app/test/shell_retention_test.dart: side bar and editor switches do not rebuild unrelated retained bodies
+02:21 +484 ~2 -1: C:/build/aurora/app/test/shell_retention_test.dart: side bar and editor switches do not rebuild unrelated retained bodies
+02:21 +485 ~2 -1: C:/build/aurora/app/test/shell_retention_test.dart: side bar and editor switches do not rebuild unrelated retained bodies
+02:22 +486 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:22 +486 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: the side bar lists the outline and a click jumps to that chapter
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (405 ms)
+PdfViewer: Loaded 3 of 3 pages in 70 ms
+02:23 +487 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:24 +488 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:24 +489 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:24 +490 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:24 +491 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:24 +492 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:24 +493 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:24 +494 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:26 +495 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:26 +496 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:26 +497 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:26 +498 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:26 +499 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:26 +500 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:26 +501 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:28 +502 ~2 -1: C:/build/aurora/app/test/sidebar_resize_test.dart: sidebar follows every pointer pixel including same-frame bursts at 1.0 zoom
+02:28 +503 ~2 -1: C:/build/aurora/app/test/snippets_test.dart: real editor Tab, Shift+Tab, choices, Esc and encoding status stay live
+02:28 +503 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a PDF without an outline says so
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (401 ms)
+02:28 +504 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a PDF without an outline says so
+02:30 +505 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a PDF without an outline says so
+02:31 +506 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:31 +507 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:31 +508 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:32 +508 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (401 ms)
+PdfViewer: Loaded 4 of 4 pages in 73 ms
+02:33 +509 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:35 +510 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:35 +511 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:35 +512 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:35 +513 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:35 +514 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:35 +515 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:35 +516 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:35 +517 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: all arrangements and tab placements keep ONE live body and unsaved input
+02:37 +518 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +519 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +520 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +521 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +522 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +523 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +524 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +525 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +526 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +527 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +528 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:37 +529 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:38 +530 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:38 +531 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:38 +532 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:38 +533 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:39 +534 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:40 +535 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:40 +536 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:40 +537 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:40 +538 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:40 +539 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:40 +540 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:41 +541 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:41 +542 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:41 +543 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: search finds the words, counts the matches and steps through them
+02:42 +544 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: wrapped active label stays visible after selection, resizing and pinning
+02:42 +545 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: wrapped active label stays visible after selection, resizing and pinning
+02:42 +546 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a file that is not a PDF is explained, with retry and download
+02:43 +547 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a file that is not a PDF is explained, with retry and download
+02:43 +548 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a file that is not a PDF is explained, with retry and download
+02:43 +549 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: layout menu exposes tab widths and touch targets remain usable
+02:44 +550 ~2 -1: C:/build/aurora/app/test/tab_workspace_test.dart: layout menu exposes tab widths and touch targets remain usable
+02:44 +551 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: an empty file is said to be empty
+02:44 +552 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: an empty file is said to be empty
+02:44 +553 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: an empty file is said to be empty
+02:45 +554 ~2 -1: C:/build/aurora/app/test/terminal_session_list_test.dart: failed session kill keeps the live terminal view
+02:46 +555 ~2 -1: C:/build/aurora/app/test/terminal_session_list_test.dart: failed session kill keeps the live terminal view
+02:46 +556 ~2 -1: C:/build/aurora/app/test/terminal_session_list_test.dart: failed session kill keeps the live terminal view
+02:46 +556 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a failing server shows the error and retry works
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",2]) (394 ms)
+02:47 +557 ~2 -1: C:/build/aurora/app/test/terminal_session_list_test.dart: failed session kill keeps the live terminal view
+02:48 +558 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a failing server shows the error and retry works
+02:48 +559 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a failing server shows the error and retry works
+02:48 +560 ~2 -1: C:/build/aurora/app/test/terminal_wheel_test.dart: a replacement scroll position still reports wheel changes
+02:48 +561 ~2 -1: C:/build/aurora/app/test/terminal_session_list_test.dart: late session lists cannot remove a reopened terminal instance
+02:48 +562 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:48 +563 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +564 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +565 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +566 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +567 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +568 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +569 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +570 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +571 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +572 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:49 +573 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:50 +574 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+PdfDocument initial load: PdfDocumentRefKey(["server","home","/doc.pdf","e1",1]) (1534 ms)
+02:50 +575 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:51 +576 ~2 -1: C:/build/aurora/app/test/pdf_view_test.dart: a bigger PDF is fetched completely first, with progress, then opens
+02:54 +577 ~2 -1: C:/build/aurora/app/test/ui_performance_test.dart: window metrics do not rebuild hidden document content
+02:56 +578 ~2 -1: C:/build/aurora/app/test/ui_performance_test.dart: window metrics do not rebuild hidden document content
+02:56 +579 ~2 -1: C:/build/aurora/app/test/ui_performance_test.dart: window metrics do not rebuild hidden document content
+02:56 +580 ~2 -1: C:/build/aurora/app/test/ui_performance_test.dart: window metrics do not rebuild hidden document content
+GUI_HIDDEN_METRICS tabs=30 resizes=24 hiddenBuilds=0
+02:58 +581 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+02:58 +582 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+02:59 +583 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+02:59 +584 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:00 +585 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:00 +585 ~2 -1: C:/build/aurora/app/test/ui_performance_test.dart: resizing a viewport does not relayout every hidden document
+UI_RESIZE_BENCH frames=24 tabs=30 hiddenLayouts=0 elapsedUs=2038369
+03:00 +586 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:00 +586 ~2 -1: C:/build/aurora/app/test/ui_performance_test.dart: a burst of geometry updates does not fan out to service listeners
+UI_GEOMETRY_BENCH updates=240 serviceNotifications=0 elapsedUs=9651
+03:00 +587 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:01 +587 ~2 -1: C:/build/aurora/app/test/ui_performance_test.dart: terminal panel resize is frame coalesced and hidden terminal buffers keep their constraints
+PANEL_RESIZE_BENCH updates=240 businessNotifications=0 geometryFrames=1 hiddenTerminalLayouts=0
+03:01 +588 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:01 +589 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:02 +590 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:02 +591 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:02 +592 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:02 +593 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:02 +594 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:02 +595 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:02 +596 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:03 +597 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:05 +598 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:05 +599 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:08 +600 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:09 +601 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:11 +602 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:12 +603 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:12 +604 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:13 +605 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:13 +606 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:15 +607 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:16 +608 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:16 +609 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:16 +610 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:18 +611 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:19 +612 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:19 +613 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:19 +614 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:19 +615 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:19 +616 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:19 +617 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:20 +618 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+03:21 +619 ~2 -1: C:/build/aurora/app/test/workbench_regression_test.dart: every split, tab position and responsive width keeps viewport and tab hit regions disjoint
+03:21 +620 ~2 -1: C:/build/aurora/app/test/workbench_regression_test.dart: every split, tab position and responsive width keeps viewport and tab hit regions disjoint
+03:21 +621 ~2 -1: C:/build/aurora/app/test/workbench_regression_test.dart: every split, tab position and responsive width keeps viewport and tab hit regions disjoint
+03:22 +622 ~2 -1: C:/build/aurora/app/test/workbench_regression_test.dart: every split, tab position and responsive width keeps viewport and tab hit regions disjoint
+03:24 +623 ~2 -1: C:/build/aurora/app/test/workbench_regression_test.dart: every split, tab position and responsive width keeps viewport and tab hit regions disjoint
+03:24 +624 ~2 -1: C:/build/aurora/app/test/workbench_regression_test.dart: every split, tab position and responsive width keeps viewport and tab hit regions disjoint
+03:25 +625 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+03:25 +626 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+03:27 +627 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+03:34 +628 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+03:34 +629 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+03:35 +630 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+03:35 +631 ~2 -1: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+03:36 +632 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:36 +633 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:37 +634 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:37 +635 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +636 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +637 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +638 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +639 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +640 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +641 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +642 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +643 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +644 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +645 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +646 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +647 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +648 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +649 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +650 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +651 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +652 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +653 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +654 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +655 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +656 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +657 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:38 +658 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:39 +659 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: production tools in both themes, zoom and narrow windows
+03:46 +660 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: real workbench stays quiet, responsive and stateful in both themes
+04:06 +661 ~2 -1: C:/build/aurora/app/test/workbench_visual_test.dart: (tearDownAll)
+04:06 +661 ~2 -1: Some tests failed.
+
+Failing tests:
+  C:/build/aurora/app/test/gui_workflow_test.dart: production GUI workflow across live zoom, menus, panels and retained state

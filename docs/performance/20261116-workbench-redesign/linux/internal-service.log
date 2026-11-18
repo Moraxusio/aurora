@@ -1,0 +1,19 @@
+=== RUN   TestDisabledServiceRefusesWithoutRunningHandler
+--- PASS: TestDisabledServiceRefusesWithoutRunningHandler (0.00s)
+=== RUN   TestEnabledByDefault
+--- PASS: TestEnabledByDefault (0.00s)
+=== RUN   TestMissingRequiredDependencyMarksUnavailable
+--- PASS: TestMissingRequiredDependencyMarksUnavailable (0.00s)
+=== RUN   TestOptionalDependencyDoesNotDisable
+--- PASS: TestOptionalDependencyDoesNotDisable (0.00s)
+=== RUN   TestEntryOperationsCannotBeSwitchedOff
+--- PASS: TestEntryOperationsCannotBeSwitchedOff (0.00s)
+=== RUN   TestSetEnabledTakesEffectAtOnce
+--- PASS: TestSetEnabledTakesEffectAtOnce (0.00s)
+=== RUN   TestUnknownOperationAndService
+--- PASS: TestUnknownOperationAndService (0.00s)
+=== RUN   TestDuplicateOperationRejected
+--- PASS: TestDuplicateOperationRejected (0.00s)
+=== RUN   TestStatusesSortedAndListOperations
+--- PASS: TestStatusesSortedAndListOperations (0.00s)
+PASS

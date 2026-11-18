@@ -1,0 +1,5 @@
+FAIL	aurora3/internal/systemd [setup failed]
+# aurora3/internal/systemd
+package aurora3/internal/systemd: build constraints exclude all Go files in C:\build\aurora\agent\internal\systemd
+ok  	aurora3/internal/terminal	1.443s
+FAIL

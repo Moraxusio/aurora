@@ -1,0 +1,5 @@
+{"port":60558}
+target www.gstatic.com:80
+target e2e-curl.invalid:80
+target e2e-git.invalid:80
+target e2e-gitsvc.invalid:80

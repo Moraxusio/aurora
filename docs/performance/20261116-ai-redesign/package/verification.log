@@ -1,0 +1,22 @@
+PASS production-key signature/hash aurora3-agent 3.23.0 87828dfb18459372
+PASS production-key signature/hash aurora3-local-agent 3.23.0 87828dfb18459372
+PASS production-key upgrade policy verification
+3.23.0
+PASS real Dart LSP initialize
+PASS real Dart DAP initialize
+PASS stale AI configuration rejected
+PASS AI instructions, skills and budget persistence
+PASS effective budget, subagent and tool policies over signed TLS
+PASS unlimited budget, automatic feature switches and snapshot scope over signed TLS
+IDE_SIGNED_AGENT_TEXT_TRANSACTION_TASK_LSP_DAP_EXTENSIONS_OK
+Running build hooks...
+SIGNED_AGENT_TLS_HARNESS_MEDIA_PATCH_QUESTION_RESTART_OK
+Running build hooks...Running build hooks...
+Fixture-only instance scope: launcher-smoke-e252e7c63a63420babb0959539905515
+PASS actual CMD launcher opens Release window PID 23900
+PASS local-workspace semantics and isolated encrypted profile
+PASS repeated CMD launch restores the same isolated process
+PASS actual local-task exit confirmation
+PASS launcher exit and local-agent cleanup
+RELEASE_CMD_LAUNCHER_ISOLATION_RESTORE_EXIT_OK
+AI_REDESIGN_FULL_CANDIDATE_VERIFIED

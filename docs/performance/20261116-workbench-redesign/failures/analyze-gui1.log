@@ -1,0 +1,5 @@
+Analyzing shell.dart, panels.dart, component_gallery.dart, git...
+
+warning - lib\kernel\shell.dart:171:15 - The declaration '_feature' isn't referenced. Try removing the declaration of '_feature'. - unused_element
+
+1 issue found.

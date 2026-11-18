@@ -1,0 +1,17 @@
+=== RUN   TestDotDotGivesForbidden
+--- PASS: TestDotDotGivesForbidden (0.00s)
+=== RUN   TestMalformedGivesBadRequest
+--- PASS: TestMalformedGivesBadRequest (0.00s)
+=== RUN   TestResolveRefusesSymlinkOutside
+--- PASS: TestResolveRefusesSymlinkOutside (0.00s)
+=== RUN   TestResolveInside
+--- PASS: TestResolveInside (0.00s)
+=== RUN   TestForeignMountsCoversVirtualFS
+--- PASS: TestForeignMountsCoversVirtualFS (0.00s)
+=== RUN   TestCheckUnit
+--- PASS: TestCheckUnit (0.00s)
+=== RUN   TestCheckActions
+--- PASS: TestCheckActions (0.00s)
+=== RUN   TestStatfsBoundedOnRealDirectory
+--- PASS: TestStatfsBoundedOnRealDirectory (0.00s)
+PASS

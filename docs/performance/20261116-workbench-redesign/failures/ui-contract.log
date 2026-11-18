@@ -1,0 +1,7 @@
+Unhandled exception:
+PathNotFoundException: Directory listing failed, path = 'lib\*' (OS Error: 系统找不到指定的路径。, errno = 3)
+#0      _Directory._fillWithDirectoryListing (dart:io-patch/directory_patch.dart:49:4)
+#1      _Directory.listSync (dart:io/directory_impl.dart:259:5)
+#2      main (file:///C:/build/aurora/app/tool/ui_contract.dart:6:8)
+#3      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:311:33)
+#4      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)

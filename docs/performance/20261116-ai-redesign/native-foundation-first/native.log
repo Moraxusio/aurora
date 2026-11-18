@@ -1,0 +1,65 @@
+Building Windows application...                                   414.6s
+√ Built build\windows\x64\runner\Profile\aurora.exe
+VMServiceFlutterDriver: Connecting to Flutter application at http://127.0.0.1:63959/MX8CVH1rX0A=/
+VMServiceFlutterDriver: Isolate found with number: 6580364893479807
+VMServiceFlutterDriver: Isolate 6580364893479807 is runnable.
+VMServiceFlutterDriver: Isolate is paused at start.
+VMServiceFlutterDriver: Attempting to resume isolate
+00:00 +0: production desktop monitor and concurrent workbench frame budgets
+VMServiceFlutterDriver: Connected to Flutter application.
+Expected: a value less than <16667>
+  Actual: <21945>
+   Which: is not a value less than <16667>
+monitor + AI stream + terminal output + sidebar drag UI budget
+
+#0      fail (package:matcher/src/expect/expect.dart:187)
+#1      _expect (package:matcher/src/expect/expect.dart:182)
+#2      expect (package:matcher/src/expect/expect.dart:65)
+#3      expect (package:flutter_test/src/widget_tester.dart:473)
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/integration_test/gui_foundation_test.dart:353)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953)
+<asynchronous suspension>
+#7      TestWidgetsFlutterBinding._createTestCompletionHandler.<anonymous closure> (package:flutter_test/src/binding.dart:1707)
+<asynchronous suspension>
+01:59 +0: production desktop monitor and concurrent workbench frame budgets [E]
+  Test failed. See exception logs above.
+  The test description was: production desktop monitor and concurrent workbench frame budgets
+
+01:59 +0 -1: (tearDownAll)
+Warning: integration_test plugin was not detected.
+
+If you're running the tests with `flutter drive`, please make sure your tests
+are in the `integration_test/` directory of your package and use
+`flutter test $path_to_test` to run it instead.
+
+If you're running the tests with Android instrumentation or XCTest, this means
+that you are not capturing test results properly! See the following link for
+how to set up the integration_test plugin:
+
+https://docs.flutter.dev/testing/integration-tests
+
+01:59 +1 -1: Some tests failed.
+Failure Details:
+Failure in method: production desktop monitor and concurrent workbench frame budgets
+Instance of 'FlutterErrorDetails'
+end of failure 1
+
+
+
+The Flutter CLI developer tool uses Google Analytics to report usage and diagnostic
+data along with package dependencies, and crash reporting to send basic crash
+reports. This data is used to help improve the Dart platform, Flutter framework,
+and related tools.
+
+Telemetry is not sent on the very first run. To disable reporting of telemetry,
+run this terminal command:
+
+    flutter --disable-analytics
+
+If you opt out of telemetry, an opt-out event will be sent, and then no further
+information will be sent. This data is collected in accordance with the Google
+Privacy Policy (https://policies.google.com/privacy).
+

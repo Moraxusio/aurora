@@ -1,0 +1,89 @@
+Running build hooks...Running build hooks...00:00 +0: loading test\agent_test.dart
+00:00 +0: test\agent_test.dart: (setUpAll)
+00:00 +0: test\bytes_test.dart: take across chunks
+00:00 +0: test\agent_test.dart: hello reports the agent; the token is not in it
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~1: test\bytes_test.dart: take across chunks
+00:00 +0 ~1: test\agent_test.dart: unary call, error code and Chinese text survive
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~2: test\bytes_test.dart: take across chunks
+00:00 +0 ~2: test\agent_test.dart: wrong token: auth failure
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~3: test\bytes_test.dart: take across chunks
+00:00 +0 ~3: test\agent_test.dart: wrong pin: refused before the token is sent
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~4: test\bytes_test.dart: take across chunks
+00:00 +0 ~4: test\agent_test.dart: nothing listening: network failure
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~5: test\bytes_test.dart: take across chunks
+00:00 +0 ~5: test\agent_test.dart: switch a service off and on over the link
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~6: test\bytes_test.dart: take across chunks
+00:00 +0 ~6: test\agent_test.dart: stream: pipe echoes data frames
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~7: test\bytes_test.dart: take across chunks
+00:00 +0 ~7: test\agent_test.dart: download 64 MiB intact (agent to client)
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~8: test\bytes_test.dart: take across chunks
+00:00 +0 ~8: test\agent_test.dart: upload 64 MiB intact (client to agent)
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~9: test\bytes_test.dart: take across chunks
+00:00 +0 ~9: test\agent_test.dart: 200 concurrent calls on one link
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~10: test\bytes_test.dart: take across chunks
+00:00 +0 ~10: test\agent_test.dart: a call stays fast while a download runs
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~11: test\bytes_test.dart: take across chunks
+00:00 +0 ~11: test\agent_test.dart: ping and keepalive
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~12: test\bytes_test.dart: take across chunks
+00:00 +0 ~12: test\agent_test.dart: the agent going away ends the link with a reason
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~13: test\bytes_test.dart: take across chunks
+00:00 +0 ~13: test\agent_test.dart: port forward bytes go both ways, in text and in bulk
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~14: test\bytes_test.dart: take across chunks
+00:00 +0 ~14: test\agent_test.dart: port forward connections run side by side
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~15: test\bytes_test.dart: take across chunks
+00:00 +0 ~15: test\agent_test.dart: port forward a port nothing listens on: the connection ends, the reason is kept
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~16: test\bytes_test.dart: take across chunks
+00:00 +0 ~16: test\agent_test.dart: port forward close stops the listener
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~17: test\bytes_test.dart: take across chunks
+00:00 +0 ~17: test\agent_test.dart: port forward a local port in use is reported
+  Skip: AURORA3_TESTPEER not set
+00:00 +0 ~18: test\bytes_test.dart: take across chunks
+00:00 +1 ~18: test\connection_test.dart: host:port parsing
+00:00 +2 ~18: test\connection_test.dart: host:port parsing
+00:00 +3 ~18: test\bytes_test.dart: oversized frames are refused
+00:00 +4 ~18: test\yamux_test.dart: open, send both ways, close both ways
+00:00 +5 ~18: test\connection_test.dart: network failures: every address, then 3 retries, then failed
+00:00 +6 ~18: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +7 ~18: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +8 ~18: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +9 ~18: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +10 ~18: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +11 ~18: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +12 ~18: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +13 ~18: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +13 ~18: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+  Skip: AURORA3_TESTPEER not set
+00:00 +13 ~19: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +13 ~19: test\connection_test.dart: against the Go entry wrong token: auth, no retry
+  Skip: AURORA3_TESTPEER not set
+00:00 +13 ~20: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +13 ~20: test\connection_test.dart: against the Go entry reinstalled agent (new certificate): pinMismatch, no retry
+  Skip: AURORA3_TESTPEER not set
+00:00 +13 ~21: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +14 ~21: test\yamux_test.dart: writes in one turn share a socket write
+00:00 +15 ~21: test\yamux_test.dart: interactive frames overtake a bulk transfer
+00:00 +16 ~21: test\yamux_test.dart: ping measures a round trip
+00:00 +17 ~21: test\yamux_test.dart: reset fails the other side
+00:00 +18 ~21: test\yamux_test.dart: the peer closing ends the session and fails waiting reads
+00:00 +19 ~21: test\yamux_test.dart: a bad header ends the session with a protocol error
+00:00 +20 ~21: test\yamux_test.dart: data beyond the window is a protocol error
+00:00 +21 ~21: test\yamux_test.dart: frames split at any byte boundary still parse
+00:00 +22 ~21: test\yamux_test.dart: opens wait when the peer backlog is full
+00:00 +23 ~21: All tests passed!

@@ -1,0 +1,76 @@
+00:00 +0: loading C:/build/aurora/app/test/async_audit_test.dart
+00:00 +0: C:/build/aurora/app/test/async_audit_test.dart: git mutations reject repeated clicks and always release busy
+00:00 +1: C:/build/aurora/app/test/async_audit_test.dart: old git write cannot report success or refresh another repository
+00:00 +2: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +3: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +4: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +5: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +6: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +7: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +8: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +9: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +10: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +11: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +12: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +13: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +14: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +15: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +16: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +17: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +18: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +19: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +20: C:/build/aurora/app/test/async_audit_test.dart: watch reconnect overtakes an old pending handshake
+00:00 +21: C:/build/aurora/app/test/async_audit_test.dart: git.status cannot publish a reply from the previously selected repository
+00:00 +22: C:/build/aurora/app/test/async_audit_test.dart: git.branches cannot publish a reply from the previously selected repository
+00:00 +23: C:/build/aurora/app/test/async_audit_test.dart: git.log cannot publish a reply from the previously selected repository
+00:00 +24: C:/build/aurora/app/test/async_audit_test.dart: git.stash cannot publish a reply from the previously selected repository
+00:00 +25: C:/build/aurora/app/test/async_audit_test.dart: git.tag cannot publish a reply from the previously selected repository
+00:00 +26: C:/build/aurora/app/test/async_audit_test.dart: git status rejects old connections and out-of-order refreshes
+00:00 +27: C:/build/aurora/app/test/workbench_repair_test.dart: pending forward is closed after disconnect
+00:00 +28: C:/build/aurora/app/test/workbench_repair_test.dart: pending forward is closed after disposal
+00:00 +29: C:/build/aurora/app/test/workbench_repair_test.dart: repeated forward restarts share one listener
+00:01 +30: C:/build/aurora/app/test/workbench_repair_test.dart: disconnect invalidates local bootstrap and duplicate connects coalesce
+00:01 +31: C:/build/aurora/app/test/workbench_repair_test.dart: terminal reconnect overtakes a held old attach without duplicate streams
+00:01 +32: C:/build/aurora/app/test/workbench_repair_test.dart: terminal reconnect overtakes a held old attach without duplicate streams
+00:01 +33: C:/build/aurora/app/test/workbench_repair_test.dart: terminal reconnect overtakes a held old attach without duplicate streams
+00:01 +34: C:/build/aurora/app/test/workbench_repair_test.dart: terminal reconnect overtakes a held old attach without duplicate streams
+00:01 +35: C:/build/aurora/app/test/workbench_repair_test.dart: terminal reconnect overtakes a held old attach without duplicate streams
+00:01 +36: C:/build/aurora/app/test/workbench_repair_test.dart: log follow pauses hidden polling and keeps narrow toolbar usable
+00:02 +37: C:/build/aurora/app/test/workbench_repair_test.dart: manual port validation keeps the entered address in its dialog
+00:12 +38: C:/build/aurora/app/test/task_debug_test.dart: task completion already in transport cannot undo cancellation
+00:12 +39: C:/build/aurora/app/test/task_debug_test.dart: debug control is single-flight even when its acknowledgement is held
+00:12 +40: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:13 +41: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:13 +42: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:13 +43: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:13 +44: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:13 +45: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:13 +46: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:13 +47: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:14 +48: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:14 +49: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:14 +50: C:/build/aurora/app/test/task_debug_test.dart: narrow breakpoint editor saves every field and virtual source is read-only
+00:14 +51: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit agent route
+00:14 +52: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit agent route
+00:14 +53: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit agent route
+00:14 +54: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit agent route
+00:14 +55: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit agent route
+00:14 +56: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit agent route
+00:14 +57: C:/build/aurora/app/test/task_debug_test.dart: agent RE2 problems are consumed once, scoped, bounded and persisted
+00:14 +58: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit direct route
+00:14 +59: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit direct route
+00:14 +60: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit direct route
+00:14 +61: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit direct route
+00:14 +62: C:/build/aurora/app/test/new_session_dialog_test.dart: local terminal returns explicit direct route
+00:14 +63: C:/build/aurora/app/test/new_session_dialog_test.dart: with a node chosen the box can be ticked, and the answer carries it
+00:15 +64: C:/build/aurora/app/test/new_session_dialog_test.dart: left unticked, the session is made without a proxy
+00:15 +65: C:/build/aurora/app/test/new_session_dialog_test.dart: when it cannot be had the box is disabled and says why: 这台服务器的 agent 没有代理功能
+00:15 +66: C:/build/aurora/app/test/new_session_dialog_test.dart: when it cannot be had the box is disabled and says why: 代理服务是关闭的：在“代理”页打开它
+00:15 +67: C:/build/aurora/app/test/new_session_dialog_test.dart: when it cannot be had the box is disabled and says why: 还没有选节点：在“代理”页选一个
+00:15 +68: C:/build/aurora/app/test/new_session_dialog_test.dart: cancel returns nothing
+00:15 +69: C:/build/aurora/app/test/new_session_dialog_test.dart: proxyOffer reads the agent's service list and the server's chosen node all in place: offered, naming the node
+00:15 +70: C:/build/aurora/app/test/new_session_dialog_test.dart: proxyOffer reads the agent's service list and the server's chosen node the agent has no proxy service
+00:16 +71: C:/build/aurora/app/test/new_session_dialog_test.dart: proxyOffer reads the agent's service list and the server's chosen node the service is switched off
+00:16 +72: C:/build/aurora/app/test/new_session_dialog_test.dart: proxyOffer reads the agent's service list and the server's chosen node an older agent without proxy.set
+00:16 +73: C:/build/aurora/app/test/new_session_dialog_test.dart: proxyOffer reads the agent's service list and the server's chosen node no node chosen yet
+00:16 +74: All tests passed!

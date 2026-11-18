@@ -1,0 +1,43 @@
+Documentation contract passed: 27 current documents, 54 Markdown files, local links and owned references.
+{
+  "version": "3.23.0",
+  "candidate": "ai-preview2",
+  "source_head": "da239052098f610716a8f2b82ed072aa001953dc",
+  "source_working_tree": "uncommitted working tree",
+  "source_files_checked": 1809,
+  "zip": "C:\\dev\\VPS\\preview4\\Aurora-3.23.0-ai-preview2.zip",
+  "zip_bytes": 43578562,
+  "zip_sha256": "f5c32f80ba8a94a8d1dcc60f14f5121cd1243ae6e0056bb02bde916e26b56297",
+  "zip_files_matching_directory": 337,
+  "client_version": "3.23.0+32300",
+  "client_aot_sha256": "903fa1571201e44fcc665af9fb4a114fbc5acbbadbd9f81b411c212163a163c0",
+  "agents": [
+    {
+      "product": "aurora3-agent",
+      "channel": "stable",
+      "version": "3.23.0",
+      "file": "aurora3-agent-3.23.0-linux-amd64",
+      "size": 15601826,
+      "sha256": "5deeb98063f101a0e3aa189d0481ea96cef55493705d51fbe0bd901fa7672752",
+      "created": "2026-11-16T04:48:53Z",
+      "key_id": "87828dfb18459372"
+    },
+    {
+      "product": "aurora3-local-agent",
+      "channel": "stable",
+      "version": "3.23.0",
+      "file": "aurora3-local-agent-3.23.0-windows-amd64.exe",
+      "size": 14710784,
+      "sha256": "5e9ad6707c3880473c0fa0f40c2161b621f66de173a020ddb32057226bb97f99",
+      "created": "2026-11-16T04:48:53Z",
+      "key_id": "87828dfb18459372"
+    }
+  ],
+  "licenses_verified": [
+    "re_editor",
+    "xterm",
+    "OpenCode"
+  ],
+  "unpacked_directory": "C:\\Users\\finwe\\AppData\\Local\\Temp\\opencode\\aurora-ai-redesign-package\\extracted\\Aurora-3.23.0-ai-preview2"
+}
+CANDIDATE_SOURCE_VERSION_ZIP_LICENSES_OK

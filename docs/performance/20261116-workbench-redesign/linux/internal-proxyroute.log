@@ -1,0 +1,5 @@
+=== RUN   TestRoutesRespectSchemeBypassAndRefuseMissingAgent
+--- PASS: TestRoutesRespectSchemeBypassAndRefuseMissingAgent (0.00s)
+=== RUN   TestChildEnvironmentHasOnlyTheSelectedProxy
+--- PASS: TestChildEnvironmentHasOnlyTheSelectedProxy (0.00s)
+PASS

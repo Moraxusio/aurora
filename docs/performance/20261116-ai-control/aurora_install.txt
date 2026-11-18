@@ -1,0 +1,67 @@
+Running build hooks...Running build hooks...00:00 +0: loading test\installer_test.dart
+00:00 +0: test\installer_test.dart: (setUpAll)
+00:00 +0: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +0: test\installer_test.dart: sudo with a password: password on stdin, never in a command
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +0 ~1: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +0 ~1: test\installer_test.dart: root login: no sudo, no --user
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +0 ~2: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +0 ~2: test\installer_test.dart: passwordless sudo uses sudo -n
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +0 ~3: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +0 ~3: test\installer_test.dart: refusals before anything is uploaded
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +0 ~4: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +0 ~4: test\installer_test.dart: wrong sudo password is reported as such
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +0 ~5: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +0 ~5: test\installer_test.dart: rollback and refusal results come through
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +0 ~6: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +0 ~6: test\installer_test.dart: no result line, upload failure
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +0 ~7: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +0 ~7: test\installer_test.dart: a result without valid direct parameters is not ok
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +0 ~8: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +1 ~8: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +1 ~8: test\policy_test.dart: Go-signed policy verifies and has the same safety decisions
+  Skip: AURORA3_UPGRADE_FIXTURE not set
+00:00 +1 ~9: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +1 ~9: test\policy_test.dart: Go-signed revocation permits only a safe rollback
+  Skip: AURORA3_UPGRADE_FIXTURE not set
+00:00 +1 ~10: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +1 ~10: test\policy_test.dart: policy bytes and signature tampering are refused
+  Skip: AURORA3_UPGRADE_FIXTURE not set
+00:00 +1 ~11: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +2 ~11: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +3 ~11: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +3 ~11: test\installer_test.dart: instances (D-101) a named instance installs with --instance
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +3 ~12: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +3 ~12: test\installer_test.dart: instances (D-101) the default instance adds no flag
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +3 ~13: test\manifest_test.dart: the release key is v3's (key_id 87828dfb18459372)
+00:00 +4 ~13: test\installer_test.dart: instances (D-101) uninstall and direct-info address the instance own binary
+00:00 +5 ~13: test\manifest_test.dart: versions compare like update.CompareVersionStrict
+00:00 +6 ~13: test\manifest_test.dart: versions compare like update.CompareVersionStrict
+00:00 +7 ~13: test\installer_test.dart: (tearDownAll)
+00:00 +7 ~13: test\manifest_test.dart: a Go-signed build verifies
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +7 ~14: test\installer_test.dart: (tearDownAll)
+00:00 +7 ~14: test\manifest_test.dart: the real release key does not accept the test signature
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +7 ~15: test\manifest_test.dart: refused: flipped-build
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +7 ~16: test\manifest_test.dart: refused: flipped-manifest
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +7 ~17: test\manifest_test.dart: refused: flipped-sig
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +7 ~18: test\manifest_test.dart: refused: missing-build
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +7 ~19: test\manifest_test.dart: refused: v2-product
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +7 ~20: test\manifest_test.dart: refused: other-key
+  Skip: AURORA3_RELEASE_FIXTURE not set
+00:00 +7 ~21: All tests passed!

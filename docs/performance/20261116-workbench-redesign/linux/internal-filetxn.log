@@ -1,0 +1,33 @@
+=== RUN   TestBatchChecksEveryVersionBeforeMutation
+--- PASS: TestBatchChecksEveryVersionBeforeMutation (0.00s)
+=== RUN   TestTransactionPreflightsSuppliedByteBudgetBeforeDiskReads
+--- PASS: TestTransactionPreflightsSuppliedByteBudgetBeforeDiskReads (0.00s)
+=== RUN   TestCancellationRollsBackFilesAndCheckpoint
+--- PASS: TestCancellationRollsBackFilesAndCheckpoint (0.03s)
+=== RUN   TestCrashRecoveryChild
+--- PASS: TestCrashRecoveryChild (0.00s)
+=== RUN   TestRecoveryAfterProcessExitAtEachReplacement
+=== RUN   TestRecoveryAfterProcessExitAtEachReplacement/0
+=== RUN   TestRecoveryAfterProcessExitAtEachReplacement/1
+=== RUN   TestRecoveryAfterProcessExitAtEachReplacement/2
+--- PASS: TestRecoveryAfterProcessExitAtEachReplacement (0.13s)
+    --- PASS: TestRecoveryAfterProcessExitAtEachReplacement/0 (0.03s)
+    --- PASS: TestRecoveryAfterProcessExitAtEachReplacement/1 (0.04s)
+    --- PASS: TestRecoveryAfterProcessExitAtEachReplacement/2 (0.05s)
+=== RUN   TestRecoveryRetainsExternalChangesAndJournal
+--- PASS: TestRecoveryRetainsExternalChangesAndJournal (0.03s)
+=== RUN   TestSuccessfulCommitAndCommittedCleanupDoNotUndo
+--- PASS: TestSuccessfulCommitAndCommittedCleanupDoNotUndo (0.06s)
+=== RUN   TestMarkerFailureMustBeDurablyRemovedBeforeRollback
+=== RUN   TestMarkerFailureMustBeDurablyRemovedBeforeRollback/write
+=== RUN   TestMarkerFailureMustBeDurablyRemovedBeforeRollback/remove
+=== RUN   TestMarkerFailureMustBeDurablyRemovedBeforeRollback/sync
+--- PASS: TestMarkerFailureMustBeDurablyRemovedBeforeRollback (0.24s)
+    --- PASS: TestMarkerFailureMustBeDurablyRemovedBeforeRollback/write (0.10s)
+    --- PASS: TestMarkerFailureMustBeDurablyRemovedBeforeRollback/remove (0.07s)
+    --- PASS: TestMarkerFailureMustBeDurablyRemovedBeforeRollback/sync (0.07s)
+=== RUN   TestCleanupFailureKeepsCommitDecisionAcrossRecovery
+--- PASS: TestCleanupFailureKeepsCommitDecisionAcrossRecovery (0.07s)
+=== RUN   TestTransactionRefusesOutOfRootAndEscapingSymlink
+--- PASS: TestTransactionRefusesOutOfRootAndEscapingSymlink (0.00s)
+PASS

@@ -1,0 +1,33 @@
+{
+  "steps": [
+    "project switch, tree expansion, pointer-open files and retained dirty buffer",
+    "85%: settings input, AI composer/menu/barrier/history/maximize/details, terminal shortcuts, state and divider",
+    "80%: settings input, AI composer/menu/barrier/history/maximize/details, terminal shortcuts, state and divider",
+    "100%: settings input, AI composer/menu/barrier/history/maximize/details, terminal shortcuts, state and divider",
+    "125%: settings input, AI composer/menu/barrier/history/maximize/details, terminal shortcuts, state and divider",
+    "150%: settings input, AI composer/menu/barrier/history/maximize/details, terminal shortcuts, state and divider",
+    "85%: settings input, AI composer/menu/barrier/history/maximize/details, terminal shortcuts, state and divider",
+    "scaled docking and cancelled unsaved close",
+    "layout dialog, width slider and accessible local overlay",
+    "command dialogs, Escape and scaled notification"
+  ],
+  "terminal_attaches": 1,
+  "dirty_buffer_retained": true,
+  "undo_redo_retained": true,
+  "scales_percent": [
+    85,
+    80,
+    100,
+    125,
+    150,
+    85
+  ],
+  "production_root": true,
+  "synthetic_services": true,
+  "native_engine": true,
+  "synthetic_input": true,
+  "mode": "profile",
+  "physical_width": 1682.0,
+  "physical_height": 1066.0,
+  "device_pixel_ratio": 1.25
+}

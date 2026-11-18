@@ -1,0 +1,81 @@
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+00:00 +0: loading C:/build/aurora/app/test/appearance_test.dart
+00:00 +0: C:/build/aurora/app/test/appearance_test.dart: 240 live values coalesce into one write; a slow write never rolls back the preview
+00:00 +1: C:/build/aurora/app/test/appearance_test.dart: failed save preserves live settings and can retry without overwriting unrelated fields
+00:00 +2: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:01 +3: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:01 +4: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:01 +5: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:01 +6: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:01 +7: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:02 +8: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:03 +9: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:04 +10: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:05 +11: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:05 +12: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:06 +13: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:06 +14: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:07 +15: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:07 +16: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:08 +17: C:/build/aurora/app/test/appearance_test.dart: real open file and terminal update before saving, UI zoom keeps their controllers and stream
+00:09 +18: C:/build/aurora/app/test/workbench_redesign_test.dart: real sidebars retain per-server inputs, navigation and identity across reconnect and theme
+00:10 +19: C:/build/aurora/app/test/workbench_redesign_test.dart: real sidebars retain per-server inputs, navigation and identity across reconnect and theme
+00:10 +20: C:/build/aurora/app/test/workbench_redesign_test.dart: real sidebars retain per-server inputs, navigation and identity across reconnect and theme
+00:10 +21: C:/build/aurora/app/test/workbench_panels_test.dart: a late terminal attachment also leaves an open dialog in control of focus
+00:10 +22: C:/build/aurora/app/test/workbench_redesign_test.dart: Git drafts follow repositories and a completed commit keeps newer typing
+00:11 +23: C:/build/aurora/app/test/workbench_redesign_test.dart: Git confirmation and service confirmation cannot execute on a replacement link
+00:13 +24: C:/build/aurora/app/test/workbench_redesign_test.dart: search and services stay operable in short narrow dark panels at 150% text
+00:13 +25: C:/build/aurora/app/test/workbench_redesign_test.dart: search and services stay operable in short narrow light panels at 150% text
+00:14 +26: C:/build/aurora/app/test/workbench_redesign_test.dart: labelled navigation is keyboard accessible and exposes selection
+00:14 +27: All tests passed!

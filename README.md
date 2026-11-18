@@ -2,9 +2,11 @@
 
 Windows 本地与 Linux 远程开发工作台：文件编辑、终端、Git、监控、语言服务、任务／调试和 AI 协作。布局服务于任务，移动、隐藏和缩放面板保留工作状态。
 
-当前版本：**[3.22.0，Windows x64](https://github.com/Moraxusio/aurora/releases/tag/v3.22.0)**。完整包包含同版本 Windows 本地 agent 和 Linux amd64 agent；完整解压后运行 **`aurora.exe`**。操作见 [开始使用](docs/guides/getting-started.md)，本轮成果见 [3.22.0 版本说明](docs/releases/3.22.0.md)。
+当前正式版：**[3.22.0，Windows x64](https://github.com/Moraxusio/aurora/releases/tag/v3.22.0)**。完整包包含同版本 Windows 本地 agent 和 Linux amd64 agent；完整解压后运行 **`aurora.exe`**。操作见 [开始使用](docs/guides/getting-started.md)，正式版成果见 [3.22.0 版本说明](docs/releases/3.22.0.md)。
 
 正式版已完成双 agent 验签、ZIP 一致性、真实 agent 冒烟、Release 启动／退出，以及三项 GitHub 资产的无认证下载复核；详见 [正式发布记录](docs/validation/2026-11-16-release-3.22.0.md)。包内附带构建信息、源码指纹和许可证。
+
+本地候选：[3.24.0-workbench-preview1](docs/releases/3.24.0-workbench-preview1.md)，重点为非 AI 功能可靠性和工作台 GUI 重构。候选完整解压后使用 `启动验收版.cmd`，按 [候选验收指南](docs/guides/acceptance.md) 检查。
 
 ## 文档
 
@@ -41,7 +43,7 @@ powershell -NoProfile -File tools/package.ps1 `
   -NotesFile docs/releases/3.22.0.md
 ```
 
-最近的功能源码验收：602 项客户端测试通过、20 项条件跳过；Windows／Linux Go 检查与 race 通过；原生 541 帧满足既定 p95 预算。准确范围和原始证据见 [源码验收记录](docs/validation/2026-11-16-implementation.md)，条件跳过及真实账号／长期压力未验项目保留在记录中。
+最新候选的检查结果与原始证据见 [工作台重构验收](docs/validation/2026-11-16-workbench-redesign.md)；正式版基础记录见 [源码验收记录](docs/validation/2026-11-16-implementation.md)。条件跳过及真实账号／长期压力未验项目分别保留在对应记录中。
 
 ## 许可证
 

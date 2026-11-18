@@ -1,0 +1,77 @@
+=== RUN   TestRankFilesMatchesFullSort
+--- PASS: TestRankFilesMatchesFullSort (0.68s)
+=== RUN   TestCancelledFileListDoesNotPoisonCache
+--- PASS: TestCancelledFileListDoesNotPoisonCache (0.00s)
+=== RUN   TestSearchWorkersRespectSharedBudget
+--- PASS: TestSearchWorkersRespectSharedBudget (0.01s)
+=== RUN   TestUploadRevalidatesAtCommitWithoutBlockingEditorSave
+--- PASS: TestUploadRevalidatesAtCommitWithoutBlockingEditorSave (0.01s)
+=== RUN   TestCopyFolderSameAndAcrossRoots
+--- PASS: TestCopyFolderSameAndAcrossRoots (0.00s)
+=== RUN   TestCopyRefusals
+--- PASS: TestCopyRefusals (0.00s)
+=== RUN   TestCopyReadOnlyFolder
+--- PASS: TestCopyReadOnlyFolder (0.00s)
+=== RUN   TestDuTotalsChildrenAndHardLinks
+--- PASS: TestDuTotalsChildrenAndHardLinks (0.00s)
+=== RUN   TestFsErrNotEmptyIsNotExists
+--- PASS: TestFsErrNotEmptyIsNotExists (0.00s)
+=== RUN   TestTraversalOutsideRootIsRefused
+--- PASS: TestTraversalOutsideRootIsRefused (0.00s)
+=== RUN   TestInsideRootStillWorks
+--- PASS: TestInsideRootStillWorks (0.01s)
+=== RUN   TestUnknownRootRefused
+--- PASS: TestUnknownRootRefused (0.00s)
+=== RUN   TestEditorReadSaveConflict
+--- PASS: TestEditorReadSaveConflict (0.01s)
+=== RUN   TestReplacementSharesSearchSemanticsAndPreservesSeparators
+--- PASS: TestReplacementSharesSearchSemanticsAndPreservesSeparators (0.00s)
+=== RUN   TestReplacementBudgetsCancellationAndLinearRegex
+--- PASS: TestReplacementBudgetsCancellationAndLinearRegex (0.13s)
+=== RUN   TestReplacementStreamsUnsavedSnapshotAndResetsReleaseBudget
+--- PASS: TestReplacementStreamsUnsavedSnapshotAndResetsReleaseBudget (0.00s)
+=== RUN   TestSearchStreamResetCancelsBackendWork
+--- PASS: TestSearchStreamResetCancelsBackendWork (0.00s)
+=== RUN   TestListFilesUsesRunner
+--- PASS: TestListFilesUsesRunner (0.00s)
+=== RUN   TestListFilesFallsBackToWalk
+--- PASS: TestListFilesFallsBackToWalk (0.00s)
+=== RUN   TestListFilesWithoutRunnerWalks
+--- PASS: TestListFilesWithoutRunnerWalks (0.00s)
+=== RUN   TestListFilesReportsCap
+--- PASS: TestListFilesReportsCap (0.05s)
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-8
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-8-bom
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-16le
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-16le-bom
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-16be
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-16be-bom
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/gb18030
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/big5
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/shift-jis
+=== RUN   TestTextCodecsRoundTripBOMAndLegacyEncodings/windows-1252
+--- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings (0.01s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-8 (0.00s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-8-bom (0.00s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-16le (0.00s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-16le-bom (0.00s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-16be (0.00s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/utf-16be-bom (0.00s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/gb18030 (0.00s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/big5 (0.00s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/shift-jis (0.00s)
+    --- PASS: TestTextCodecsRoundTripBOMAndLegacyEncodings/windows-1252 (0.00s)
+=== RUN   TestTextStreamFramesLargeUTF8AndWindowsWithoutLoadingWholeFile
+--- PASS: TestTextStreamFramesLargeUTF8AndWindowsWithoutLoadingWholeFile (0.03s)
+=== RUN   TestBatchCommitStagesOutsideLockAndChecksWholeBatch
+=== RUN   TestBatchCommitStagesOutsideLockAndChecksWholeBatch/commit
+=== RUN   TestBatchCommitStagesOutsideLockAndChecksWholeBatch/conflict
+=== RUN   TestBatchCommitStagesOutsideLockAndChecksWholeBatch/cancel
+=== RUN   TestBatchCommitStagesOutsideLockAndChecksWholeBatch/encoding-error
+--- PASS: TestBatchCommitStagesOutsideLockAndChecksWholeBatch (0.08s)
+    --- PASS: TestBatchCommitStagesOutsideLockAndChecksWholeBatch/commit (0.06s)
+    --- PASS: TestBatchCommitStagesOutsideLockAndChecksWholeBatch/conflict (0.01s)
+    --- PASS: TestBatchCommitStagesOutsideLockAndChecksWholeBatch/cancel (0.01s)
+    --- PASS: TestBatchCommitStagesOutsideLockAndChecksWholeBatch/encoding-error (0.01s)
+PASS

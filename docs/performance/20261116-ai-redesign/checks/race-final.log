@@ -1,0 +1,30 @@
+=== RUN   TestRunBudgetReservesConcurrentRequestsAndPricesInclusiveUsage
+--- PASS: TestRunBudgetReservesConcurrentRequestsAndPricesInclusiveUsage (0.00s)
+=== RUN   TestHarnessJournalRecoveryPreservesKnownResults
+--- PASS: TestHarnessJournalRecoveryPreservesKnownResults (0.03s)
+=== RUN   TestHarnessJournalFailurePreventsToolExecution
+--- PASS: TestHarnessJournalFailurePreventsToolExecution (1.55s)
+=== RUN   TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel
+--- PASS: TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel (0.37s)
+=== RUN   TestStoppedInboxSurvivesReloadAndCanBeCancelled
+--- PASS: TestStoppedInboxSurvivesReloadAndCanBeCancelled (0.03s)
+=== RUN   TestAdmissionPersistenceFailureRetainsInputs
+--- PASS: TestAdmissionPersistenceFailureRetainsInputs (0.04s)
+=== RUN   TestControlsParallelChildrenCheckpointAndTotalLimit
+--- PASS: TestControlsParallelChildrenCheckpointAndTotalLimit (0.22s)
+=== RUN   TestControlsQueuedMessagesOwnBudgetsAndAdmittedPolicy
+--- PASS: TestControlsQueuedMessagesOwnBudgetsAndAdmittedPolicy (1.22s)
+=== RUN   TestControlsResumedChildCannotDelegateOrLoseReadOnly
+--- PASS: TestControlsResumedChildCannotDelegateOrLoseReadOnly (0.18s)
+=== RUN   TestControlsDisabledBudgetStillMetersAndCancelledSlotsDoNotStart
+--- PASS: TestControlsDisabledBudgetStillMetersAndCancelledSlotsDoNotStart (0.00s)
+=== RUN   TestControlsToolLimitAndRepeatApproval
+--- PASS: TestControlsToolLimitAndRepeatApproval (0.36s)
+=== RUN   TestControlsShellUsesConfiguredTimeout
+--- PASS: TestControlsShellUsesConfiguredTimeout (1.04s)
+=== RUN   TestControlsStoppingParentCancelsParallelChildren
+--- PASS: TestControlsStoppingParentCancelsParallelChildren (0.31s)
+=== RUN   TestControlsStoppingOneChildPreservesSiblingAndResultReference
+--- PASS: TestControlsStoppingOneChildPreservesSiblingAndResultReference (0.33s)
+PASS
+ok  	aurora3/internal/ai	11.604s

@@ -1,0 +1,17 @@
+{
+  "version": "3.23.0",
+  "candidate": "ai-preview1",
+  "built_at_utc": "2026-11-16T01:54:25.4393314Z",
+  "source_head": "da239052098f610716a8f2b82ed072aa001953dc",
+  "source_working_tree": "uncommitted working tree",
+  "source_files_checked_before_and_after_build": 1664,
+  "source_deleted_files": [],
+  "client_aot_sha256": "02d7e55f930cb1db9f033e3e68117864bfbb6edee1fef546bb5cfd8536cce419",
+  "isolated_launcher": "启动验收版.cmd",
+  "agent_version": "3.23.0",
+  "linux_agent_sha256": "e1db782500c7b5a5ecab76ba4847f53a0d0c92a516a793a4f1e17893bc515f63",
+  "local_agent_sha256": "24c37f18eecdb24af7b47dcb5c99959163336dcb75e46f15fb843374557b922c",
+  "signing_key_id": "87828dfb18459372",
+  "document_entry": "docs/README.md",
+  "acceptance_guide": "docs/guides/acceptance.md"
+}

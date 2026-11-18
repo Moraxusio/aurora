@@ -1,0 +1,7 @@
+{
+  "source_files": 1207,
+  "unchanged_between_failed_and_traced": true,
+  "traced_run_passed": true,
+  "cpu_samples": 31,
+  "attribution": "not established; spike did not reproduce in traced run"
+}

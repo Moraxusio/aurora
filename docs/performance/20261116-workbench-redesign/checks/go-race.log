@@ -1,0 +1,27 @@
+--- FAIL: TestControlsShellUsesConfiguredTimeout (8.01s)
+    run_controls_test.go:361: {[Command timed out after 1000 ms and was terminated] true map[exit:1 timeout:true] []} 8.0000203s
+FAIL
+FAIL	aurora3/internal/ai	231.743s
+?   	aurora3/internal/bundle	[no test files]
+?   	aurora3/internal/devprocess	[no test files]
+ok  	aurora3/internal/devtools	17.587s
+ok  	aurora3/internal/entry	14.808s
+ok  	aurora3/internal/files	17.108s
+ok  	aurora3/internal/filetxn	2.627s
+?   	aurora3/internal/git	[no test files]
+ok  	aurora3/internal/mcp	1.628s
+ok  	aurora3/internal/monitor	7.225s
+ok  	aurora3/internal/netfwd	1.253s
+ok  	aurora3/internal/netproxy	20.297s
+ok  	aurora3/internal/p2p	11.099s
+ok  	aurora3/internal/paths	1.111s
+ok  	aurora3/internal/proxyroute	8.809s
+ok  	aurora3/internal/proxysvc	26.332s
+ok  	aurora3/internal/service	9.789s
+ok  	aurora3/internal/terminal	11.822s
+?   	aurora3/internal/testsvc	[no test files]
+ok  	aurora3/internal/update	12.207s
+ok  	aurora3/internal/upgrade	12.805s
+ok  	aurora3/internal/winlocal	14.700s
+ok  	aurora3/internal/wire	27.034s
+FAIL

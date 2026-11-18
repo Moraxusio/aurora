@@ -1,0 +1,42 @@
+[
+  {
+    "operation": "monitor + AI stream + terminal output + sidebar drag",
+    "frames": 160,
+    "elapsed_us": 7302383,
+    "build_p95_us": 21945,
+    "raster_p95_us": 14028,
+    "build_max_us": 28774,
+    "raster_max_us": 525152,
+    "over_16ms": 31
+  },
+  {
+    "operation": "retained editor switching beside AI and terminal",
+    "frames": 50,
+    "elapsed_us": 5405633,
+    "build_p95_us": 48152,
+    "raster_p95_us": 512336,
+    "build_max_us": 49493,
+    "raster_max_us": 527183,
+    "over_16ms": 49
+  },
+  {
+    "operation": "expanded monitor scroll and refresh",
+    "frames": 58,
+    "elapsed_us": 2318889,
+    "build_p95_us": 5643,
+    "raster_p95_us": 13113,
+    "build_max_us": 22875,
+    "raster_max_us": 13560,
+    "over_16ms": 1
+  },
+  {
+    "operation": "30s concurrent polling and streaming soak",
+    "frames": 301,
+    "elapsed_us": 44786618,
+    "build_p95_us": 9704,
+    "raster_p95_us": 466724,
+    "build_max_us": 13927,
+    "raster_max_us": 513972,
+    "over_16ms": 40
+  }
+]

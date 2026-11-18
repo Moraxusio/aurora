@@ -1,0 +1,3 @@
+PASS production-key signature/hash aurora3-agent 3.23.0 87828dfb18459372
+PASS production-key signature/hash aurora3-local-agent 3.23.0 87828dfb18459372
+PASS production-key upgrade policy verification

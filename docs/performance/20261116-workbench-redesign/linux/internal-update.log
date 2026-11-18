@@ -1,0 +1,43 @@
+=== RUN   TestLocalPathsAndResult
+--- PASS: TestLocalPathsAndResult (0.02s)
+=== RUN   TestSignedPolicyAndRevocationRules
+--- PASS: TestSignedPolicyAndRevocationRules (0.00s)
+=== RUN   TestTransferGateQuietWindowAndAdmission
+--- PASS: TestTransferGateQuietWindowAndAdmission (0.07s)
+=== RUN   TestFailureVersionPersists
+--- PASS: TestFailureVersionPersists (0.00s)
+=== RUN   TestSignVerifyAndTamper
+--- PASS: TestSignVerifyAndTamper (0.00s)
+=== RUN   TestVerifyTrustedSecondKey
+--- PASS: TestVerifyTrustedSecondKey (0.00s)
+=== RUN   TestValidateEdges
+--- PASS: TestValidateEdges (0.00s)
+=== RUN   TestCompareVersion
+--- PASS: TestCompareVersion (0.00s)
+=== RUN   TestSignSetsKeyID
+--- PASS: TestSignSetsKeyID (0.00s)
+=== RUN   TestVerifyRejectsKeyIDMismatch
+--- PASS: TestVerifyRejectsKeyIDMismatch (0.00s)
+=== RUN   TestVerifyTrustedUsesTheKeyID
+--- PASS: TestVerifyTrustedUsesTheKeyID (0.00s)
+=== RUN   TestVerifyForAcceptsMatchingProductAndChannel
+--- PASS: TestVerifyForAcceptsMatchingProductAndChannel (0.00s)
+=== RUN   TestVerifyForProductMismatch
+--- PASS: TestVerifyForProductMismatch (0.00s)
+=== RUN   TestVerifyForChannelMismatch
+--- PASS: TestVerifyForChannelMismatch (0.00s)
+=== RUN   TestVerifyForFlippedManifestByte
+--- PASS: TestVerifyForFlippedManifestByte (0.00s)
+=== RUN   TestVerifyForFlippedSignatureByte
+--- PASS: TestVerifyForFlippedSignatureByte (0.00s)
+=== RUN   TestVerifyForTruncatedSignature
+--- PASS: TestVerifyForTruncatedSignature (0.00s)
+=== RUN   TestVerifyForUnknownKey
+--- PASS: TestVerifyForUnknownKey (0.00s)
+=== RUN   TestCompareVersionStrictEqualAndOlder
+--- PASS: TestCompareVersionStrictEqualAndOlder (0.00s)
+=== RUN   TestCompareVersionStrictRejectsMalformed
+--- PASS: TestCompareVersionStrictRejectsMalformed (0.00s)
+=== RUN   TestCompareVersionUnchangedForDesktop
+--- PASS: TestCompareVersionUnchangedForDesktop (0.00s)
+PASS

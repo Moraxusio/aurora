@@ -1,0 +1,24 @@
+=== RUN   TestNativeGPUFixture
+    gpu_native_test.go:18: set AURORA_GPU_NATIVE_FIXTURE to sample the local NVIDIA driver
+--- SKIP: TestNativeGPUFixture (0.00s)
+=== RUN   TestGPUDetailsAcrossDriverLayouts
+--- PASS: TestGPUDetailsAcrossDriverLayouts (0.01s)
+=== RUN   TestGPUUnknownIsNotZeroAndEmptyIsNotFailure
+--- PASS: TestGPUUnknownIsNotZeroAndEmptyIsNotFailure (0.00s)
+=== RUN   TestGPUCoalescingCancellationAndSystemIsolation
+--- PASS: TestGPUCoalescingCancellationAndSystemIsolation (0.01s)
+=== RUN   TestGPUFailureKeepsTimestampAndBacksOffThenRecovers
+--- PASS: TestGPUFailureKeepsTimestampAndBacksOffThenRecovers (0.00s)
+=== RUN   TestGPUMissingAndTimeoutAreExplicit
+=== RUN   TestGPUMissingAndTimeoutAreExplicit/missing
+=== RUN   TestGPUMissingAndTimeoutAreExplicit/timeout
+=== RUN   TestGPUMissingAndTimeoutAreExplicit/invalid
+--- PASS: TestGPUMissingAndTimeoutAreExplicit (0.01s)
+    --- PASS: TestGPUMissingAndTimeoutAreExplicit/missing (0.00s)
+    --- PASS: TestGPUMissingAndTimeoutAreExplicit/timeout (0.01s)
+    --- PASS: TestGPUMissingAndTimeoutAreExplicit/invalid (0.00s)
+=== RUN   TestNvidiaCommandAndBoundedOutput
+--- PASS: TestNvidiaCommandAndBoundedOutput (0.06s)
+=== RUN   TestGPUOperationIsOptional
+--- PASS: TestGPUOperationIsOptional (0.00s)
+PASS

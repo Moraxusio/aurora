@@ -1,0 +1,9 @@
+=== RUN   TestMCPChild
+--- PASS: TestMCPChild (0.00s)
+=== RUN   TestMCPStdioCatalogAndCancellationReclaimsProcess
+--- PASS: TestMCPStdioCatalogAndCancellationReclaimsProcess (0.06s)
+=== RUN   TestMCPStreamableHTTPHeadersSessionAndSSE
+--- PASS: TestMCPStreamableHTTPHeadersSessionAndSSE (0.05s)
+=== RUN   TestMCPRejectsOversizedRepliesAndRepeatedPagination
+--- PASS: TestMCPRejectsOversizedRepliesAndRepeatedPagination (0.06s)
+PASS

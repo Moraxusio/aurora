@@ -1,0 +1,15 @@
+=== RUN   TestCheckDial
+--- PASS: TestCheckDial (0.00s)
+=== RUN   TestNetDialCarriesBytes
+--- PASS: TestNetDialCarriesBytes (0.04s)
+=== RUN   TestNetDialRefused
+--- PASS: TestNetDialRefused (0.01s)
+=== RUN   TestParseListen
+--- PASS: TestParseListen (0.00s)
+=== RUN   TestHexAddrV6
+--- PASS: TestHexAddrV6 (0.00s)
+=== RUN   TestNetPortsFindsListener
+--- PASS: TestNetPortsFindsListener (0.02s)
+=== RUN   TestDedupePortsIsStable
+--- PASS: TestDedupePortsIsStable (0.00s)
+PASS

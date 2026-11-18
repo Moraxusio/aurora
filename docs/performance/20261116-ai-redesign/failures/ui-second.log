@@ -1,0 +1,422 @@
+00:00 +0: loading C:/build/aurora/app/test/ai_controls_workflow_test.dart
+00:00 +0: C:/build/aurora/app/test/ai_controls_workflow_test.dart: (setUpAll)
+00:00 +0: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:03 +1: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:04 +2: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:04 +3: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:05 +4: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:05 +5: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:06 +6: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:07 +7: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:07 +8: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:07 +9: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:07 +10: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:08 +11: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following StateError was thrown running a test:
+Bad state: No element
+
+When the exception was thrown, this was the stack:
+#0      Iterable.single (dart:core/iterable.dart:694:25)
+#1      WidgetController.element (package:flutter_test/src/controller.dart:888:30)
+#2      WidgetController.ensureVisible (package:flutter_test/src/controller.dart:2389:32)
+#3      main.page (file:///C:/build/aurora/app/test/ai_extensions_test.dart:129:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_extensions_test.dart:241:9)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+The test description was:
+  project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:08 +11 -1: C:/build/aurora/app/test/ai_interaction_test.dart: outdated catalog cannot overwrite provider after switching away and back
+00:08 +11 -1: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0) [E]
+  Test failed. See exception logs above.
+  The test description was: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+  
+00:08 +12 -1: C:/build/aurora/app/test/ai_interaction_test.dart: outdated catalog cannot overwrite provider after switching away and back
+00:09 +13 -1: C:/build/aurora/app/test/ai_controls_workflow_test.dart: unified pages retain drafts at 360.0 Brightness.dark
+00:09 +14 -1: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (1280.0)
+00:10 +15 -1: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (1280.0)
+00:11 +16 -1: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (1280.0)
+00:11 +17 -1: C:/build/aurora/app/test/ai_controls_workflow_test.dart: unified pages retain drafts at 360.0 Brightness.light
+00:11 +18 -1: C:/build/aurora/app/test/ai_interaction_test.dart: narrow sidebar retains model selection and send dispatches slash commands
+00:12 +19 -1: C:/build/aurora/app/test/ai_runtime_test.dart: main, child and long output keep independent drafts and reading anchors
+00:12 +20 -1: C:/build/aurora/app/test/ai_runtime_test.dart: main, child and long output keep independent drafts and reading anchors
+00:12 +21 -1: C:/build/aurora/app/test/ai_runtime_test.dart: main, child and long output keep independent drafts and reading anchors
+00:13 +22 -1: C:/build/aurora/app/test/ai_runtime_test.dart: main, child and long output keep independent drafts and reading anchors
+00:13 +23 -1: C:/build/aurora/app/test/ai_runtime_test.dart: main, child and long output keep independent drafts and reading anchors
+00:13 +24 -1: C:/build/aurora/app/test/ai_controls_workflow_test.dart: unified pages retain drafts at 1200.0 Brightness.light
+00:13 +25 -1: C:/build/aurora/app/test/ai_interaction_test.dart: resizing a sidebar with expanded runtime keeps decisions and input reachable
+00:13 +26 -1: C:/build/aurora/app/test/ai_interaction_test.dart: resizing a sidebar with expanded runtime keeps decisions and input reachable
+00:14 +27 -1: C:/build/aurora/app/test/ai_interaction_test.dart: resizing a sidebar with expanded runtime keeps decisions and input reachable
+00:14 +28 -1: C:/build/aurora/app/test/ai_runtime_test.dart: work switcher and output remain readable in a light narrow pane
+00:14 +29 -1: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:14 +30 -1: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:15 +31 -1: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:15 +32 -1: C:/build/aurora/app/test/ai_input_test.dart: Ctrl+V pastes image, upload precedes run and JSON never embeds image bytes
+00:15 +33 -1: C:/build/aurora/app/test/ai_feature_test.dart: AiSessionSidebar lists remote sessions and opens studio tab
+00:16 +34 -1: C:/build/aurora/app/test/ai_feature_test.dart: AiSessionSidebar lists remote sessions and opens studio tab
+00:16 +35 -1: C:/build/aurora/app/test/ai_feature_test.dart: AiSessionSidebar lists remote sessions and opens studio tab
+00:16 +36 -1: C:/build/aurora/app/test/ai_feature_test.dart: AiSessionSidebar lists remote sessions and opens studio tab
+00:16 +37 -1: C:/build/aurora/app/test/ai_feature_test.dart: AiSessionSidebar lists remote sessions and opens studio tab
+00:16 +38 -1: C:/build/aurora/app/test/ai_runtime_test.dart: mobile composer previews pasted image and file without uploading
+00:16 +39 -1: C:/build/aurora/app/test/ai_interaction_test.dart: question is restored on load and failed answer is retained for retry
+00:17 +40 -1: C:/build/aurora/app/test/ai_interaction_test.dart: question is restored on load and failed answer is retained for retry
+00:17 +41 -1: C:/build/aurora/app/test/ai_input_test.dart: workdir dropdown browses folders without a typed path
+00:17 +42 -1: C:/build/aurora/app/test/ai_input_test.dart: workdir dropdown browses folders without a typed path
+00:17 +43 -1: C:/build/aurora/app/test/ai_input_test.dart: workdir dropdown browses folders without a typed path
+00:17 +44 -1: C:/build/aurora/app/test/ai_interaction_test.dart: model overrides persist without switching default and are sent as a snapshot
+00:18 +44 -1: C:/build/aurora/app/test/ai_feature_test.dart: history groups by day, shows a preview, pins, renames and searches the conversation text
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following assertion was thrown running a test:
+The finder "Found 2 widgets with text "置顶": [
+  Text("置顶", dependencies: [DefaultSelectionStyle, DefaultTextStyle, MediaQuery]),
+  Text("置顶", overflow: ellipsis, maxLines: 2, dependencies: [DefaultSelectionStyle,
+DefaultTextStyle, MediaQuery]),
+]" (used in a call to "tap()") ambiguously found multiple matching widgets. The "tap()" method needs
+a single target.
+
+When the exception was thrown, this was the stack:
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2100:7)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_feature_test.dart:454:15)
+<asynchronous suspension>
+#4      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#5      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+The test description was:
+  history groups by day, shows a preview, pins, renames and searches the conversation text
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:18 +44 -2: C:/build/aurora/app/test/ai_interaction_test.dart: model overrides persist without switching default and are sent as a snapshot
+00:18 +44 -2: C:/build/aurora/app/test/ai_feature_test.dart: history groups by day, shows a preview, pins, renames and searches the conversation text [E]
+  Test failed. See exception logs above.
+  The test description was: history groups by day, shows a preview, pins, renames and searches the conversation text
+  
+00:18 +45 -2: C:/build/aurora/app/test/ai_interaction_test.dart: model overrides persist without switching default and are sent as a snapshot
+00:19 +46 -2: C:/build/aurora/app/test/ai_interaction_test.dart: model overrides persist without switching default and are sent as a snapshot
+00:19 +47 -2: C:/build/aurora/app/test/ai_feature_test.dart: the composer shows the model and thinking strength, and the picker changes both
+00:19 +48 -2: C:/build/aurora/app/test/ai_feature_test.dart: the composer shows the model and thinking strength, and the picker changes both
+00:19 +49 -2: C:/build/aurora/app/test/ai_feature_test.dart: the composer shows the model and thinking strength, and the picker changes both
+00:20 +50 -2: C:/build/aurora/app/test/ai_feature_test.dart: the composer shows the model and thinking strength, and the picker changes both
+00:20 +51 -2: C:/build/aurora/app/test/ai_feature_test.dart: the composer shows the model and thinking strength, and the picker changes both
+00:20 +52 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:21 +53 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:21 +54 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:21 +55 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:21 +56 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:21 +57 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:21 +58 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:22 +59 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+PdfDocument initial load: PdfDocumentRefKey(report.pdf) (588 ms)
+00:22 +60 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:22 +61 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:22 +62 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:22 +63 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:23 +64 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:23 +65 -2: C:/build/aurora/app/test/ai_interaction_test.dart: tool media loads on expansion and image and PDF open from immutable references
+00:23 +66 -2: C:/build/aurora/app/test/ai_feature_test.dart: AiStudioView renders OpenCode todos, tools, diffs, approves permission, and sends prompt
+00:23 +67 -2: C:/build/aurora/app/test/ai_feature_test.dart: AiStudioView renders OpenCode todos, tools, diffs, approves permission, and sends prompt
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following TestFailure was thrown running a test:
+Expected: 'plan'
+  Actual: 'build'
+   Which: is different.
+          Expected: plan
+            Actual: build
+                    ^
+           Differ at offset 0
+
+When the exception was thrown, this was the stack:
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_feature_test.dart:611:7)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+This was caught by the test expectation on the following line:
+  file:///C:/build/aurora/app/test/ai_feature_test.dart line 611
+The test description was:
+  AiStudioView renders OpenCode todos, tools, diffs, approves permission, and sends prompt
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:23 +67 -3: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:23 +67 -3: C:/build/aurora/app/test/ai_feature_test.dart: AiStudioView renders OpenCode todos, tools, diffs, approves permission, and sends prompt [E]
+  Test failed. See exception logs above.
+  The test description was: AiStudioView renders OpenCode todos, tools, diffs, approves permission, and sends prompt
+  
+00:23 +68 -3: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:23 +69 -3: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:23 +70 -3: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:23 +71 -3: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:23 +72 -3: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:23 +73 -3: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:23 +74 -3: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:23 +75 -3: C:/build/aurora/app/test/ai_interaction_test.dart: delivery selector sends queue only after explicit selection
+00:24 +76 -3: C:/build/aurora/app/test/ai_feature_test.dart: AiSettingsDialog fetches models via agent and saves sealed provider
+00:24 +77 -3: C:/build/aurora/app/test/ai_feature_test.dart: AiSettingsDialog fetches models via agent and saves sealed provider
+00:24 +78 -3: C:/build/aurora/app/test/ai_feature_test.dart: AiSettingsDialog fetches models via agent and saves sealed provider
+00:24 +79 -3: C:/build/aurora/app/test/ai_feature_test.dart: AiSettingsDialog fetches models via agent and saves sealed provider
+00:25 +80 -3: C:/build/aurora/app/test/ai_feature_test.dart: AiSettingsDialog fetches models via agent and saves sealed provider
+00:25 +81 -3: C:/build/aurora/app/test/ai_feature_test.dart: AiSettingsDialog fetches models via agent and saves sealed provider
+00:25 +82 -3: C:/build/aurora/app/test/ai_feature_test.dart: AiSettingsDialog fetches models via agent and saves sealed provider
+00:25 +83 -3: C:/build/aurora/app/test/ai_interaction_test.dart: unfinished rule form participates in save and discard protection
+00:26 +84 -3: C:/build/aurora/app/test/ai_feature_test.dart: manual model and credential survive fetching and saving settings
+00:27 +85 -3: C:/build/aurora/app/test/ai_interaction_test.dart: open inbox follows stop events and retained input can be removed
+00:27 +86 -3: C:/build/aurora/app/test/ai_feature_test.dart: provider settings fits a 390px phone without losing credentials
+00:27 +87 -3: C:/build/aurora/app/test/ai_interaction_test.dart: short composer can inspect and remove pasted attachments
+00:27 +88 -3: C:/build/aurora/app/test/ai_feature_test.dart: saving display settings preserves a concurrently rotated API key
+00:28 +89 -3: C:/build/aurora/app/test/ai_interaction_test.dart: settings pages stay independent at 390.0 dark
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-overview'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-overview'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 89.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#95d3c
+The hit test result at that offset is: HitTestResult(RenderPointerListener#304dd@Offset(169.0, 24.0), RenderSemanticsAnnotations#0147c@Offset(169.0, 24.0), RenderMouseRegion#d69bb@Offset(169.0, 24.0), RenderSemanticsAnnotations#eb130@Offset(169.0, 24.0), RenderAnimatedOpacity#29c6f@Offset(169.0, 24.0), RenderSemanticsAnnotations#9b1d6@Offset(169.0, 24.0), RenderRepaintBoundary#c022b@Offset(169.0, 24.0), RenderIndexedSemantics#f53bc@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 24.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 32.0, crossAxis: 169.0), RenderShrinkWrappingViewport#0ffd4@Offset(169.0, 32.0), RenderIgnorePointer#789ba@Offset(169.0, 32.0), RenderSemanticsAnnotations#771b2@Offset(169.0, 32.0), RenderPointerListener#8e3a2@Offset(169.0, 32.0), RenderSemanticsGestureHandler#1bb3b@Offset(169.0, 32.0), RenderPointerListener#bc058@Offset(169.0, 32.0), _RenderScrollSemantics#c3eae@Offset(169.0, 32.0), RenderRepaintBoundary#50a94@Offset(169.0, 32.0), RenderCustomPaint#0c379@Offset(169.0, 32.0), RenderMouseRegion#7442d@Offset(169.0, 32.0), RenderPointerListener#a4d65@Offset(169.0, 32.0), RenderSemanticsGestureHandler#46c90@Offset(169.0, 32.0), RenderPointerListener#aaacd@Offset(169.0, 32.0), RenderRepaintBoundary#ea30a@Offset(169.0, 32.0), _RenderInkFeatures#bec0f@Offset(169.0, 32.0), RenderCustomPaint#f813c@Offset(169.0, 32.0), RenderClipPath#ac6bb@Offset(169.0, 32.0), RenderClipRRect#3a9d4@Offset(169.0, 32.0), RenderSemanticsAnnotations#e565f@Offset(169.0, 32.0), RenderCustomPaint#06f14@Offset(169.0, 32.0), RenderAnimatedOpacity#14430@Offset(169.0, 32.0), RenderCustomSingleChildLayoutBox#4bb4a@Offset(199.0, 89.0), _RenderLayoutBuilder#ed576@Offset(199.0, 89.0), RenderRepaintBoundary#55457@Offset(199.0, 89.0), RenderIgnorePointer#ffd75@Offset(199.0, 89.0), RenderRepaintBoundary#9b3f8@Offset(199.0, 89.0), RenderSemanticsAnnotations#ae65f@Offset(199.0, 89.0), RenderOffstage#50c62@Offset(199.0, 89.0), RenderSemanticsAnnotations#34bc6@Offset(199.0, 89.0), _RenderTheater#267f0@Offset(199.0, 89.0), RenderAbsorbPointer#3e1cf@Offset(199.0, 89.0), RenderPointerListener#e001f@Offset(199.0, 89.0), RenderSemanticsAnnotations#892f4@Offset(199.0, 89.0), RenderSemanticsAnnotations#fa8f6@Offset(199.0, 89.0), RenderSemanticsAnnotations#9e53d@Offset(199.0, 89.0), RenderSemanticsAnnotations#97529@Offset(199.0, 89.0), RenderTapRegionSurface#f4069@Offset(199.0, 89.0), RenderSemanticsAnnotations#b860d@Offset(199.0, 89.0), RenderSemanticsAnnotations#e9913@Offset(199.0, 89.0), RenderRepaintBoundary#e78ce@Offset(199.0, 89.0), HitTestEntry<HitTestTarget>#23222(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#1a43b(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-connection'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-connection'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 185.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#15582
+The hit test result at that offset is: HitTestResult(RenderPointerListener#e7fb0@Offset(169.0, 24.0), RenderSemanticsAnnotations#e2969@Offset(169.0, 24.0), RenderMouseRegion#d61e4@Offset(169.0, 24.0), RenderSemanticsAnnotations#39555@Offset(169.0, 24.0), RenderAnimatedOpacity#04bcc@Offset(169.0, 24.0), RenderSemanticsAnnotations#9cf8f@Offset(169.0, 24.0), RenderRepaintBoundary#7e5f9@Offset(169.0, 24.0), RenderIndexedSemantics#ea3e1@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 72.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 80.0, crossAxis: 169.0), RenderShrinkWrappingViewport#af4ab@Offset(169.0, 80.0), RenderIgnorePointer#f3b62@Offset(169.0, 80.0), RenderSemanticsAnnotations#618ad@Offset(169.0, 80.0), RenderPointerListener#048d6@Offset(169.0, 80.0), RenderSemanticsGestureHandler#ddf45@Offset(169.0, 80.0), RenderPointerListener#303c6@Offset(169.0, 80.0), _RenderScrollSemantics#13c5e@Offset(169.0, 80.0), RenderRepaintBoundary#720d7@Offset(169.0, 80.0), RenderCustomPaint#18f2a@Offset(169.0, 80.0), RenderMouseRegion#706f5@Offset(169.0, 80.0), RenderPointerListener#e4650@Offset(169.0, 80.0), RenderSemanticsGestureHandler#793bf@Offset(169.0, 80.0), RenderPointerListener#dbd0a@Offset(169.0, 80.0), RenderRepaintBoundary#dc8e7@Offset(169.0, 80.0), _RenderInkFeatures#bbeee@Offset(169.0, 80.0), RenderCustomPaint#2f732@Offset(169.0, 80.0), RenderClipPath#e297c@Offset(169.0, 80.0), RenderClipRRect#a120d@Offset(169.0, 80.0), RenderSemanticsAnnotations#e9593@Offset(169.0, 80.0), RenderCustomPaint#894fe@Offset(169.0, 80.0), RenderAnimatedOpacity#bd5e4@Offset(169.0, 80.0), RenderCustomSingleChildLayoutBox#c734a@Offset(199.0, 185.0), _RenderLayoutBuilder#204f9@Offset(199.0, 185.0), RenderRepaintBoundary#40f53@Offset(199.0, 185.0), RenderIgnorePointer#0da6c@Offset(199.0, 185.0), RenderRepaintBoundary#857d5@Offset(199.0, 185.0), RenderSemanticsAnnotations#3b29d@Offset(199.0, 185.0), RenderOffstage#beb6d@Offset(199.0, 185.0), RenderSemanticsAnnotations#27dab@Offset(199.0, 185.0), _RenderTheater#267f0@Offset(199.0, 185.0), RenderAbsorbPointer#3e1cf@Offset(199.0, 185.0), RenderPointerListener#e001f@Offset(199.0, 185.0), RenderSemanticsAnnotations#892f4@Offset(199.0, 185.0), RenderSemanticsAnnotations#fa8f6@Offset(199.0, 185.0), RenderSemanticsAnnotations#9e53d@Offset(199.0, 185.0), RenderSemanticsAnnotations#97529@Offset(199.0, 185.0), RenderTapRegionSurface#f4069@Offset(199.0, 185.0), RenderSemanticsAnnotations#b860d@Offset(199.0, 185.0), RenderSemanticsAnnotations#e9913@Offset(199.0, 185.0), RenderRepaintBoundary#e78ce@Offset(199.0, 185.0), HitTestEntry<HitTestTarget>#195a9(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#15582(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-models'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-models'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 185.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#5fb20
+The hit test result at that offset is: HitTestResult(RenderPointerListener#cedf2@Offset(169.0, 24.0), RenderSemanticsAnnotations#1c379@Offset(169.0, 24.0), RenderMouseRegion#cbcc7@Offset(169.0, 24.0), RenderSemanticsAnnotations#f7419@Offset(169.0, 24.0), RenderAnimatedOpacity#26f22@Offset(169.0, 24.0), RenderSemanticsAnnotations#95a00@Offset(169.0, 24.0), RenderRepaintBoundary#372e3@Offset(169.0, 24.0), RenderIndexedSemantics#88e5b@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 120.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 128.0, crossAxis: 169.0), RenderShrinkWrappingViewport#7a974@Offset(169.0, 128.0), RenderIgnorePointer#61963@Offset(169.0, 128.0), RenderSemanticsAnnotations#ccec2@Offset(169.0, 128.0), RenderPointerListener#7713b@Offset(169.0, 128.0), RenderSemanticsGestureHandler#97a83@Offset(169.0, 128.0), RenderPointerListener#f80e1@Offset(169.0, 128.0), _RenderScrollSemantics#f6169@Offset(169.0, 128.0), RenderRepaintBoundary#cd4bd@Offset(169.0, 128.0), RenderCustomPaint#6e5bc@Offset(169.0, 128.0), RenderMouseRegion#fa2f8@Offset(169.0, 128.0), RenderPointerListener#ad030@Offset(169.0, 128.0), RenderSemanticsGestureHandler#94445@Offset(169.0, 128.0), RenderPointerListener#a35ab@Offset(169.0, 128.0), RenderRepaintBoundary#6819a@Offset(169.0, 128.0), _RenderInkFeatures#83b43@Offset(169.0, 128.0), RenderCustomPaint#f7f64@Offset(169.0, 128.0), RenderClipPath#5b067@Offset(169.0, 128.0), RenderClipRRect#a60ee@Offset(169.0, 128.0), RenderSemanticsAnnotations#01d95@Offset(169.0, 128.0), RenderCustomPaint#36aaf@Offset(169.0, 128.0), RenderAnimatedOpacity#ab67c@Offset(169.0, 128.0), RenderCustomSingleChildLayoutBox#ace19@Offset(199.0, 185.0), _RenderLayoutBuilder#5ce9c@Offset(199.0, 185.0), RenderRepaintBoundary#61dfc@Offset(199.0, 185.0), RenderIgnorePointer#9663f@Offset(199.0, 185.0), RenderRepaintBoundary#26130@Offset(199.0, 185.0), RenderSemanticsAnnotations#75bbe@Offset(199.0, 185.0), RenderOffstage#12520@Offset(199.0, 185.0), RenderSemanticsAnnotations#977f3@Offset(199.0, 185.0), _RenderTheater#267f0@Offset(199.0, 185.0), RenderAbsorbPointer#3e1cf@Offset(199.0, 185.0), RenderPointerListener#e001f@Offset(199.0, 185.0), RenderSemanticsAnnotations#892f4@Offset(199.0, 185.0), RenderSemanticsAnnotations#fa8f6@Offset(199.0, 185.0), RenderSemanticsAnnotations#9e53d@Offset(199.0, 185.0), RenderSemanticsAnnotations#97529@Offset(199.0, 185.0), RenderTapRegionSurface#f4069@Offset(199.0, 185.0), RenderSemanticsAnnotations#b860d@Offset(199.0, 185.0), RenderSemanticsAnnotations#e9913@Offset(199.0, 185.0), RenderRepaintBoundary#e78ce@Offset(199.0, 185.0), HitTestEntry<HitTestTarget>#5b6dc(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#c256d(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-execution'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-execution'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 224.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#eb353
+The hit test result at that offset is: HitTestResult(RenderPointerListener#e69c7@Offset(169.0, 24.0), RenderSemanticsAnnotations#638ba@Offset(169.0, 24.0), RenderMouseRegion#1ca8d@Offset(169.0, 24.0), RenderSemanticsAnnotations#74c1e@Offset(169.0, 24.0), RenderAnimatedOpacity#dacc9@Offset(169.0, 24.0), RenderSemanticsAnnotations#390ce@Offset(169.0, 24.0), RenderRepaintBoundary#26784@Offset(169.0, 24.0), RenderIndexedSemantics#80806@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 168.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 176.0, crossAxis: 169.0), RenderShrinkWrappingViewport#1e220@Offset(169.0, 176.0), RenderIgnorePointer#21508@Offset(169.0, 176.0), RenderSemanticsAnnotations#71b60@Offset(169.0, 176.0), RenderPointerListener#58f85@Offset(169.0, 176.0), RenderSemanticsGestureHandler#36158@Offset(169.0, 176.0), RenderPointerListener#0d18a@Offset(169.0, 176.0), _RenderScrollSemantics#09756@Offset(169.0, 176.0), RenderRepaintBoundary#bf6e9@Offset(169.0, 176.0), RenderCustomPaint#20d31@Offset(169.0, 176.0), RenderMouseRegion#11928@Offset(169.0, 176.0), RenderPointerListener#7f1e4@Offset(169.0, 176.0), RenderSemanticsGestureHandler#8ccb2@Offset(169.0, 176.0), RenderPointerListener#4dd5f@Offset(169.0, 176.0), RenderRepaintBoundary#0212b@Offset(169.0, 176.0), _RenderInkFeatures#d08b3@Offset(169.0, 176.0), RenderCustomPaint#c0cd0@Offset(169.0, 176.0), RenderClipPath#9ee43@Offset(169.0, 176.0), RenderClipRRect#1db18@Offset(169.0, 176.0), RenderSemanticsAnnotations#c70ce@Offset(169.0, 176.0), RenderCustomPaint#37baf@Offset(169.0, 176.0), RenderAnimatedOpacity#6a128@Offset(169.0, 176.0), RenderCustomSingleChildLayoutBox#c6867@Offset(199.0, 224.0), _RenderLayoutBuilder#f282c@Offset(199.0, 224.0), RenderRepaintBoundary#9d529@Offset(199.0, 224.0), RenderIgnorePointer#b8cac@Offset(199.0, 224.0), RenderRepaintBoundary#0d3f0@Offset(199.0, 224.0), RenderSemanticsAnnotations#a1dc5@Offset(199.0, 224.0), RenderOffstage#521e2@Offset(199.0, 224.0), RenderSemanticsAnnotations#5acb2@Offset(199.0, 224.0), _RenderTheater#267f0@Offset(199.0, 224.0), RenderAbsorbPointer#3e1cf@Offset(199.0, 224.0), RenderPointerListener#e001f@Offset(199.0, 224.0), RenderSemanticsAnnotations#892f4@Offset(199.0, 224.0), RenderSemanticsAnnotations#fa8f6@Offset(199.0, 224.0), RenderSemanticsAnnotations#9e53d@Offset(199.0, 224.0), RenderSemanticsAnnotations#97529@Offset(199.0, 224.0), RenderTapRegionSurface#f4069@Offset(199.0, 224.0), RenderSemanticsAnnotations#b860d@Offset(199.0, 224.0), RenderSemanticsAnnotations#e9913@Offset(199.0, 224.0), RenderRepaintBoundary#e78ce@Offset(199.0, 224.0), HitTestEntry<HitTestTarget>#b1a3a(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#4ea22(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-defaults'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-defaults'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 272.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#ca033
+The hit test result at that offset is: HitTestResult(RenderPointerListener#42d13@Offset(169.0, 24.0), RenderSemanticsAnnotations#e3aac@Offset(169.0, 24.0), RenderMouseRegion#b75c0@Offset(169.0, 24.0), RenderSemanticsAnnotations#9a46c@Offset(169.0, 24.0), RenderAnimatedOpacity#d9c85@Offset(169.0, 24.0), RenderSemanticsAnnotations#4a175@Offset(169.0, 24.0), RenderRepaintBoundary#3f00e@Offset(169.0, 24.0), RenderIndexedSemantics#8cb23@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 216.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 224.0, crossAxis: 169.0), RenderShrinkWrappingViewport#20fb6@Offset(169.0, 224.0), RenderIgnorePointer#12995@Offset(169.0, 224.0), RenderSemanticsAnnotations#d8881@Offset(169.0, 224.0), RenderPointerListener#db494@Offset(169.0, 224.0), RenderSemanticsGestureHandler#04990@Offset(169.0, 224.0), RenderPointerListener#d4a94@Offset(169.0, 224.0), _RenderScrollSemantics#c70b5@Offset(169.0, 224.0), RenderRepaintBoundary#d6ce4@Offset(169.0, 224.0), RenderCustomPaint#c1d14@Offset(169.0, 224.0), RenderMouseRegion#81d1f@Offset(169.0, 224.0), RenderPointerListener#3efdc@Offset(169.0, 224.0), RenderSemanticsGestureHandler#8a493@Offset(169.0, 224.0), RenderPointerListener#b6e49@Offset(169.0, 224.0), RenderRepaintBoundary#085cd@Offset(169.0, 224.0), _RenderInkFeatures#caa35@Offset(169.0, 224.0), RenderCustomPaint#e8178@Offset(169.0, 224.0), RenderClipPath#c7ef1@Offset(169.0, 224.0), RenderClipRRect#7e53d@Offset(169.0, 224.0), RenderSemanticsAnnotations#19c09@Offset(169.0, 224.0), RenderCustomPaint#3034f@Offset(169.0, 224.0), RenderAnimatedOpacity#b1d8f@Offset(169.0, 224.0), RenderCustomSingleChildLayoutBox#0202d@Offset(199.0, 272.0), _RenderLayoutBuilder#05239@Offset(199.0, 272.0), RenderRepaintBoundary#ceb2c@Offset(199.0, 272.0), RenderIgnorePointer#8c550@Offset(199.0, 272.0), RenderRepaintBoundary#5cacf@Offset(199.0, 272.0), RenderSemanticsAnnotations#21719@Offset(199.0, 272.0), RenderOffstage#77720@Offset(199.0, 272.0), RenderSemanticsAnnotations#5ceb5@Offset(199.0, 272.0), _RenderTheater#267f0@Offset(199.0, 272.0), RenderAbsorbPointer#3e1cf@Offset(199.0, 272.0), RenderPointerListener#e001f@Offset(199.0, 272.0), RenderSemanticsAnnotations#892f4@Offset(199.0, 272.0), RenderSemanticsAnnotations#fa8f6@Offset(199.0, 272.0), RenderSemanticsAnnotations#9e53d@Offset(199.0, 272.0), RenderSemanticsAnnotations#97529@Offset(199.0, 272.0), RenderTapRegionSurface#f4069@Offset(199.0, 272.0), RenderSemanticsAnnotations#b860d@Offset(199.0, 272.0), RenderSemanticsAnnotations#e9913@Offset(199.0, 272.0), RenderRepaintBoundary#e78ce@Offset(199.0, 272.0), HitTestEntry<HitTestTarget>#0d230(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#14601(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+00:29 +90 -3: C:/build/aurora/app/test/ai_interaction_test.dart: settings pages stay independent at 390.0 light
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-overview'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-overview'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 89.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#5197f
+The hit test result at that offset is: HitTestResult(RenderPointerListener#44534@Offset(169.0, 24.0), RenderSemanticsAnnotations#63ded@Offset(169.0, 24.0), RenderMouseRegion#fb8f5@Offset(169.0, 24.0), RenderSemanticsAnnotations#88a6e@Offset(169.0, 24.0), RenderAnimatedOpacity#c2958@Offset(169.0, 24.0), RenderSemanticsAnnotations#2c8c6@Offset(169.0, 24.0), RenderRepaintBoundary#b999e@Offset(169.0, 24.0), RenderIndexedSemantics#b28bb@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 24.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 32.0, crossAxis: 169.0), RenderShrinkWrappingViewport#eb3ff@Offset(169.0, 32.0), RenderIgnorePointer#26a57@Offset(169.0, 32.0), RenderSemanticsAnnotations#d5723@Offset(169.0, 32.0), RenderPointerListener#bec86@Offset(169.0, 32.0), RenderSemanticsGestureHandler#ae721@Offset(169.0, 32.0), RenderPointerListener#95d26@Offset(169.0, 32.0), _RenderScrollSemantics#dbfdb@Offset(169.0, 32.0), RenderRepaintBoundary#74655@Offset(169.0, 32.0), RenderCustomPaint#80c6b@Offset(169.0, 32.0), RenderMouseRegion#5ae9b@Offset(169.0, 32.0), RenderPointerListener#76e29@Offset(169.0, 32.0), RenderSemanticsGestureHandler#58456@Offset(169.0, 32.0), RenderPointerListener#52116@Offset(169.0, 32.0), RenderRepaintBoundary#e00c6@Offset(169.0, 32.0), _RenderInkFeatures#c8d0b@Offset(169.0, 32.0), RenderCustomPaint#cb930@Offset(169.0, 32.0), RenderClipPath#85d63@Offset(169.0, 32.0), RenderClipRRect#02727@Offset(169.0, 32.0), RenderSemanticsAnnotations#6b408@Offset(169.0, 32.0), RenderCustomPaint#860e6@Offset(169.0, 32.0), RenderAnimatedOpacity#c3e70@Offset(169.0, 32.0), RenderCustomSingleChildLayoutBox#96b6a@Offset(199.0, 89.0), _RenderLayoutBuilder#7c251@Offset(199.0, 89.0), RenderRepaintBoundary#54b05@Offset(199.0, 89.0), RenderIgnorePointer#b34ad@Offset(199.0, 89.0), RenderRepaintBoundary#52633@Offset(199.0, 89.0), RenderSemanticsAnnotations#75778@Offset(199.0, 89.0), RenderOffstage#c87d3@Offset(199.0, 89.0), RenderSemanticsAnnotations#b9af2@Offset(199.0, 89.0), _RenderTheater#68b75@Offset(199.0, 89.0), RenderAbsorbPointer#7af9e@Offset(199.0, 89.0), RenderPointerListener#d8de6@Offset(199.0, 89.0), RenderSemanticsAnnotations#a5aff@Offset(199.0, 89.0), RenderSemanticsAnnotations#5e6d8@Offset(199.0, 89.0), RenderSemanticsAnnotations#7948c@Offset(199.0, 89.0), RenderSemanticsAnnotations#e6aa2@Offset(199.0, 89.0), RenderTapRegionSurface#c2fb5@Offset(199.0, 89.0), RenderSemanticsAnnotations#264c8@Offset(199.0, 89.0), RenderSemanticsAnnotations#4e839@Offset(199.0, 89.0), RenderRepaintBoundary#6c1b2@Offset(199.0, 89.0), HitTestEntry<HitTestTarget>#c5a96(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#1f1e4(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-connection'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-connection'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 185.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#1ad38
+The hit test result at that offset is: HitTestResult(RenderPointerListener#10643@Offset(169.0, 24.0), RenderSemanticsAnnotations#7118d@Offset(169.0, 24.0), RenderMouseRegion#2aa60@Offset(169.0, 24.0), RenderSemanticsAnnotations#cc804@Offset(169.0, 24.0), RenderAnimatedOpacity#a468f@Offset(169.0, 24.0), RenderSemanticsAnnotations#b188f@Offset(169.0, 24.0), RenderRepaintBoundary#b3e2a@Offset(169.0, 24.0), RenderIndexedSemantics#2d820@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 72.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 80.0, crossAxis: 169.0), RenderShrinkWrappingViewport#2a4d2@Offset(169.0, 80.0), RenderIgnorePointer#bd64c@Offset(169.0, 80.0), RenderSemanticsAnnotations#5cba7@Offset(169.0, 80.0), RenderPointerListener#81cf2@Offset(169.0, 80.0), RenderSemanticsGestureHandler#d8216@Offset(169.0, 80.0), RenderPointerListener#92e2a@Offset(169.0, 80.0), _RenderScrollSemantics#15ccc@Offset(169.0, 80.0), RenderRepaintBoundary#f9214@Offset(169.0, 80.0), RenderCustomPaint#c5bf7@Offset(169.0, 80.0), RenderMouseRegion#6165b@Offset(169.0, 80.0), RenderPointerListener#9fc76@Offset(169.0, 80.0), RenderSemanticsGestureHandler#072ad@Offset(169.0, 80.0), RenderPointerListener#44200@Offset(169.0, 80.0), RenderRepaintBoundary#96c9f@Offset(169.0, 80.0), _RenderInkFeatures#cfc8f@Offset(169.0, 80.0), RenderCustomPaint#6ecbc@Offset(169.0, 80.0), RenderClipPath#314d0@Offset(169.0, 80.0), RenderClipRRect#0d053@Offset(169.0, 80.0), RenderSemanticsAnnotations#affa4@Offset(169.0, 80.0), RenderCustomPaint#8079f@Offset(169.0, 80.0), RenderAnimatedOpacity#1c531@Offset(169.0, 80.0), RenderCustomSingleChildLayoutBox#1ade4@Offset(199.0, 185.0), _RenderLayoutBuilder#81324@Offset(199.0, 185.0), RenderRepaintBoundary#d991c@Offset(199.0, 185.0), RenderIgnorePointer#b02b2@Offset(199.0, 185.0), RenderRepaintBoundary#25fb3@Offset(199.0, 185.0), RenderSemanticsAnnotations#665e1@Offset(199.0, 185.0), RenderOffstage#d13fc@Offset(199.0, 185.0), RenderSemanticsAnnotations#194a2@Offset(199.0, 185.0), _RenderTheater#68b75@Offset(199.0, 185.0), RenderAbsorbPointer#7af9e@Offset(199.0, 185.0), RenderPointerListener#d8de6@Offset(199.0, 185.0), RenderSemanticsAnnotations#a5aff@Offset(199.0, 185.0), RenderSemanticsAnnotations#5e6d8@Offset(199.0, 185.0), RenderSemanticsAnnotations#7948c@Offset(199.0, 185.0), RenderSemanticsAnnotations#e6aa2@Offset(199.0, 185.0), RenderTapRegionSurface#c2fb5@Offset(199.0, 185.0), RenderSemanticsAnnotations#264c8@Offset(199.0, 185.0), RenderSemanticsAnnotations#4e839@Offset(199.0, 185.0), RenderRepaintBoundary#6c1b2@Offset(199.0, 185.0), HitTestEntry<HitTestTarget>#05062(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#55019(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-models'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-models'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 185.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#5041d
+The hit test result at that offset is: HitTestResult(RenderPointerListener#62cba@Offset(169.0, 24.0), RenderSemanticsAnnotations#68947@Offset(169.0, 24.0), RenderMouseRegion#604b8@Offset(169.0, 24.0), RenderSemanticsAnnotations#e6a4d@Offset(169.0, 24.0), RenderAnimatedOpacity#3f61b@Offset(169.0, 24.0), RenderSemanticsAnnotations#c7a66@Offset(169.0, 24.0), RenderRepaintBoundary#4d7a4@Offset(169.0, 24.0), RenderIndexedSemantics#93103@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 120.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 128.0, crossAxis: 169.0), RenderShrinkWrappingViewport#0abc7@Offset(169.0, 128.0), RenderIgnorePointer#f30e7@Offset(169.0, 128.0), RenderSemanticsAnnotations#19112@Offset(169.0, 128.0), RenderPointerListener#18a8b@Offset(169.0, 128.0), RenderSemanticsGestureHandler#b3311@Offset(169.0, 128.0), RenderPointerListener#7d336@Offset(169.0, 128.0), _RenderScrollSemantics#d9709@Offset(169.0, 128.0), RenderRepaintBoundary#36e73@Offset(169.0, 128.0), RenderCustomPaint#86c33@Offset(169.0, 128.0), RenderMouseRegion#2af6f@Offset(169.0, 128.0), RenderPointerListener#40288@Offset(169.0, 128.0), RenderSemanticsGestureHandler#9dda9@Offset(169.0, 128.0), RenderPointerListener#e29b7@Offset(169.0, 128.0), RenderRepaintBoundary#a7320@Offset(169.0, 128.0), _RenderInkFeatures#e89cc@Offset(169.0, 128.0), RenderCustomPaint#8af74@Offset(169.0, 128.0), RenderClipPath#504c9@Offset(169.0, 128.0), RenderClipRRect#d499f@Offset(169.0, 128.0), RenderSemanticsAnnotations#03011@Offset(169.0, 128.0), RenderCustomPaint#a2bdb@Offset(169.0, 128.0), RenderAnimatedOpacity#8309c@Offset(169.0, 128.0), RenderCustomSingleChildLayoutBox#6eaa0@Offset(199.0, 185.0), _RenderLayoutBuilder#a405c@Offset(199.0, 185.0), RenderRepaintBoundary#a6d41@Offset(199.0, 185.0), RenderIgnorePointer#96dd7@Offset(199.0, 185.0), RenderRepaintBoundary#817ab@Offset(199.0, 185.0), RenderSemanticsAnnotations#d840d@Offset(199.0, 185.0), RenderOffstage#cd22a@Offset(199.0, 185.0), RenderSemanticsAnnotations#3796c@Offset(199.0, 185.0), _RenderTheater#68b75@Offset(199.0, 185.0), RenderAbsorbPointer#7af9e@Offset(199.0, 185.0), RenderPointerListener#d8de6@Offset(199.0, 185.0), RenderSemanticsAnnotations#a5aff@Offset(199.0, 185.0), RenderSemanticsAnnotations#5e6d8@Offset(199.0, 185.0), RenderSemanticsAnnotations#7948c@Offset(199.0, 185.0), RenderSemanticsAnnotations#e6aa2@Offset(199.0, 185.0), RenderTapRegionSurface#c2fb5@Offset(199.0, 185.0), RenderSemanticsAnnotations#264c8@Offset(199.0, 185.0), RenderSemanticsAnnotations#4e839@Offset(199.0, 185.0), RenderRepaintBoundary#6c1b2@Offset(199.0, 185.0), HitTestEntry<HitTestTarget>#95cad(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#ba756(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-execution'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-execution'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 224.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#5dd5a
+The hit test result at that offset is: HitTestResult(RenderPointerListener#275e6@Offset(169.0, 24.0), RenderSemanticsAnnotations#5739d@Offset(169.0, 24.0), RenderMouseRegion#b44a7@Offset(169.0, 24.0), RenderSemanticsAnnotations#fc10b@Offset(169.0, 24.0), RenderAnimatedOpacity#ac27e@Offset(169.0, 24.0), RenderSemanticsAnnotations#f7634@Offset(169.0, 24.0), RenderRepaintBoundary#ac4de@Offset(169.0, 24.0), RenderIndexedSemantics#3d787@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 168.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 176.0, crossAxis: 169.0), RenderShrinkWrappingViewport#f1766@Offset(169.0, 176.0), RenderIgnorePointer#927f1@Offset(169.0, 176.0), RenderSemanticsAnnotations#4bf51@Offset(169.0, 176.0), RenderPointerListener#4c294@Offset(169.0, 176.0), RenderSemanticsGestureHandler#72256@Offset(169.0, 176.0), RenderPointerListener#99ea2@Offset(169.0, 176.0), _RenderScrollSemantics#35e8e@Offset(169.0, 176.0), RenderRepaintBoundary#079a7@Offset(169.0, 176.0), RenderCustomPaint#7cea5@Offset(169.0, 176.0), RenderMouseRegion#5eed1@Offset(169.0, 176.0), RenderPointerListener#1dccd@Offset(169.0, 176.0), RenderSemanticsGestureHandler#d3b1c@Offset(169.0, 176.0), RenderPointerListener#4bafd@Offset(169.0, 176.0), RenderRepaintBoundary#7933c@Offset(169.0, 176.0), _RenderInkFeatures#021c9@Offset(169.0, 176.0), RenderCustomPaint#7a945@Offset(169.0, 176.0), RenderClipPath#46efa@Offset(169.0, 176.0), RenderClipRRect#6bd9e@Offset(169.0, 176.0), RenderSemanticsAnnotations#c8be5@Offset(169.0, 176.0), RenderCustomPaint#f3538@Offset(169.0, 176.0), RenderAnimatedOpacity#fb24b@Offset(169.0, 176.0), RenderCustomSingleChildLayoutBox#3c9b1@Offset(199.0, 224.0), _RenderLayoutBuilder#d8619@Offset(199.0, 224.0), RenderRepaintBoundary#4bb1d@Offset(199.0, 224.0), RenderIgnorePointer#2a04f@Offset(199.0, 224.0), RenderRepaintBoundary#291b6@Offset(199.0, 224.0), RenderSemanticsAnnotations#92c12@Offset(199.0, 224.0), RenderOffstage#72064@Offset(199.0, 224.0), RenderSemanticsAnnotations#01ecd@Offset(199.0, 224.0), _RenderTheater#68b75@Offset(199.0, 224.0), RenderAbsorbPointer#7af9e@Offset(199.0, 224.0), RenderPointerListener#d8de6@Offset(199.0, 224.0), RenderSemanticsAnnotations#a5aff@Offset(199.0, 224.0), RenderSemanticsAnnotations#5e6d8@Offset(199.0, 224.0), RenderSemanticsAnnotations#7948c@Offset(199.0, 224.0), RenderSemanticsAnnotations#e6aa2@Offset(199.0, 224.0), RenderTapRegionSurface#c2fb5@Offset(199.0, 224.0), RenderSemanticsAnnotations#264c8@Offset(199.0, 224.0), RenderSemanticsAnnotations#4e839@Offset(199.0, 224.0), RenderRepaintBoundary#6c1b2@Offset(199.0, 224.0), HitTestEntry<HitTestTarget>#7b19f(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#e5d8f(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+
+Warning: A call to tap() with finder "Found 1 widget with key [<'ai-settings-nav-defaults'>] (ignoring all but last): [
+  DropdownMenuItem<String>-[<'ai-settings-nav-defaults'>](dependencies: [_ScrollableScope]),
+]" derived an Offset (Offset(199.0, 272.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderSemanticsAnnotations#636c0
+The hit test result at that offset is: HitTestResult(RenderPointerListener#2bd11@Offset(169.0, 24.0), RenderSemanticsAnnotations#989f1@Offset(169.0, 24.0), RenderMouseRegion#9197d@Offset(169.0, 24.0), RenderSemanticsAnnotations#d3d81@Offset(169.0, 24.0), RenderAnimatedOpacity#f2db2@Offset(169.0, 24.0), RenderSemanticsAnnotations#dd985@Offset(169.0, 24.0), RenderRepaintBoundary#9a11b@Offset(169.0, 24.0), RenderIndexedSemantics#1e860@Offset(169.0, 24.0), RenderSliverList@(mainAxis: 216.0, crossAxis: 169.0), RenderSliverPadding@(mainAxis: 224.0, crossAxis: 169.0), RenderShrinkWrappingViewport#cde6b@Offset(169.0, 224.0), RenderIgnorePointer#6783e@Offset(169.0, 224.0), RenderSemanticsAnnotations#28867@Offset(169.0, 224.0), RenderPointerListener#e2968@Offset(169.0, 224.0), RenderSemanticsGestureHandler#7f197@Offset(169.0, 224.0), RenderPointerListener#81fd8@Offset(169.0, 224.0), _RenderScrollSemantics#d18e5@Offset(169.0, 224.0), RenderRepaintBoundary#9a940@Offset(169.0, 224.0), RenderCustomPaint#073fd@Offset(169.0, 224.0), RenderMouseRegion#863a3@Offset(169.0, 224.0), RenderPointerListener#6089f@Offset(169.0, 224.0), RenderSemanticsGestureHandler#b6aef@Offset(169.0, 224.0), RenderPointerListener#20243@Offset(169.0, 224.0), RenderRepaintBoundary#857ea@Offset(169.0, 224.0), _RenderInkFeatures#20e2f@Offset(169.0, 224.0), RenderCustomPaint#af095@Offset(169.0, 224.0), RenderClipPath#6607f@Offset(169.0, 224.0), RenderClipRRect#bef2f@Offset(169.0, 224.0), RenderSemanticsAnnotations#d2f5f@Offset(169.0, 224.0), RenderCustomPaint#b210d@Offset(169.0, 224.0), RenderAnimatedOpacity#d9e95@Offset(169.0, 224.0), RenderCustomSingleChildLayoutBox#c3d42@Offset(199.0, 272.0), _RenderLayoutBuilder#21acd@Offset(199.0, 272.0), RenderRepaintBoundary#47372@Offset(199.0, 272.0), RenderIgnorePointer#fa8b2@Offset(199.0, 272.0), RenderRepaintBoundary#fd5e6@Offset(199.0, 272.0), RenderSemanticsAnnotations#6742f@Offset(199.0, 272.0), RenderOffstage#edf19@Offset(199.0, 272.0), RenderSemanticsAnnotations#06389@Offset(199.0, 272.0), _RenderTheater#68b75@Offset(199.0, 272.0), RenderAbsorbPointer#7af9e@Offset(199.0, 272.0), RenderPointerListener#d8de6@Offset(199.0, 272.0), RenderSemanticsAnnotations#a5aff@Offset(199.0, 272.0), RenderSemanticsAnnotations#5e6d8@Offset(199.0, 272.0), RenderSemanticsAnnotations#7948c@Offset(199.0, 272.0), RenderSemanticsAnnotations#e6aa2@Offset(199.0, 272.0), RenderTapRegionSurface#c2fb5@Offset(199.0, 272.0), RenderSemanticsAnnotations#264c8@Offset(199.0, 272.0), RenderSemanticsAnnotations#4e839@Offset(199.0, 272.0), RenderRepaintBoundary#6c1b2@Offset(199.0, 272.0), HitTestEntry<HitTestTarget>#38508(_ReusableRenderView#0e1ba), HitTestEntry<HitTestTarget>#4ea95(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2165:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.page (file:///C:/build/aurora/app/test/ai_interaction_test.dart:236:13)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///C:/build/aurora/app/test/ai_interaction_test.dart:873:13)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#7      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+00:30 +91 -3: C:/build/aurora/app/test/ai_interaction_test.dart: settings pages stay independent at 1100.0 dark
+00:31 +92 -3: C:/build/aurora/app/test/ai_interaction_test.dart: settings pages stay independent at 1100.0 light
+00:32 +93 -3: C:/build/aurora/app/test/ai_interaction_test.dart: project permissions bind to both server and project and survive serialization
+00:32 +94 -3: C:/build/aurora/app/test/ai_interaction_test.dart: (tearDownAll)
+00:32 +94 -3: Some tests failed.
+
+Failing tests:
+  C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+  C:/build/aurora/app/test/ai_feature_test.dart: AiStudioView renders OpenCode todos, tools, diffs, approves permission, and sends prompt
+  C:/build/aurora/app/test/ai_feature_test.dart: history groups by day, shows a preview, pins, renames and searches the conversation text

@@ -1,0 +1,277 @@
+=== RUN   TestApplyEditThreeTierAndCRLF
+--- PASS: TestApplyEditThreeTierAndCRLF (0.00s)
+=== RUN   TestTruncateOutputSpillover
+--- PASS: TestTruncateOutputSpillover (0.01s)
+=== RUN   TestProtocolsAndOpenCodeHeaders
+=== RUN   TestProtocolsAndOpenCodeHeaders/openai-chat
+=== RUN   TestProtocolsAndOpenCodeHeaders/anthropic-messages
+=== RUN   TestProtocolsAndOpenCodeHeaders/openai-responses
+--- PASS: TestProtocolsAndOpenCodeHeaders (0.10s)
+    --- PASS: TestProtocolsAndOpenCodeHeaders/openai-chat (0.07s)
+    --- PASS: TestProtocolsAndOpenCodeHeaders/anthropic-messages (0.01s)
+    --- PASS: TestProtocolsAndOpenCodeHeaders/openai-responses (0.02s)
+=== RUN   TestRunnerLoopSnapshotAndRevert
+--- PASS: TestRunnerLoopSnapshotAndRevert (0.24s)
+=== RUN   TestAttachmentChunkTransferAndCompactWire
+--- PASS: TestAttachmentChunkTransferAndCompactWire (0.04s)
+=== RUN   TestAttachmentIncompleteUploadDoesNotCommit
+=== RUN   TestAttachmentIncompleteUploadDoesNotCommit/disconnect
+=== RUN   TestAttachmentIncompleteUploadDoesNotCommit/wrong-size
+=== RUN   TestAttachmentIncompleteUploadDoesNotCommit/unsupported
+=== RUN   TestAttachmentIncompleteUploadDoesNotCommit/oversized
+=== RUN   TestAttachmentIncompleteUploadDoesNotCommit/bad-end
+--- PASS: TestAttachmentIncompleteUploadDoesNotCommit (0.00s)
+    --- PASS: TestAttachmentIncompleteUploadDoesNotCommit/disconnect (0.00s)
+    --- PASS: TestAttachmentIncompleteUploadDoesNotCommit/wrong-size (0.00s)
+    --- PASS: TestAttachmentIncompleteUploadDoesNotCommit/unsupported (0.00s)
+    --- PASS: TestAttachmentIncompleteUploadDoesNotCommit/oversized (0.00s)
+    --- PASS: TestAttachmentIncompleteUploadDoesNotCommit/bad-end (0.00s)
+=== RUN   TestMediaLoweringForAllProtocols
+=== RUN   TestMediaLoweringForAllProtocols/openai-chat
+=== RUN   TestMediaLoweringForAllProtocols/openai-responses
+=== RUN   TestMediaLoweringForAllProtocols/anthropic-messages
+--- PASS: TestMediaLoweringForAllProtocols (0.08s)
+    --- PASS: TestMediaLoweringForAllProtocols/openai-chat (0.03s)
+    --- PASS: TestMediaLoweringForAllProtocols/openai-responses (0.03s)
+    --- PASS: TestMediaLoweringForAllProtocols/anthropic-messages (0.03s)
+=== RUN   TestLargeSubscriptionMediaUsesZstd
+--- PASS: TestLargeSubscriptionMediaUsesZstd (0.04s)
+=== RUN   TestDeletingSessionOnlyRemovesUnsharedAttachmentData
+--- PASS: TestDeletingSessionOnlyRemovesUnsharedAttachmentData (0.01s)
+=== RUN   TestAttachmentLimitsAndStoreQuota
+--- PASS: TestAttachmentLimitsAndStoreQuota (0.09s)
+=== RUN   TestPersistenceRejectsInvalidJSONWithoutReplacingCheckpoint
+--- PASS: TestPersistenceRejectsInvalidJSONWithoutReplacingCheckpoint (0.01s)
+=== RUN   TestPersistenceRetainsJSONPrivacyAndEmptyMessages
+--- PASS: TestPersistenceRetainsJSONPrivacyAndEmptyMessages (0.02s)
+=== RUN   TestSlowSubscriberRequiresResync
+--- PASS: TestSlowSubscriberRequiresResync (0.00s)
+=== RUN   TestRevertWaitsForRunnerExit
+--- PASS: TestRevertWaitsForRunnerExit (0.00s)
+=== RUN   TestCompactionReservesSessionAndReportsPersistenceFailure
+--- PASS: TestCompactionReservesSessionAndReportsPersistenceFailure (0.04s)
+=== RUN   TestSnapshotRestoreRejectsEscapingSymlinkParent
+--- PASS: TestSnapshotRestoreRejectsEscapingSymlinkParent (0.04s)
+=== RUN   TestSnapshotRestoreReportsFailedDeletion
+--- PASS: TestSnapshotRestoreReportsFailedDeletion (0.04s)
+=== RUN   TestSnapshotRestoreReplacesFinalSymlinkWithoutTouchingTarget
+--- PASS: TestSnapshotRestoreReplacesFinalSymlinkWithoutTouchingTarget (0.05s)
+=== RUN   TestBudgetZeroSurvivesProjectRoundTripAndMissingUsesDefaults
+--- PASS: TestBudgetZeroSurvivesProjectRoundTripAndMissingUsesDefaults (0.04s)
+=== RUN   TestBudgetFailureUsesObservedUsageAndExplainsNextInput
+--- PASS: TestBudgetFailureUsesObservedUsageAndExplainsNextInput (0.00s)
+=== RUN   TestBudgetStoppedRunPersistsProviderAndCanContinueWithNewLimits
+--- PASS: TestBudgetStoppedRunPersistsProviderAndCanContinueWithNewLimits (0.08s)
+=== RUN   TestBudgetDeadlineIsStructured
+--- PASS: TestBudgetDeadlineIsStructured (0.00s)
+=== RUN   TestExtensionsLayeredInstructionsAndSkillOverride
+--- PASS: TestExtensionsLayeredInstructionsAndSkillOverride (0.01s)
+=== RUN   TestExtensionsConfigTransactionAndConflict
+--- PASS: TestExtensionsConfigTransactionAndConflict (0.07s)
+=== RUN   TestRunBudgetReservesConcurrentRequestsAndPricesInclusiveUsage
+--- PASS: TestRunBudgetReservesConcurrentRequestsAndPricesInclusiveUsage (0.00s)
+=== RUN   TestSkillDeclarationAndExecutionUsesSameCatalog
+--- PASS: TestSkillDeclarationAndExecutionUsesSameCatalog (0.00s)
+=== RUN   TestRetryAfterHeaderIsHonoured
+--- PASS: TestRetryAfterHeaderIsHonoured (0.00s)
+=== RUN   TestStatusErrorCarriesRetryAfter
+--- PASS: TestStatusErrorCarriesRetryAfter (5.02s)
+=== RUN   TestLargerRetryAfterLengthensTheWait
+--- PASS: TestLargerRetryAfterLengthensTheWait (3.02s)
+=== RUN   TestPermissionReasonsForTheClient
+--- PASS: TestPermissionReasonsForTheClient (0.00s)
+=== RUN   TestOrderedPermissionRulesLastMatchWins
+--- PASS: TestOrderedPermissionRulesLastMatchWins (0.00s)
+=== RUN   TestWildcardAllowCannotBypassSensitiveOrHighRiskGuard
+--- PASS: TestWildcardAllowCannotBypassSensitiveOrHighRiskGuard (0.00s)
+=== RUN   TestAlwaysAllowScopeIsExplained
+--- PASS: TestAlwaysAllowScopeIsExplained (0.00s)
+=== RUN   TestPermissionQuestionCarriesScopeAndCode
+--- PASS: TestPermissionQuestionCarriesScopeAndCode (0.00s)
+=== RUN   TestCompactionPromptFollowsTheConversationLanguage
+--- PASS: TestCompactionPromptFollowsTheConversationLanguage (0.00s)
+=== RUN   TestEstimateTokensCountsCJKHeavier
+--- PASS: TestEstimateTokensCountsCJKHeavier (0.00s)
+=== RUN   TestDefaultContextWindowMarkedAsGuess
+--- PASS: TestDefaultContextWindowMarkedAsGuess (0.00s)
+=== RUN   TestHarnessMediaReadRoundTripAllProtocols
+=== RUN   TestHarnessMediaReadRoundTripAllProtocols/openai-chat
+=== RUN   TestHarnessMediaReadRoundTripAllProtocols/openai-responses
+=== RUN   TestHarnessMediaReadRoundTripAllProtocols/anthropic-messages
+--- PASS: TestHarnessMediaReadRoundTripAllProtocols (0.32s)
+    --- PASS: TestHarnessMediaReadRoundTripAllProtocols/openai-chat (0.12s)
+    --- PASS: TestHarnessMediaReadRoundTripAllProtocols/openai-responses (0.10s)
+    --- PASS: TestHarnessMediaReadRoundTripAllProtocols/anthropic-messages (0.09s)
+=== RUN   TestHarnessCapabilitiesAndArgumentValidationPreventSideEffects
+--- PASS: TestHarnessCapabilitiesAndArgumentValidationPreventSideEffects (0.00s)
+=== RUN   TestHarnessMutationsRecheckApprovalAndCancel
+=== RUN   TestHarnessMutationsRecheckApprovalAndCancel/write/cancel=false
+=== RUN   TestHarnessMutationsRecheckApprovalAndCancel/write/cancel=true
+=== RUN   TestHarnessMutationsRecheckApprovalAndCancel/edit/cancel=false
+=== RUN   TestHarnessMutationsRecheckApprovalAndCancel/edit/cancel=true
+=== RUN   TestHarnessMutationsRecheckApprovalAndCancel/apply_patch/cancel=false
+=== RUN   TestHarnessMutationsRecheckApprovalAndCancel/apply_patch/cancel=true
+--- PASS: TestHarnessMutationsRecheckApprovalAndCancel (0.01s)
+    --- PASS: TestHarnessMutationsRecheckApprovalAndCancel/write/cancel=false (0.00s)
+    --- PASS: TestHarnessMutationsRecheckApprovalAndCancel/write/cancel=true (0.00s)
+    --- PASS: TestHarnessMutationsRecheckApprovalAndCancel/edit/cancel=false (0.00s)
+    --- PASS: TestHarnessMutationsRecheckApprovalAndCancel/edit/cancel=true (0.00s)
+    --- PASS: TestHarnessMutationsRecheckApprovalAndCancel/apply_patch/cancel=false (0.00s)
+    --- PASS: TestHarnessMutationsRecheckApprovalAndCancel/apply_patch/cancel=true (0.00s)
+=== RUN   TestHarnessPatchTransaction
+--- PASS: TestHarnessPatchTransaction (0.04s)
+=== RUN   TestHarnessSearchRespectsPerFilePolicyAndOptions
+--- PASS: TestHarnessSearchRespectsPerFilePolicyAndOptions (0.00s)
+=== RUN   TestHarnessQuestionAnswerSkipCancelAndReconnect
+=== RUN   TestHarnessQuestionAnswerSkipCancelAndReconnect/answer
+=== RUN   TestHarnessQuestionAnswerSkipCancelAndReconnect/skip
+=== RUN   TestHarnessQuestionAnswerSkipCancelAndReconnect/stop
+--- PASS: TestHarnessQuestionAnswerSkipCancelAndReconnect (0.00s)
+    --- PASS: TestHarnessQuestionAnswerSkipCancelAndReconnect/answer (0.00s)
+    --- PASS: TestHarnessQuestionAnswerSkipCancelAndReconnect/skip (0.00s)
+    --- PASS: TestHarnessQuestionAnswerSkipCancelAndReconnect/stop (0.00s)
+=== RUN   TestHarnessJournalRecoveryPreservesKnownResults
+--- PASS: TestHarnessJournalRecoveryPreservesKnownResults (0.01s)
+=== RUN   TestHarnessReasoningWireValuesAndDisabledTools
+=== RUN   TestHarnessReasoningWireValuesAndDisabledTools/openai-chat//max
+=== RUN   TestHarnessReasoningWireValuesAndDisabledTools/openai-responses//ultra
+=== RUN   TestHarnessReasoningWireValuesAndDisabledTools/anthropic-messages/anthropic-adaptive/max
+=== RUN   TestHarnessReasoningWireValuesAndDisabledTools/anthropic-messages/anthropic-budget/custom
+=== RUN   TestHarnessReasoningWireValuesAndDisabledTools/openai-chat/disabled/max
+=== RUN   TestHarnessReasoningWireValuesAndDisabledTools/anthropic-messages//unmapped
+--- PASS: TestHarnessReasoningWireValuesAndDisabledTools (0.10s)
+    --- PASS: TestHarnessReasoningWireValuesAndDisabledTools/openai-chat//max (0.02s)
+    --- PASS: TestHarnessReasoningWireValuesAndDisabledTools/openai-responses//ultra (0.02s)
+    --- PASS: TestHarnessReasoningWireValuesAndDisabledTools/anthropic-messages/anthropic-adaptive/max (0.02s)
+    --- PASS: TestHarnessReasoningWireValuesAndDisabledTools/anthropic-messages/anthropic-budget/custom (0.02s)
+    --- PASS: TestHarnessReasoningWireValuesAndDisabledTools/openai-chat/disabled/max (0.02s)
+    --- PASS: TestHarnessReasoningWireValuesAndDisabledTools/anthropic-messages//unmapped (0.01s)
+=== RUN   TestHarnessJournalFailurePreventsToolExecution
+--- PASS: TestHarnessJournalFailurePreventsToolExecution (0.08s)
+=== RUN   TestHistoryStreamsOversizedMessages
+--- PASS: TestHistoryStreamsOversizedMessages (0.05s)
+=== RUN   TestActivitySnapshotIncludesChildTools
+--- PASS: TestActivitySnapshotIncludesChildTools (0.00s)
+=== RUN   TestModelListShapes
+--- PASS: TestModelListShapes (0.00s)
+=== RUN   TestModelListImageCapabilities
+--- PASS: TestModelListImageCapabilities (0.00s)
+=== RUN   TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel
+--- PASS: TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel (0.17s)
+=== RUN   TestStoppedInboxSurvivesReloadAndCanBeCancelled
+--- PASS: TestStoppedInboxSurvivesReloadAndCanBeCancelled (0.02s)
+=== RUN   TestAdmissionPersistenceFailureRetainsInputs
+--- PASS: TestAdmissionPersistenceFailureRetainsInputs (0.00s)
+=== RUN   TestSessionGrantCanBeRevokedAndExplicitDenyWinsInPlan
+--- PASS: TestSessionGrantCanBeRevokedAndExplicitDenyWinsInPlan (0.00s)
+=== RUN   TestDeviceAuthorizationLifecycle
+--- PASS: TestDeviceAuthorizationLifecycle (0.02s)
+=== RUN   TestDeviceIntervalsAndSafeErrors
+=== RUN   TestDeviceIntervalsAndSafeErrors/0
+=== RUN   TestDeviceIntervalsAndSafeErrors/"bad"
+=== RUN   TestDeviceIntervalsAndSafeErrors/999
+=== RUN   TestDeviceIntervalsAndSafeErrors/"10"
+=== RUN   TestDeviceIntervalsAndSafeErrors/safe_upstream_body
+=== RUN   TestDeviceIntervalsAndSafeErrors/redirect_rejected
+--- PASS: TestDeviceIntervalsAndSafeErrors (0.10s)
+    --- PASS: TestDeviceIntervalsAndSafeErrors/0 (0.02s)
+    --- PASS: TestDeviceIntervalsAndSafeErrors/"bad" (0.01s)
+    --- PASS: TestDeviceIntervalsAndSafeErrors/999 (0.02s)
+    --- PASS: TestDeviceIntervalsAndSafeErrors/"10" (0.01s)
+    --- PASS: TestDeviceIntervalsAndSafeErrors/safe_upstream_body (0.02s)
+    --- PASS: TestDeviceIntervalsAndSafeErrors/redirect_rejected (0.03s)
+=== RUN   TestRefreshRPCAndAccountClaims
+--- PASS: TestRefreshRPCAndAccountClaims (0.02s)
+=== RUN   TestSubscriptionResponsesRouting
+--- PASS: TestSubscriptionResponsesRouting (0.03s)
+=== RUN   TestRuntimeContextAllowlist
+--- PASS: TestRuntimeContextAllowlist (0.00s)
+=== RUN   TestSubscriptionAuxiliaryCalls
+--- PASS: TestSubscriptionAuxiliaryCalls (0.07s)
+=== RUN   TestSubscriptionSafeFailures
+=== RUN   TestSubscriptionSafeFailures/http
+=== RUN   TestSubscriptionSafeFailures/stream
+=== RUN   TestSubscriptionSafeFailures/overflow
+=== RUN   TestSubscriptionSafeFailures/disconnect
+=== RUN   TestSubscriptionSafeFailures/redirect
+--- PASS: TestSubscriptionSafeFailures (0.14s)
+    --- PASS: TestSubscriptionSafeFailures/http (0.03s)
+    --- PASS: TestSubscriptionSafeFailures/stream (0.03s)
+    --- PASS: TestSubscriptionSafeFailures/overflow (0.03s)
+    --- PASS: TestSubscriptionSafeFailures/disconnect (0.03s)
+    --- PASS: TestSubscriptionSafeFailures/redirect (0.03s)
+=== RUN   TestProposalUsesUnsavedSnapshotsAcrossProtocolsWithoutWriting
+=== RUN   TestProposalUsesUnsavedSnapshotsAcrossProtocolsWithoutWriting/openai-chat
+=== RUN   TestProposalUsesUnsavedSnapshotsAcrossProtocolsWithoutWriting/openai-responses
+=== RUN   TestProposalUsesUnsavedSnapshotsAcrossProtocolsWithoutWriting/anthropic-messages
+--- PASS: TestProposalUsesUnsavedSnapshotsAcrossProtocolsWithoutWriting (0.05s)
+    --- PASS: TestProposalUsesUnsavedSnapshotsAcrossProtocolsWithoutWriting/openai-chat (0.02s)
+    --- PASS: TestProposalUsesUnsavedSnapshotsAcrossProtocolsWithoutWriting/openai-responses (0.02s)
+    --- PASS: TestProposalUsesUnsavedSnapshotsAcrossProtocolsWithoutWriting/anthropic-messages (0.02s)
+=== RUN   TestProposalRejectsAmbiguousOverlappingAndUnknownTargets
+--- PASS: TestProposalRejectsAmbiguousOverlappingAndUnknownTargets (0.00s)
+=== RUN   TestProposalResetCancelsUpstreamAndReleasesBudget
+--- PASS: TestProposalResetCancelsUpstreamAndReleasesBudget (0.02s)
+=== RUN   TestProviderRouteChoosesSystemAgentAndDirect
+--- PASS: TestProviderRouteChoosesSystemAgentAndDirect (0.04s)
+=== RUN   TestRevertIsVersionCheckedAndCheckpointedAsOneBatch
+--- PASS: TestRevertIsVersionCheckedAndCheckpointedAsOneBatch (0.20s)
+=== RUN   TestSharedRunBudgetStopsUpstreamAdmissionAndOversizedStream
+--- PASS: TestSharedRunBudgetStopsUpstreamAdmissionAndOversizedStream (0.02s)
+=== RUN   TestControlsParallelChildrenCheckpointAndTotalLimit
+--- PASS: TestControlsParallelChildrenCheckpointAndTotalLimit (0.15s)
+=== RUN   TestControlsQueuedMessagesOwnBudgetsAndAdmittedPolicy
+--- PASS: TestControlsQueuedMessagesOwnBudgetsAndAdmittedPolicy (1.18s)
+=== RUN   TestControlsResumedChildCannotDelegateOrLoseReadOnly
+--- PASS: TestControlsResumedChildCannotDelegateOrLoseReadOnly (0.10s)
+=== RUN   TestControlsDisabledBudgetStillMetersAndCancelledSlotsDoNotStart
+--- PASS: TestControlsDisabledBudgetStillMetersAndCancelledSlotsDoNotStart (0.00s)
+=== RUN   TestControlsToolLimitAndRepeatApproval
+--- PASS: TestControlsToolLimitAndRepeatApproval (0.12s)
+=== RUN   TestControlsShellUsesConfiguredTimeout
+--- PASS: TestControlsShellUsesConfiguredTimeout (1.00s)
+=== RUN   TestControlsStoppingParentCancelsParallelChildren
+--- PASS: TestControlsStoppingParentCancelsParallelChildren (0.11s)
+=== RUN   TestControlsStoppingOneChildPreservesSiblingAndResultReference
+--- PASS: TestControlsStoppingOneChildPreservesSiblingAndResultReference (0.11s)
+=== RUN   TestSessionJournalIncrementalReplayAndCheckpointRotation
+--- PASS: TestSessionJournalIncrementalReplayAndCheckpointRotation (0.96s)
+=== RUN   TestSessionJournalTornTailAndCorruptionPreserveEvidence
+--- PASS: TestSessionJournalTornTailAndCorruptionPreserveEvidence (0.03s)
+=== RUN   TestSessionIndependentPersistenceAndSameSessionOrdering
+--- PASS: TestSessionIndependentPersistenceAndSameSessionOrdering (0.04s)
+=== RUN   TestSessionIndexLazySearchCacheAndAttachmentReferences
+--- PASS: TestSessionIndexLazySearchCacheAndAttachmentReferences (0.54s)
+=== RUN   TestSnapshotServiceKeepsLazyReferencesAndBlocksUnknownRecords
+--- PASS: TestSnapshotServiceKeepsLazyReferencesAndBlocksUnknownRecords (0.16s)
+=== RUN   TestSessionRevertTruncatesIncrementalHistoryAtomically
+--- PASS: TestSessionRevertTruncatesIncrementalHistoryAtomically (0.05s)
+=== RUN   TestSessionIndexCorruptionRebuildsAndReadsDoNotRewrite
+--- PASS: TestSessionIndexCorruptionRebuildsAndReadsDoNotRewrite (0.03s)
+=== RUN   TestLargeSessionCanRevertAndDeleteWithinStorageBudget
+--- PASS: TestLargeSessionCanRevertAndDeleteWithinStorageBudget (5.28s)
+=== RUN   TestSessionDeletePreflightsDescendantBudgetWithoutPartialDeletion
+--- PASS: TestSessionDeletePreflightsDescendantBudgetWithoutPartialDeletion (4.07s)
+=== RUN   TestSnapshotBudgetsPreserveFilesAndGCReferencedTrees
+--- PASS: TestSnapshotBudgetsPreserveFilesAndGCReferencedTrees (0.18s)
+=== RUN   TestSnapshotWorkspaceLocksUnicodeDiffAndBoundedOutput
+--- PASS: TestSnapshotWorkspaceLocksUnicodeDiffAndBoundedOutput (0.09s)
+=== RUN   TestSnapshotStoreBudgetUsesDeduplicatedObjects
+--- PASS: TestSnapshotStoreBudgetUsesDeduplicatedObjects (0.11s)
+=== RUN   TestSnapshotRealGitScopeIgnoresAndTrackedDeletedFiles
+--- PASS: TestSnapshotRealGitScopeIgnoresAndTrackedDeletedFiles (0.09s)
+=== RUN   TestSnapshotLargeSourceTreeAboveOldCountLimit
+--- PASS: TestSnapshotLargeSourceTreeAboveOldCountLimit (2.20s)
+=== RUN   TestHTMLToMarkdown
+--- PASS: TestHTMLToMarkdown (0.00s)
+=== RUN   TestParseExaResults
+--- PASS: TestParseExaResults (0.00s)
+=== RUN   TestParseMCPBodyJSONAndSSE
+--- PASS: TestParseMCPBodyJSONAndSSE (0.00s)
+=== RUN   TestWebSearchAndFetchTools
+--- PASS: TestWebSearchAndFetchTools (0.02s)
+=== RUN   TestFetchModelsFallsBackToV1AndExplainsHTML
+--- PASS: TestFetchModelsFallsBackToV1AndExplainsHTML (0.04s)
+=== RUN   TestHistoryPinRenameSearchExport
+--- PASS: TestHistoryPinRenameSearchExport (0.03s)
+PASS

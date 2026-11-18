@@ -1,0 +1,6 @@
+00:00 +0: loading C:/build/aurora/app/test/proxy_e2e_test.dart
+00:00 +0: E2E subscription -> node chosen -> a proxied session reaches the node; a plain one does not
+00:02 +1: E2E switching the node moves new sessions, and the agent audit has no secret
+00:02 +2: All tests passed!
+flutter test exit code: 0
+Preserved E2E evidence: C:\Users\finwe\AppData\Local\Temp\opencode\aurora-workbench-proxy-e2e2

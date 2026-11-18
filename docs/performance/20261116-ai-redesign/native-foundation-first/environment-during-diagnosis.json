@@ -1,0 +1,39 @@
+{
+  "captured_utc": "2026-11-16T04:38:33.1658297Z",
+  "cpu": {
+    "Name": "11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz",
+    "CurrentClockSpeed": 1201,
+    "MaxClockSpeed": 2803,
+    "LoadPercentage": 40
+  },
+  "counters": {
+    "PercentProcessorTime": 39,
+    "PercentProcessorPerformance": 149,
+    "ProcessorFrequency": 1201,
+    "PercentofMaximumFrequency": 42
+  },
+  "display": [
+    {
+      "Name": "GameViewer Virtual Display Adapter",
+      "DriverVersion": "15.6.5.199",
+      "CurrentHorizontalResolution": null,
+      "CurrentVerticalResolution": null,
+      "CurrentRefreshRate": null
+    },
+    {
+      "Name": "NVIDIA GeForce MX450",
+      "DriverVersion": "32.0.15.7391",
+      "CurrentHorizontalResolution": null,
+      "CurrentVerticalResolution": null,
+      "CurrentRefreshRate": null
+    },
+    {
+      "Name": "Intel(R) Iris(R) Xe Graphics",
+      "DriverVersion": "32.0.101.7085",
+      "CurrentHorizontalResolution": 1920,
+      "CurrentVerticalResolution": 1080,
+      "CurrentRefreshRate": 60
+    }
+  ],
+  "power_plan": "电源方案 GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (平衡)"
+}

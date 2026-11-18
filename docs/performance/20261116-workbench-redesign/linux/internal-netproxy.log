@@ -1,0 +1,76 @@
+=== RUN   TestHysteria2Tunnel
+--- PASS: TestHysteria2Tunnel (0.12s)
+=== RUN   TestHysteria2WrongPasswordIsRefused
+--- PASS: TestHysteria2WrongPasswordIsRefused (0.03s)
+=== RUN   TestHysteria2ChecksTheCertificate
+--- PASS: TestHysteria2ChecksTheCertificate (0.19s)
+=== RUN   TestHysteria2Salamander
+--- PASS: TestHysteria2Salamander (3.04s)
+=== RUN   TestSalamanderRoundTrip
+--- PASS: TestSalamanderRoundTrip (0.03s)
+=== RUN   TestHysteria2TimesOutWhenUDPIsDropped
+--- PASS: TestHysteria2TimesOutWhenUDPIsDropped (3.01s)
+=== RUN   TestHysteriaProjectServer
+    hysteria_interop_test.go:86: AURORA3_HYSTERIA is not set
+--- SKIP: TestHysteriaProjectServer (0.00s)
+=== RUN   TestHysteriaProjectServerWithSalamander
+    hysteria_interop_test.go:98: AURORA3_HYSTERIA is not set
+--- SKIP: TestHysteriaProjectServerWithSalamander (0.00s)
+=== RUN   TestStartRefusesNonLoopbackListener
+--- PASS: TestStartRefusesNonLoopbackListener (0.00s)
+=== RUN   TestVLESSOverTCP
+--- PASS: TestVLESSOverTCP (0.03s)
+=== RUN   TestVLESSWrongUUIDIsRefused
+--- PASS: TestVLESSWrongUUIDIsRefused (0.02s)
+=== RUN   TestVLESSOverTLSChecksTheCertificate
+--- PASS: TestVLESSOverTLSChecksTheCertificate (0.04s)
+=== RUN   TestVMessBothCiphers
+=== RUN   TestVMessBothCiphers/auto
+=== RUN   TestVMessBothCiphers/aes-128-gcm
+=== RUN   TestVMessBothCiphers/chacha20-poly1305
+--- PASS: TestVMessBothCiphers (0.08s)
+    --- PASS: TestVMessBothCiphers/auto (0.03s)
+    --- PASS: TestVMessBothCiphers/aes-128-gcm (0.03s)
+    --- PASS: TestVMessBothCiphers/chacha20-poly1305 (0.03s)
+=== RUN   TestVMessWrongUUIDIsRefused
+--- PASS: TestVMessWrongUUIDIsRefused (0.02s)
+=== RUN   TestVMessClockSkewIsExplained
+--- PASS: TestVMessClockSkewIsExplained (0.02s)
+=== RUN   TestNodeCheckRefusesWhatItCannotDo
+--- PASS: TestNodeCheckRefusesWhatItCannotDo (0.00s)
+=== RUN   TestNodeLabelHasNoSecret
+--- PASS: TestNodeLabelHasNoSecret (0.00s)
+=== RUN   TestSwitchingNodeKeepsOpenTunnels
+--- PASS: TestSwitchingNodeKeepsOpenTunnels (0.14s)
+=== RUN   TestNoNodeRefusesTunnels
+--- PASS: TestNoNodeRefusesTunnels (0.05s)
+=== RUN   TestStatsReportTheFailureReason
+--- PASS: TestStatsReportTheFailureReason (0.04s)
+=== RUN   TestSocksRoundTrip
+--- PASS: TestSocksRoundTrip (0.10s)
+=== RUN   TestSocksRejectsWrongPassword
+--- PASS: TestSocksRejectsWrongPassword (0.13s)
+=== RUN   TestHTTPProxyAuth
+--- PASS: TestHTTPProxyAuth (0.06s)
+=== RUN   TestEnvCarriesCredentials
+--- PASS: TestEnvCarriesCredentials (0.00s)
+=== RUN   TestStartRefusesOpenListener
+--- PASS: TestStartRefusesOpenListener (0.00s)
+=== RUN   TestRelayStopsWhenOneSideCloses
+--- PASS: TestRelayStopsWhenOneSideCloses (0.00s)
+=== RUN   TestXrayVLESS
+    xray_interop_test.go:136: AURORA3_XRAY is not set
+--- SKIP: TestXrayVLESS (0.00s)
+=== RUN   TestXrayVLESSOverWebSocket
+    xray_interop_test.go:149: AURORA3_XRAY is not set
+--- SKIP: TestXrayVLESSOverWebSocket (0.00s)
+=== RUN   TestXrayVMess
+    xray_interop_test.go:165: AURORA3_XRAY is not set
+--- SKIP: TestXrayVMess (0.00s)
+=== RUN   TestXrayVMessOverWebSocket
+    xray_interop_test.go:182: AURORA3_XRAY is not set
+--- SKIP: TestXrayVMessOverWebSocket (0.00s)
+=== RUN   TestXrayRefusesAWrongUUID
+    xray_interop_test.go:200: AURORA3_XRAY is not set
+--- SKIP: TestXrayRefusesAWrongUUID (0.00s)
+PASS

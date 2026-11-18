@@ -1,0 +1,41 @@
+{
+  "version": "3.23.0",
+  "candidate": "ai-preview1",
+  "source_head": "da239052098f610716a8f2b82ed072aa001953dc",
+  "source_working_tree": "uncommitted working tree",
+  "source_files_checked": 1664,
+  "zip": "C:\\dev\\VPS\\preview3\\Aurora-3.23.0-ai-preview1.zip",
+  "zip_bytes": 37245093,
+  "zip_sha256": "b9ef6d6c240d925083f3bc0dbe7df1e048485c5c57613d23bf4853e4570d70b4",
+  "zip_files_matching_directory": 197,
+  "client_version": "3.23.0+32300",
+  "client_aot_sha256": "02d7e55f930cb1db9f033e3e68117864bfbb6edee1fef546bb5cfd8536cce419",
+  "agents": [
+    {
+      "product": "aurora3-agent",
+      "channel": "stable",
+      "version": "3.23.0",
+      "file": "aurora3-agent-3.23.0-linux-amd64",
+      "size": 15560866,
+      "sha256": "e1db782500c7b5a5ecab76ba4847f53a0d0c92a516a793a4f1e17893bc515f63",
+      "created": "2026-11-16T01:51:18Z",
+      "key_id": "87828dfb18459372"
+    },
+    {
+      "product": "aurora3-local-agent",
+      "channel": "stable",
+      "version": "3.23.0",
+      "file": "aurora3-local-agent-3.23.0-windows-amd64.exe",
+      "size": 14669312,
+      "sha256": "24c37f18eecdb24af7b47dcb5c99959163336dcb75e46f15fb843374557b922c",
+      "created": "2026-11-16T01:51:18Z",
+      "key_id": "87828dfb18459372"
+    }
+  ],
+  "licenses_verified": [
+    "re_editor",
+    "xterm",
+    "OpenCode"
+  ],
+  "unpacked_directory": "C:\\Users\\finwe\\AppData\\Local\\Temp\\opencode\\aurora-ai-control-package\\extracted\\Aurora-3.23.0-ai-preview1"
+}

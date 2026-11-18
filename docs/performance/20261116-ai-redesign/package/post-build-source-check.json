@@ -1,0 +1,9 @@
+{
+  "checked": 1809,
+  "unchanged": 1807,
+  "post_build_document_updates": [
+    "docs/performance/20261116-ai-redesign/README.md",
+    "docs/validation/2026-11-16-ai-redesign.md"
+  ],
+  "implementation_inputs_unchanged": true
+}

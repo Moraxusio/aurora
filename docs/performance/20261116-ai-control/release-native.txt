@@ -1,0 +1,7 @@
+Fixture-only instance scope: launcher-smoke-e225647da80648ec8744efc9fbdffc7a
+PASS actual CMD launcher opens Release window PID 20388
+PASS local-workspace semantics and isolated encrypted profile
+PASS repeated CMD launch restores the same isolated process
+PASS actual local-task exit confirmation
+PASS launcher exit and local-agent cleanup
+RELEASE_CMD_LAUNCHER_ISOLATION_RESTORE_EXIT_OK

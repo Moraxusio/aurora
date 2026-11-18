@@ -1,0 +1,102 @@
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+Running build hooks...Running build hooks...00:00 +0: loading test\agent_test.dart
+00:00 +0: test\agent_test.dart: (setUpAll)
+00:00 +1: test\agent_test.dart: (setUpAll)
+00:00 +2: test\agent_test.dart: (setUpAll)
+00:00 +3: test\agent_test.dart: (setUpAll)
+00:00 +4: test\agent_test.dart: (setUpAll)
+00:00 +5: test\agent_test.dart: (setUpAll)
+00:00 +6: test\agent_test.dart: (setUpAll)
+00:00 +7: test\agent_test.dart: (setUpAll)
+00:00 +8: test\agent_test.dart: (setUpAll)
+00:00 +9: test\agent_test.dart: (setUpAll)
+00:00 +10: test\agent_test.dart: (setUpAll)
+00:00 +11: test\agent_test.dart: (setUpAll)
+00:00 +11: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +12: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +13: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +14: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +15: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +16: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +17: test\yamux_test.dart: a large transfer respects the window and arrives intact
+00:00 +18: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:00 +19: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:01 +20: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:01 +21: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:01 +22: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:01 +23: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:01 +24: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:01 +25: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:01 +26: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:01 +27: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:02 +28: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:02 +29: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:02 +30: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:03 +31: test\connection_test.dart: against the Go entry the agent restarts: the link comes back by itself
+00:03 +32: test\agent_test.dart: upload 64 MiB intact (client to agent)
+00:04 +33: test\agent_test.dart: upload 64 MiB intact (client to agent)
+00:04 +34: test\agent_test.dart: upload 64 MiB intact (client to agent)
+00:05 +35: test\agent_test.dart: 200 concurrent calls on one link
+00:05 +36: test\agent_test.dart: a call stays fast while a download runs
+echo during download: n=20 median=2347us max=16173us
+00:05 +37: test\agent_test.dart: ping and keepalive
+00:06 +38: test\agent_test.dart: the agent going away ends the link with a reason
+00:06 +39: test\agent_test.dart: port forward bytes go both ways, in text and in bulk
+00:07 +40: test\agent_test.dart: port forward connections run side by side
+00:08 +41: test\agent_test.dart: port forward a port nothing listens on: the connection ends, the reason is kept
+00:08 +42: test\agent_test.dart: port forward close stops the listener
+00:10 +43: test\agent_test.dart: port forward a local port in use is reported
+00:10 +44: test\agent_test.dart: (tearDownAll)
+00:10 +44: All tests passed!

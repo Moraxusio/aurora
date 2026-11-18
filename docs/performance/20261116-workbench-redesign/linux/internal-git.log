@@ -1,0 +1,19 @@
+=== RUN   TestBranchOnEmptyRepoSaysCommitFirst
+--- PASS: TestBranchOnEmptyRepoSaysCommitFirst (0.03s)
+=== RUN   TestStageCommitAndAudit
+--- PASS: TestStageCommitAndAudit (0.03s)
+=== RUN   TestRepoOutsideRootRefused
+--- PASS: TestRepoOutsideRootRefused (0.00s)
+=== RUN   TestUnknownRootRefused
+--- PASS: TestUnknownRootRefused (0.01s)
+=== RUN   TestRepoPathMustBeRelative
+--- PASS: TestRepoPathMustBeRelative (0.01s)
+=== RUN   TestGitGetsProxyWhenServiceOn
+--- PASS: TestGitGetsProxyWhenServiceOn (0.00s)
+=== RUN   TestGitNoProxyWhenServiceOff
+--- PASS: TestGitNoProxyWhenServiceOff (0.00s)
+=== RUN   TestGitNoProxyWithoutHook
+--- PASS: TestGitNoProxyWithoutHook (0.00s)
+=== RUN   TestProxySwitchAppliesToNextCall
+--- PASS: TestProxySwitchAppliesToNextCall (0.00s)
+PASS

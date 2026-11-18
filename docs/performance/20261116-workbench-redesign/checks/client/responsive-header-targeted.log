@@ -1,0 +1,94 @@
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+00:00 +0: loading C:/build/aurora/app/test/monitor_workflow_test.dart
+00:00 +0: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:02 +1: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:02 +2: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:05 +3: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:05 +4: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:05 +5: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:05 +6: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:05 +7: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:06 +8: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:06 +9: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:07 +10: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:07 +11: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:08 +12: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:08 +13: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:09 +14: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:10 +15: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1800.0, 1100.0) / dark / 1.0 DPR
+00:11 +16: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:13 +17: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:15 +18: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:18 +19: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:19 +20: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:20 +21: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:21 +22: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:21 +23: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:21 +24: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:22 +25: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:23 +26: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:24 +27: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:24 +28: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:24 +29: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:27 +30: C:/build/aurora/app/test/ui_shots_test.dart: wide dark
+00:28 +31: C:/build/aurora/app/test/monitor_workflow_test.dart: production monitor GPU expansion, refresh and zoom at Size(1200.0, 800.0) / light / 1.0 DPR
+00:30 +32: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+00:32 +33: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+00:34 +34: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+00:37 +35: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+00:39 +36: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+00:41 +37: C:/build/aurora/app/test/ui_shots_test.dart: wide light
+00:42 +38: C:/build/aurora/app/test/ui_shots_test.dart: medium dark
+00:43 +39: C:/build/aurora/app/test/ui_shots_test.dart: phone dark
+00:43 +40: C:/build/aurora/app/test/ui_shots_test.dart: no server
+00:44 +41: C:/build/aurora/app/test/ui_shots_test.dart: (tearDownAll)
+00:44 +41: All tests passed!

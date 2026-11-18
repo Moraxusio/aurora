@@ -1,0 +1,19 @@
+=== RUN   TestChoosingANodeStartsTheProxyAndASessionGetsIt
+--- PASS: TestChoosingANodeStartsTheProxyAndASessionGetsIt (0.11s)
+=== RUN   TestTheNodeSecretNeverComesBack
+--- PASS: TestTheNodeSecretNeverComesBack (0.03s)
+=== RUN   TestTheSwitchDecidesSessionsAndGit
+--- PASS: TestTheSwitchDecidesSessionsAndGit (0.03s)
+=== RUN   TestChangingAndClearingTheNode
+--- PASS: TestChangingAndClearingTheNode (0.06s)
+=== RUN   TestARefusedNodeChangesNothing
+--- PASS: TestARefusedNodeChangesNothing (0.02s)
+=== RUN   TestProxyTestMeasuresFromThisMachine
+--- PASS: TestProxyTestMeasuresFromThisMachine (0.03s)
+=== RUN   TestLocalPortIsSavedAndASeizedPortIsReplaced
+--- PASS: TestLocalPortIsSavedAndASeizedPortIsReplaced (0.04s)
+=== RUN   TestStartRestoresTheSavedNode
+--- PASS: TestStartRestoresTheSavedNode (0.03s)
+=== RUN   TestCheckSaysWhyANodeCannotBeUsed
+--- PASS: TestCheckSaysWhyANodeCannotBeUsed (0.00s)
+PASS

@@ -1,0 +1,3 @@
+2026/11/16 15:32:24 aurora3-agent 3.24.0 listening on 127.0.0.1:17795 (pin a67cd06522f8dbd31f9ffe1e7d1097adf397e200f140be5371389a83aab599ad)
+2026/11/16 15:39:56 tcp 127.0.0.1:63815 session ended after 2s: close: closed locally
+2026/11/16 15:39:56 tcp 127.0.0.1:63818 session ended after 0s: close: closed locally

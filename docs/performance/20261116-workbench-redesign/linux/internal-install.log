@@ -1,0 +1,133 @@
+=== RUN   TestFailedVersionIsNotRetried
+--- PASS: TestFailedVersionIsNotRetried (0.47s)
+=== RUN   TestSignedPolicyOnlyAllowsSafeRevocationRollback
+--- PASS: TestSignedPolicyOnlyAllowsSafeRevocationRollback (0.10s)
+=== RUN   TestFreshInstall
+--- PASS: TestFreshInstall (0.05s)
+=== RUN   TestUpgradeKeepsConfigAndIdentity
+--- PASS: TestUpgradeKeepsConfigAndIdentity (0.09s)
+=== RUN   TestSameOrOlderVersionChangesNothing
+--- PASS: TestSameOrOlderVersionChangesNothing (0.07s)
+=== RUN   TestRefusals
+=== RUN   TestRefusals/no_systemd
+=== RUN   TestRefusals/dev_version
+=== RUN   TestRefusals/port_taken
+=== RUN   TestRefusals/wrong_sha256
+=== RUN   TestRefusals/bad_sha256_flag
+=== RUN   TestRefusals/bad_existing_config
+=== RUN   TestRefusals/rollback_left
+--- PASS: TestRefusals (0.05s)
+    --- PASS: TestRefusals/no_systemd (0.01s)
+    --- PASS: TestRefusals/dev_version (0.01s)
+    --- PASS: TestRefusals/port_taken (0.00s)
+    --- PASS: TestRefusals/wrong_sha256 (0.01s)
+    --- PASS: TestRefusals/bad_sha256_flag (0.01s)
+    --- PASS: TestRefusals/bad_existing_config (0.01s)
+    --- PASS: TestRefusals/rollback_left (0.00s)
+=== RUN   TestProbeOnlyChangesNothing
+--- PASS: TestProbeOnlyChangesNothing (0.00s)
+=== RUN   TestRollbackRestoresEverything
+=== RUN   TestRollbackRestoresEverything/fresh_machine/before_the_commit_(save)
+=== RUN   TestRollbackRestoresEverything/fresh_machine/before_the_commit_(temps)
+=== RUN   TestRollbackRestoresEverything/fresh_machine/between_renames
+=== RUN   TestRollbackRestoresEverything/fresh_machine/daemon-reload_fails
+=== RUN   TestRollbackRestoresEverything/fresh_machine/restart_fails
+=== RUN   TestRollbackRestoresEverything/fresh_machine/after_restart
+=== RUN   TestRollbackRestoresEverything/fresh_machine/new_version_never_answers
+=== RUN   TestRollbackRestoresEverything/running_3.0.1/before_the_commit_(save)
+=== RUN   TestRollbackRestoresEverything/running_3.0.1/before_the_commit_(temps)
+=== RUN   TestRollbackRestoresEverything/running_3.0.1/between_renames
+=== RUN   TestRollbackRestoresEverything/running_3.0.1/daemon-reload_fails
+=== RUN   TestRollbackRestoresEverything/running_3.0.1/restart_fails
+=== RUN   TestRollbackRestoresEverything/running_3.0.1/after_restart
+=== RUN   TestRollbackRestoresEverything/running_3.0.1/new_version_never_answers
+=== RUN   TestRollbackRestoresEverything/installed,_stopped_and_disabled/before_the_commit_(save)
+=== RUN   TestRollbackRestoresEverything/installed,_stopped_and_disabled/before_the_commit_(temps)
+=== RUN   TestRollbackRestoresEverything/installed,_stopped_and_disabled/between_renames
+=== RUN   TestRollbackRestoresEverything/installed,_stopped_and_disabled/daemon-reload_fails
+=== RUN   TestRollbackRestoresEverything/installed,_stopped_and_disabled/restart_fails
+=== RUN   TestRollbackRestoresEverything/installed,_stopped_and_disabled/after_restart
+=== RUN   TestRollbackRestoresEverything/installed,_stopped_and_disabled/new_version_never_answers
+=== RUN   TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/before_the_commit_(save)
+=== RUN   TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/before_the_commit_(temps)
+=== RUN   TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/between_renames
+=== RUN   TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/daemon-reload_fails
+=== RUN   TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/restart_fails
+=== RUN   TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/after_restart
+=== RUN   TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/new_version_never_answers
+--- PASS: TestRollbackRestoresEverything (3.50s)
+    --- PASS: TestRollbackRestoresEverything/fresh_machine/before_the_commit_(save) (0.02s)
+    --- PASS: TestRollbackRestoresEverything/fresh_machine/before_the_commit_(temps) (0.04s)
+    --- PASS: TestRollbackRestoresEverything/fresh_machine/between_renames (0.04s)
+    --- PASS: TestRollbackRestoresEverything/fresh_machine/daemon-reload_fails (0.04s)
+    --- PASS: TestRollbackRestoresEverything/fresh_machine/restart_fails (0.04s)
+    --- PASS: TestRollbackRestoresEverything/fresh_machine/after_restart (0.04s)
+    --- PASS: TestRollbackRestoresEverything/fresh_machine/new_version_never_answers (0.35s)
+    --- PASS: TestRollbackRestoresEverything/running_3.0.1/before_the_commit_(save) (0.07s)
+    --- PASS: TestRollbackRestoresEverything/running_3.0.1/before_the_commit_(temps) (0.09s)
+    --- PASS: TestRollbackRestoresEverything/running_3.0.1/between_renames (0.11s)
+    --- PASS: TestRollbackRestoresEverything/running_3.0.1/daemon-reload_fails (0.12s)
+    --- PASS: TestRollbackRestoresEverything/running_3.0.1/restart_fails (0.12s)
+    --- PASS: TestRollbackRestoresEverything/running_3.0.1/after_restart (0.12s)
+    --- PASS: TestRollbackRestoresEverything/running_3.0.1/new_version_never_answers (0.41s)
+    --- PASS: TestRollbackRestoresEverything/installed,_stopped_and_disabled/before_the_commit_(save) (0.08s)
+    --- PASS: TestRollbackRestoresEverything/installed,_stopped_and_disabled/before_the_commit_(temps) (0.09s)
+    --- PASS: TestRollbackRestoresEverything/installed,_stopped_and_disabled/between_renames (0.14s)
+    --- PASS: TestRollbackRestoresEverything/installed,_stopped_and_disabled/daemon-reload_fails (0.12s)
+    --- PASS: TestRollbackRestoresEverything/installed,_stopped_and_disabled/restart_fails (0.11s)
+    --- PASS: TestRollbackRestoresEverything/installed,_stopped_and_disabled/after_restart (0.10s)
+    --- PASS: TestRollbackRestoresEverything/installed,_stopped_and_disabled/new_version_never_answers (0.41s)
+    --- PASS: TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/before_the_commit_(save) (0.06s)
+    --- PASS: TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/before_the_commit_(temps) (0.07s)
+    --- PASS: TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/between_renames (0.07s)
+    --- PASS: TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/daemon-reload_fails (0.08s)
+    --- PASS: TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/restart_fails (0.08s)
+    --- PASS: TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/after_restart (0.08s)
+    --- PASS: TestRollbackRestoresEverything/uninstalled,_config_kept_(D-32)/new_version_never_answers (0.38s)
+=== RUN   TestRollbackFailureKeepsTheRollbackDir
+--- PASS: TestRollbackFailureKeepsTheRollbackDir (0.43s)
+=== RUN   TestStaleStageFromADeadRunIsCleaned
+--- PASS: TestStaleStageFromADeadRunIsCleaned (0.05s)
+=== RUN   TestLockRefusesASecondRun
+--- PASS: TestLockRefusesASecondRun (0.00s)
+=== RUN   TestDirectInfo
+--- PASS: TestDirectInfo (0.04s)
+=== RUN   TestOnlyV3NamesAreWritten
+--- PASS: TestOnlyV3NamesAreWritten (0.39s)
+=== RUN   TestVerifyUnitRealFileNamesOnly
+--- PASS: TestVerifyUnitRealFileNamesOnly (0.45s)
+=== RUN   TestLocalAddrAndPort
+--- PASS: TestLocalAddrAndPort (0.00s)
+=== RUN   TestInstancesInstallSideBySide
+--- PASS: TestInstancesInstallSideBySide (0.09s)
+=== RUN   TestInstanceUpgradeLeavesTheOthersAlone
+--- PASS: TestInstanceUpgradeLeavesTheOthersAlone (0.13s)
+=== RUN   TestInstanceFailedUpgradeRollsBackOnlyItself
+--- PASS: TestInstanceFailedUpgradeRollsBackOnlyItself (0.52s)
+=== RUN   TestInstanceUninstallLeavesTheOthersAlone
+--- PASS: TestInstanceUninstallLeavesTheOthersAlone (0.28s)
+=== RUN   TestPurgingTheDefaultKeepsNamedInstances
+--- PASS: TestPurgingTheDefaultKeepsNamedInstances (0.09s)
+=== RUN   TestPurgingTheLastNamedInstanceRemovesTheEmptyParents
+--- PASS: TestPurgingTheLastNamedInstanceRemovesTheEmptyParents (0.04s)
+=== RUN   TestInstancePortSkipsThePortsOfTheOthers
+--- PASS: TestInstancePortSkipsThePortsOfTheOthers (0.12s)
+=== RUN   TestInstanceNamesAreRefused
+--- PASS: TestInstanceNamesAreRefused (0.07s)
+=== RUN   TestDefaultInstanceKeepsOriginalNames
+--- PASS: TestDefaultInstanceKeepsOriginalNames (0.00s)
+=== RUN   TestUninstallDefaultKeepsConfigAndState
+--- PASS: TestUninstallDefaultKeepsConfigAndState (0.05s)
+=== RUN   TestUninstallPurgeRemovesEverything
+--- PASS: TestUninstallPurgeRemovesEverything (0.06s)
+=== RUN   TestUninstallAsksAboutSessions
+--- PASS: TestUninstallAsksAboutSessions (0.04s)
+=== RUN   TestUninstallProbeChangesNothing
+--- PASS: TestUninstallProbeChangesNothing (0.04s)
+=== RUN   TestUninstallStopsAtAFailedStepAndReports
+--- PASS: TestUninstallStopsAtAFailedStepAndReports (0.04s)
+=== RUN   TestUninstallOnACleanMachine
+--- PASS: TestUninstallOnACleanMachine (0.01s)
+=== RUN   TestUninstallLeavesV2Alone
+--- PASS: TestUninstallLeavesV2Alone (0.04s)
+PASS

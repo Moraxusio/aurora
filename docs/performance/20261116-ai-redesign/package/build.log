@@ -1,0 +1,27 @@
+Documentation contract passed: 27 current documents, 55 Markdown files, local links and owned references.
+Documentation contract passed: 27 current documents, 55 Markdown files, local links and owned references.
+tmux bundle matches bundle.lock
+aurora3-agent-3.23.0-linux-amd64 3.23.0 15601826 5deeb98063f101a0e3aa189d0481ea96cef55493705d51fbe0bd901fa7672752
+product: aurora3-agent
+channel: stable
+version: 3.23.0
+file: aurora3-agent-3.23.0-linux-amd64
+size: 15601826
+sha256: 5deeb98063f101a0e3aa189d0481ea96cef55493705d51fbe0bd901fa7672752
+aurora3-local-agent-3.23.0-windows-amd64.exe 3.23.0 14710784 5e9ad6707c3880473c0fa0f40c2161b621f66de173a020ddb32057226bb97f99
+product: aurora3-local-agent
+channel: stable
+version: 3.23.0
+file: aurora3-local-agent-3.23.0-windows-amd64.exe
+size: 14710784
+sha256: 5e9ad6707c3880473c0fa0f40c2161b621f66de173a020ddb32057226bb97f99
+signed upgrade policy aurora3-agent 
+GUI contract passed: 132 Dart source files.
+Building Windows application...                                   164.1s
+√ Built build\windows\x64\runner\Release\aurora.exe
+C:\Users\finwe\AppData\Local\Temp\opencode\aurora-preview-8526bfec270d4c4ba609b5f47e107dda\Aurora-3.23.0\LICENSES.txt: 405 KB
+Documentation contract passed: 27 current documents, 54 Markdown files, local links and owned references.
+Folder: C:\Users\finwe\AppData\Local\Temp\opencode\aurora-preview-8526bfec270d4c4ba609b5f47e107dda\Aurora-3.23.0
+Candidate: C:\dev\VPS\preview4\Aurora-3.23.0-ai-preview2
+ZIP: C:\dev\VPS\preview4\Aurora-3.23.0-ai-preview2.zip
+SHA256: f5c32f80ba8a94a8d1dcc60f14f5121cd1243ae6e0056bb02bde916e26b56297

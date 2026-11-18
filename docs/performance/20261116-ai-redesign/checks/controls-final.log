@@ -1,0 +1,19 @@
+00:00 +0: loading C:/build/aurora/app/test/ai_controls_workflow_test.dart
+00:00 +0: C:/build/aurora/app/test/ai_controls_workflow_test.dart: (setUpAll)
+00:00 +0: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:02 +1: C:/build/aurora/app/test/ai_controls_workflow_test.dart: message controls survive failure, apply once and queue independently
+00:03 +2: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:04 +3: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (360.0)
+00:04 +4: C:/build/aurora/app/test/ai_controls_workflow_test.dart: send shortcut respects composition and task drafts
+00:04 +5: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (1280.0)
+00:05 +6: C:/build/aurora/app/test/ai_extensions_test.dart: project forms preserve in-flight edits, conflicts and MCP catalog (1280.0)
+00:05 +7: C:/build/aurora/app/test/ai_controls_workflow_test.dart: unified pages retain drafts at 360.0 Brightness.light
+00:06 +8: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 360.0 dark
+00:06 +9: C:/build/aurora/app/test/ai_controls_workflow_test.dart: unified pages retain drafts at 1200.0 Brightness.dark
+00:07 +10: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 360.0 light
+00:07 +11: C:/build/aurora/app/test/ai_controls_workflow_test.dart: unified pages retain drafts at 1200.0 Brightness.light
+00:07 +12: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 1280.0 dark
+00:08 +13: C:/build/aurora/app/test/ai_extensions_test.dart: project agent and tool controls save at 1280.0 light
+00:09 +14: C:/build/aurora/app/test/ai_extensions_test.dart: old connection probe cannot populate new connection; draft stays editable
+00:09 +15: C:/build/aurora/app/test/ai_extensions_test.dart: (tearDownAll)
+00:09 +15: All tests passed!

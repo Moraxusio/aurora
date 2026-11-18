@@ -1,0 +1,34 @@
+=== RUN   TestProxyImpactIncludesKnownAndLegacyUnknownSessions
+--- PASS: TestProxyImpactIncludesKnownAndLegacyUnknownSessions (0.24s)
+=== RUN   TestSessionWithProxyGetsTheVariablesAndNothingLeaks
+--- PASS: TestSessionWithProxyGetsTheVariablesAndNothingLeaks (0.30s)
+=== RUN   TestSessionWithoutProxyHasNone
+--- PASS: TestSessionWithoutProxyHasNone (0.28s)
+=== RUN   TestProxySessionRefusedWhenNoProxyIsAvailable
+--- PASS: TestProxySessionRefusedWhenNoProxyIsAvailable (0.19s)
+=== RUN   TestProxyIsNotAddedToAnExistingSession
+--- PASS: TestProxyIsNotAddedToAnExistingSession (0.27s)
+=== RUN   TestEnvFileRefusesOddNames
+--- PASS: TestEnvFileRefusesOddNames (0.11s)
+=== RUN   TestBundledTmuxIsUsed
+--- PASS: TestBundledTmuxIsUsed (0.09s)
+=== RUN   TestCreateListCwdKill
+--- PASS: TestCreateListCwdKill (0.15s)
+=== RUN   TestTerminalTypesAndKeepsTheSession
+--- PASS: TestTerminalTypesAndKeepsTheSession (0.91s)
+=== RUN   TestSwitchingOffDisconnectsButKeepsSessions
+--- PASS: TestSwitchingOffDisconnectsButKeepsSessions (0.42s)
+=== RUN   TestKillEndsProcessesThatIgnoreHangup
+--- PASS: TestKillEndsProcessesThatIgnoreHangup (1.21s)
+=== RUN   TestInstancesHaveSeparateSessions
+--- PASS: TestInstancesHaveSeparateSessions (0.27s)
+=== RUN   TestUnitNamesFollowThePrefix
+--- PASS: TestUnitNamesFollowThePrefix (0.00s)
+=== RUN   TestWheelScrollsLess
+    wheel_test.go:82: 10 wheel clicks moved less from line 1 to line 31 and back
+--- PASS: TestWheelScrollsLess (10.76s)
+=== RUN   TestWheelReachesAMouseProgram
+--- PASS: TestWheelReachesAMouseProgram (5.45s)
+=== RUN   TestWheelScrollsTheHistoryOfAShell
+--- PASS: TestWheelScrollsTheHistoryOfAShell (1.26s)
+PASS

@@ -1,0 +1,17 @@
+{
+  "source_head": "da239052098f610716a8f2b82ed072aa001953dc",
+  "source_working_tree": "uncommitted working tree",
+  "go": "go1.26.0 windows/amd64",
+  "flutter": "3.47.9 stable",
+  "flutter_revision": "c197ca5199e9ee5661e865596c9c07294dfab51c",
+  "dart": "3.13.7 windows_x64",
+  "nasm": "3.02",
+  "race_compiler": "MinGW 13.1",
+  "linux_runtime": "WSL Ubuntu-24.04 amd64",
+  "go_test": "go test ./... -count=1 -timeout 6m",
+  "race_test": "go test -race ./internal/ai -run 'TestControls|TestDelivery|TestStoppedInbox|TestAdmissionPersistence|TestRunBudget|TestHarnessJournal' -count=1 -timeout 90s -v",
+  "flutter_test": "flutter test --no-pub --reporter expanded",
+  "flutter_analyze": "flutter analyze --no-pub --no-fatal-infos",
+  "gui_contract": "dart tool/ui_contract.dart",
+  "screenshots": "AURORA_AI_SHOTS; synthetic protocol fixtures with installed Windows fonts"
+}

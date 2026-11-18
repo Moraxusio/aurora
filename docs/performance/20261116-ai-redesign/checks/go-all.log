@@ -1,0 +1,34 @@
+?   	aurora3/cmd/aurora3-agent	[no test files]
+?   	aurora3/cmd/aurora3-bench	[no test files]
+?   	aurora3/cmd/aurora3-brokenagent	[no test files]
+ok  	aurora3/cmd/aurora3-local-agent	1.934s
+?   	aurora3/cmd/aurora3-probe	[no test files]
+ok  	aurora3/cmd/aurora3-release	1.377s
+?   	aurora3/cmd/aurora3-sshpeer	[no test files]
+?   	aurora3/cmd/aurora3-testnode	[no test files]
+?   	aurora3/cmd/aurora3-testpeer	[no test files]
+?   	aurora3/cmd/aurora3-tlspeer	[no test files]
+?   	aurora3/cmd/aurora3-upgradecheck	[no test files]
+ok  	aurora3/internal/ai	141.492s
+?   	aurora3/internal/bundle	[no test files]
+?   	aurora3/internal/devprocess	[no test files]
+ok  	aurora3/internal/devtools	0.812s
+ok  	aurora3/internal/entry	1.569s
+ok  	aurora3/internal/files	4.105s
+ok  	aurora3/internal/filetxn	1.811s
+?   	aurora3/internal/git	[no test files]
+ok  	aurora3/internal/mcp	0.542s
+ok  	aurora3/internal/monitor	0.285s
+ok  	aurora3/internal/netfwd	0.188s
+ok  	aurora3/internal/netproxy	7.369s
+ok  	aurora3/internal/p2p	1.206s
+ok  	aurora3/internal/paths	0.118s
+ok  	aurora3/internal/proxyroute	0.086s
+ok  	aurora3/internal/proxysvc	0.548s
+ok  	aurora3/internal/service	0.138s
+?   	aurora3/internal/terminal	[no test files]
+?   	aurora3/internal/testsvc	[no test files]
+ok  	aurora3/internal/update	0.222s
+ok  	aurora3/internal/upgrade	0.343s
+ok  	aurora3/internal/winlocal	5.859s
+ok  	aurora3/internal/wire	15.437s

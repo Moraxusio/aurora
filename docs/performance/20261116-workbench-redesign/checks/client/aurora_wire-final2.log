@@ -1,0 +1,133 @@
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+  Building assets for package:aurora_tls failed.
+  build.dart returned with exit code: 1073807364.
+  To reproduce run:
+  (cd C:\build\aurora\app\packages\aurora_tls\; C:\dev\VPS\flutter\bin\cache\dart-sdk\bin\dart.exe --packages=C:\build\aurora\app\packages\aurora_wire\.dart_tool\package_config.json C:\build\aurora\app\packages\aurora_wire\.dart_tool\hooks_runner\aurora_tls\8e04c28b44\hook.dill --config=C:\build\aurora\app\packages\aurora_wire\.dart_tool\hooks_runner\aurora_tls\8e04c28b44\input.json )
+  stderr:
+  INFO: Could not find files for the given pattern(s).
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+INFO: Could not find files for the given pattern(s).
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+  stdout:
+  Running `where.exe vswhere.exe`.
+Running `"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"`.
+Running `"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -format json -utf8 -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64`.
+Running `"C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\bin\Hostx64\x64\cl.exe"`.
+Running `where.exe vswhere.exe`.
+Running `"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"`.
+Running `"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -format json -utf8 -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64`.
+Running `(cd C:\build\aurora\app\packages\aurora_wire\.dart_tool\hooks_runner\shared\aurora_tls\build\8e04c28b44\; CommandPromptType=Native DevEnvDir=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\ EXTERNAL_INCLUDE=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\include;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\VS\include;C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\um;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\shared;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\winrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\cppwinrt Framework40Version=v4.0 FrameworkDir=C:\Windows\Microsoft.NET\Framework64\ FrameworkDir64=C:\Windows\Microsoft.NET\Framework64\ FrameworkVersion=v4.0.30319 FrameworkVersion64=v4.0.30319 INCLUDE=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\include;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\VS\include;C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\um;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\shared;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\winrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\cppwinrt LIB=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\lib\x64;C:\Program Files (x86)\Windows Kits\10\lib\10.0.26100.0\ucrt\x64;C:\Program Files (x86)\Windows Kits\10\\lib\10.0.26100.0\\um\x64 LIBPATH=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\lib\x64;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\lib\x86\store\references;C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.26100.0;C:\Program Files (x86)\Windows Kits\10\References\10.0.26100.0;C:\Windows\Microsoft.NET\Framework64\v4.0.30319 PATH=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\bin\HostX64\x64;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\VC\VCPackages;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\TestWindow;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\bin\Roslyn;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\Extensions\Microsoft\CodeCoverage.Console;C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\\x64;C:\Program Files (x86)\Windows Kits\10\bin\\x64;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\\MSBuild\Current\Bin\amd64;C:\Windows\Microsoft.NET\Framework64\v4.0.30319;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\Tools\;C:\ProgramData\miniconda3\condabin;C:\ProgramData\miniconda3\condabin;C:\dev\VPS\go\go\bin;C:\dev\VPS\flutter\bin;C:\dev\VPS\flutter\bin\cache\dart-sdk\bin;C:\dev\VPS\tools\nasm-3.02;C:\Program Files\PowerShell\7;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Windows\System32\OpenSSH;C:\Users\finwe\AppData\Local\Microsoft\WindowsApps;C:\WINDOWS;C:\WINDOWS\system32;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Microsoft VS Code\bin;C:\Program Files\Git\cmd;C:\ProgramData\miniconda3;C:\ProgramData\miniconda3\Scripts;C:\ProgramData\miniconda3\Library\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\Qt\6.11.0\mingw_64\bin;C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.11.0\msvc2022_64\bin;C:\Program Files\texlive\2026\bin\windows;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Tailscale\;C:\opencode-windows-x64;C:\Program Files\PowerShell\7\;C:\Program Files\WSL\;C:\Users\finwe\AppData\Local\Programs\Python\Python312\Scripts\;C:\Users\finwe\AppData\Local\Programs\Python\Python312\;C:\Users\finwe\AppData\Local\Programs\Python\Launcher\;C:\Users\finwe\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin;C:\Users\finwe\AppData\Local\Microsoft\WindowsApps;;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\VC\Linux\bin\ConnectionManagerExe;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\vcpkg Platform=x64 UCRTVersion=10.0.26100.0 UniversalCRTSdkDir=C:\Program Files (x86)\Windows Kits\10\ VCIDEInstallDir=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\VC\ VCINSTALLDIR=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\ VCPKG_ROOT=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\vcpkg VCToolsInstallDir=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\ VCToolsRedistDir=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Redist\MSVC\14.50.35710\ VCToolsVersion=14.50.35717 VisualStudioVersion=18.0 VS180COMNTOOLS=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\Tools\ VSCMD_ARG_app_plat=Desktop VSCMD_ARG_HOST_ARCH=x64 VSCMD_ARG_TGT_ARCH=x64 VSCMD_VER=18.0 VSINSTALLDIR=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\ WindowsLibPath=C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.26100.0;C:\Program Files (x86)\Windows Kits\10\References\10.0.26100.0 WindowsSdkBinPath=C:\Program Files (x86)\Windows Kits\10\bin\ WindowsSdkDir=C:\Program Files (x86)\Windows Kits\10\ WindowsSDKLibVersion=10.0.26100.0\ WindowsSdkVerBinPath=C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\ WindowsSDKVersion=10.0.26100.0\ __DOTNET_ADD_64BIT=1 __DOTNET_PREFERRED_BITNESS=64 __VSCMD_PREINIT_PATH=C:\ProgramData\miniconda3\condabin;C:\ProgramData\miniconda3\condabin;C:\dev\VPS\go\go\bin;C:\dev\VPS\flutter\bin;C:\dev\VPS\flutter\bin\cache\dart-sdk\bin;C:\dev\VPS\tools\nasm-3.02;C:\Program Files\PowerShell\7;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Windows\System32\OpenSSH;C:\Users\finwe\AppData\Local\Microsoft\WindowsApps;C:\WINDOWS;C:\WINDOWS\system32;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Microsoft VS Code\bin;C:\Program Files\Git\cmd;C:\ProgramData\miniconda3;C:\ProgramData\miniconda3\Scripts;C:\ProgramData\miniconda3\Library\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\Qt\6.11.0\mingw_64\bin;C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.11.0\msvc2022_64\bin;C:\Program Files\texlive\2026\bin\windows;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Tailscale\;C:\opencode-windows-x64;C:\Program Files\PowerShell\7\;C:\Program Files\WSL\;C:\Users\finwe\AppData\Local\Programs\Python\Python312\Scripts\;C:\Users\finwe\AppData\Local\Programs\Python\Python312\;C:\Users\finwe\AppData\Local\Programs\Python\Launcher\;C:\Users\finwe\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin;C:\Users\finwe\AppData\Local\Microsoft\WindowsApps; "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\bin\Hostx64\x64\cl.exe" /O2 /TP /std:c++17 /utf-8 /Zc:__cplusplus /EHs-c- /GR- /DBORINGSSL_IMPLEMENTATION /D_HAS_EXCEPTIONS=0 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_CRT_SECURE_NO_WARNINGS /DRELEASE /DNDEBUG /IC:\build\aurora\app\packages\aurora_tls\third_party\boringssl\include /c C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\bio_ssl.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\d1_both.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\d1_lib.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\d1_pkt.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\d1_srtp.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\dtls_method.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\dtls_record.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\encrypted_client_hello.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\extensions.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\handoff.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\handshake.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\handshake_client.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\handshake_server.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\s3_both.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\s3_lib.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\s3_pkt.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_aead_ctx.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_asn1.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_buffer.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_cert.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_cipher.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_credential.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_file.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_key_share.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_lib.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_privkey.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_session.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_stat.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_transcript.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_versions.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\ssl_x509.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\t1_enc.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\tls13_both.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\tls13_client.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\tls13_enc.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\tls13_server.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\tls_method.cc C:\build\aurora\app\packages\aurora_tls\third_party\boringssl\ssl\tls_record.cc /link /MACHINE:X64 )`.
+bio_ssl.cc
+
+d1_both.cc
+
+d1_lib.cc
+
+d1_pkt.cc
+
+d1_srtp.cc
+
+dtls_method.cc
+
+dtls_record.cc
+
+encrypted_client_hello.cc
+
+extensions.cc
+
+handoff.cc
+
+handshake.cc
+
+handshake_client.cc
+
+handshake_server.cc
+
+s3_both.cc
+
+s3_lib.cc
+
+s3_pkt.cc
+
+ssl_aead_ctx.cc
+
+ssl_asn1.cc
+
+ssl_buffer.cc
+
+ssl_cert.cc
+
+正在生成代码...
+
+正在编译...
+
+ssl_cipher.cc
+
+ssl_credential.cc
+
+ssl_file.cc
+
+ssl_key_share.cc
+
+ssl_lib.cc
+
+ssl_privkey.cc
+
+ssl_session.cc
+
+ssl_stat.cc
+
+ssl_transcript.cc
+
+ssl_versions.cc
+
+ssl_x509.cc
+
+t1_enc.cc
+
+tls13_both.cc
+
+tls13_client.cc
+
+tls13_enc.cc
+
+tls13_server.cc
+
+tls_method.cc
+
+tls_record.cc
+
+正在生成代码...
+
+Running `(cd C:\build\aurora\app\packages\aurora_wire\.dart_tool\hooks_runner\shared\aurora_tls\build\8e04c28b44\; CommandPromptType=Native DevEnvDir=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\ EXTERNAL_INCLUDE=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\include;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\VS\include;C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\um;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\shared;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\winrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\cppwinrt Framework40Version=v4.0 FrameworkDir=C:\Windows\Microsoft.NET\Framework64\ FrameworkDir64=C:\Windows\Microsoft.NET\Framework64\ FrameworkVersion=v4.0.30319 FrameworkVersion64=v4.0.30319 INCLUDE=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\include;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\VS\include;C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\um;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\shared;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\winrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\cppwinrt LIB=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\lib\x64;C:\Program Files (x86)\Windows Kits\10\lib\10.0.26100.0\ucrt\x64;C:\Program Files (x86)\Windows Kits\10\\lib\10.0.26100.0\\um\x64 LIBPATH=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\lib\x64;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\lib\x86\store\references;C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.26100.0;C:\Program Files (x86)\Windows Kits\10\References\10.0.26100.0;C:\Windows\Microsoft.NET\Framework64\v4.0.30319 PATH=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\bin\HostX64\x64;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\VC\VCPackages;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\TestWindow;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\bin\Roslyn;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\Extensions\Microsoft\CodeCoverage.Console;C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\\x64;C:\Program Files (x86)\Windows Kits\10\bin\\x64;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\\MSBuild\Current\Bin\amd64;C:\Windows\Microsoft.NET\Framework64\v4.0.30319;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\Tools\;C:\ProgramData\miniconda3\condabin;C:\ProgramData\miniconda3\condabin;C:\dev\VPS\go\go\bin;C:\dev\VPS\flutter\bin;C:\dev\VPS\flutter\bin\cache\dart-sdk\bin;C:\dev\VPS\tools\nasm-3.02;C:\Program Files\PowerShell\7;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Windows\System32\OpenSSH;C:\Users\finwe\AppData\Local\Microsoft\WindowsApps;C:\WINDOWS;C:\WINDOWS\system32;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Microsoft VS Code\bin;C:\Program Files\Git\cmd;C:\ProgramData\miniconda3;C:\ProgramData\miniconda3\Scripts;C:\ProgramData\miniconda3\Library\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\Qt\6.11.0\mingw_64\bin;C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.11.0\msvc2022_64\bin;C:\Program Files\texlive\2026\bin\windows;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Tailscale\;C:\opencode-windows-x64;C:\Program Files\PowerShell\7\;C:\Program Files\WSL\;C:\Users\finwe\AppData\Local\Programs\Python\Python312\Scripts\;C:\Users\finwe\AppData\Local\Programs\Python\Python312\;C:\Users\finwe\AppData\Local\Programs\Python\Launcher\;C:\Users\finwe\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin;C:\Users\finwe\AppData\Local\Microsoft\WindowsApps;;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\VC\Linux\bin\ConnectionManagerExe;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\vcpkg Platform=x64 UCRTVersion=10.0.26100.0 UniversalCRTSdkDir=C:\Program Files (x86)\Windows Kits\10\ VCIDEInstallDir=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\VC\ VCINSTALLDIR=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\ VCPKG_ROOT=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\vcpkg VCToolsInstallDir=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\ VCToolsRedistDir=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Redist\MSVC\14.50.35710\ VCToolsVersion=14.50.35717 VisualStudioVersion=18.0 VS180COMNTOOLS=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\Tools\ VSCMD_ARG_app_plat=Desktop VSCMD_ARG_HOST_ARCH=x64 VSCMD_ARG_TGT_ARCH=x64 VSCMD_VER=18.0 VSINSTALLDIR=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\ WindowsLibPath=C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.26100.0;C:\Program Files (x86)\Windows Kits\10\References\10.0.26100.0 WindowsSdkBinPath=C:\Program Files (x86)\Windows Kits\10\bin\ WindowsSdkDir=C:\Program Files (x86)\Windows Kits\10\ WindowsSDKLibVersion=10.0.26100.0\ WindowsSdkVerBinPath=C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\ WindowsSDKVersion=10.0.26100.0\ __DOTNET_ADD_64BIT=1 __DOTNET_PREFERRED_BITNESS=64 __VSCMD_PREINIT_PATH=C:\ProgramData\miniconda3\condabin;C:\ProgramData\miniconda3\condabin;C:\dev\VPS\go\go\bin;C:\dev\VPS\flutter\bin;C:\dev\VPS\flutter\bin\cache\dart-sdk\bin;C:\dev\VPS\tools\nasm-3.02;C:\Program Files\PowerShell\7;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Windows\System32\OpenSSH;C:\Users\finwe\AppData\Local\Microsoft\WindowsApps;C:\WINDOWS;C:\WINDOWS\system32;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Microsoft VS Code\bin;C:\Program Files\Git\cmd;C:\ProgramData\miniconda3;C:\ProgramData\miniconda3\Scripts;C:\ProgramData\miniconda3\Library\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\Qt\6.11.0\mingw_64\bin;C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.11.0\msvc2022_64\bin;C:\Program Files\texlive\2026\bin\windows;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Tailscale\;C:\opencode-windows-x64;C:\Program Files\PowerShell\7\;C:\Program Files\WSL\;C:\Users\finwe\AppData\Local\Programs\Python\Python312\Scripts\;C:\Users\finwe\AppData\Local\Programs\Python\Python312\;C:\Users\finwe\AppData\Local\Programs\Python\Launcher\;C:\Users\finwe\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin;C:\Users\finwe\AppData\Local\Microsoft\WindowsApps; "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\bin\Hostx64\x64\lib.exe" /out:C:\build\aurora\app\packages\aurora_wire\.dart_tool\hooks_runner\shared\aurora_tls\build\8e04c28b44\bssl_ssl.lib bio_ssl.obj d1_both.obj d1_lib.obj d1_pkt.obj d1_srtp.obj dtls_method.obj dtls_record.obj encrypted_client_hello.obj extensions.obj handoff.obj handshake.obj handshake_client.obj handshake_server.obj s3_both.obj s3_lib.obj s3_pkt.obj ssl_aead_ctx.obj ssl_asn1.obj ssl_buffer.obj ssl_cert.obj ssl_cipher.obj ssl_credential.obj ssl_file.obj ssl_key_share.obj ssl_lib.obj ssl_privkey.obj ssl_session.obj ssl_stat.obj ssl_transcript.obj ssl_versions.obj ssl_x509.obj t1_enc.obj tls13_both.obj tls13_client.obj tls13_enc.obj tls13_server.obj tls_method.obj tls_record.obj )`.
+
+          
+Error: Running build hooks failed.
+Running build hooks...Running build hooks...

@@ -1,0 +1,23 @@
+=== RUN   TestSignAndVerify
+--- PASS: TestSignAndVerify (0.02s)
+=== RUN   TestWindowsLocalProductCannotBeRemoteAgent
+--- PASS: TestWindowsLocalProductCannotBeRemoteAgent (0.00s)
+=== RUN   TestVerifyRejects
+=== RUN   TestVerifyRejects/build_byte
+=== RUN   TestVerifyRejects/manifest
+=== RUN   TestVerifyRejects/signature
+=== RUN   TestVerifyRejects/missing_build
+=== RUN   TestVerifyRejects/other_product
+=== RUN   TestVerifyRejects/untrusted_key
+--- PASS: TestVerifyRejects (0.01s)
+    --- PASS: TestVerifyRejects/build_byte (0.00s)
+    --- PASS: TestVerifyRejects/manifest (0.00s)
+    --- PASS: TestVerifyRejects/signature (0.00s)
+    --- PASS: TestVerifyRejects/missing_build (0.00s)
+    --- PASS: TestVerifyRejects/other_product (0.00s)
+    --- PASS: TestVerifyRejects/untrusted_key (0.00s)
+=== RUN   TestSignRefusesBadInput
+--- PASS: TestSignRefusesBadInput (0.00s)
+=== RUN   TestPubkey
+--- PASS: TestPubkey (0.02s)
+PASS

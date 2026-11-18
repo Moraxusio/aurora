@@ -1,0 +1,65 @@
+{
+  "native_engine": true,
+  "production_root": true,
+  "profile": true,
+  "frame_budget_enforced": true,
+  "cpu_trace_enabled": true,
+  "physical_size": {
+    "width": 1682.0,
+    "height": 1066.0
+  },
+  "device_pixel_ratio": 1.25,
+  "samples": [
+    {
+      "operation": "monitor + AI stream + terminal output + sidebar drag",
+      "frames": 123,
+      "elapsed_us": 2874278,
+      "build_p95_us": 8023,
+      "raster_p95_us": 5248,
+      "build_max_us": 10286,
+      "raster_max_us": 5796,
+      "over_16ms": 0
+    },
+    {
+      "operation": "retained editor switching beside AI and terminal",
+      "frames": 50,
+      "elapsed_us": 1956509,
+      "build_p95_us": 12747,
+      "raster_p95_us": 5373,
+      "build_max_us": 16080,
+      "raster_max_us": 5990,
+      "over_16ms": 0
+    },
+    {
+      "operation": "expanded monitor scroll and refresh",
+      "frames": 58,
+      "elapsed_us": 2244526,
+      "build_p95_us": 2033,
+      "raster_p95_us": 4964,
+      "build_max_us": 6654,
+      "raster_max_us": 6430,
+      "over_16ms": 0
+    },
+    {
+      "operation": "30s concurrent polling and streaming soak",
+      "frames": 301,
+      "elapsed_us": 33368760,
+      "build_p95_us": 2716,
+      "raster_p95_us": 4549,
+      "build_max_us": 4170,
+      "raster_max_us": 5552,
+      "over_16ms": 0
+    }
+  ],
+  "dirty_buffer_retained": true,
+  "terminal_attaches": 1,
+  "ai_attaches": 1,
+  "ai_draft_retained": true,
+  "reading_anchor_retained": true,
+  "native_window_sizes": [
+    "1200x800",
+    "1000x700",
+    "1500x1000"
+  ],
+  "soak_gpu_polls": 22
+}

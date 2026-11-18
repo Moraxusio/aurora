@@ -1,0 +1,10 @@
+Fixture-only instance scope: launcher-smoke-44d4c4dc5633478295fbe1957a0862db
+PASS actual CMD launcher opens Release window PID 26256
+PASS rendered local-workspace UI and isolated encrypted profile
+Timed out waiting for launcher state
+At C:\Users\finwe\AppData\Local\Temp\opencode\aurora-ai-control-package\verify-launcher.ps1:37 char:5
++     throw 'Timed out waiting for launcher state'
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Timed out waiting for launcher state:String) [], RuntimeException
+    + FullyQualifiedErrorId : Timed out waiting for launcher state
+ 

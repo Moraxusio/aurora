@@ -1,0 +1,10 @@
+Fixture-only instance scope: launcher-smoke-2cfab7cab2294e73b82506ff3ba763b6
+PASS actual CMD launcher opens Release window PID 4584
+PASS rendered local-workspace UI and isolated encrypted profile
+Command palette not invokable
+At C:\Users\finwe\AppData\Local\Temp\opencode\aurora-ai-control-package\verify-launcher.ps1:85 char:67
++ ... oke($script:window,'命令面板')) { throw 'Command palette not invokable' }
++                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Command palette not invokable:String) [], RuntimeException
+    + FullyQualifiedErrorId : Command palette not invokable
+ 

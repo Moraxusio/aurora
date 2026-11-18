@@ -1,0 +1,87 @@
+Running build hooks...INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+INFO: Could not find files for the given pattern(s).
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+用于 x64 的 Microsoft (R) C/C++ 优化编译器 19.50.35730 版
+
+
+版权所有(C) Microsoft Corporation。保留所有权利。
+
+
+
+PASS signed agent 3.23.0 IDE capabilities
+PASS encoded batch create/read and unsaved replacement
+PASS stale multi-file transaction rejected
+PASS atomic conflict and versioned batch update
+PASS stale development configuration rejected
+PASS task output, problem location and exit code
+PASS real Dart LSP initialize
+PASS real Dart DAP initialize
+PASS stale AI configuration rejected
+PASS AI instructions, skills and budget persistence
+PASS unlimited budget, automatic feature switches and snapshot scope over signed TLS
+IDE_SIGNED_AGENT_TEXT_TRANSACTION_TASK_LSP_DAP_EXTENSIONS_OK
+Running build hooks...

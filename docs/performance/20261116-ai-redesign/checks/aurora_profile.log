@@ -1,0 +1,60 @@
+00:00 +0: loading test\ai_capabilities_test.dart
+00:00 +0: test\ai_capabilities_test.dart: model context/output overrides survive profile and wire resolution
+00:00 +1: test\ai_capabilities_test.dart: legacy, global and model capabilities resolve in explicit order
+00:00 +2: test\ai_capabilities_test.dart: custom effort inheritance, mapping, omission and session override
+00:00 +3: test\ai_capabilities_test.dart: profile roundtrip retains per-model options and independent maps
+00:00 +4: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:00 +5: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:00 +6: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:00 +7: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:00 +8: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:00 +9: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:00 +10: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:00 +11: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:00 +12: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +13: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +14: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +15: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +16: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +17: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +18: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +19: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +20: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +21: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +22: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +23: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +24: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:01 +25: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +26: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +27: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +28: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +29: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +30: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +31: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +32: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +33: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +34: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:02 +35: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:03 +36: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:06 +37: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:06 +38: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:06 +39: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:06 +40: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:06 +41: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:06 +42: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +43: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +44: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +45: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +46: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +47: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +48: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +49: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +50: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +51: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +52: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +53: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:08 +54: test\android_sealer_test.dart: AES-GCM round trip, 1 MiB
+00:13 +55: test\android_sealer_test.dart: nonce differs per seal
+00:13 +56: test\android_sealer_test.dart: tampering, wrong key and wrong purpose are rejected
+00:13 +57: test\android_sealer_test.dart: short key is refused
+00:13 +58: All tests passed!

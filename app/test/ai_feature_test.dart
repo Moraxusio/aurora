@@ -451,14 +451,14 @@ void main() {
         buttons: kSecondaryButton,
       );
       await settle(t);
-      await t.tap(find.text('置顶'));
+      await t.tap(find.text('置顶').hitTestable().last);
       await settle(t);
       final pin = link.rpcCalls.where((c) => c.$1 == 'ai.update').single.$2;
       expect(pin['id'], 'ses_2');
       expect(pin['pinned'], isTrue);
       expect(pin.containsKey('title'), isFalse);
       expect(
-        find.text('置顶'),
+        find.descendant(of: find.byType(ListView), matching: find.text('置顶')),
         findsOneWidget,
         reason: 'the pinned group header appears',
       );
@@ -591,9 +591,15 @@ void main() {
       expect(approveCall.$2['allow'], isTrue);
 
       // Switch to Plan mode and send steering message
-      await t.tap(find.byKey(const ValueKey('ai-agent-mode')));
-      await t.pump(const Duration(milliseconds: 50));
-      expect(find.text('规划 · 只读'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('ai-send-options')));
+      await settle(t);
+      await t.tap(find.byKey(const ValueKey('ai-send-agent-0')));
+      await settle(t);
+      await t.tap(find.text('规划 · 只读').hitTestable().last);
+      await settle(t);
+      await t.tap(find.byKey(const ValueKey('ai-send-options-apply')));
+      await settle(t);
+      expect(find.textContaining('规划 · 询问'), findsOneWidget);
 
       await t.enterText(
         find.byKey(const ValueKey('ai-prompt-input')),

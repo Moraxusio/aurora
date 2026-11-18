@@ -188,37 +188,19 @@ class _SearchPanelState extends State<SearchPanel> {
     Widget toggle(String label, String tip, bool on, VoidCallback tap) =>
         Tooltip(
           message: tip,
-          child: InkWell(
-            onTap: tap,
-            borderRadius: BorderRadius.circular(3),
-            child: Container(
-              width: 24,
-              height: 22,
-              alignment: Alignment.center,
-              margin: const EdgeInsets.only(right: 2),
-              decoration: BoxDecoration(
-                color: on ? ide.selection : null,
-                borderRadius: BorderRadius.circular(3),
-                border: on ? Border.all(color: ide.accent) : null,
-              ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: on ? ide.text : ide.textDim,
-                ),
-              ),
-            ),
-          ),
+          child: Semantics(toggled: on, child: TextButton(
+            onPressed: tap,
+            style: TextButton.styleFrom(backgroundColor: on ? ide.accentSoft : null,
+              foregroundColor: on ? ide.accent : ide.textDim),
+            child: Text(label),
+          )),
         );
     Widget field(
       TextEditingController c,
       String hint, {
       FocusNode? focus,
       List<Widget> tail = const [],
-    }) => SizedBox(
-      height: 30,
-      child: TextField(
+    }) => TextField(
         controller: c,
         focusNode: focus,
         style: const TextStyle(fontSize: 13),
@@ -234,16 +216,18 @@ class _SearchPanelState extends State<SearchPanel> {
               ? null
               : Row(mainAxisSize: MainAxisSize.min, children: tail),
         ),
-      ),
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Padding(padding: const EdgeInsets.only(bottom: Space.m),
+                child: Text('范围：${widget.ws.project?.name ?? '全部文件根'}',
+                  style: TextStyle(color: ide.textDim, fontSize: 11.5))),
               if (_m.running || _m.replacing)
                 Align(
                   alignment: Alignment.centerRight,
@@ -260,7 +244,9 @@ class _SearchPanelState extends State<SearchPanel> {
                 _query,
                 '搜索',
                 focus: _focus,
-                tail: [
+                tail: [IconBtn(Icons.search, '立即搜索 / 重新搜索', _m.running ? null : _run)],
+              ),
+              Wrap(spacing: Space.xs, children: [
                   toggle(
                     'Aa',
                     '区分大小写',
@@ -279,8 +265,7 @@ class _SearchPanelState extends State<SearchPanel> {
                     _regex,
                     () => _toggle(() => _regex = !_regex),
                   ),
-                ],
-              ),
+              ]),
               Wrap(
                 alignment: WrapAlignment.end,
                 children: [
@@ -305,7 +290,7 @@ class _SearchPanelState extends State<SearchPanel> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
-                    onPressed: _m.running || _m.replacing || _m.results.isEmpty
+                    onPressed: _m.running || _m.replacing || _m.results.isEmpty || _m.incomplete || _m.timedOut || _m.truncated
                         ? null
                         : _previewReplacement,
                     icon: const Icon(Icons.find_replace, size: 16),
@@ -324,7 +309,8 @@ class _SearchPanelState extends State<SearchPanel> {
         ),
         _summary(ide),
         const Divider(),
-        Expanded(child: _results(ide)),
+        ])),
+        _results(ide),
       ],
     );
   }
@@ -337,7 +323,7 @@ class _SearchPanelState extends State<SearchPanel> {
     } else if (_m.running && files == 0) {
       text = '正在搜索…';
     } else if (_query.text.isEmpty) {
-      text = '';
+      text = '输入关键词搜索文件内容';
     } else if (files == 0) {
       text = '没有结果';
     } else {
@@ -376,7 +362,7 @@ class _SearchPanelState extends State<SearchPanel> {
         rows.addAll(f.lines.map((l) => (f, l)));
       }
     }
-    return ListView.builder(
+    return SliverList.builder(
       itemCount: rows.length,
       itemBuilder: (_, index) {
         final (f, l) = rows[index];

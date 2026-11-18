@@ -77,6 +77,8 @@ class DebugModel extends ChangeNotifier {
       _stackRequest = 0;
   int get pauseGeneration => _pauseGeneration;
   bool _disposed = false, _notifyQueued = false;
+  Object? _control;
+  bool get controlling => _control != null;
   Link? _link;
   TaskRun? _prelaunch;
   Completer<void>? _initialized;
@@ -338,6 +340,7 @@ class DebugModel extends ChangeNotifier {
 
   void _end(DebugPhase next) {
     _generation++;
+    _control = null;
     final peer = _peer;
     _peer = null;
     phase = next;
@@ -727,27 +730,33 @@ class DebugModel extends ChangeNotifier {
 
   Future<void> control(String command) async {
     final peer = _peer, generation = _generation, pause = _pauseGeneration;
-    if (peer == null) return;
-    if (command == 'pause') {
-      if (phase != DebugPhase.running) return;
-      final reply = await peer.request('threads');
-      if (generation != _generation || phase != DebugPhase.running) return;
-      final available = _maps(reply, 'threads', 128);
-      final id = available.firstOrNull?['id'];
-      if (id != null) await peer.request('pause', {'threadId': id});
-      return;
-    }
-    if (!stopped || threadId == null) return;
-    await peer.request(command, {'threadId': threadId});
-    if (_samePause(generation, pause)) {
-      phase = DebugPhase.running;
-      _clearPause();
+    if (peer == null || controlling) return;
+    final operation = _control = Object();
+    _notify();
+    try {
+      if (command == 'pause') {
+        if (phase != DebugPhase.running) return;
+        final reply = await peer.request('threads');
+        if (generation != _generation || phase != DebugPhase.running) return;
+        final available = _maps(reply, 'threads', 128);
+        final id = available.firstOrNull?['id'];
+        if (id != null) await peer.request('pause', {'threadId': id});
+        return;
+      }
+      if (!stopped || threadId == null) return;
+      await peer.request(command, {'threadId': threadId});
+      if (_samePause(generation, pause)) {
+        phase = DebugPhase.running;
+        _clearPause();
+      }
+    } finally {
+      if (identical(_control, operation)) _control = null;
       _notify();
     }
   }
 
   Future<void> stop() async {
-    if (!active) return;
+    if (!active || phase == DebugPhase.stopping) return;
     phase = DebugPhase.stopping;
     _notify();
     final peer = _peer, generation = _generation;

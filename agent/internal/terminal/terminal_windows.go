@@ -80,7 +80,7 @@ func (e *Env) list(context.Context, json.RawMessage) (any, error) {
 	return map[string]any{"sessions": out, "backend": "conpty", "persistent": false}, nil
 }
 
-var localName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,48}$`)
+var localName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
 func (e *Env) create(ctx context.Context, raw json.RawMessage) (any, error) {
 	var a struct {
@@ -262,10 +262,26 @@ func (e *Env) attach(ctx context.Context, st net.Conn, raw json.RawMessage) erro
 		case <-cctx.Done():
 			return nil
 		case <-s.done:
-			return send(wire.TypeJSON, []byte(`{"type":"exit"}`))
+			// Output and process exit may become ready together. Drain the
+			// completed reader's buffered tail before reporting shell exit.
+			for {
+				select {
+				case b, ok := <-ch:
+					if !ok {
+						return send(wire.TypeJSON, []byte(`{"type":"exit"}`))
+					}
+					if err := send(wire.TypeData, b); err != nil {
+						return err
+					}
+				default:
+					return send(wire.TypeJSON, []byte(`{"type":"exit"}`))
+				}
+			}
 		case b, ok := <-ch:
 			if !ok {
-				return nil
+				// A slow subscriber is recoverable from retained history.
+				// Tell the client to reattach rather than wait for a new link.
+				return send(wire.TypeJSON, []byte(`{"type":"detached"}`))
 			}
 			if err := send(wire.TypeData, b); err != nil {
 				return err

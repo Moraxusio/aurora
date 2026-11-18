@@ -9,7 +9,48 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
+
+func (s svc) opInspectSnapshots(ctx context.Context, raw json.RawMessage) (any, error) {
+	s.init()
+	var in struct{ Root, Workdir string }
+	if err := decodeArgs(raw, &in); err != nil {
+		return nil, err
+	}
+	_, _, work, err := s.resolveWorkspace(in.Root, in.Workdir)
+	if err != nil {
+		return nil, err
+	}
+	cfg, _, err := loadExtensionConfig(work)
+	if err != nil {
+		return nil, err
+	}
+	policy := cfg.Snapshot.resolved()
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(policy.TimeoutSeconds)*time.Second)
+	defer cancel()
+	unlock := s.snapshots.lock(work)
+	defer unlock()
+	gitDir, err := s.snapshots.ensureRepo(ctx, work)
+	if err != nil {
+		return nil, err
+	}
+	files, skipped, err := s.snapshots.snapshotFiles(ctx, gitDir, work, policy)
+	if err != nil {
+		return nil, err
+	}
+	size, err := s.snapshots.storeBytes(ctx, gitDir, work)
+	if err != nil {
+		return nil, err
+	}
+	var total int64
+	for _, file := range files {
+		total += file.size
+	}
+	return map[string]any{"enabled": enabledByDefault(cfg.Snapshots), "files": len(files),
+		"skipped": skipped, "contentBytes": total, "storeBytes": size, "policy": policy,
+		"overTreeBudget": total > int64(policy.MaxTreeBytes), "overStoreBudget": size >= int64(policy.MaxStoreBytes)}, nil
+}
 
 func (s svc) opPruneSnapshots(ctx context.Context, raw json.RawMessage) (any, error) {
 	s.init()

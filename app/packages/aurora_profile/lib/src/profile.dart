@@ -782,6 +782,8 @@ class AiSettings {
   List<AiPermissionRule> permissionRules;
   String followUp;
   Map<String, bool> toolDefaults;
+  String sendKey;
+  bool expandReasoning, expandErrors, showQuickPrompts, showMessageNavigation;
 
   AiSettings({
     List<AiProvider>? providers,
@@ -792,6 +794,11 @@ class AiSettings {
     List<AiPermissionRule>? permissionRules,
     this.followUp = 'steer',
     Map<String, bool>? toolDefaults,
+    this.sendKey = 'enter',
+    this.expandReasoning = false,
+    this.expandErrors = true,
+    this.showQuickPrompts = true,
+    this.showMessageNavigation = false,
   }) : providers = providers ?? [],
        toolDefaults = toolDefaults ?? {},
        permissionRules = permissionRules ?? [];
@@ -815,6 +822,11 @@ class AiSettings {
       chatFontSize == 15 &&
       followUp == 'steer' &&
       toolDefaults.isEmpty &&
+      sendKey == 'enter' &&
+      !expandReasoning &&
+      expandErrors &&
+      showQuickPrompts &&
+      !showMessageNavigation &&
       permissionRules.isEmpty;
 
   factory AiSettings.fromJson(Map<String, dynamic> j) {
@@ -838,6 +850,11 @@ class AiSettings {
       ],
       followUp: j['follow_up'] == 'queue' ? 'queue' : 'steer',
       toolDefaults: aiCapabilityMap(j['tool_defaults']),
+      sendKey: j['send_key'] == 'ctrl-enter' ? 'ctrl-enter' : 'enter',
+      expandReasoning: j['expand_reasoning'] == true,
+      expandErrors: j['expand_errors'] != false,
+      showQuickPrompts: j['show_quick_prompts'] != false,
+      showMessageNavigation: j['show_message_navigation'] == true,
     );
   }
 
@@ -850,6 +867,11 @@ class AiSettings {
     if (chatFontSize != 15) 'chat_font_size': chatFontSize,
     if (followUp != 'steer') 'follow_up': followUp,
     if (toolDefaults.isNotEmpty) 'tool_defaults': toolDefaults,
+    if (sendKey != 'enter') 'send_key': sendKey,
+    if (expandReasoning) 'expand_reasoning': true,
+    if (!expandErrors) 'expand_errors': false,
+    if (!showQuickPrompts) 'show_quick_prompts': false,
+    if (showMessageNavigation) 'show_message_navigation': true,
     if (permissionRules.isNotEmpty)
       'permission_rules': [for (final r in permissionRules) r.toJson()],
   };
@@ -1057,13 +1079,22 @@ class AiProvider {
     },
     if (effectiveContextWindow(modelOverride) > 0)
       'context_window': effectiveContextWindow(modelOverride),
-    if (!isSubscription && maxTokens > 0) 'max_tokens': maxTokens,
+    if (!isSubscription && effectiveMaxTokens(modelOverride) > 0)
+      'max_tokens': effectiveMaxTokens(modelOverride),
     'use_proxy': usesProxy,
     if (proxyMode.isNotEmpty) 'proxy_mode': proxyMode,
     if (!isSubscription && headers.isNotEmpty) 'headers': headers,
   };
 
-  int effectiveContextWindow([String? selected]) => contextWindow > 0
+  int effectiveMaxTokens([String? selected]) =>
+      (modelOptions[selected ?? model]?.maxTokens ?? 0) > 0
+      ? modelOptions[selected ?? model]!.maxTokens
+      : maxTokens;
+
+  int effectiveContextWindow([String? selected]) =>
+      (modelOptions[selected ?? model]?.contextWindow ?? 0) > 0
+      ? modelOptions[selected ?? model]!.contextWindow
+      : contextWindow > 0
       ? contextWindow
       : modelContextWindows[selected ?? model] ?? 0;
 

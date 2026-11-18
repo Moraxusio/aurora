@@ -57,5 +57,8 @@ class MemoryTerminalStream implements OpStream {
   }
 
   @override
+  void reset() { unawaited(close()); }
+
+  @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:aurora/ui/aurora_ui.dart';
 
+import 'ai_visuals.dart';
+
 import '../../kernel/ai_edits.dart';
 import '../../kernel/document_model.dart';
 import '../../kernel/editor_tab.dart';
@@ -209,6 +211,11 @@ class _AiEditReviewState extends State<AiEditReview> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const AiSectionHeading(
+                    icon: Icons.difference_outlined,
+                    title: 'AI 修改审阅',
+                    subtitle: '选择上下文 → 生成建议 → 逐块接受 → 保存与验证',
+                  ),
                   TextField(
                     controller: instruction,
                     minLines: 1,
@@ -220,23 +227,31 @@ class _AiEditReviewState extends State<AiEditReview> {
                     ),
                     onSubmitted: (_) => generate(),
                   ),
-                  Wrap(
-                    spacing: 6,
+                  ExpansionTile(
+                    title: Text('参考文件 · 已选择 ${selected.length} 个'),
+                    subtitle: const Text('使用当前编辑缓冲，包括尚未保存的内容'),
+                    tilePadding: EdgeInsets.zero,
                     children: [
-                      for (final doc in files.take(32))
-                        FilterChip(
-                          label: Text(doc.key.path),
-                          selected: selected.contains(doc),
-                          onSelected: busy
-                              ? null
-                              : (yes) => setState(() {
-                                  if (yes) {
-                                    selected.add(doc);
-                                  } else {
-                                    selected.remove(doc);
-                                  }
-                                }),
-                        ),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final doc in files.take(32))
+                            FilterChip(
+                              label: Text(doc.key.path),
+                              selected: selected.contains(doc),
+                              onSelected: busy
+                                  ? null
+                                  : (yes) => setState(() {
+                                      if (yes) {
+                                        selected.add(doc);
+                                      } else {
+                                        selected.remove(doc);
+                                      }
+                                    }),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                   Wrap(
@@ -288,12 +303,7 @@ class _AiEditReviewState extends State<AiEditReview> {
                   if (busy || current?.saving == true)
                     const LinearProgressIndicator(),
                   if (error != null)
-                    SelectableText(
-                      error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
+                    Notice(tone: Tone.error, title: '操作未完成', body: error),
                   if (current != null && current.chunks.isEmpty)
                     const Text('没有需要修改的内容。'),
                 ],

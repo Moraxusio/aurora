@@ -50,29 +50,47 @@ class AiWorkItem extends ChangeNotifier {
     };
     if (event['output'] is String) {
       final text = event['output'] as String;
-      if (snapshot) { _mergeSnapshot(text); } else { replaceOutput(text); }
+      if (snapshot) {
+        _mergeSnapshot(text);
+      } else {
+        replaceOutput(text);
+      }
     }
   }
 
   void _mergeSnapshot(String text) {
     if (text.isEmpty || output.endsWith(text)) return;
-    if (output.isEmpty) { replaceOutput(text); return; }
+    if (output.isEmpty) {
+      replaceOutput(text);
+      return;
+    }
     // Active snapshots are bounded tails. Merge their overlap with the local
     // log in linear time, preserving line IDs and any earlier text still held.
     final prefix = List<int>.filled(text.length, 0);
     for (var i = 1, match = 0; i < text.length; i++) {
-      while (match > 0 && text.codeUnitAt(i) != text.codeUnitAt(match)) { match = prefix[match - 1]; }
+      while (match > 0 && text.codeUnitAt(i) != text.codeUnitAt(match)) {
+        match = prefix[match - 1];
+      }
       if (text.codeUnitAt(i) == text.codeUnitAt(match)) match++;
       prefix[i] = match;
     }
     var overlap = 0;
-    for (var i = (output.length - text.length).clamp(0, output.length); i < output.length; i++) {
+    for (
+      var i = (output.length - text.length).clamp(0, output.length);
+      i < output.length;
+      i++
+    ) {
       if (overlap == text.length) overlap = prefix[overlap - 1];
-      while (overlap > 0 && output.codeUnitAt(i) != text.codeUnitAt(overlap)) { overlap = prefix[overlap - 1]; }
+      while (overlap > 0 && output.codeUnitAt(i) != text.codeUnitAt(overlap)) {
+        overlap = prefix[overlap - 1];
+      }
       if (output.codeUnitAt(i) == text.codeUnitAt(overlap)) overlap++;
     }
-    if (overlap > 0) { append(text.substring(overlap)); }
-    else { replaceOutput(text); }
+    if (overlap > 0) {
+      append(text.substring(overlap));
+    } else {
+      replaceOutput(text);
+    }
   }
 
   void append(String delta) {
@@ -102,12 +120,18 @@ class AiWorkItem extends ChangeNotifier {
     var end = output.length;
     for (var line = 0; line < 4096 && end > cut; line++) {
       final at = output.lastIndexOf('\n', end - 1);
-      if (at < 0) { end = 0; break; }
+      if (at < 0) {
+        end = 0;
+        break;
+      }
       end = at;
       if (line == 4095 && end >= cut) cut = end + 1;
     }
     if (cut == 0) return;
-    if (cut < output.length && output.codeUnitAt(cut) >= 0xdc00 && output.codeUnitAt(cut) <= 0xdfff) cut++;
+    if (cut < output.length &&
+        output.codeUnitAt(cut) >= 0xdc00 &&
+        output.codeUnitAt(cut) <= 0xdfff)
+      cut++;
     firstLine += '\n'.allMatches(output.substring(0, cut)).length;
     output = output.substring(cut);
     clipped = true;
@@ -142,7 +166,8 @@ class AiWorkController extends ChangeNotifier {
       items.values.where((item) => item.status == AiWorkStatus.running).length;
 
   void select(String target) {
-    if (target.startsWith('work:') && !items.containsKey(target.substring(5))) return;
+    if (target.startsWith('work:') && !items.containsKey(target.substring(5)))
+      return;
     opened.add(target);
     selected = target;
     notifyListeners();
@@ -213,6 +238,8 @@ class AiWorkController extends ChangeNotifier {
       });
       item.status = result == null
           ? AiWorkStatus.interrupted
+          : result.metadata['cancelled'] == true
+          ? AiWorkStatus.stopped
           : result.isError
           ? AiWorkStatus.error
           : AiWorkStatus.completed;
@@ -281,6 +308,8 @@ class AiWorkController extends ChangeNotifier {
       if (item != null) {
         item.status = type == 'tool.running'
             ? AiWorkStatus.running
+            : item.metadata['cancelled'] == true
+            ? AiWorkStatus.stopped
             : event['is_error'] == true
             ? AiWorkStatus.error
             : AiWorkStatus.completed;
@@ -305,12 +334,14 @@ class AiWorkController extends ChangeNotifier {
           }
         }
       }
-    } else if (type == 'permission.ask') {
+    } else if (type == 'permission.ask' || type == 'question.ask') {
       final info = sessions.putIfAbsent(
         sid,
         () => AiWorkSession(sid, event['session_title'] as String? ?? '子代理'),
       );
       info.waiting = true;
+    } else if (type == 'question.done') {
+      sessions[sid]?.waiting = false;
     } else if (type == 'session.title') {
       sessions[sid]?.title = event['title'] as String? ?? sessions[sid]!.title;
     } else {

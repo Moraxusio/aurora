@@ -71,31 +71,40 @@ class UpgradeModel {
   Future<void> recover(String id,Link link) async {
     final r = app.server(id)?.upgrade;
     if (r == null || (r.terminal && r.state != 'interrupted')) return;
+    final observed = app.link(id);
+    final job = r.job, target = r.target;
+    bool current() {
+      final now = app.server(id)?.upgrade;
+      return !link.isClosed && identical(observed, app.link(id)) &&
+        (observed == null || identical(observed, link)) && now != null &&
+        now.job == job && now.target == target && (!now.terminal || now.state == 'interrupted');
+    }
+    if (!current()) return;
     // A rollback target may be an older agent without the status operation.
     if (!link.server.caps.contains('agent.upgrade.status')) {
       if (link.server.version == r.target) {
-        await record(id,state:'upgraded',message:'已重连并确认目标版本');
+        await record(id,state:'upgraded',message:'已重连并确认目标版本',current:current);
       } else {
-        await record(id,state:'interrupted',message:'已连接旧 agent，无法查询任务；请通过 SSH 核查，不会重复推送');
+        await record(id,state:'interrupted',message:'已连接旧 agent，无法查询任务；请通过 SSH 核查，不会重复推送',current:current);
       }
       return;
     }
     if (r.job == null) {
-      await record(id,state:'failed',message:'提交前连接中断，没有升级任务回执；未自动重试');
+      await record(id,state:'failed',message:'提交前连接中断，没有升级任务回执；未自动重试',current:current);
       return;
     }
     try {
       final result = await link.call('agent.upgrade.status', {'id':r.job}) as Map;
+      if (!current()) return;
       if (result['id'] != r.job || result['version'] != r.target) throw OpError(codeConflict, '升级任务回执与请求不匹配');
-      final current = app.server(id)?.upgrade;
-      if (current == null || (current.terminal && current.state != 'interrupted') || current.job != r.job || current.target != r.target) return;
-      await record(id,state:result['state'] as String,message:result['message'] as String?);
+      await record(id,state:result['state'] as String,message:result['message'] as String?,current:current);
     } on OpError catch(e) {
-      await record(id,state:e.code == codeNotFound ? 'failed' : r.state,message:e.code == codeNotFound ? '上传未完成或任务不存在；没有自动重复推送' : e.message,blockTarget: false);
+      await record(id,state:e.code == codeNotFound ? 'failed' : r.state,message:e.code == codeNotFound ? '上传未完成或任务不存在；没有自动重复推送' : e.message,blockTarget: false,current:current);
     }
   }
 
-  Future<void> record(String id,{required String state,String? message,String? job,bool blockTarget=true}) => app.update((p) {
+  Future<void> record(String id,{required String state,String? message,String? job,bool blockTarget=true,bool Function()? current}) => app.update((p) {
+    if (current != null && !current()) return;
     final e=p.server(id),r=p.server(id)?.upgrade;
     if (e==null||r==null) return;
     // A late "starting" reply must not roll back a terminal status already

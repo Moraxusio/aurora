@@ -28,6 +28,42 @@ class FakeLink implements Link {
 }
 
 void main(){
+  test('old connection proxy acknowledgement leaves its selection pending', () async {
+    final app = MemoryProfile();
+    final n = SubNode(proto: 'trojan', host: 'fixture.invalid', port: 443, secret: 'fixture', tls: true);
+    final src = ProxySource(id: 'src', name: 'source', nodes: [n.toAgent()]);
+    app.profile.proxySources.add(src);
+    app.profile.servers.single.proxy = ProxyChoice(source: src.id, key: n.key, name: 'node', pending: true, revision: 1);
+    final entered = Completer<void>(), reply = Completer<Object?>();
+    final old = FakeLink((_, _) { entered.complete(); return reply.future; });
+    app.links['s'] = old;
+    final pending = ProxyModel(app).repush(app.profile.servers.single, old);
+    final check = expectLater(pending, throwsA(isA<OpError>()));
+    await entered.future;
+    app.links['s'] = FakeLink((_, _) async => {});
+    reply.complete({});
+    await check;
+    expect(app.profile.servers.single.proxy!.pending, isTrue);
+  });
+
+  for (final fail in [false, true]) {
+    test('old upgrade recovery ${fail ? 'failure' : 'success'} cannot rewrite a new receipt', () async {
+      final app = MemoryProfile();
+      app.profile.servers.single.upgrade = UpgradeRecord(target: '3.3.1', previous: '3.3.0', state: 'interrupted', job: 'a' * 24);
+      final reply = Completer<Object?>();
+      final old = FakeLink((_, _) => reply.future);
+      app.links['s'] = old;
+      final pending = UpgradeModel(app, () => [], () => null).recover('s', old);
+      app.links['s'] = FakeLink((_, _) async => {});
+      app.profile.servers.single.upgrade = UpgradeRecord(target: '3.4.0', previous: '3.3.1', state: 'waiting', job: 'b' * 24);
+      if (fail) { reply.completeError(OpError(codeNotFound, 'old receipt missing')); }
+      else { reply.complete({'id': 'a' * 24, 'version': '3.3.1', 'state': 'failed'}); }
+      await pending;
+      expect(app.profile.servers.single.upgrade!.state, 'waiting');
+      expect(app.profile.servers.single.upgrade!.job, 'b' * 24);
+      expect(app.profile.servers.single.failedUpgrades, isEmpty);
+    });
+  }
   test('capability check sends placeholders, real testing and selection send real credentials',()async{
     final app=MemoryProfile(), sent=<Map<String, dynamic>>[];
     final link=FakeLink((op,args)async{sent.add({'op':op,'args':args});if(op=='proxy.check')return {'reasons':['']};if(op=='proxy.test')return {'ok':true,'ms':2};return {};});

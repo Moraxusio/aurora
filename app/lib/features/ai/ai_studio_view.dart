@@ -20,6 +20,9 @@ import 'ai_permission_card.dart';
 import 'ai_session_grants.dart';
 import 'ai_question_dialog.dart';
 import 'ai_settings_dialog.dart';
+import 'ai_extensions.dart';
+import 'ai_budget_view.dart';
+import 'ai_run_options.dart';
 import 'ai_attachments.dart';
 import 'ai_path_picker.dart';
 import 'ai_attachment_tile.dart';
@@ -111,6 +114,17 @@ class AiStudioView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AiWorkbench(
     sessionId: initialSessionId,
+    onStopSession: (id) {
+      final link = ws.link;
+      if (link != null)
+        unawaited(ws.guard(() => link.call('ai.stop', {'id': id})));
+    },
+    onSettings: () => showAiSettingsDialog(
+      context,
+      app: ws.app,
+      ws: ws,
+      initialSection: 'overview',
+    ),
     conversationBuilder: (work, sessionId, primary) => _AiConversation(
       ws: ws,
       initialSessionId: sessionId,
@@ -157,13 +171,23 @@ class _AiStudioViewState extends State<_AiConversation> {
   String _agentMode = 'build'; // 'build' | 'plan'
   String _permMode = 'ask'; // 'ask' | 'auto'
   String _deliveryMode = 'steer'; // 'steer' | 'queue'
+  Map<String, dynamic> _runOptions = {};
 
   // Live streaming buffers for the active step
   String _liveReasoning = '';
   String _liveText = '';
   String _liveCompaction = '';
   final List<LiveToolCall> _liveTools = [];
-  AiPermissionQuestion? _pendingPerm;
+  final _permissions = <String, AiPermissionQuestion>{};
+  AiPermissionQuestion? get _pendingPerm => _permissions.values.firstOrNull;
+  set _pendingPerm(AiPermissionQuestion? value) {
+    if (value != null) {
+      _permissions[value.id] = value;
+    } else if (_permissions.isNotEmpty) {
+      _permissions.remove(_permissions.keys.first);
+    }
+  }
+
   Map<String, dynamic>? _pendingQuestion;
   int _questionGeneration = 0;
   final _openActions = <String>{};
@@ -248,6 +272,7 @@ class _AiStudioViewState extends State<_AiConversation> {
     if (!mounted) return;
     setState(() {
       final ai = ws.app.ready ? ws.app.aiSettings : AiSettings();
+      _messageCache.clear();
       final previous = _provider;
       final live = ai.providers.where((p) => p.id == previous?.id).firstOrNull;
       final source = live ?? (!_selectionExplicit ? ai.activeProvider : null);
@@ -366,7 +391,17 @@ class _AiStudioViewState extends State<_AiConversation> {
         ];
         _messageCache.clear();
         _running = running;
-        _pendingPerm = pending;
+        _permissions.clear();
+        if (res['pending_permissions'] is List) {
+          for (final q in res['pending_permissions'] as List) {
+            if (q is Map)
+              _pendingPerm = AiPermissionQuestion.fromJson(
+                q.cast<String, dynamic>(),
+              );
+          }
+        } else if (pending != null) {
+          _pendingPerm = pending;
+        }
         _activities.clear();
         for (final a in (res['activities'] as List? ?? const [])) {
           if (a is Map) {
@@ -377,7 +412,9 @@ class _AiStudioViewState extends State<_AiConversation> {
         _root = sess.root;
         _workdir = sess.workdir;
         if (initialLoad) {
-          _agentMode = sess.agent == 'plan' ? 'plan' : 'build';
+          _agentMode = ['plan', 'explore'].contains(sess.agent)
+              ? sess.agent
+              : 'build';
           if (sess.permissionMode.isNotEmpty) _permMode = sess.permissionMode;
         }
         if (!_selectionExplicit &&
@@ -577,10 +614,14 @@ class _AiStudioViewState extends State<_AiConversation> {
           _pendingPerm = AiPermissionQuestion.fromJson(
             (ev['permission'] as Map).cast<String, dynamic>(),
           );
-        if (type == 'tool.done' && _pendingPerm?.callId == ev['tool_call_id'])
-          _pendingPerm = null;
-        if (type == 'session.status' && ev['status'] != 'running')
+        if (type == 'tool.done')
+          _permissions.removeWhere(
+            (_, q) => q.sessionId == sid && q.callId == ev['tool_call_id'],
+          );
+        if (type == 'session.status' && ev['status'] != 'running') {
+          _permissions.removeWhere((_, q) => q.sessionId == sid);
           _activities.removeWhere((_, a) => a['session_id'] == sid);
+        }
       });
       return;
     }
@@ -607,7 +648,7 @@ class _AiStudioViewState extends State<_AiConversation> {
     }
 
     setState(() {
-      if (ev['runtime'] is Map || ev['context'] is Map) {
+      if (ev['runtime'] is Map || ev['context'] is Map || ev['budget'] is Map) {
         _session ??= AiSession(
           id: sid,
           title: '新会话',
@@ -622,6 +663,8 @@ class _AiStudioViewState extends State<_AiConversation> {
           _session!.context = AiContextInfo.fromJson(
             (ev['context'] as Map).cast<String, dynamic>(),
           );
+        if (ev['budget'] is Map)
+          _session!.budget = AiRunBudget.fromJson(ev['budget'] as Map);
       }
       switch (type) {
         case 'question.ask':
@@ -641,7 +684,7 @@ class _AiStudioViewState extends State<_AiConversation> {
             _liveText = '';
             _liveCompaction = '';
             _liveTools.clear();
-            _pendingPerm = null;
+            _permissions.clear();
             _pendingQuestion = null;
           }
           widget.onSessionsChanged?.call();
@@ -719,9 +762,9 @@ class _AiStudioViewState extends State<_AiConversation> {
             existing.running = false;
             existing.metadata = meta;
           }
-          if (_pendingPerm?.callId == cid) {
-            _pendingPerm = null;
-          }
+          _permissions.removeWhere(
+            (_, q) => q.sessionId == sid && q.callId == cid,
+          );
           // Notify open editors/file tree if files were modified
           if (meta.containsKey('files')) {
             ws.filesRevision.value++;
@@ -867,6 +910,55 @@ class _AiStudioViewState extends State<_AiConversation> {
     if (!mounted || !_openActions.add(value)) return;
     try {
       switch (value) {
+        case 'send-options':
+          final link = ws.link;
+          if (link == null) return;
+          final result = await showAiRunOptions(
+            context,
+            link: link,
+            root: _root,
+            workdir: _workdir,
+            initial: AiSendSettings(
+              agent: _agentMode,
+              permission: _permMode,
+              delivery: _deliveryMode,
+              options: _runOptions,
+            ),
+            running: _running,
+            child: _session?.parentId.isNotEmpty == true,
+          );
+          if (result != null && mounted && identical(link, ws.link)) {
+            setState(() {
+              _agentMode = result.agent;
+              _permMode = result.permission;
+              _deliveryMode = result.delivery;
+              _runOptions = result.options;
+            });
+          }
+        case 'navigate':
+          await showWorkbenchDialog<void>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('跳转到消息'),
+              content: SizedBox(
+                width: 520,
+                child: _buildMessageNavigation(
+                  Ide.of(context),
+                  (_session?.messages ?? const <AiMessage>[])
+                      .where((m) => !m.isSystemReminder)
+                      .toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('关闭'),
+                ),
+              ],
+            ),
+          );
+        case 'latest':
+          _scrollToBottom(force: true);
         case 'model':
           await _chooseModel();
         case 'settings':
@@ -874,9 +966,23 @@ class _AiStudioViewState extends State<_AiConversation> {
             context,
             app: ws.app,
             ws: ws,
-            initialSection: _provider == null ? 'connection' : 'models',
+            initialSection: 'overview',
             providerId: _provider?.id,
             model: _provider?.model,
+          );
+        case 'project':
+        case 'budget':
+        case 'snapshots':
+          if (ws.link?.server.caps.contains('ai.extensions') != true) {
+            ws.toast('请连接支持 AI 项目配置的 agent。', error: true);
+            return;
+          }
+          await openAiExtensions(
+            context,
+            ws,
+            root: _root,
+            workdir: _workdir,
+            page: value == 'snapshots' ? 'snapshots' : 'budget',
           );
         case 'compact':
           await _compactManual();
@@ -1072,6 +1178,13 @@ class _AiStudioViewState extends State<_AiConversation> {
     final sentAttachments = inboxId == null
         ? List<AiAttachment>.of(_attachments)
         : <AiAttachment>[];
+    final sentOptions = _runOptions;
+    if (sentOptions.isNotEmpty &&
+        inboxId == null &&
+        !link.server.caps.contains('ai.run.options')) {
+      ws.toast('当前 agent 不支持已选择的本次运行设置，请升级 agent 或恢复项目设置后发送。', error: true);
+      return;
+    }
     final sentRoot = _root,
         sentWorkdir = _workdir,
         sentAgent = _agentMode,
@@ -1151,9 +1264,15 @@ class _AiStudioViewState extends State<_AiConversation> {
         attachments.add(result);
       }
       if (!mounted || !identical(link, ws.link)) return;
+      final useRunOptions = !_running || sentDelivery == 'queue';
       final res = await link.call('ai.run', {
         if (_sessionId != null) 'session_id': _sessionId,
         if (inboxId != null) 'inbox_id': inboxId,
+        if (link.server.caps.contains('ai.run.options') &&
+            useRunOptions &&
+            sentOptions.isNotEmpty &&
+            inboxId == null)
+          'options': sentOptions,
         'root': sentRoot,
         'workdir': sentWorkdir,
         'agent': sentAgent,
@@ -1171,6 +1290,10 @@ class _AiStudioViewState extends State<_AiConversation> {
       if (!mounted || !identical(link, ws.link)) return;
       if (quickPrompt == null && _inputCtl.text == inputBefore)
         _inputCtl.clear();
+      if (useRunOptions &&
+          inboxId == null &&
+          identical(_runOptions, sentOptions))
+        _runOptions = {};
       setState(() => _attachments.removeWhere(sentAttachments.contains));
       for (final a in sentAttachments) {
         _uploadedAttachments.remove(a);
@@ -1478,8 +1601,8 @@ class _AiStudioViewState extends State<_AiConversation> {
       await link
           .call('ai.approve', {'id': q.id, 'allow': allow, 'always': always})
           .timeout(const Duration(seconds: 20));
-      if (mounted && _pendingPerm?.id == q.id) {
-        setState(() => _pendingPerm = null);
+      if (mounted && identical(link, ws.link)) {
+        setState(() => _permissions.remove(q.id));
       }
     } on Object catch (e) {
       if (mounted && _pendingPerm?.id == q.id) {
@@ -1786,7 +1909,8 @@ class _AiStudioViewState extends State<_AiConversation> {
             child: Column(
               children: [
                 _buildWorkspaceBar(ide, compact: short),
-                _buildMessageNavigation(ide, messages, compact: short),
+                if (ws.app.aiSettings.showMessageNavigation && !short)
+                  _buildMessageNavigation(ide, messages),
                 if (_loading) const LinearProgressIndicator(minHeight: 2),
                 if (_eventNote != null || _error != null)
                   MaterialBanner(
@@ -2012,7 +2136,6 @@ class _AiStudioViewState extends State<_AiConversation> {
                 ),
               ),
             ),
-            _buildConversationActions(ide),
           ],
         );
       },
@@ -2078,66 +2201,56 @@ class _AiStudioViewState extends State<_AiConversation> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(Radii.m),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                StatusDot(statusColor, size: 7),
-                const SizedBox(width: 5),
-                if (!compact)
-                  Text(
-                    statusText,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          WorkbenchMenuButton<AiPathChoice>(
-            key: const ValueKey('ai-workdir-menu'),
-            enabled: canPick,
-            tooltip: '${native}\n${canPick ? '更换工作目录' : '会话目录固定'}',
-            onSelected: (choice) {
-              if (choice.root == '*browse*') {
-                _pickWorkdir();
-              } else {
-                setState(() {
-                  _root = choice.root;
-                  _workdir = choice.path;
-                });
-              }
-            },
-            itemBuilder: (_) => [
-              for (final folder
-                  in ws.project?.folders ?? const <WorkspacePath>[])
-                PopupMenuItem(
-                  value: AiPathChoice(folder.root, folder.path, folder.path),
-                  child: Text('项目：${folder.path}'),
-                ),
-              for (final r in _roots)
-                PopupMenuItem(
-                  value: AiPathChoice(r['id'] as String, '/', '/'),
-                  child: Text('${r['label'] ?? r['id']} /'),
-                ),
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                value: const AiPathChoice('*browse*', '', ''),
-                child: MenuLabel(
-                  ws.entry?.isLocal == true ? '浏览本机目录…' : '浏览服务器目录…',
-                  icon: Icons.folder_open_outlined,
-                ),
+          Tooltip(
+            message: _session?.budget?.summary ?? statusText,
+            child: TextButton(
+              key: const ValueKey('ai-run-budget-summary'),
+              onPressed: () => _action('details'),
+              child: Text(
+                statusText,
+                style: TextStyle(fontSize: 11, color: statusColor),
               ),
-            ],
-            child: const Icon(Icons.edit_location_alt_outlined, size: 16),
+            ),
           ),
+          if (canPick)
+            WorkbenchMenuButton<AiPathChoice>(
+              key: const ValueKey('ai-workdir-menu'),
+              enabled: canPick,
+              tooltip: '${native}\n${canPick ? '更换工作目录' : '会话目录固定'}',
+              onSelected: (choice) {
+                if (choice.root == '*browse*') {
+                  _pickWorkdir();
+                } else {
+                  setState(() {
+                    _root = choice.root;
+                    _workdir = choice.path;
+                  });
+                }
+              },
+              itemBuilder: (_) => [
+                for (final folder
+                    in ws.project?.folders ?? const <WorkspacePath>[])
+                  PopupMenuItem(
+                    value: AiPathChoice(folder.root, folder.path, folder.path),
+                    child: Text('项目：${folder.path}'),
+                  ),
+                for (final r in _roots)
+                  PopupMenuItem(
+                    value: AiPathChoice(r['id'] as String, '/', '/'),
+                    child: Text('${r['label'] ?? r['id']} /'),
+                  ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: const AiPathChoice('*browse*', '', ''),
+                  child: MenuLabel(
+                    ws.entry?.isLocal == true ? '浏览本机目录…' : '浏览服务器目录…',
+                    icon: Icons.folder_open_outlined,
+                  ),
+                ),
+              ],
+              child: const Icon(Icons.expand_more, size: 16),
+            ),
+          _buildConversationActions(ide),
         ],
       ),
     );
@@ -2164,11 +2277,10 @@ class _AiStudioViewState extends State<_AiConversation> {
             padding: EdgeInsets.zero,
             onSelected: _action,
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'settings', child: Text('AI 设置…')),
-              const PopupMenuItem(
-                value: 'pick-model',
-                child: Text('切换当前会话模型…'),
-              ),
+              const PopupMenuItem(value: 'navigate', child: Text('跳转到消息…')),
+              const PopupMenuItem(value: 'latest', child: Text('回到最新消息')),
+              if (ws.link?.server.caps.contains('ai.extensions') == true)
+                const PopupMenuItem(value: 'project', child: Text('此目录的项目策略…')),
               if (_sessionId != null &&
                   ws.link?.server.caps.contains('ai.permissions') == true)
                 const PopupMenuItem(value: 'grants', child: Text('本会话授权…')),
@@ -2303,6 +2415,28 @@ class _AiStudioViewState extends State<_AiConversation> {
               ),
             ],
             const SizedBox(height: 8),
+            if (_session?.budget case final budget?)
+              ExpansionTile(
+                key: const ValueKey('ai-budget-details'),
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                  budget.summary,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: budget.blockedBy.isEmpty ? ide.textDim : ide.warn,
+                  ),
+                ),
+                subtitle: const Text(
+                  '运行预算 · 点击查看明细',
+                  style: TextStyle(fontSize: 11),
+                ),
+                children: [
+                  AiBudgetView(
+                    budget: budget,
+                    onConfigure: () => _action('budget'),
+                  ),
+                ],
+              ),
           ],
         ],
       ),
@@ -2470,9 +2604,9 @@ class _AiStudioViewState extends State<_AiConversation> {
                   key: const ValueKey('ai-configure-btn'),
                   onPressed: () => _action('settings'),
                   icon: const Icon(Icons.key_rounded, size: 16),
-                  label: const Text('配置 OpenCode 模型与 API Key'),
+                  label: const Text('连接模型'),
                 )
-              else
+              else if (ws.app.aiSettings.showQuickPrompts)
                 Wrap(
                   spacing: Space.s + 2,
                   runSpacing: Space.s + 2,
@@ -2661,7 +2795,7 @@ class _AiStudioViewState extends State<_AiConversation> {
                   Expanded(
                     child: Text(
                       msg.runtime?.label ??
-                          '未知提供商 / ${msg.model.isEmpty ? '未知模型' : msg.model}（旧记录）',
+                          '未知提供商 / ${msg.model.isEmpty ? '未知模型' : msg.model}（未记录来源）',
                       style: TextStyle(fontSize: 12, color: ide.textDim),
                     ),
                   ),
@@ -2688,7 +2822,7 @@ class _AiStudioViewState extends State<_AiConversation> {
                   icon: Icons.psychology_outlined,
                   title: '思考过程',
                   accent: ide.textDim,
-                  initiallyExpanded: false,
+                  initiallyExpanded: ws.app.aiSettings.expandReasoning,
                   child: SelectableText(
                     p.text.trim(),
                     style: TextStyle(
@@ -2715,6 +2849,7 @@ class _AiStudioViewState extends State<_AiConversation> {
                   inputJson: p.inputJson,
                   output: resultMap[p.toolCallId]?.output ?? '',
                   isError: resultMap[p.toolCallId]?.isError ?? false,
+                  expandErrors: ws.app.aiSettings.expandErrors,
                   running:
                       msg.finish == 'tool-running' &&
                       resultMap[p.toolCallId] == null,
@@ -2737,18 +2872,60 @@ class _AiStudioViewState extends State<_AiConversation> {
           if (msg.error.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: Space.xs),
-              child: Notice(
-                tone: Tone.error,
-                title: '模型请求中断或报错',
-                body: msg.error,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Notice(
+                    tone: msg.errorCode.startsWith('budget.')
+                        ? Tone.warn
+                        : Tone.error,
+                    title: msg.errorCode.startsWith('budget.')
+                        ? '运行已暂停：预算不足'
+                        : '模型请求中断或报错',
+                    body: msg.error,
+                  ),
+                  if (msg.errorCode.startsWith('budget.')) ...[
+                    if (msg.budget case final budget?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: AiBudgetView(budget: budget),
+                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton(
+                          onPressed: () => _action('budget'),
+                          child: const Text('调整预算'),
+                        ),
+                        OutlinedButton(
+                          onPressed: _running ? null : _compactManual,
+                          child: const Text('压缩上下文'),
+                        ),
+                        FilledButton(
+                          onPressed: _running || _sending
+                              ? null
+                              : () =>
+                                    _send('请根据已有结果继续完成任务，先检查已执行步骤，避免重复产生副作用。'),
+                          child: const Text('继续任务（新预算）'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ),
           if (msg.snapshot?.warning.isNotEmpty == true)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                '快照：${msg.snapshot!.warning}',
-                style: TextStyle(color: ide.warn),
+              child: Notice(
+                tone: Tone.warn,
+                title: '本步骤的文件恢复点未完整建立',
+                body: msg.snapshot!.warning,
+                action: TextButton(
+                  onPressed: () => _action('snapshots'),
+                  child: const Text('检查快照设置'),
+                ),
               ),
             ),
           if (msg.snapshot != null && msg.snapshot!.files.isNotEmpty)
@@ -2816,7 +2993,7 @@ class _AiStudioViewState extends State<_AiConversation> {
                 icon: Icons.psychology_outlined,
                 title: '正在思考…',
                 accent: ide.accent,
-                initiallyExpanded: true,
+                initiallyExpanded: ws.app.aiSettings.expandReasoning,
                 child: SelectableText(
                   _liveReasoning,
                   style: TextStyle(
@@ -2840,6 +3017,7 @@ class _AiStudioViewState extends State<_AiConversation> {
                 inputJson: t.inputJson,
                 output: t.output,
                 isError: t.isError,
+                expandErrors: ws.app.aiSettings.expandErrors,
                 running: t.running,
                 metadata: t.metadata,
                 onOpen: t.name == 'shell' || t.name == 'subagent'
@@ -2957,7 +3135,9 @@ class _AiStudioViewState extends State<_AiConversation> {
                   const SizedBox(width: 5),
                   Expanded(
                     child: Text(
-                      '任务已暂停 · 需要你的决定',
+                      _permissions.length > 1
+                          ? '${_permissions.length} 项等待批准 · 逐项处理'
+                          : '需要你的决定 · ${q.sessionId == _sessionId ? '主代理' : '子代理'}',
                       style: TextStyle(
                         fontSize: 11.5,
                         color: ide.warn,
@@ -3012,7 +3192,6 @@ class _AiStudioViewState extends State<_AiConversation> {
   Widget _buildComposer(Ide ide, AiProvider? prov, {bool compact = false}) {
     return LayoutBuilder(
       builder: (_, box) {
-        final narrow = box.maxWidth < 460;
         if (compact) return _buildCompactComposer(ide, prov, box.maxWidth);
         return Container(
           key: const ValueKey('ai-composer'),
@@ -3126,191 +3305,8 @@ class _AiStudioViewState extends State<_AiConversation> {
                       minLines: 2,
                       maxLines: box.maxWidth < 600 ? 3 : 6,
                     ),
-                    SizedBox(height: compact ? 3 : Space.s + 2),
-                    SizedBox(height: 30, child: _buildModelChoice(ide, prov)),
-                    const SizedBox(height: 4),
-                    SizedBox(
-                      height: compact ? 27 : 32,
-                      child: Row(
-                        children: [
-                          // Build / Plan switcher
-                          _ModePill(
-                            key: const ValueKey('ai-agent-mode'),
-                            tip: AiComposerText.agentTip(_agentMode),
-                            label: AiComposerText.agent(
-                              _agentMode,
-                              narrow: narrow,
-                            ),
-                            icon: _agentMode == 'plan'
-                                ? Icons.architecture_rounded
-                                : Icons.build_circle_outlined,
-                            color: _agentMode == 'plan' ? ide.warn : ide.accent,
-                            onTap: () => _action(
-                              _agentMode == 'plan' ? 'build' : 'plan',
-                            ),
-                          ),
-                          if (box.maxWidth < 340)
-                            _buildNarrowModeMenu(ide)
-                          else ...[
-                            if (_running) ...[
-                              const SizedBox(width: 4),
-                              _buildDeliveryChoice(ide, narrow: narrow),
-                            ],
-                            const SizedBox(width: 4),
-                            // Ask / Auto permission switcher
-                            _ModePill(
-                              key: const ValueKey('ai-permission-mode'),
-                              tip: AiComposerText.permissionTip(_permMode),
-                              label: AiComposerText.permission(
-                                _permMode,
-                                narrow: narrow,
-                              ),
-                              icon: _permMode == 'auto'
-                                  ? Icons.bolt_rounded
-                                  : Icons.verified_user_outlined,
-                              color: _permMode == 'auto' ? ide.ok : ide.textDim,
-                              onTap: () =>
-                                  _action(_permMode == 'auto' ? 'ask' : 'auto'),
-                            ),
-                          ],
-                          const Spacer(),
-                          SizedBox(
-                            width: 30,
-                            child: WorkbenchMenuButton<String>(
-                              padding: EdgeInsets.zero,
-                              key: const ValueKey('ai-attach-menu'),
-                              tooltip: '添加图片或文件',
-                              onSelected: _action,
-                              itemBuilder: (_) {
-                                // Editor switches do not invalidate session UI.
-                                // Resolve attachment context when opening the menu.
-                                final activeFile = ws
-                                    .tab(ws.editorActiveId ?? '')
-                                    ?.file;
-                                return [
-                                  if (activeFile != null)
-                                    PopupMenuItem(
-                                      value: 'active',
-                                      child: Text('附加当前文件：${activeFile.name}'),
-                                    ),
-                                  if (activeFile != null)
-                                    const PopupMenuItem(
-                                      value: 'selection',
-                                      child: Text('附加编辑器选区'),
-                                    ),
-                                  const PopupMenuItem(
-                                    value: 'local',
-                                    child: Text('选择本机图片 / 文件…'),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'paste',
-                                    child: Text('粘贴图片 / 文件 / 文本'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'remote',
-                                    child: Text(
-                                      ws.entry?.isLocal == true
-                                          ? '浏览本机项目文件…'
-                                          : '浏览服务器文件…',
-                                    ),
-                                  ),
-                                ];
-                              },
-                              icon: Icon(
-                                Icons.add,
-                                size: 18,
-                                color: ide.textDim,
-                              ),
-                            ),
-                          ),
-                          if (_running) ...[
-                            const SizedBox(width: 4),
-                            Tooltip(
-                              message: '停止当前运行',
-                              child: InkWell(
-                                key: const ValueKey('ai-stop-btn'),
-                                onTap: () => _action('stop'),
-                                borderRadius: BorderRadius.circular(Radii.m),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: ide.error.withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(
-                                      Radii.m,
-                                    ),
-                                    border: Border.all(
-                                      color: ide.error.withValues(alpha: 0.4),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.stop_rounded,
-                                        size: 15,
-                                        color: ide.error,
-                                      ),
-                                      const SizedBox(width: 3),
-                                      if (!narrow)
-                                        Text(
-                                          '停止',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: ide.error,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: 6),
-                          Tooltip(
-                            message: AiComposerText.sendTip(running: _running),
-                            child: FilledButton(
-                              key: const ValueKey('ai-send-btn'),
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                minimumSize: const Size(0, 30),
-                              ),
-                              onPressed: _sending
-                                  ? null
-                                  : () => _action('send'),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _running
-                                        ? Icons.subdirectory_arrow_left_rounded
-                                        : Icons.arrow_upward_rounded,
-                                    size: 15,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  if (!narrow)
-                                    Text(
-                                      _running && _deliveryMode == 'queue'
-                                          ? '排队'
-                                          : AiComposerText.send(
-                                              running: _running,
-                                              sending: _sending,
-                                            ),
-                                      style: const TextStyle(fontSize: 12.5),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    const SizedBox(height: Space.s),
+                    _buildComposerFooter(ide, prov, box.maxWidth),
                   ],
                 ),
               ),
@@ -3344,6 +3340,9 @@ class _AiStudioViewState extends State<_AiConversation> {
           if (event is KeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.enter &&
               !HardwareKeyboard.instance.isShiftPressed &&
+              (ws.app.aiSettings.sendKey != 'ctrl-enter' ||
+                  HardwareKeyboard.instance.isControlPressed ||
+                  HardwareKeyboard.instance.isMetaPressed) &&
               !(_inputCtl.value.composing.isValid &&
                   !_inputCtl.value.composing.isCollapsed)) {
             unawaited(_action('send'));
@@ -3393,10 +3392,9 @@ class _AiStudioViewState extends State<_AiConversation> {
               ),
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            hintText: AiComposerText.hint(
-              running: _running,
-              agentMode: _agentMode,
-            ),
+            hintText: _running && _deliveryMode == 'queue'
+                ? '输入下一项任务，当前任务结束后自动开始…'
+                : AiComposerText.hint(running: _running, agentMode: _agentMode),
             filled: false,
             isCollapsed: true,
             border: InputBorder.none,
@@ -3429,10 +3427,10 @@ class _AiStudioViewState extends State<_AiConversation> {
                   prov?.model.isNotEmpty == true ? prov!.model : '选择模型…',
                 ),
               ),
-              const PopupMenuItem(value: 'plan', child: Text('规划 · 只读')),
-              const PopupMenuItem(value: 'build', child: Text('构建 · 可改文件')),
-              const PopupMenuItem(value: 'ask', child: Text('先询问')),
-              const PopupMenuItem(value: 'auto', child: Text('自动执行')),
+              const PopupMenuItem(
+                value: 'send-options',
+                child: Text('本次发送 · 模式、预算与协作…'),
+              ),
               const PopupMenuItem(value: 'attach', child: Text('添加附件…')),
               const PopupMenuItem(
                 value: 'paste',
@@ -3476,41 +3474,98 @@ class _AiStudioViewState extends State<_AiConversation> {
     );
   }
 
-  Widget _buildNarrowModeMenu(Ide ide) => WorkbenchMenuButton<String>(
-    key: const ValueKey('ai-mode-options'),
-    tooltip:
-        '${AiComposerText.permission(_permMode, narrow: false)} · ${_deliveryMode == 'queue' ? '排队发送' : '补充指令'}',
-    onSelected: _action,
-    itemBuilder: (_) => [
-      PopupMenuItem(
-        value: 'ask',
-        child: Text('${_permMode == 'ask' ? '✓ ' : ''}先询问'),
+  Widget _buildComposerFooter(Ide ide, AiProvider? prov, double width) {
+    final options = TextButton(
+      key: const ValueKey('ai-send-options'),
+      onPressed: () => _action('send-options'),
+      child: Text(
+        '${_agentMode == 'explore' ? '探索' : AiComposerText.agent(_agentMode, narrow: true)} · '
+        '${AiComposerText.permission(_permMode, narrow: true)}'
+        '${_running && _deliveryMode == 'steer'
+            ? ' · 沿用预算'
+            : _runOptions['budgetMode'] == 'off'
+            ? ' · 预算关'
+            : _runOptions.isNotEmpty
+            ? ' · 本次覆盖'
+            : ''}',
+        style: TextStyle(fontSize: 11.5, color: ide.textDim),
       ),
-      PopupMenuItem(
-        value: 'auto',
-        child: Text('${_permMode == 'auto' ? '✓ ' : ''}自动执行'),
-      ),
-      if (_running) ...[
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'steer',
-          child: Text('${_deliveryMode == 'steer' ? '✓ ' : ''}补充 · 下一步优先'),
+    );
+    final actions = Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        options,
+        WorkbenchMenuButton<String>(
+          key: const ValueKey('ai-attach-menu'),
+          tooltip: '添加图片或文件',
+          onSelected: _action,
+          itemBuilder: (_) {
+            final file = ws.tab(ws.editorActiveId ?? '')?.file;
+            return [
+              if (file != null)
+                PopupMenuItem(
+                  value: 'active',
+                  child: Text('附加当前文件：${file.name}'),
+                ),
+              if (file != null)
+                const PopupMenuItem(value: 'selection', child: Text('附加编辑器选区')),
+              const PopupMenuItem(value: 'local', child: Text('选择本机图片 / 文件…')),
+              const PopupMenuItem(
+                value: 'paste',
+                child: Text('粘贴图片 / 文件 / 文本'),
+              ),
+              PopupMenuItem(
+                value: 'remote',
+                child: Text(
+                  ws.entry?.isLocal == true ? '浏览本机项目文件…' : '浏览服务器文件…',
+                ),
+              ),
+            ];
+          },
+          icon: Icon(Icons.add_rounded, size: 18, color: ide.textDim),
         ),
-        PopupMenuItem(
-          value: 'queue',
-          child: Text('${_deliveryMode == 'queue' ? '✓ ' : ''}排队 · 当前任务结束后'),
+        if (_running)
+          IconBtn(
+            Icons.stop_rounded,
+            '停止当前运行',
+            () => _action('stop'),
+            key: const ValueKey('ai-stop-btn'),
+            color: ide.error,
+          ),
+        FilledButton(
+          key: const ValueKey('ai-send-btn'),
+          onPressed: _sending ? null : () => _action('send'),
+          child: Text(
+            _sending
+                ? '准备中'
+                : _running && _deliveryMode == 'queue'
+                ? '排队发送'
+                : _running
+                ? '补充指令'
+                : '发送',
+          ),
         ),
       ],
-    ],
-    child: IgnorePointer(
-      child: _ModePill(
-        label: '选项',
-        icon: Icons.tune_rounded,
-        color: ide.textDim,
-        onTap: () {},
-      ),
-    ),
-  );
+    );
+    if (width >= 720) {
+      return Row(
+        children: [
+          Expanded(child: _buildModelChoice(ide, prov)),
+          const SizedBox(width: 12),
+          actions,
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: 30, child: _buildModelChoice(ide, prov)),
+        Align(alignment: Alignment.centerRight, child: actions),
+      ],
+    );
+  }
 
   Widget _buildSlashSuggestions(Ide ide) {
     final suggestions = _slashSuggestions(_inputCtl.text);
@@ -3563,30 +3618,6 @@ class _AiStudioViewState extends State<_AiConversation> {
       ),
     );
   }
-
-  Widget _buildDeliveryChoice(Ide ide, {required bool narrow}) =>
-      WorkbenchMenuButton<String>(
-        key: const ValueKey('ai-delivery-mode'),
-        tooltip: _deliveryMode == 'queue' ? '排队：当前任务结束后发送' : '补充：插入下一步模型上下文',
-        onSelected: _action,
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'steer', child: Text('补充指令 · 下一步优先')),
-          PopupMenuItem(value: 'queue', child: Text('排队发送 · 当前任务结束后')),
-        ],
-        child: IgnorePointer(
-          child: _ModePill(
-            label: narrow
-                ? (_deliveryMode == 'queue' ? '排队' : '投递')
-                : (_deliveryMode == 'queue' ? '排队发送' : '投递方式'),
-            tip: _deliveryMode == 'queue' ? '当前任务结束后发送' : '插入正在运行的任务下一步',
-            icon: _deliveryMode == 'queue'
-                ? Icons.schedule_send_outlined
-                : Icons.low_priority_rounded,
-            color: ide.textDim,
-            onTap: () {},
-          ),
-        ),
-      );
 
   Widget _buildModelChoice(Ide ide, AiProvider? prov) {
     final image = prov?.effectiveCapabilities(
@@ -3667,14 +3698,6 @@ class _AiStudioViewState extends State<_AiConversation> {
             ),
           ),
         ),
-        IconButton(
-          key: const ValueKey('ai-settings-open'),
-          tooltip: 'AI 设置',
-          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-          padding: EdgeInsets.zero,
-          onPressed: () => _action('settings'),
-          icon: Icon(Icons.tune_rounded, size: 16, color: ide.textDim),
-        ),
       ],
     );
   }
@@ -3683,58 +3706,6 @@ class _AiStudioViewState extends State<_AiConversation> {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
     return '$n';
-  }
-}
-
-class _ModePill extends StatelessWidget {
-  final String label;
-  final String tip;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-  const _ModePill({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-    this.tip = '',
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final pill = InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(Radii.m),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(Radii.m),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    return Semantics(
-      button: true,
-      label: tip.isEmpty ? label : '$label。$tip',
-      excludeSemantics: true,
-      child: tip.isEmpty ? pill : Tooltip(message: tip, child: pill),
-    );
   }
 }
 
@@ -3828,6 +3799,7 @@ class _ToolCallCard extends StatefulWidget {
   final VoidCallback? onOpen;
   final List<AiPart> attachments;
   final Link? link;
+  final bool expandErrors;
 
   const _ToolCallCard({
     required this.name,
@@ -3839,6 +3811,7 @@ class _ToolCallCard extends StatefulWidget {
     this.onOpen,
     this.attachments = const [],
     this.link,
+    this.expandErrors = true,
   });
 
   @override
@@ -3846,7 +3819,14 @@ class _ToolCallCard extends StatefulWidget {
 }
 
 class _ToolCallCardState extends State<_ToolCallCard> {
-  bool _open = false;
+  late bool _open = widget.isError && widget.expandErrors;
+
+  @override
+  void didUpdateWidget(covariant _ToolCallCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isError && widget.isError && widget.expandErrors)
+      _open = true;
+  }
 
   /// The pages a websearch found, from the tool result's metadata.
   List<({String title, String url})> get _sources => [

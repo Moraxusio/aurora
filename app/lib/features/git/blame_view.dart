@@ -17,20 +17,22 @@ EditorTab blameTab(Workspace ws, GitModel git, String path) {
     title: 'Blame ${path.split('/').last}',
     icon: Icons.person_search_outlined,
     tooltip: path,
-    builder: (_) => BlameView(ws: ws, git: git, path: path),
+    builder: (_) => BlameView(ws: ws, git: git, repository: r, path: path),
   );
 }
 
 class BlameView extends StatefulWidget {
   final Workspace ws;
   final GitModel git;
+  final GitRepo? repository;
   final String path;
-  const BlameView({super.key, required this.ws, required this.git, required this.path});
+  const BlameView({super.key, required this.ws, required this.git, this.repository, required this.path});
   @override
   State<BlameView> createState() => _BlameViewState();
 }
 
 class _BlameViewState extends State<BlameView> {
+  late final GitModel _git = GitModel(widget.ws)..repo = widget.repository ?? widget.git.repo;
   Blame? _blame;
   List<String>? _text;
   String? _error;
@@ -41,20 +43,23 @@ class _BlameViewState extends State<BlameView> {
     _load();
   }
 
+  @override
+  void dispose() { _git.dispose(); super.dispose(); }
+
   Future<void> _load() async {
+    final link = widget.ws.link;
     try {
       // the blame is of the work tree file, so its text is the work tree's
-      final repo = widget.git.repo!;
+      final repo = _git.repo!;
       final abs = repo.repo == '/' || repo.repo.isEmpty ? '/${widget.path}' : '${repo.repo}/${widget.path}';
-      final link = widget.ws.link;
       if (link == null) throw OpError(codeUnavailable, '未连接');
       final results = await Future.wait([
-        widget.git.blame(widget.path),
+        _git.blame(widget.path),
         link.call('fs.read', {'root': repo.root, 'path': abs}),
       ]);
       final b = results[0] as Blame?;
       final r = (results[1] as Map).cast<String, dynamic>();
-      if (!mounted) return;
+      if (!mounted || !identical(link, widget.ws.link)) return;
       if (b == null) return setState(() => _error = '读取 blame 失败');
       if (r['binary'] == true || r['truncated'] == true) return setState(() => _error = '二进制文件或超过 512 KB 的文件不显示 blame');
       final content = r['content'] as String? ?? '';
@@ -63,22 +68,23 @@ class _BlameViewState extends State<BlameView> {
       setState(() {
         _blame = b;
         _text = lines;
+        _error = null;
       });
-    } on OpError catch (e) {
-      if (mounted) setState(() => _error = e.message);
+    } on Object catch (e) {
+      if (mounted && identical(link, widget.ws.link)) setState(() => _error = e is OpError ? e.message : '$e');
     }
   }
 
   void _openCommit(BlameCommit c) {
     if (c.uncommitted) return;
-    final repo = widget.git.repo!;
+    final repo = _git.repo!;
     final commit = GitCommit.fromJson({'hash': c.hash, 'short': c.short, 'author': c.author, 'subject': c.summary, 'time': c.time});
     widget.ws.openTab(EditorTab(
       id: 'commit:${repo.root}:${repo.repo}:${c.hash}',
       title: '${c.short} ${c.summary}',
       icon: Icons.commit,
       tooltip: '${c.hash}\n${c.author}',
-      builder: (_) => CommitView(ws: widget.ws, git: widget.git, commit: commit),
+      builder: (_) => CommitView(ws: widget.ws, git: _git, repository: repo, commit: commit),
     ));
   }
 

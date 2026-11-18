@@ -143,7 +143,7 @@ Go 任务例子：
 
 编辑器中的 AI 修改建议使用当前未保存缓冲、选区与诊断。审阅页可选择文档、逐块接受／拒绝、撤销、整批保存和运行验证任务。`Alt+\` 在行尾请求行内续写，`Tab` 接受，`Esc` 拒绝。
 
-命令面板 **AI 项目指令、技能、MCP 与运行预算…** 编辑 `.aurora/ai.json`，同时查看生效指令、技能、MCP 目录和清理未引用快照。
+命令面板 **AI 项目指令、技能、MCP 与运行预算…** 编辑 `.aurora/ai.json`，同时查看生效指令、技能、MCP 目录和清理未引用快照。3.23.0 候选提供分区表单，也可从对话工具栏直接打开；操作与新增字段见 [AI 配置指南](ai.md)。
 
 ```json
 {
@@ -151,7 +151,10 @@ Go 任务例子：
   "instructions": ["docs/project-rules.md"],
   "disabledSkills": [],
   "mcp": [{"id": "local-tools", "command": ["my-mcp-server", "--stdio"]}],
+  "budgetEnabled": true,
   "budget": {"steps": 60, "seconds": 900, "tokens": 500000, "outputBytes": 2097152, "cost": 0},
+  "subagents": {"enabled": true, "maxParallel": 2, "maxTotal": 32, "readOnly": false},
+  "tools": {"maxCallsPerStep": 64, "repeatLimit": 3, "shellDefaultSeconds": 120, "shellMaxSeconds": 600},
   "prices": {}
 }
 ```
@@ -161,6 +164,8 @@ HTTP MCP 改用 `{"id":"remote-tools","url":"https://example.com/mcp","headers":
 指令按 `StateDir/ai/AGENTS.md` → 根目录 → 项目应用，各层优先 `AGENTS.md`、`CLAUDE.md`、`.cursorrules`；读取更深文件时附加子目录指令。技能来自 `StateDir/ai/skills` 和各层 `.opencode/skills`、`.agents/skills`、`.aurora/skills` 下的 `<name>/SKILL.md`。
 
 `prices` 以模型 ID 为键，`input`／`output`／`cacheRead`／`cacheWrite` 均为 USD／百万 tokens；启用金额预算时必须配置当前模型价格。令牌、输出、时间和金额预算由主／子任务及辅助请求共享。
+
+`budgetEnabled: false` 关闭运行限额并保留统计。`subagents` 管理允许、并发、总量及只读；`tools` 管理单步调用上限、重复确认及 Shell 超时。字段范围、逐消息覆盖与排队语义见 [代理协作与工具控制](ai.md#代理协作与工具控制)。这些字段需要 ai-preview2 agent。
 
 ## 会话存储与已知边界
 

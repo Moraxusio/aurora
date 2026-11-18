@@ -23,8 +23,8 @@ func TestSnapshotBudgetsPreserveFilesAndGCReferencedTrees(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	if _, err := m.CaptureChecked(ctx, work); err == nil {
-		t.Fatal("oversized file captured")
+	if got, err := m.CaptureChecked(ctx, work); err != nil || got != first {
+		t.Fatal("large untracked artifact prevented source capture", got, err)
 	}
 	if info, _ := os.Stat(path); info.Size() != snapshotFileMax+1 {
 		t.Fatal("capture changed source")

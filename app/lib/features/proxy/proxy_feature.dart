@@ -56,7 +56,12 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
   bool _testing = false;
   bool _cancel = false;
   String? _busy; // source id being refreshed
-  String _filter = '';
+  final _filter = TextEditingController();
+  Link? _statusLink;
+  bool _statusBusy = false, _choosing = false;
+  int _statusGeneration = 0, _testGeneration = 0;
+  final Set<String> _testingNodes = {};
+  String _nodeKey(NodeRow row) => '${row.source.id}:${row.node.key}';
 
   @override
   Duration get pollEvery => const Duration(seconds: 5);
@@ -67,33 +72,59 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
   @override
   void initState() {
     super.initState();
+    _statusLink = ws.link;
     _loadStatus();
     ws.app.addListener(_onApp);
+    ws.addListener(_onApp);
+    _filter.addListener(_filterChanged);
   }
 
   @override
   void dispose() {
     _cancel = true;
     ws.app.removeListener(_onApp);
+    ws.removeListener(_onApp);
+    _filter.dispose();
     super.dispose();
   }
 
+  void _filterChanged() => setState(() {});
+
   void _onApp() {
+    if (!identical(_statusLink, ws.link)) {
+      _statusLink = ws.link;
+      _statusGeneration++;
+      _testGeneration++;
+      _statusBusy = _testing = false;
+      _timed.clear();
+      _agentReasons.clear();
+      _status = null;
+      _loadStatus();
+    }
     if (mounted) setState(() {});
   }
 
   Future<void> _loadStatus() async {
     final link = ws.link;
-    if (link == null) return;
+    if (_statusBusy) return;
+    if (link == null) {
+      setState(() => _statusError = '未连接');
+      return;
+    }
+    final generation = ++_statusGeneration;
+    bool current() => mounted && generation == _statusGeneration && identical(link, ws.link);
+    _statusBusy = true;
     try {
       final r = await link.call('proxy.status') as Map;
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _status = r.cast<String, dynamic>();
         _statusError = null;
       });
-    } on OpError catch (e) {
-      if (mounted) setState(() => _statusError = e.message);
+    } on Object catch (e) {
+      if (current()) setState(() => _statusError = e is OpError ? e.message : '代理状态读取失败，请重试');
+    } finally {
+      if (current()) _statusBusy = false;
     }
   }
 
@@ -103,14 +134,14 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
     try {
       final nodes = [for (final j in s.nodes) SubNode.fromJson(j)];
       final r = await model.check(link, nodes);
-      if (!mounted) return;
+      if (!mounted || !identical(link, ws.link)) return;
       setState(() {
         for (final n in nodes) {
           _agentReasons.remove(n.key);
         }
         _agentReasons.addAll(r);
       });
-    } on OpError {
+    } on Object {
       // an agent without proxy.check: the parser's own reasons still show
     }
   }
@@ -118,21 +149,23 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
   // ---- adding and refreshing ----
 
   Future<void> _add() async {
-    final r = await showWorkbenchDialog<_NewSource>(context: context, builder: (_) => const _AddSourceDialog());
-    if (r == null || !mounted) return;
+    if (_busy != null) return;
     setState(() => _busy = 'new');
     try {
+      final r = await showWorkbenchDialog<_NewSource>(context: context, builder: (_) => const _AddSourceDialog());
+      if (r == null || !mounted) return;
       final src = r.url != null ? await model.addSubscription(r.name, r.url!) : await model.addPasted(r.name, r.text!);
       ws.toast('已添加“${src.name}”，${src.nodes.length} 个节点');
       await _checkSource(src);
-    } on FetchError catch (e) {
-      ws.toast(e.message, error: true);
+    } on Object catch (e) {
+      if (mounted) ws.toast(e is FetchError ? e.message : '添加失败：$e', error: true);
     } finally {
       if (mounted) setState(() => _busy = null);
     }
   }
 
   Future<void> _refresh(ProxySource s) async {
+    if (_busy != null) return;
     setState(() => _busy = s.id);
     try {
       final r = await model.refresh(s.id);
@@ -151,7 +184,7 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
         if (e == null || l == null) continue;
         try {
           if (await model.repush(e, l)) pushed++;
-        } on OpError {
+        } on Object {
           // told next time it is chosen, or refreshed while connected
         }
       }
@@ -162,6 +195,8 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
         if (r.gone > 0) '${r.gone} 台服务器选的节点已不在订阅里，仍用原来的',
       ];
       ws.toast('已更新：${notes.join('；')}');
+    } on Object catch (e) {
+      if (mounted) ws.toast('更新失败：$e', error: true);
     } finally {
       if (mounted) setState(() => _busy = null);
     }
@@ -182,18 +217,23 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
         ],
       ),
     );
-    if (ok == true) await model.remove(s.id);
+    if (ok == true && mounted) {
+      await ws.guard(() => model.remove(s.id));
+      if (mounted) await _loadStatus();
+    }
   }
 
   // ---- using a node ----
 
   Future<void> _choose(NodeRow row) async {
     final link = ws.link, e = ws.entry;
-    if (link == null || e == null) return;
+    if (link == null || e == null || _choosing) return;
     if (!row.usable) {
       ws.toast('这个节点用不了：${row.blocked}', error: true);
       return;
     }
+    setState(() => _choosing = true);
+    try {
     if (row.node.insecure) {
       final go = await showWorkbenchDialog<bool>(
         context: context,
@@ -206,29 +246,38 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
           ],
         ),
       );
-      if (go != true) return;
+      if (go != true || !mounted || !identical(link, ws.link)) return;
     }
     await ws.guard(() => model.choose(e, link, row));
-    await _loadStatus();
+    if (mounted && identical(link, ws.link)) await _loadStatus();
+    } finally {
+      if (mounted) setState(() => _choosing = false);
+    }
   }
 
   Future<void> _clearChoice() async {
     final link = ws.link, e = ws.entry;
-    if (link == null || e == null) return;
-    await ws.guard(() => model.clear(e, link));
-    await _loadStatus();
+    if (link == null || e == null || _choosing) return;
+    setState(() => _choosing = true);
+    try {
+      await ws.guard(() => model.clear(e, link));
+      if (mounted && identical(link, ws.link)) await _loadStatus();
+    } finally {
+      if (mounted) setState(() => _choosing = false);
+    }
   }
 
   Future<void> _testAll(List<NodeRow> rows) async {
     final link = ws.link;
     if (link == null || _testing) return;
+    final generation = ++_testGeneration;
     setState(() {
       _testing = true;
       _cancel = false;
       for (final row in rows.where((r) => r.usable)) {
         row.ms = null;
         row.testError = null;
-        _timed[row.node.key] = row;
+        _timed[_nodeKey(row)] = row;
       }
     });
     try {
@@ -236,28 +285,30 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
         link,
         rows,
         onEach: () {
-          if (mounted) setState(() {});
+          if (mounted && generation == _testGeneration) setState(() {});
         },
-        cancelled: () => _cancel || !mounted,
+        cancelled: () => _cancel || !mounted || generation != _testGeneration || !identical(link, ws.link),
       );
     } finally {
-      if (mounted) setState(() => _testing = false);
+      if (mounted && generation == _testGeneration) setState(() => _testing = false);
     }
   }
 
   Future<void> _testOne(NodeRow row) async {
     final link = ws.link;
-    if (link == null) return;
+    final key = _nodeKey(row);
+    if (link == null || _testing || !_testingNodes.add(key)) return;
     setState(() {
       row.ms = null;
       row.testError = null;
       // _source builds fresh rows on every frame. Keep the object the async
       // test fills, so the next build can recover its result instead of
       // throwing it away (and so switching sidebars keeps the result).
-      _timed[row.node.key] = row;
+      _timed[key] = row;
     });
     await model.test(link, row);
-    if (mounted) setState(() {});
+    _testingNodes.remove(key);
+    if (mounted && identical(link, ws.link)) setState(() {});
   }
 
   // ---- view ----
@@ -272,6 +323,14 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _current(ide, entry)),
+        SliverToBoxAdapter(child: UiToolbar(children: [
+          FilledButton.icon(onPressed: _busy == null ? _add : null, icon: const Icon(Icons.add, size: 16), label: const Text('添加来源')),
+          if (_testing) TextButton.icon(onPressed: () => setState(() => _cancel = true), icon: const Icon(Icons.stop, size: 16), label: const Text('停止测速')),
+        ])),
+        if (sources.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.all(Space.m),
+          child: TextField(controller: _filter, decoration: InputDecoration(hintText: '筛选所有来源的节点',
+            prefixIcon: const Icon(Icons.search, size: 16),
+            suffixIcon: IconBtn(Icons.clear, '清除节点筛选', _filter.text.isEmpty ? null : _filter.clear))))),
         SliverToBoxAdapter(
           child: SectionHeader(
             '来源  ${sources.length}',
@@ -342,11 +401,13 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
               Expanded(
                 child: Text('这台服务器现在用的节点', style: TextStyle(fontSize: 11, color: ide.textDim)),
               ),
-              if (node != null) IconBtn(Icons.link_off, '不再使用代理节点', _clearChoice),
+              if (node != null) IconBtn(Icons.link_off, '不再使用代理节点', _choosing || ws.link == null ? null : _clearChoice),
+              IconBtn(Icons.refresh, '刷新代理状态', _statusBusy ? null : _loadStatus),
             ],
           ),
           const SizedBox(height: 4),
           Text(line, style: TextStyle(fontSize: 12.5, color: color)),
+          if (_choosing) const Text('正在更新服务器节点…'),
           if (choice?.pending == true || choice?.syncError != null)
             Text(choice?.syncError ?? '节点参数待同步；连接恢复后会自动重试', style: TextStyle(fontSize: 11.5, color: ide.warn)),
           if (moved)
@@ -362,13 +423,13 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
   List<Widget> _source(Ide ide, ProxySource s, ProxyChoice? choice) {
     final rows = model.rows(s, _agentReasons);
     for (final r in rows) {
-      final prev = _timed[r.node.key];
+      final prev = _timed[_nodeKey(r)];
       if (prev != null) {
         r.ms = prev.ms;
         r.testError = prev.testError;
       }
     }
-    final q = _filter.trim().toLowerCase();
+    final q = _filter.text.trim().toLowerCase();
     final shown = [
       for (final r in rows)
         if (q.isEmpty || r.node.name.toLowerCase().contains(q) || r.node.host.toLowerCase().contains(q)) r,
@@ -407,20 +468,8 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
           child: Text('${s.url == null ? '粘贴的节点' : '订阅'}${updated.isEmpty ? '' : '  ·  更新于 $updated'}', style: TextStyle(color: ide.textDim, fontSize: 11)),
         ),
       ),
-      if (rows.length > 12)
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
-            child: SizedBox(
-              height: 30,
-              child: TextField(
-                style: const TextStyle(fontSize: 12),
-                decoration: const InputDecoration(isDense: true, hintText: '按名称或地址筛选', prefixIcon: Icon(Icons.search, size: 16)),
-                onChanged: (v) => setState(() => _filter = v),
-              ),
-            ),
-          ),
-        ),
+      if (shown.isEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.all(Space.m),
+        child: Text(q.isEmpty ? '这个来源还没有节点' : '这个来源没有匹配的节点', style: TextStyle(color: ide.textDim, fontSize: 12)))),
       // Airport subscriptions can contain thousands of entries. Create only
       // visible rows, instead of building the whole source on every visit,
       // filter change or periodic status update.
@@ -441,12 +490,12 @@ class ProxyPanelState extends State<ProxyPanel> with VisiblePolling<ProxyPanel> 
       subtitle: sub,
       labelColor: r.usable ? null : ide.textDim,
       selected: chosen,
-      onTap: r.usable ? () => _choose(r) : null,
+      onTap: r.usable && !_choosing ? () => _choose(r) : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (r.usable) IconBtn(Icons.speed, '测速', ws.link == null ? null : () => _testOne(r)),
-          if (r.usable && !chosen) IconBtn(Icons.check, '用这个节点', () => _choose(r)),
+          if (r.usable) IconBtn(Icons.speed, '测速', ws.link == null || _testing || _testingNodes.contains(_nodeKey(r)) ? null : () => _testOne(r)),
+          if (r.usable && !chosen) IconBtn(Icons.check, '用这个节点', _choosing ? null : () => _choose(r)),
         ],
       ),
       menu: () => [

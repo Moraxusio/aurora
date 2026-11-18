@@ -35,6 +35,7 @@ class Terminal {
   String endReason = '';
   final Map<int, Completer<Duration>> _pings = {};
   int _ping = 0;
+  Future<void>? _closing;
 
   Terminal._(this._s, this.session);
 
@@ -42,7 +43,12 @@ class Terminal {
   /// session ended, unavailable when the service is off).
   static Future<Terminal> attach(Link link, String session, {int cols = 80, int rows = 24}) async {
     final s = await link.open('terminal', {'name': session, 'cols': cols, 'rows': rows}, Priority.interactive);
-    await s.response();
+    try {
+      await s.response().timeout(const Duration(seconds: 20));
+    } on Object {
+      s.reset();
+      rethrow;
+    }
     final t = Terminal._(s, session);
     unawaited(t._read());
     return t;
@@ -56,8 +62,9 @@ class Terminal {
 
   Future<void> _read() async {
     try {
-      while (true) {
+      while (isOpen) {
         final f = await _s.read();
+        if (!isOpen) return;
         if (f == null) return _finish(TerminalEnd.lost);
         if (f.type == typeData) {
           _out.add(f.payload);
@@ -69,7 +76,8 @@ class Terminal {
         switch (m['type']) {
           case 'pong':
             final c = _pings.remove(m['code']);
-            if (c != null && !c.isCompleted) c.complete(_sw.elapsed - (_sent[m['code']] ?? Duration.zero));
+            final sent = _sent.remove(m['code']);
+            if (c != null && !c.isCompleted) c.complete(_sw.elapsed - (sent ?? Duration.zero));
           case 'exit':
             return _finish(TerminalEnd.exit);
           case 'detached':
@@ -84,8 +92,8 @@ class Terminal {
             }
         }
       }
-    } on OpError catch (e) {
-      endReason = e.message;
+    } on Object catch (e) {
+      endReason = e is OpError ? e.message : '$e';
       _finish(TerminalEnd.lost);
     }
   }
@@ -93,13 +101,16 @@ class Terminal {
   final Stopwatch _sw = Stopwatch()..start();
   final Map<int, Duration> _sent = {};
 
-  void _finish(TerminalEnd why) {
-    if (!_end.isCompleted) _end.complete(why);
+  void _finish(TerminalEnd why, {bool resetStream = true}) {
+    if (_end.isCompleted) return;
+    _end.complete(why);
+    if (resetStream) _s.reset();
     if (!_out.isClosed) _out.close();
     for (final c in _pings.values) {
       if (!c.isCompleted) c.completeError(OpError(codeUnavailable, '终端已关闭'));
     }
     _pings.clear();
+    _sent.clear();
   }
 
   bool get isOpen => !_end.isCompleted;
@@ -117,25 +128,35 @@ class Terminal {
 
   /// Round trip through the attached tmux client.
   Future<Duration> ping() {
+    if (!isOpen) return Future.error(OpError(codeUnavailable, '终端已关闭'));
     final id = ++_ping;
     final c = Completer<Duration>();
     _pings[id] = c;
     _sent[id] = _sw.elapsed;
     _s.sendJson({'type': 'ping', 'code': id}).catchError((Object e) {
+      _pings.remove(id);
+      _sent.remove(id);
       if (!c.isCompleted) c.completeError(e);
     });
-    return c.future;
+    return c.future.timeout(const Duration(seconds: 15)).whenComplete(() {
+      _pings.remove(id);
+      _sent.remove(id);
+    });
   }
 
   /// Detaches; the session keeps running.
-  Future<void> close() async {
+  Future<void> close() => _closing ??= _close();
+
+  Future<void> _close() async {
     if (!isOpen) return;
+    // Claim completion before sending FIN: the read loop can observe EOF
+    // during close, but must not turn an explicit detach into a second reset.
+    _finish(TerminalEnd.detached, resetStream: false);
     try {
       await _s.sendJson({'type': 'close'});
       await _s.close();
-    } on OpError {
-      // already gone
+    } on Object {
+      _s.reset();
     }
-    _finish(TerminalEnd.detached);
   }
 }

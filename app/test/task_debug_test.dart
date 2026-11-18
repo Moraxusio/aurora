@@ -227,6 +227,46 @@ void _dartAdapter(_Stream stream, {bool holdVariables = false}) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('task completion already in transport cannot undo cancellation', () async {
+    final link = _Link();
+    final app = _App(link);
+    final ws = Workspace(app, 'server');
+    final run = await ws.tasks.start(fixtureScope(), 'test');
+    await Future<void>.delayed(Duration.zero);
+    link.task.receive({'type': 'complete', 'code': 0});
+    ws.tasks.cancel(run.id);
+    await Future<void>.delayed(Duration.zero);
+    expect(run.status, 'cancelled');
+    expect(await run.done, -1);
+    ws.dispose(); app.dispose();
+  });
+
+  test('debug control is single-flight even when its acknowledgement is held', () async {
+    final link = _Link();
+    _dartAdapter(link.dap);
+    final app = _App(link);
+    final ws = Workspace(app, 'server'), model = ws.debugger;
+    await model.start(fixtureScope(), 'dart');
+    link.dap.receive({'type': 'event', 'event': 'stopped', 'body': {'threadId': 1}}, data: true);
+    await changedUntil(model, () => model.stopped && model.frameId != null);
+    final original = link.dap.onMessage!;
+    Map<String, dynamic>? held;
+    link.dap.onMessage = (m) {
+      if (m['command'] == 'next') { held = m; } else { original(m); }
+    };
+    final first = model.control('next');
+    await link.dap.saw('next');
+    await model.control('next');
+    expect(model.controlling, isTrue);
+    expect(link.dap.messages.where((m) => m['command'] == 'next'), hasLength(1));
+    original(held!);
+    await first;
+    expect(model.controlling, isFalse);
+    expect(model.phase, DebugPhase.running);
+    await model.stop();
+    ws.dispose(); app.dispose();
+  });
+
   testWidgets(
     'narrow breakpoint editor saves every field and virtual source is read-only',
     (t) async {

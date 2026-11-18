@@ -144,6 +144,42 @@ class AiModelOptionsEditor extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         const Text('模型覆盖优先于全局默认；工具权限仍单独生效。', style: TextStyle(fontSize: 11)),
+        const SizedBox(height: 16),
+        TextFormField(
+          key: ValueKey('ai-model-context-${provider.id}-$model'),
+          initialValue: options.contextWindow > 0
+              ? '${options.contextWindow}'
+              : '',
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: '此模型的上下文窗口（tokens）',
+            helperText:
+                '留空继承连接／目录值；当前解析值 ${provider.effectiveContextWindow(model) > 0 ? provider.effectiveContextWindow(model) : '由 agent 估算'}。这是单次输入窗口，不是运行预算。',
+            helperMaxLines: 3,
+          ),
+          onChanged: (v) => change(
+            (o) =>
+                o.contextWindow = v.trim().isEmpty ? 0 : int.tryParse(v) ?? -1,
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (!provider.isSubscription)
+          TextFormField(
+            key: ValueKey('ai-model-output-${provider.id}-$model'),
+            initialValue: options.maxTokens > 0 ? '${options.maxTokens}' : '',
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '此模型的单次最大输出（tokens）',
+              helperText: '留空继承连接预设；运行预算还会约束可预留输出。',
+              helperMaxLines: 3,
+            ),
+            onChanged: (v) => change(
+              (o) => o.maxTokens = v.trim().isEmpty ? 0 : int.tryParse(v) ?? -1,
+            ),
+          )
+        else
+          const Text('订阅 Responses 路由由上游控制单次最大输出，不发送 max_tokens。'),
+        const SizedBox(height: 16),
         AiCapabilityEditor(
           model: true,
           values: options.capabilities,

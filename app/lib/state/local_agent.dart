@@ -15,8 +15,14 @@ class LocalAgent {
   int _epoch = 0;
   List<Map<String, dynamic>> roots = [];
 
-  Future<Target> start(String stateDir) =>
-      _starting ??= _start(stateDir).whenComplete(() => _starting = null);
+  Future<Target> start(String stateDir) {
+    if (_starting != null) return _starting!;
+    final work = _start(stateDir);
+    _starting = work;
+    return work.whenComplete(() {
+      if (identical(_starting, work)) _starting = null;
+    });
+  }
 
   Future<Target> _start(String stateDir) async {
     final epoch = _epoch;
@@ -59,6 +65,9 @@ class LocalAgent {
         throw StateError('本地 agent 未返回启动结果');
       }
       final ready = (jsonDecode(lines.current) as Map).cast<String, dynamic>();
+      if (epoch != _epoch || !identical(_process, process)) {
+        throw StateError('本地 agent 启动已取消');
+      }
       final addr = ready['addr'] as String? ?? '';
       final hp = splitHostPort(addr);
       final pin = ready['pin'] as String? ?? '';
@@ -87,7 +96,11 @@ class LocalAgent {
       );
       return _target!;
     } on Object {
-      await stop();
+      if (identical(_process, process)) {
+        await stop();
+      } else {
+        process.kill();
+      }
       rethrow;
     } finally {
       await lines.cancel();
@@ -127,9 +140,11 @@ class LocalAgent {
 
   Future<void> stop() async {
     _epoch++;
+    _starting = null;
     final p = _process;
     _process = null;
     _target = null;
+    roots = [];
     if (p == null) return;
     // EOF is the graceful lifetime signal, not a command-line secret. A child
     // that already exited may have broken its pipe; shutdown must still finish.

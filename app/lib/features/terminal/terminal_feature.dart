@@ -154,6 +154,7 @@ class _NewSessionDialogState extends State<NewSessionDialog> {
   late final TextEditingController _name = TextEditingController(text: widget.initial);
   bool _proxy = false;
   String _proxyMode = 'system';
+  String? _error;
 
   @override
   void dispose() {
@@ -161,8 +162,14 @@ class _NewSessionDialogState extends State<NewSessionDialog> {
     super.dispose();
   }
 
-  void _ok() => Navigator.pop(context, NewSession(_name.text.trim(), !widget.local && _proxy && widget.proxy.available,
-    proxyMode: widget.local && widget.networkChoice ? _proxyMode : null));
+  void _ok() {
+    if (!_nameRe.hasMatch(_name.text.trim())) {
+      setState(() => _error = '使用 1–64 个字母、数字、点、下划线或连字符');
+      return;
+    }
+    Navigator.pop(context, NewSession(_name.text.trim(), !widget.local && _proxy && widget.proxy.available,
+      proxyMode: widget.local && widget.networkChoice ? _proxyMode : null));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,7 +186,7 @@ class _NewSessionDialogState extends State<NewSessionDialog> {
             TextField(
               controller: _name,
               autofocus: true,
-              decoration: const InputDecoration(hintText: '字母、数字、点、下划线、连字符'),
+              decoration: InputDecoration(hintText: '字母、数字、点、下划线、连字符', errorText: _error),
               onSubmitted: (_) => _ok(),
             ),
             const SizedBox(height: 10),
@@ -237,6 +244,8 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   String? _error;
   String? _active;
   int _loadGeneration = 0;
+  w.Link? _listLink;
+  bool _reading = false;
   final Set<String> _ending = {};
 
   Workspace get ws => widget.ws;
@@ -251,11 +260,19 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   void initState() {
     super.initState();
     _active = ws.terminalActiveId;
+    _listLink = ws.link;
     ws.addListener(_selectionChanged);
     _load();
   }
 
   void _selectionChanged() {
+    if (!identical(_listLink, ws.link)) {
+      _listLink = ws.link;
+      _loadGeneration++;
+      _reading = false;
+      _sessions = [];
+      _load();
+    }
     if (_active == ws.terminalActiveId) return;
     setState(() => _active = ws.terminalActiveId);
   }
@@ -268,7 +285,12 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
 
   Future<void> _load({bool quiet = false}) async {
     final link = ws.link;
-    if (link == null) return;
+    if (_reading) return;
+    if (link == null) {
+      setState(() { _loading = false; _error = '未连接'; });
+      return;
+    }
+    _reading = true;
     final generation = ++_loadGeneration;
     final observed = ws.terminalTabs.toSet();
     try {
@@ -283,13 +305,15 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
       // a tab whose session no longer exists has nothing to show
       final names = {for (final s in list) s['name'] as String};
       ws.dropTabs((t) => observed.contains(t) && t.id.startsWith('term:') && !names.contains(t.id.substring(5)));
-    } on w.OpError catch (e) {
+    } on Object catch (e) {
       if (mounted && generation == _loadGeneration && identical(link, ws.link) && (!quiet || _loading)) {
         setState(() {
-          _error = e.message;
+          _error = e is w.OpError ? e.message : '$e';
           _loading = false;
         });
       }
+    } finally {
+      if (generation == _loadGeneration) _reading = false;
     }
   }
 
@@ -390,38 +414,37 @@ class _SessionViewState extends State<SessionView> {
   String _state = '正在连接…';
   bool _disposed = false;
   bool _attaching = false;
+  int _attachGeneration = 0;
+  w.Link? _streamLink;
+  Timer? _retry;
   int _cols = 80, _rows = 24;
   bool _ctrl = false; // the on-screen Ctrl is armed for the next key
-  late final ByteConversionSink _decoder;
 
   Workspace get ws => widget.ws;
 
   @override
   void initState() {
     super.initState();
-    // Decodes across chunk boundaries: a multi-byte character split between
-    // two frames is not mangled.
-    _decoder = const Utf8Decoder(allowMalformed: true).startChunkedConversion(_StringSink((s) => _term.write(s)));
     _term.onOutput = (data) {
       if (_ctrl && data.length == 1) {
         final c = data.codeUnitAt(0);
         _ctrl = false;
         if (mounted) setState(() {});
         if (c >= 0x61 && c <= 0x7a) {
-          _t?.write([c - 0x60]);
+          _send([c - 0x60]);
           return;
         }
         if (c >= 0x40 && c <= 0x5f) {
-          _t?.write([c & 0x1f]);
+          _send([c & 0x1f]);
           return;
         }
       }
-      _t?.write(utf8.encode(data));
+      _send(utf8.encode(data));
     };
     _term.onResize = (cols, rows, _, _) {
       _cols = cols;
       _rows = rows;
-      _t?.resize(cols, rows);
+      _resize(cols, rows);
     };
     ws.addListener(_onWs);
     ws.app.appearance.addListener(_onAppearance);
@@ -433,8 +456,33 @@ class _SessionViewState extends State<SessionView> {
   }
 
   void _onWs() {
-    // The link came back: attach again if we lost the stream.
-    if (_t == null && !_attaching && ws.link != null && _state.startsWith('连接已断开')) _attach();
+    if (identical(_streamLink, ws.link)) return;
+    _attachGeneration++;
+    _retry?.cancel();
+    _attaching = false;
+    _streamLink = ws.link;
+    final terminal = _t;
+    _t = null;
+    _out?.cancel();
+    _out = null;
+    unawaited(terminal?.close());
+    setState(() => _state = '连接已断开，等待重新连接…');
+    if (ws.link != null) unawaited(_attach());
+  }
+
+  void _send(List<int> bytes) {
+    final terminal = _t;
+    if (terminal == null) return;
+    unawaited(terminal.write(bytes).catchError((Object e) {
+      if (!_disposed && identical(_t, terminal)) {
+        setState(() => _state = '终端写入失败：$e');
+      }
+    }));
+  }
+
+  void _resize(int cols, int rows) {
+    final terminal = _t;
+    if (terminal != null) unawaited(terminal.resize(cols, rows).catchError((Object _) {}));
   }
 
   double? _fontSize;
@@ -445,31 +493,44 @@ class _SessionViewState extends State<SessionView> {
 
   Future<void> _attach() async {
     final link = ws.link;
-    if (link == null || _disposed) return;
+    if (link == null || _disposed || _attaching || _t != null) return;
+    _retry?.cancel();
+    final generation = ++_attachGeneration;
+    _streamLink = link;
+    bool current() => !_disposed && generation == _attachGeneration && identical(link, ws.link);
     _attaching = true;
+    setState(() => _state = '正在连接…');
+    StreamSubscription<Uint8List>? output;
     try {
       if (_term.viewWidth > 1 && _term.viewHeight > 1) {
         _cols = _term.viewWidth;
         _rows = _term.viewHeight;
       }
       final t = await w.Terminal.attach(link, widget.session, cols: _cols, rows: _rows);
-      if (_disposed) {
+      if (!current()) {
         await t.close();
         return;
       }
       _t = t;
+      _attaching = false;
       if (_term.viewWidth > 1 && (_term.viewWidth != _cols || _term.viewHeight != _rows)) {
         _cols = _term.viewWidth;
         _rows = _term.viewHeight;
       }
-      unawaited(t.resize(_cols, _rows));
-      _out = t.output.listen(_decoder.add);
+      _resize(_cols, _rows);
+      // UTF-8 state belongs to this stream; a reconnect cannot join partial
+      // bytes from the old connection to the new terminal's first character.
+      final decoder = const Utf8Decoder(allowMalformed: true).startChunkedConversion(
+        _StringSink((s) { if (current()) _term.write(s); }),
+      );
+      output = _out = t.output.listen(decoder.add, onDone: decoder.close);
       setState(() => _state = '');
       if (_wantsFocus) _focus.requestFocus();
       final why = await t.done;
-      await _out?.cancel();
+      await output.cancel();
+      if (!current()) return;
+      _out = null;
       _t = null;
-      if (_disposed) return;
       switch (why) {
         case w.TerminalEnd.exit:
           setState(() => _state = '会话已结束');
@@ -479,24 +540,29 @@ class _SessionViewState extends State<SessionView> {
         case w.TerminalEnd.detached:
           // detached (C-d) or the agent restarting: attach again shortly
           setState(() => _state = '连接已断开，正在重新连接…');
-          await Future<void>.delayed(const Duration(milliseconds: 500));
-          if (!_disposed) unawaited(_attach());
+          _retry = Timer(const Duration(milliseconds: 500), () {
+            if (current()) unawaited(_attach());
+          });
         case w.TerminalEnd.lost:
           setState(() => _state = '连接已断开，等待重新连接…');
       }
-    } on w.OpError catch (e) {
-      if (!_disposed) {
-        setState(() => _state = e.code == w.codeNotFound ? '会话已结束' : '无法连接终端：${e.message}');
-        if (e.code == w.codeNotFound) ws.dropTabs((x) => x.id == 'term:${widget.session}');
+    } on Object catch (e) {
+      if (current()) {
+        final missing = e is w.OpError && e.code == w.codeNotFound;
+        setState(() => _state = missing ? '会话已结束' : '无法连接终端：${e is w.OpError ? e.message : e}');
+        if (missing) ws.dropTabs((x) => x.id == 'term:${widget.session}');
       }
     } finally {
-      _attaching = false;
+      await output?.cancel();
+      if (current()) _attaching = false;
     }
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _attachGeneration++;
+    _retry?.cancel();
     ws.removeListener(_onWs);
     ws.app.appearance.removeListener(_onAppearance);
     _out?.cancel();
@@ -509,6 +575,7 @@ class _SessionViewState extends State<SessionView> {
 
   Future<void> _paste() async {
     final d = await Clipboard.getData(Clipboard.kTextPlain);
+    if (_disposed) return;
     final text = d?.text;
     if (text != null && text.isNotEmpty) _term.paste(text);
   }
@@ -601,7 +668,7 @@ class _SessionViewState extends State<SessionView> {
                               child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
                             ),
                           Text(_state),
-                          if (_t == null && !_state.startsWith('正在')) TextButton(onPressed: _attach, child: const Text('重新连接')),
+                           if (_t == null && !_state.startsWith('正在')) TextButton(onPressed: _attaching || ws.link == null ? null : _attach, child: const Text('重新连接')),
                         ],
                       ),
                     ),

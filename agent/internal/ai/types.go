@@ -142,19 +142,21 @@ type Part struct {
 }
 
 type Message struct {
-	ID        string        `json:"id"`
-	SessionID string        `json:"session_id"`
-	Role      string        `json:"role"` // "user" | "assistant" | "tool" | "compaction"
-	Agent     string        `json:"agent,omitempty"`
-	Model     string        `json:"model,omitempty"`
-	Runtime   *RuntimeInfo  `json:"runtime,omitempty"`
-	Parts     []Part        `json:"parts"`
-	Finish    string        `json:"finish,omitempty"` // "stop" | "tool-calls" | "length" | "aborted" | "error"
-	Error     string        `json:"error,omitempty"`
-	Usage     *Usage        `json:"usage,omitempty"`
-	Snapshot  *StepSnapshot `json:"snapshot,omitempty"`
-	KeepID    string        `json:"keep_id,omitempty"` // For compaction messages: first message ID kept verbatim
-	CreatedAt int64         `json:"created_at"`
+	ID        string          `json:"id"`
+	SessionID string          `json:"session_id"`
+	Role      string          `json:"role"` // "user" | "assistant" | "tool" | "compaction"
+	Agent     string          `json:"agent,omitempty"`
+	Model     string          `json:"model,omitempty"`
+	Runtime   *RuntimeInfo    `json:"runtime,omitempty"`
+	Parts     []Part          `json:"parts"`
+	Finish    string          `json:"finish,omitempty"` // "stop" | "tool-calls" | "length" | "aborted" | "error"
+	Error     string          `json:"error,omitempty"`
+	ErrorCode string          `json:"error_code,omitempty"`
+	Budget    *RunBudgetState `json:"budget,omitempty"`
+	Usage     *Usage          `json:"usage,omitempty"`
+	Snapshot  *StepSnapshot   `json:"snapshot,omitempty"`
+	KeepID    string          `json:"keep_id,omitempty"` // For compaction messages: first message ID kept verbatim
+	CreatedAt int64           `json:"created_at"`
 }
 
 type ContextAttachment struct {
@@ -177,7 +179,10 @@ type InboxItem struct {
 	Runtime         *RuntimeInfo        `json:"runtime,omitempty"`
 	Held            bool                `json:"held,omitempty"` // derived for clients; requires explicit resend
 	// Credentials live only in memory for this admitted request.
-	Provider ProviderConfig `json:"-"`
+	Provider       ProviderConfig   `json:"-"`
+	Options        *RunOptions      `json:"options,omitempty"`
+	AdmittedConfig *ExtensionConfig `json:"-"`
+	ConfigSource   string           `json:"-"`
 }
 
 type Session struct {
@@ -197,6 +202,7 @@ type Session struct {
 	LastInputToks   int              `json:"last_input_tokens,omitempty"`
 	Runtime         *RuntimeInfo     `json:"runtime,omitempty"`
 	Context         *ContextInfo     `json:"context,omitempty"`
+	Budget          *RunBudgetState  `json:"budget,omitempty"`
 	Messages        []Message        `json:"messages"`
 	Inbox           []InboxItem      `json:"inbox,omitempty"`
 	CreatedAt       int64            `json:"created_at"`
@@ -248,6 +254,7 @@ type StreamEvent struct {
 	TotalUsage    *Usage              `json:"total_usage,omitempty"`
 	Runtime       *RuntimeInfo        `json:"runtime,omitempty"`
 	Context       *ContextInfo        `json:"context,omitempty"`
+	Budget        *RunBudgetState     `json:"budget,omitempty"`
 	Inbox         []InboxItem         `json:"inbox,omitempty"`
 	Question      *UserQuestion       `json:"question,omitempty"`
 }

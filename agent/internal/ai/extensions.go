@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,11 +28,13 @@ const extensionConfigPath = ".aurora/ai.json"
 const extensionConfigMax = 128 << 10
 
 type RunBudget struct {
-	Steps       int     `json:"steps,omitempty"`
-	Seconds     int     `json:"seconds,omitempty"`
-	Tokens      int     `json:"tokens,omitempty"`
-	Cost        float64 `json:"cost,omitempty"`
-	OutputBytes int     `json:"outputBytes,omitempty"`
+	// Missing fields inherit defaults when loading a project; explicit zero
+	// disables that limit. Do not omit zeros when saving.
+	Steps       int     `json:"steps"`
+	Seconds     int     `json:"seconds"`
+	Tokens      int     `json:"tokens"`
+	Cost        float64 `json:"cost"`
+	OutputBytes int     `json:"outputBytes"`
 }
 type ModelPrice struct {
 	Input      float64 `json:"input"`
@@ -45,12 +48,29 @@ type ExtensionConfig struct {
 	DisabledSkills []string              `json:"disabledSkills"`
 	MCP            []mcp.Config          `json:"mcp"`
 	Budget         RunBudget             `json:"budget"`
+	BudgetEnabled  *bool                 `json:"budgetEnabled,omitempty"`
+	Subagents      *SubagentOptions      `json:"subagents,omitempty"`
+	Tools          *ToolOptions          `json:"tools,omitempty"`
 	Prices         map[string]ModelPrice `json:"prices"` // per million tokens, keyed by model ID
+	AutoTitle      *bool                 `json:"autoTitle,omitempty"`
+	AutoCompact    *bool                 `json:"autoCompact,omitempty"`
+	Snapshots      *bool                 `json:"snapshots,omitempty"`
+	Snapshot       *SnapshotOptions      `json:"snapshot,omitempty"`
 }
 
 func defaultExtensionConfig() ExtensionConfig {
 	return ExtensionConfig{Version: 1, Instructions: []string{}, DisabledSkills: []string{}, MCP: []mcp.Config{},
 		Budget: RunBudget{Steps: 60, Seconds: 900, Tokens: 500000, OutputBytes: 2 << 20}, Prices: map[string]ModelPrice{}}
+}
+
+func (c *ExtensionConfig) UnmarshalJSON(data []byte) error {
+	type plain ExtensionConfig
+	value := plain(defaultExtensionConfig())
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*c = ExtensionConfig(value)
+	return nil
 }
 func boundedProjectFile(base, relative string, max int64) ([]byte, error) {
 	root, err := os.OpenRoot(base)
@@ -95,10 +115,21 @@ func loadExtensionConfig(work string) (ExtensionConfig, string, error) {
 	return cfg, hex.EncodeToString(sum[:]), nil
 }
 func validateExtensionConfig(cfg ExtensionConfig) error {
+	children, tools := cfg.Subagents.resolved(), cfg.Tools.resolved()
+	if children.MaxParallel < 1 || children.MaxParallel > 16 || children.MaxTotal < 0 || children.MaxTotal > 1000 {
+		return errors.New("子代理并发数须为 1–16，单次任务总量须为 0–1000（0 不限）")
+	}
+	if tools.MaxCallsPerStep < 1 || tools.MaxCallsPerStep > 64 || tools.RepeatLimit < 0 || tools.RepeatLimit > 20 ||
+		tools.ShellDefaultSeconds < 1 || tools.ShellMaxSeconds > 600 || tools.ShellMaxSeconds < tools.ShellDefaultSeconds {
+		return errors.New("工具策略范围：每步 1–64 次，重复检测 0–20 次，Shell 默认／最大超时 1–600 秒")
+	}
+	if err := cfg.Snapshot.validate(); err != nil {
+		return err
+	}
 	b := cfg.Budget
 	if cfg.Version != 1 || len(cfg.Instructions) > 32 || len(cfg.DisabledSkills) > 64 || len(cfg.MCP) > 4 ||
-		b.Steps < 1 || b.Steps > 60 || b.Seconds < 10 || b.Seconds > 3600 || b.Tokens < 1024 || b.Tokens > 2000000 ||
-		b.Cost < 0 || b.Cost > 10000 || b.OutputBytes < 4096 || b.OutputBytes > 8<<20 || len(cfg.Prices) > 64 {
+		b.Steps < 0 || b.Steps > 10000 || b.Seconds < 0 || b.Seconds > 604800 || b.Tokens < 0 || b.Tokens > 1000000000 ||
+		b.Cost < 0 || b.Cost > 1000000 || math.IsNaN(b.Cost) || b.OutputBytes < 0 || b.OutputBytes > 1<<30 || len(cfg.Prices) > 64 {
 		return errors.New("AI 配置版本、条目或运行预算超出范围")
 	}
 	for _, p := range cfg.Instructions {
@@ -118,13 +149,15 @@ func validateExtensionConfig(cfg ExtensionConfig) error {
 	}
 	for _, p := range cfg.Prices {
 		for _, value := range []float64{p.Input, p.Output, p.CacheRead, p.CacheWrite} {
-			if value < 0 || value > 100000 {
+			if value < 0 || value > 100000 || math.IsNaN(value) {
 				return errors.New("模型价格须在 0–100000 USD／百万 tokens 之间")
 			}
 		}
 	}
 	return nil
 }
+
+func enabledByDefault(value *bool) bool { return value == nil || *value }
 
 type InstructionSource struct {
 	Path string `json:"path"`
@@ -350,7 +383,19 @@ func (s svc) opExtensions(ctx context.Context, raw json.RawMessage) (any, error)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"config": cfg, "etag": tag, "instructions": sources, "skills": skills}, nil
+	allSkills, err := discoverSkills(s.StateDir, rt.Path, work, nil)
+	if err != nil {
+		return nil, err
+	}
+	source := "project"
+	if tag == "" {
+		source = "default"
+	}
+	return map[string]any{"config": cfg, "etag": tag, "source": source,
+		"defaults": defaultExtensionConfig(), "budget_version": 2,
+		"controls_version": 1, "subagent_defaults": defaultSubagentOptions(), "tool_defaults": defaultToolOptions(), "nested_subagents": false,
+		"snapshot_defaults": defaultSnapshotOptions(),
+		"instructions":      sources, "skills": skills, "available_skills": allSkills}, nil
 }
 
 func (s svc) opMCPProbe(ctx context.Context, raw json.RawMessage) (any, error) {

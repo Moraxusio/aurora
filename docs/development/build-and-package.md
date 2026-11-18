@@ -27,12 +27,14 @@ powershell -NoProfile -File tools/check.ps1
 
 Linux 在 `agent` 目录补充 `go test ./...`、`go vet ./...`、`go build ./...`；`go test -race ./internal/ai ./internal/mcp ./internal/devtools ./internal/files ./internal/filetxn` 覆盖相关共享状态。
 
+WSL 未安装 Go 时，可在 Windows 用 `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go test -c -o <输出> ./internal/ai`，再在 WSL 对应包目录实际执行测试二进制并保存日志。只交叉编译不等于运行测试；此方式也不等于 Linux race。本轮预算与快照的 race 使用 Windows Go＋MinGW 执行。
+
 ## 完整验收候选
 
 ```powershell
 # 仓库根目录；AURORA_RELEASE_KEY 指向本机既有签名密钥
 powershell -NoProfile -File tools/package-preview.ps1 `
-  -Version 3.22.0 -Suffix ide-preview1 -Out <新输出目录> `
+  -Version 3.23.0 -Suffix ai-preview2 -Out <新输出目录> `
   -Key $env:AURORA_RELEASE_KEY
 ```
 

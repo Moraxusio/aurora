@@ -138,7 +138,7 @@ class Blame {
         [for (final l in (j['lines'] as List? ?? const [])) (l as num).toInt()],
       );
 
-  BlameCommit? at(int line) => line >= 0 && line < lines.length && lines[line] < commits.length ? commits[lines[line]] : null;
+  BlameCommit? at(int line) => line >= 0 && line < lines.length && lines[line] >= 0 && lines[line] < commits.length ? commits[lines[line]] : null;
 }
 
 /// What an operation that may stop on conflicts answered.
@@ -165,6 +165,7 @@ class GitModel extends ChangeNotifier {
   bool _disposed = false;
   int _readSequence = 0, _findSequence = 0;
   final _readVersions = <String, int>{};
+  OpStream? _syncStream;
 
   Link? get _link => ws.link;
 
@@ -177,6 +178,7 @@ class GitModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _syncStream?.reset();
     super.dispose();
   }
 
@@ -216,9 +218,9 @@ class GitModel extends ChangeNotifier {
       if (repo == null || !repos.any((r) => r.root == repo!.root && r.repo == repo!.repo)) {
         _setRepo(repos.isEmpty ? null : repos.first);
       }
-    } on OpError catch (e) {
+    } on Object catch (e) {
       if (!current()) return;
-      error = e.message;
+      error = e is OpError ? e.message : '$e';
     }
     if (!current()) return;
     loadingRepos = false;
@@ -261,13 +263,13 @@ class GitModel extends ChangeNotifier {
       final result = await l.call(op, {'root': target.root, 'repo': target.repo, ...extra}) as Map;
       if (!current()) return;
       apply(result.cast<String, dynamic>());
-    } on OpError catch (e) {
+    } on Object catch (e) {
       if (!current()) return;
       if (isStatus) {
-        error = e.message;
+        error = e is OpError ? e.message : '$e';
         status = null;
       } else {
-        ws.toast(e.message, error: true);
+        ws.toast(e is OpError ? e.message : '$e', error: true);
       }
     }
     if (current()) _notify();
@@ -288,21 +290,25 @@ class GitModel extends ChangeNotifier {
 
   /// Runs a repository-changing call, shows an error as a message, and reads
   /// the status again. Returns whether it succeeded.
-  Future<bool> act(String op, [Map<String, dynamic> extra = const {}]) async {
-    final l = _link;
-    if (l == null || repo == null) return false;
+  Future<bool> act(String op, [Map<String, dynamic> extra = const {}, bool throwConflict = false]) async {
+    final l = _link, target = repo;
+    if (l == null || target == null || busy || _disposed) return false;
+    bool current() => !_disposed && identical(l, _link) && identical(target, repo);
     busy = true;
     _notify();
     var ok = false;
     try {
-      await l.call(op, _args(extra));
+      await l.call(op, {'root': target.root, 'repo': target.repo, ...extra});
       ok = true;
-    } on OpError catch (e) {
-      ws.toast(e.message, error: true);
+    } on Object catch (e) {
+      if (current() && throwConflict && e is OpError && e.code == codeConflict) rethrow;
+      if (current()) ws.toast(e is OpError ? e.message : '$e', error: true);
+    } finally {
+      if (current()) await refresh();
+      busy = false;
+      _notify();
     }
-    busy = false;
-    await refresh();
-    return ok;
+    return ok && current();
   }
 
   Future<void> stage(List<String> paths) => act('git.stage', {'paths': paths});
@@ -327,8 +333,8 @@ class GitModel extends ChangeNotifier {
 
   /// create (at [rev], default HEAD) | rename (to [to]) | delete ([force]) |
   /// upstream (set [to] as the branch's upstream).
-  Future<bool> branch(String action, String name, {String? to, String? rev, bool force = false}) async {
-    final ok = await act('git.branch', {'action': action, 'branch': name, 'to': ?to, 'rev': ?rev, if (force) 'force': true});
+  Future<bool> branch(String action, String name, {String? to, String? rev, bool force = false, bool throwConflict = false}) async {
+    final ok = await act('git.branch', {'action': action, 'branch': name, 'to': ?to, 'rev': ?rev, if (force) 'force': true}, throwConflict);
     if (ok) await loadBranches();
     return ok;
   }
@@ -351,7 +357,7 @@ class GitModel extends ChangeNotifier {
       if (untracked) 'untracked': true,
       if (stagedOnly) 'mode': 'staged',
     });
-    await loadStashes();
+    if (r.ok) await loadStashes();
     return r;
   }
 
@@ -390,22 +396,27 @@ class GitModel extends ChangeNotifier {
       _op('git.op', {'action': action, if (rev != null && rev.isNotEmpty) 'rev': rev, 'mode': ?mode});
 
   Future<GitOpResult> _op(String name, Map<String, dynamic> extra) async {
-    final l = _link;
-    if (l == null || repo == null) return const GitOpResult(false, output: '未连接');
+    final l = _link, target = repo;
+    if (l == null || target == null || busy || _disposed) return const GitOpResult(false, output: '未连接或正在执行其它 Git 操作');
+    bool current() => !_disposed && identical(l, _link) && identical(target, repo);
     busy = true;
     _notify();
+    GitOpResult result;
     try {
-      final r = (await l.call(name, _args(extra)) as Map).cast<String, dynamic>();
-      return GitOpResult(true,
+      final r = (await l.call(name, {'root': target.root, 'repo': target.repo, ...extra}) as Map).cast<String, dynamic>();
+      result = GitOpResult(true,
           conflicts: r['conflicts'] == true, operation: r['operation'] as String? ?? '', output: r['output'] as String? ?? '');
-    } on OpError catch (e) {
-      ws.toast(e.message, error: true);
-      return GitOpResult(false, output: e.message);
+    } on Object catch (e) {
+      final message = e is OpError ? e.message : '$e';
+      if (current()) ws.toast(message, error: true);
+      result = GitOpResult(false, output: message);
     } finally {
+      if (current()) await refresh();
+      if (current() && log.isNotEmpty) await loadLog();
       busy = false;
-      await refresh();
-      if (log.isNotEmpty) await loadLog();
+      _notify();
     }
+    return current() ? result : const GitOpResult(false, output: '仓库或连接已变化，请在原仓库核对操作结果');
   }
 
   // ---- blame and conflicts ----
@@ -438,21 +449,31 @@ class GitModel extends ChangeNotifier {
   /// fetch | pull | push. The agent answers with a reason when it needs the
   /// user to choose (diverged, rejected, dirty); the caller decides.
   Future<({bool ok, String reason, String output})> sync(String action, {String? mode}) async {
-    final l = _link;
-    if (l == null || repo == null) return (ok: false, reason: 'unavailable', output: '未连接');
+    final l = _link, target = repo;
+    if (l == null || target == null || busy || _disposed) return (ok: false, reason: 'unavailable', output: '未连接或正在执行其它 Git 操作');
+    bool current() => !_disposed && identical(l, _link) && identical(target, repo);
     busy = true;
     _notify();
+    OpStream? stream;
+    ({bool ok, String reason, String output}) result;
     try {
-      final s = await l.open('git.sync', _args({'action': action, 'mode': ?mode}), Priority.bulk);
-      final r = (await s.response() as Map).cast<String, dynamic>();
-      await s.close();
-      lastSyncOutput = r['output'] as String?;
-      return (ok: r['ok'] == true, reason: r['reason'] as String? ?? '', output: r['output'] as String? ?? '');
-    } on OpError catch (e) {
-      return (ok: false, reason: 'error', output: e.message);
+      stream = await l.open('git.sync', {'root': target.root, 'repo': target.repo, 'action': action, 'mode': ?mode}, Priority.bulk);
+      if (!current()) return (ok: false, reason: 'stale', output: '仓库或连接已变化');
+      _syncStream = stream;
+      final r = (await stream.response().timeout(const Duration(minutes: 5)) as Map).cast<String, dynamic>();
+      result = (ok: r['ok'] == true, reason: r['reason'] as String? ?? '', output: r['output'] as String? ?? '');
+    } on Object catch (e) {
+      result = (ok: false, reason: 'error', output: e is OpError ? e.message : '$e');
     } finally {
+      stream?.reset();
+      if (identical(_syncStream, stream)) _syncStream = null;
+      if (current()) await refresh();
       busy = false;
-      await refresh();
+      _notify();
     }
+    if (!current()) return (ok: false, reason: 'stale', output: '仓库或连接已变化，请在原仓库核对同步结果');
+    lastSyncOutput = result.output;
+    _notify();
+    return result;
   }
 }

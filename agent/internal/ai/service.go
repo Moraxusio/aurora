@@ -44,6 +44,8 @@ func (s svc) Operations() []service.Operation {
 		{Name: "ai.extensions", Handle: s.opExtensions},
 		{Name: "ai.mcp.probe", Handle: s.opMCPProbe},
 		{Name: "ai.snapshots.prune", Handle: s.opPruneSnapshots},
+		{Name: "ai.snapshots.inspect", Handle: s.opInspectSnapshots},
+		{Name: "ai.run.options", Handle: s.opRunOptions},
 		{Name: "ai.stop", Handle: s.opStop},
 		{Name: "ai.approve", Handle: s.opApprove},
 		{Name: "ai.inbox", Handle: s.opInbox},
@@ -106,6 +108,10 @@ func (s svc) opInbox(_ context.Context, raw json.RawMessage) (any, error) {
 		}
 		before := append([]InboxItem(nil), session.Inbox...)
 		item := session.Inbox[index]
+		if in.Action == "steer" && item.Options.changed() {
+			s.mu.Unlock()
+			return nil, wire.Errf(wire.CodeBadRequest, "这条消息有独立运行设置，请保持排队发送；补充指令会沿用当前任务预算")
+		}
 		if in.Action != "cancel" && !s.inboxActiveLocked(in.SessionID, in.ID) {
 			s.mu.Unlock()
 			return nil, wire.Errf(wire.CodeBadRequest, "这条输入已保留，请等待当前任务停止后使用当前选择重新发送")
@@ -246,19 +252,27 @@ func (s svc) opGet(_ context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, wire.Errf(wire.CodeNotFound, "%v", err)
 	}
-	if pending == nil {
-		for _, activity := range s.activitiesFor(in.ID) {
-			if q := s.perms.PendingForSession(activity.SessionID); q != nil {
+	permissions := []PermissionQuestion{}
+	seen := map[string]bool{}
+	if pending != nil {
+		permissions = append(permissions, *pending)
+		seen[pending.ID] = true
+	}
+	for _, activity := range s.activitiesFor(in.ID) {
+		if q := s.perms.PendingForSession(activity.SessionID); q != nil && !seen[q.ID] {
+			permissions = append(permissions, *q)
+			seen[q.ID] = true
+			if pending == nil {
 				pending = q
-				break
 			}
 		}
 	}
 	return map[string]any{
-		"session":            sess,
-		"running":            running,
-		"pending_permission": pending,
-		"activities":         s.activitiesFor(in.ID),
+		"session":             sess,
+		"running":             running,
+		"pending_permission":  pending,
+		"pending_permissions": permissions,
+		"activities":          s.activitiesFor(in.ID),
 	}, nil
 }
 

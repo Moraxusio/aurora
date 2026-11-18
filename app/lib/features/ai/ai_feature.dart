@@ -104,6 +104,12 @@ class AiSessionSidebar extends StatefulWidget {
 
 class _AiSessionSidebarState extends State<AiSessionSidebar> {
   List<AiSessionSummary> _sessions = [];
+  String _historyFilter = 'all';
+  bool _matches(AiSessionSummary s) =>
+      _historyFilter == 'all' ||
+      _historyFilter == 'running' &&
+          (s.running || s.pendingPermission != null) ||
+      _historyFilter == 'pinned' && s.pinned;
   bool _loading = true;
   String? _error;
   OpStream? _stream;
@@ -392,8 +398,8 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
   Widget _searchBox(Ide ide) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.s, Space.xs, Space.s, Space.xs),
-      child: SizedBox(
-        height: 32,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 32),
         child: TextField(
           key: const ValueKey('ai-history-search'),
           controller: _searchCtl,
@@ -522,11 +528,27 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            relativeTime(s.updatedAt ~/ 1000),
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              color: ide.textFaint,
+                          WorkbenchMenuButton<MenuItem>(
+                            tooltip: '对话操作',
+                            onSelected: (item) => item.onTap?.call(),
+                            itemBuilder: (_) => [
+                              for (final item in _menu(s))
+                                if (item.separator)
+                                  const PopupMenuDivider()
+                                else
+                                  PopupMenuItem(
+                                    value: item,
+                                    child: MenuLabel(
+                                      item.label,
+                                      icon: item.icon,
+                                      danger: item.danger,
+                                    ),
+                                  ),
+                            ],
+                            icon: Icon(
+                              Icons.more_horiz,
+                              size: 16,
+                              color: ide.textDim,
                             ),
                           ),
                         ],
@@ -536,8 +558,10 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
                         s.pendingPermission != null
                             ? '等待你批准：${s.pendingPermission!.tool}'
                             : (s.storageError.isNotEmpty
-                                ? '会话读取失败（原记录已保留）：${s.storageError}'
-                                : s.preview.isEmpty ? s.workdir : s.preview),
+                                  ? '会话读取失败（原记录已保留）：${s.storageError}'
+                                  : s.preview.isEmpty
+                                  ? s.workdir
+                                  : s.preview),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -555,14 +579,14 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
                             s.parentId.isNotEmpty
                                 ? '子代理'
                                 : s.agent == 'plan'
-                                ? 'Plan'
-                                : 'Build',
+                                ? '规划'
+                                : '构建',
                             s.agent == 'plan' ? ide.warn : ide.textDim,
                           ),
                           const SizedBox(width: 5),
                           Flexible(
                             child: Text(
-                              s.workdir,
+                              '${s.workdir} · ${relativeTime(s.updatedAt ~/ 1000)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -627,13 +651,13 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
 
   Widget _list(Ide ide) {
     final entries = <Object>[];
-    final pinned = _sessions.where((s) => s.pinned).toList();
+    final pinned = _sessions.where((s) => s.pinned && _matches(s)).toList();
     if (pinned.isNotEmpty) {
       entries.add('置顶');
       entries.addAll(pinned);
     }
     String? last;
-    for (final s in _sessions.where((s) => !s.pinned)) {
+    for (final s in _sessions.where((s) => !s.pinned && _matches(s))) {
       final g = aiDayGroup(s.updatedAt);
       if (g != last) {
         entries.add(g);
@@ -641,6 +665,8 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
       }
       entries.add(s);
     }
+    if (entries.isEmpty)
+      return const EmptyHint(icon: Icons.chat_bubble_outline, text: '此筛选下暂无对话');
     return ListView.builder(
       itemCount: entries.length + 1,
       itemBuilder: (_, index) {
@@ -692,7 +718,7 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
         if (_sessions.isEmpty) {
           return EmptyHint(
             icon: Icons.auto_awesome_outlined,
-            text: '还没有 AI 会话。\n它能在这台服务器上读写代码、运行命令、联网查资料，每一步都能一键回退。',
+            text: '还没有对话。\n选择工作目录和模型，开始第一项任务。',
             actionLabel: widget.showNewButton ? '新建 AI 会话' : null,
             onAction: widget.showNewButton ? _new : null,
           );
@@ -702,6 +728,23 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
           children: [
             if (widget.showNewButton) newButton,
             _searchBox(ide),
+            if (!searching)
+              UiToolbar(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                children: [
+                  for (final filter in {
+                    'all': '全部',
+                    'running': '进行中',
+                    'pinned': '置顶',
+                  }.entries)
+                    ChoiceChip(
+                      label: Text(filter.value),
+                      selected: _historyFilter == filter.key,
+                      onSelected: (_) =>
+                          setState(() => _historyFilter = filter.key),
+                    ),
+                ],
+              ),
             Expanded(
               child: searching
                   ? (_hits!.isEmpty

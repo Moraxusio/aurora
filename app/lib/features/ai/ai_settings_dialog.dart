@@ -15,6 +15,10 @@ import 'ai_model_discovery.dart';
 import 'ai_oauth_client.dart';
 import 'ai_capability_editor.dart';
 import 'ai_reasoning_field.dart';
+import 'ai_extensions.dart';
+import '../development/development_scope.dart';
+
+import 'ai_visuals.dart';
 
 part 'ai_settings_pages.dart';
 
@@ -104,6 +108,10 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   final _key = TextEditingController();
   final _model = TextEditingController();
   final _context = TextEditingController();
+  final _maxTokens = TextEditingController();
+  final _headers = TextEditingController();
+  final _headerDrafts = <String, String>{};
+  final _headerErrors = <String, String>{};
   final _search = TextEditingController();
   final _resource = TextEditingController(text: '*');
   bool _loadingFields = false;
@@ -129,6 +137,8 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _key,
     _model,
     _context,
+    _maxTokens,
+    _headers,
   ];
 
   @override
@@ -176,7 +186,8 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       jsonEncode([_ruleAction, _ruleEffect, _ruleScope, _resource.text.trim()]);
 
   bool get _ruleDirty => _ruleSnapshot() != _ruleBaseline;
-  bool get _dirty => _snapshot() != _baseline || _ruleDirty;
+  bool get _dirty =>
+      _snapshot() != _baseline || _ruleDirty || _headerErrors.isNotEmpty;
 
   void _resetRule() {
     _editingRule = null;
@@ -212,6 +223,36 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     p.apiKey = _key.text.trim();
     p.model = _model.text.trim();
     p.contextWindow = int.tryParse(_context.text) ?? 0;
+    p.maxTokens = _maxTokens.text.trim().isEmpty
+        ? 0
+        : int.tryParse(_maxTokens.text) ?? -1;
+    _headerDrafts[p.id] = _headers.text;
+    final headers = <String, String>{};
+    final seen = <String>{};
+    _headerErrors.remove(p.id);
+    for (final line
+        in _headers.text.split('\n').where((e) => e.trim().isNotEmpty)) {
+      final at = line.indexOf(':');
+      final name = at > 0 ? line.substring(0, at).trim() : '';
+      if (at < 1 ||
+          !RegExp(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$").hasMatch(name) ||
+          !seen.add(name.toLowerCase()) ||
+          RegExp(r'[\r\x00]').hasMatch(line)) {
+        _headerErrors[p.id] = '请求头请按每行“名称: 值”填写，名称不可重复。';
+        break;
+      }
+      if ([
+        'user-agent',
+        'originator',
+        'x-opencode-client',
+      ].contains(name.toLowerCase())) {
+        _headerErrors[p.id] =
+            'User-Agent、originator、x-opencode-client 由兼容协议管理。';
+        break;
+      }
+      headers[name] = line.substring(at + 1).trim();
+    }
+    if (!_headerErrors.containsKey(p.id)) p.headers = headers;
   }
 
   void _load(AiProvider? p) {
@@ -223,6 +264,11 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _key.text = p?.apiKey ?? '';
     _model.text = p?.model ?? '';
     _context.text = (p?.contextWindow ?? 0) > 0 ? '${p!.contextWindow}' : '';
+    _maxTokens.text = (p?.maxTokens ?? 0) != 0 ? '${p!.maxTokens}' : '';
+    _headers.text =
+        _headerDrafts[p?.id] ??
+        (p?.headers.entries.map((e) => '${e.key}: ${e.value}').join('\n') ??
+            '');
     _search.clear();
     _loadingFields = false;
     _invalidate();
@@ -516,6 +562,25 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     }
     for (final p in _ai.providers) {
       String? error;
+      if (!p.isSubscription && _headerErrors[p.id] != null) {
+        setState(() {
+          _load(p);
+          _section = 'connection';
+          _error = _headerErrors[p.id];
+        });
+        return;
+      }
+      if (p.maxTokens < 0 ||
+          p.maxTokens > 1000000 ||
+          p.contextWindow < 0 ||
+          p.contextWindow > 10000000) {
+        setState(() {
+          _load(p);
+          _section = 'models';
+          _error = '连接上下文上限须为 0–10000000，输出上限须为 0–1000000。';
+        });
+        return;
+      }
       if (p.reasoningEffort.length > 64 ||
           RegExp(r'[\x00-\x1f\x7f]').hasMatch(p.reasoningEffort)) {
         setState(() {
@@ -532,7 +597,12 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
           ...options.reasoningEfforts.keys,
           ...options.reasoningEfforts.values,
         ];
-        if (efforts.any(
+        if (options.contextWindow < 0 ||
+            options.contextWindow > 10000000 ||
+            options.maxTokens < 0 ||
+            options.maxTokens > 1000000) {
+          error = '${entry.key}：上下文窗口须为 0–10000000，输出上限须为 0–1000000；留空继承。';
+        } else if (efforts.any(
           (v) => v.length > 64 || RegExp(r'[\x00-\x1f]').hasMatch(v),
         )) {
           error = '${entry.key}：思考档位与发送值最多 64 字符，不能包含控制字符。';

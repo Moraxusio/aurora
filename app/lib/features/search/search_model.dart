@@ -78,6 +78,7 @@ class SearchModel extends ChangeNotifier {
   FileTextOperation? _replacement;
   bool truncated = false;
   bool timedOut = false;
+  bool incomplete = false;
   String? error;
   List<String> notes = [];
   int _generation = 0;
@@ -108,6 +109,7 @@ class SearchModel extends ChangeNotifier {
     _replacement = null;
     replacing = false;
     running = false;
+    _options = null;
   }
 
   void _notify() {
@@ -127,7 +129,7 @@ class SearchModel extends ChangeNotifier {
     results = [];
     total = 0;
     running = false;
-    truncated = timedOut = false;
+    truncated = timedOut = incomplete = false;
     error = null;
     notes = [];
     _options = null;
@@ -146,7 +148,7 @@ class SearchModel extends ChangeNotifier {
     }
     results = [];
     total = 0;
-    truncated = timedOut = false;
+    truncated = timedOut = incomplete = false;
     error = null;
     notes = [];
     running = true;
@@ -194,11 +196,13 @@ class SearchModel extends ChangeNotifier {
         truncated |= r['truncated'] == true;
         timedOut |= r['timed_out'] == true;
         final skipped = (r['skipped_large'] as num?)?.toInt() ?? 0;
+        incomplete |= skipped > 0 || r['incomplete'] == true;
         if (skipped > 0) notes.add('${f.label}：跳过了 $skipped 个大于 4 MB 的文件');
         if (r['incomplete'] == true)
           notes.add('${f.label}：有 ${r['errors']} 个文件夹无法读取');
       } on Object catch (e) {
         if (!_active(gen, link)) return;
+        incomplete = true;
         if (e is OpError && e.code == codeBadRequest) {
           error = e.message;
           running = false;
@@ -231,7 +235,7 @@ class SearchModel extends ChangeNotifier {
         error != null) {
       throw StateError('请先完成搜索再生成替换预览');
     }
-    if (truncated || timedOut) throw StateError('搜索结果不完整，请缩小搜索范围后再替换');
+    if (truncated || timedOut || incomplete) throw StateError('搜索结果不完整，请处理无法读取的目录或缩小搜索范围后再替换');
     if (!link.server.caps.contains('fs.replace.preview') ||
         !link.server.caps.contains('fs.commit')) {
       throw StateError('跨文件替换需要新版 agent 的预览与文件事务服务');

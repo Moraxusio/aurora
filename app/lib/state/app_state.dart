@@ -30,6 +30,17 @@ String agentDir() {
 }
 
 class AppState extends ChangeNotifier implements ProfileAccess {
+  AppState({LocalAgent? localAgent}) : localAgent = localAgent ?? LocalAgent();
+  bool _disposed = false;
+  final Map<String, int> _connectionEpochs = {};
+  final Map<String, Future<void>> _connecting = {};
+  final Set<String> _removing = {};
+  final Map<String, String> connectionWarnings = {};
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
   AppearanceController? _appearance;
   AppearanceController get appearance => _appearance ??= AppearanceController(
     read: () {
@@ -65,7 +76,7 @@ class AppState extends ChangeNotifier implements ProfileAccess {
       await _store!.update(apply);
     }
   }
-  final localAgent = LocalAgent();
+  final LocalAgent localAgent;
   ConnStatus? _localFailure;
   String? localEntryError;
 
@@ -249,39 +260,71 @@ class AppState extends ChangeNotifier implements ProfileAccess {
   }
 
   /// Connects (or reconnects after a failure). Failures are in [status].
-  Future<void> connect(String id) async {
+  Future<void> connect(String id) {
+    if (_disposed || _removing.contains(id)) return Future.value();
+    final pending = _connecting[id];
+    if (pending != null) return pending;
+    final epoch = (_connectionEpochs[id] ?? 0) + 1;
+    _connectionEpochs[id] = epoch;
+    final work = _connect(id, epoch);
+    _connecting[id] = work;
+    return work.whenComplete(() {
+      if (identical(_connecting[id], work)) _connecting.remove(id);
+    });
+  }
+
+  Future<void> _connect(String id, int epoch) async {
     final s = profile.server(id);
     if (s == null) return;
+    bool current() => !_disposed && _connectionEpochs[id] == epoch &&
+        !_removing.contains(id) && server(id) != null;
     Target? t;
     if (s.isLocal) {
       _localFailure = ConnStatus(ConnState.connecting);
       notifyListeners();
       try {
         t = await localAgent.start('${File(storePath!).parent.path}${Platform.pathSeparator}local-agent');
+        if (!current()) return;
         _localFailure = null;
       } on Object {
+        if (!current()) return;
         _localFailure = ConnStatus(ConnState.failed, failure: ConnFailure(DialFailure.protocol, '本地 agent 启动失败。请检查随包 local-agent 的完整性与签名；不会影响远程连接或已有凭证。'));
         notifyListeners(); return;
       }
     } else {
       t = _target(s);
     }
-    if (t == null) return;
+    if (t == null || !current()) return;
     var c = _conns[id];
     if (c == null) {
       c = Connection(t, goodAddr: s.isLocal ? null : s.direct?.goodAddr);
       _conns[id] = c;
+      final connection = c;
       _subs[id] = c.changes.listen((st) {
+        if (_disposed || !identical(_conns[id], connection)) return;
         final freshLink = link(id);
         if (st.state == ConnState.connected && freshLink != null) unawaited(proxies.connected(id, freshLink));
-        if (!s.isLocal && st.state == ConnState.connected && freshLink != null) unawaited(upgrades.connected(id, freshLink));
+        if (!s.isLocal && st.state == ConnState.connected && freshLink != null) {
+          unawaited(upgrades.connected(id, freshLink).catchError((Object e) {
+            if (_disposed || !identical(link(id), freshLink)) return;
+            connectionWarnings[id] = '升级状态读取失败：$e';
+            notifyListeners();
+          }));
+        }
         if (!s.isLocal && st.state == ConnState.connected && st.addr != null && st.addr != s.direct?.goodAddr) {
           unawaited(update((p) {
+            if (!identical(link(id), freshLink)) return;
             final e = p.server(id);
             if (e?.direct != null) {
               e!.direct!.goodAddr = st.addr;
               e.lastSeen = DateTime.now().millisecondsSinceEpoch ~/ 1000;
             }
+          }).then((_) {
+            connectionWarnings.remove(id);
+          }, onError: (Object e) {
+            if (_disposed || !identical(link(id), freshLink)) return;
+            connectionWarnings[id] = '连接正常，但连接记录保存失败：$e';
+            notifyListeners();
           }));
         }
         notifyListeners();
@@ -294,14 +337,20 @@ class AppState extends ChangeNotifier implements ProfileAccess {
     } on ConnFailure {
       // reported through status
     }
-    notifyListeners();
+    if (current()) notifyListeners();
   }
 
   void retryNow(String id) => _conns[id]?.retryNow();
 
   Future<void> disconnect(String id) async {
-    await _subs.remove(id)?.cancel();
-    await _conns.remove(id)?.dispose();
+    _connectionEpochs[id] = (_connectionEpochs[id] ?? 0) + 1;
+    _connecting.remove(id);
+    final sub = _subs.remove(id), connection = _conns.remove(id);
+    if (server(id)?.isLocal == true) _localFailure = null;
+    connectionWarnings.remove(id);
+    notifyListeners();
+    await sub?.cancel();
+    await connection?.dispose();
     notifyListeners();
   }
 
@@ -343,17 +392,23 @@ class AppState extends ChangeNotifier implements ProfileAccess {
   }
 
   Future<void> removeServer(String id) async {
-    await disconnect(id);
-    await update((p) {
-      p.servers.removeWhere((s) => s.id == id);
-      if (p.selected == id) p.selected = p.servers.isEmpty ? null : p.servers.first.id;
-    });
+    if (!_removing.add(id)) return;
+    try {
+      await disconnect(id);
+      await update((p) {
+        p.servers.removeWhere((s) => s.id == id);
+        if (p.selected == id) p.selected = p.servers.isEmpty ? null : p.servers.first.id;
+      });
+    } finally {
+      _removing.remove(id);
+    }
   }
 
   Future<void> select(String id) => update((p) => p.selected = id);
 
   @override
   void dispose() {
+    _disposed = true;
     _appearance?.dispose();
     unawaited(localAgent.stop());
     for (final s in _subs.values) {

@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora/ui/aurora_ui.dart';
-import 'package:flutter/services.dart';
 
 import '../../state/app_state.dart';
 import 'ai_oauth_client.dart';
@@ -23,12 +22,14 @@ Future<AiProvider> prepareAiProvider(
     throw StateError('当前 agent 尚不支持选择代理出口，请升级 agent 或沿用旧设置');
   }
   if (!p.isSubscription) return p;
-  if (p.oauth == null || p.oauth!.refresh.isEmpty) throw StateError('请先在 AI 设置中使用 OpenAI 设备码登录');
+  if (p.oauth == null || p.oauth!.refresh.isEmpty)
+    throw StateError('请先在 AI 设置中使用 OpenAI 设备码登录');
   if (!p.oauth!.needsRefresh) return p;
   final pending = _refreshes[app] ??= {};
   if (pending[p.id] case final existing?) {
     final refreshed = await existing;
-    p.oauth = refreshed.oauth; // retain THIS caller's model and reasoning selection
+    p.oauth =
+        refreshed.oauth; // retain THIS caller's model and reasoning selection
     return p;
   }
   final job = _refreshProvider(app, link, p, localFactory);
@@ -51,7 +52,11 @@ Future<AiProvider> _refreshProvider(
   if (previous.transport == 'client') {
     final local = (localFactory ?? AiOAuthClient.new)();
     try {
-      if (p.proxyMode == 'direct') { local.useDirect(); } else { await local.configureProxy(); }
+      if (p.proxyMode == 'direct') {
+        local.useDirect();
+      } else {
+        await local.configureProxy();
+      }
       credential = await local.refresh(previous);
     } finally {
       local.close();
@@ -68,7 +73,9 @@ Future<AiProvider> _refreshProvider(
       'transport': 'server',
     });
   }
-  if (credential.access.isEmpty || credential.refresh.isEmpty || credential.needsRefresh) {
+  if (credential.access.isEmpty ||
+      credential.refresh.isEmpty ||
+      credential.needsRefresh) {
     throw StateError('OpenAI 刷新响应无效，请重新登录');
   }
   await app.update((profile) {
@@ -95,8 +102,13 @@ Future<AiOAuthCredential?> showAiDeviceLogin(
 }) => showWorkbenchDialog<AiOAuthCredential>(
   context: context,
   barrierDismissible: false,
-  builder: (_) =>
-      _DeviceLogin(link: link, useProxy: useProxy, proxyMode: proxyMode, initialTransport: initialTransport, localFactory: localFactory),
+  builder: (_) => _DeviceLogin(
+    link: link,
+    useProxy: useProxy,
+    proxyMode: proxyMode,
+    initialTransport: initialTransport,
+    localFactory: localFactory,
+  ),
 );
 
 class _DeviceLogin extends StatefulWidget {
@@ -105,7 +117,13 @@ class _DeviceLogin extends StatefulWidget {
   final String proxyMode;
   final String initialTransport;
   final AiOAuthClient Function()? localFactory;
-  const _DeviceLogin({required this.link, required this.useProxy, required this.proxyMode, required this.initialTransport, this.localFactory});
+  const _DeviceLogin({
+    required this.link,
+    required this.useProxy,
+    required this.proxyMode,
+    required this.initialTransport,
+    this.localFactory,
+  });
   @override
   State<_DeviceLogin> createState() => _DeviceLoginState();
 }
@@ -153,24 +171,40 @@ class _DeviceLoginState extends State<_DeviceLogin> {
       if (_transport == 'client') {
         final local = (widget.localFactory ?? AiOAuthClient.new)();
         _local = local;
-        if (widget.proxyMode == 'direct') { local.useDirect(); } else { await local.configureProxy(); }
+        if (widget.proxyMode == 'direct') {
+          local.useDirect();
+        } else {
+          await local.configureProxy();
+        }
         r = await local.begin();
       } else {
         if (widget.link == null) throw StateError('服务器未连接，请使用本机网络');
-        if (widget.proxyMode.isNotEmpty && !widget.link!.server.caps.contains('ai.network')) throw StateError('请升级 agent 后选择代理出口');
-        r = await widget.link!.call('ai.auth.begin', {'use_proxy': widget.useProxy, if (widget.proxyMode.isNotEmpty) 'proxy_mode': widget.proxyMode}) as Map;
+        if (widget.proxyMode.isNotEmpty &&
+            !widget.link!.server.caps.contains('ai.network'))
+          throw StateError('请升级 agent 后选择代理出口');
+        r = await widget.link!.call('ai.auth.begin', {
+          'use_proxy': widget.useProxy,
+          if (widget.proxyMode.isNotEmpty) 'proxy_mode': widget.proxyMode,
+        }) as Map;
       }
       if (!mounted || _finished || generation != _generation) return;
       _deviceId = r['device_auth_id'] as String? ?? '';
       _deadline = (r['expires_at'] as num?)?.toInt() ?? 0;
-      _interval = ((r['interval_ms'] as num?)?.toInt() ?? 8000).clamp(8000, 63000);
+      _interval = ((r['interval_ms'] as num?)?.toInt() ?? 8000).clamp(
+        8000,
+        63000,
+      );
       final code = r['user_code'] as String? ?? '';
-      if (_deviceId.isEmpty || code.isEmpty || _deadline <= DateTime.now().millisecondsSinceEpoch) {
+      if (_deviceId.isEmpty ||
+          code.isEmpty ||
+          _deadline <= DateTime.now().millisecondsSinceEpoch) {
         throw StateError('设备授权响应无效，请升级 agent 后重试');
       }
       setState(() => _code = code);
       _expiryTimer = Timer(
-        Duration(milliseconds: _deadline - DateTime.now().millisecondsSinceEpoch),
+        Duration(
+          milliseconds: _deadline - DateTime.now().millisecondsSinceEpoch,
+        ),
         () => _fail(StateError('设备码已过期，请关闭后重新登录')),
       );
       _schedule();
@@ -186,7 +220,10 @@ class _DeviceLoginState extends State<_DeviceLogin> {
       _fail(StateError('设备码已过期，请关闭后重新登录'));
       return;
     }
-    _timer = Timer(Duration(milliseconds: remaining < _interval ? remaining : _interval), () => unawaited(_poll()));
+    _timer = Timer(
+      Duration(milliseconds: remaining < _interval ? remaining : _interval),
+      () => unawaited(_poll()),
+    );
   }
 
   Future<void> _poll() async {
@@ -212,7 +249,8 @@ class _DeviceLoginState extends State<_DeviceLogin> {
           ...((r['credential'] as Map).cast<String, dynamic>()),
           'transport': _transport,
         });
-        if (c.access.isEmpty || c.refresh.isEmpty) throw StateError('授权响应缺少登录令牌');
+        if (c.access.isEmpty || c.refresh.isEmpty)
+          throw StateError('授权响应缺少登录令牌');
         _cancel();
         Navigator.pop(context, c);
       } else if (r['status'] == 'pending') {
@@ -265,7 +303,7 @@ class _DeviceLoginState extends State<_DeviceLogin> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('请自行在浏览器打开官方地址并输入下方设备码。仅在你主动发起登录时授权，切勿把设备码交给他人。'),
+              const Text('1. 选择授权网络\n2. 在官方页面输入设备码\n3. 回到这里，授权结果会自动更新'),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 key: ValueKey('ai-auth-transport-$_transport'),
@@ -273,8 +311,14 @@ class _DeviceLoginState extends State<_DeviceLogin> {
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: '授权网络出口'),
                 items: const [
-                  DropdownMenuItem(value: 'client', child: Text('本机网络 / 系统代理（推荐）')),
-                  DropdownMenuItem(value: 'server', child: Text('服务器网络 / 服务器代理出口')),
+                  DropdownMenuItem(
+                    value: 'client',
+                    child: Text('本机网络 / 系统代理（推荐）'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'server',
+                    child: Text('服务器网络 / 服务器代理出口'),
+                  ),
                 ],
                 onChanged: (v) {
                   if (v != null && v != _transport) _retry(v);
@@ -283,35 +327,53 @@ class _DeviceLoginState extends State<_DeviceLogin> {
               const SizedBox(height: 12),
               const SelectableText('https://auth.openai.com/codex/device'),
               TextButton.icon(
-                onPressed: () => Clipboard.setData(const ClipboardData(text: 'https://auth.openai.com/codex/device')),
+                onPressed: () => copyText(
+                  'https://auth.openai.com/codex/device',
+                  what: '官方登录地址已复制',
+                ),
                 icon: const Icon(Icons.copy, size: 16),
                 label: const Text('复制官方登录地址'),
               ),
               if (_code.isNotEmpty) ...[
                 SelectableText(
                   _code,
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 3),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 3,
+                  ),
                 ),
                 TextButton.icon(
-                  onPressed: () => Clipboard.setData(ClipboardData(text: _code)),
+                  onPressed: () => copyText(_code, what: '设备码已复制'),
                   icon: const Icon(Icons.copy, size: 16),
                   label: const Text('复制设备码'),
                 ),
               ],
               if (_error != null)
-                Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                )
               else
                 Row(
                   children: [
-                    const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                     const SizedBox(width: 10),
-                    Flexible(child: Text(_code.isEmpty ? '正在获取设备码…' : '等待浏览器授权，最长 15 分钟…')),
+                    Flexible(
+                      child: Text(
+                        _code.isEmpty ? '正在获取设备码…' : '等待浏览器授权，最长 15 分钟…',
+                      ),
+                    ),
                   ],
                 ),
               const SizedBox(height: 12),
               Text(
                 _transport == 'client'
-                    ? '授权及刷新直接从本机发出，不经过服务器；模型请求仍从服务器发出。令牌加密保存在本机。'
+                    ? '授权与刷新使用本机网络；模型请求由当前工作区的 agent 发出。令牌加密保存在本机。'
                     : '授权及刷新经服务器出口，令牌仅加密保存在本机。获取设备码时的 403 通常需要检查出口网络，不能据此判断订阅资格。',
                 style: const TextStyle(fontSize: 12, height: 1.6),
               ),

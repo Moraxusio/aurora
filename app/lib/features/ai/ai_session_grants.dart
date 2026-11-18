@@ -2,6 +2,7 @@ import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../theme/ide_theme.dart';
+import 'ai_visuals.dart';
 
 Future<void> showAiSessionGrants(
   BuildContext context,
@@ -69,19 +70,10 @@ class _GrantsState extends State<_Grants> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '本会话授权',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '这里是“本会话允许”记住的实际范围。撤销后，后续工具调用重新按权限规则判断。',
-                style: TextStyle(fontSize: 12, height: 1.5, color: ide.textDim),
-              ),
-            ],
+          child: const AiSectionHeading(
+            icon: Icons.shield_outlined,
+            title: '本会话授权',
+            subtitle: '仅此会话记住的允许范围。撤销后，后续调用重新按权限规则判断。',
           ),
         ),
         if (_busy) const LinearProgressIndicator(minHeight: 2),

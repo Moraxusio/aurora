@@ -144,6 +144,20 @@ void main() {
     });
   });
 
+  testWidgets('a lazily opened merge tab stays bound to its original repository through save and stage', (t) async {
+    final tab = mergeTab(ws, git, 'src/f.txt');
+    git.repo = GitRepo('other-root', '/other-repo', 'other');
+    await show(t, Builder(builder: tab.builder));
+    expect(args('fs.read'), allOf(containsPair('root', 'home'), containsPair('path', '/project/src/f.txt')));
+    await t.tap(find.text('采用当前')); await t.pump();
+    await t.tap(find.text('保存')); await t.pumpAndSettle();
+    expect(args('fs.write'), allOf(containsPair('root', 'home'), containsPair('path', '/project/src/f.txt')));
+    await t.tap(find.text('暂存')); await t.pumpAndSettle();
+    expect(args('git.stage'), allOf(containsPair('root', 'home'), containsPair('repo', '/project')));
+    await t.pumpWidget(const SizedBox());
+    tab.dispose();
+  });
+
   group('merge view', () {
     testWidgets('pick a side, save with the etag, then stage', (t) async {
       await show(t, MergeView(ws: ws, git: git, path: 'src/f.txt'));

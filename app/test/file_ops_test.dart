@@ -97,6 +97,29 @@ void main() {
       expect(r.moved, isEmpty);
     });
 
+    test('cross-root cut reports a copied destination when source deletion fails', () async {
+      final fs = FakeFs({'home': {'/f.txt'}, 'data': {'/f.txt'}});
+      final result = await pasteItems(
+        call: (op, args) async {
+          if (op == 'fs.delete' && args['root'] == 'home') {
+            throw OpError(codeUnavailable, 'source is read-only');
+          }
+          return fs.call(op, args);
+        },
+        items: const [ClipItem('home', '/f.txt', false)],
+        cut: true, destRoot: 'data', destDir: '/', existing: {'f.txt'},
+        resolve: (n, d, {required more}) async => const ConflictChoice(Conflict.replace),
+      );
+      expect(result.done, 1);
+      expect(result.createdPaths, ['/f.txt']);
+      expect(result.moved, isEmpty);
+      expect(result.errors.single, contains('已复制'));
+      expect(fs.tree['home'], contains('/f.txt'));
+      expect(fs.tree['data'], {'/f.txt'});
+      expect(fs.calls.where((c) => c.startsWith('fs.rename')), hasLength(1),
+          reason: 'committed destination must never enter copy rollback');
+    });
+
     test('copy beside itself makes a numbered copy without asking', () async {
       final fs = FakeFs({'home': {'/d', '/d/a.txt'}});
       final r = await pasteItems(call: fs.call, items: const [ClipItem('home', '/d/a.txt', false)], cut: false, destRoot: 'home', destDir: '/d', existing: {'a.txt'}, resolve: never);

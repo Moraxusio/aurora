@@ -174,6 +174,7 @@ class _FileTreePageState extends State<_FileTreePage> {
   bool _desc = false;
   bool _foldersFirst = true;
   String? _activeFile;
+  Link? _link;
 
   Workspace get ws => widget.ws;
 
@@ -184,6 +185,7 @@ class _FileTreePageState extends State<_FileTreePage> {
     ws.filesRevision.addListener(_onFilesChanged);
     ws.fileClipboard.addListener(_tick);
     ws.addListener(_onWorkspace);
+    _link = ws.link;
     final view = ws.viewForProject(widget.projectId);
     _expanded = view.expanded.toSet();
     _treeSet = view.treeSet;
@@ -215,6 +217,13 @@ class _FileTreePageState extends State<_FileTreePage> {
 
   String _shape() => ws.entry?.workspace(widget.projectId)?.folders.map((f) => '${f.root}:${f.path}').join('|') ?? '';
   void _onWorkspace() {
+    if (!identical(_link, ws.link)) {
+      _link = ws.link;
+      _generation++;
+      _refreshing = null;
+      _refreshAgain = false;
+      if (_link != null) _loadRoots();
+    }
     final active = ws.active?.file;
     final activeKey = active == null ? null : '${active.root}:${active.path}';
     if (_activeFile != activeKey) { _activeFile = activeKey; if (mounted) setState(() {}); }
@@ -305,19 +314,17 @@ class _FileTreePageState extends State<_FileTreePage> {
     try {
       final r = await link.call('fs.roots') as Map;
       final list = [for (final x in r['roots'] as List) (x as Map).cast<String, dynamic>()];
-      if (!mounted || generation != _generation) return;
+      if (!mounted || generation != _generation || !identical(link, ws.link)) return;
       final project = ws.entry?.workspace(widget.projectId);
       final nodes = project == null
           ? [for (final x in list) _Node(x['id'] as String, '/', (x['label'] as String?) ?? x['id'] as String, null, location: x['path'] as String?)]
           : [for (final f in project.folders) _Node(f.root, f.path, f.path == '/' ? (list.where((r) => r['id'] == f.root).firstOrNull?['label'] as String? ?? f.root) : f.name,
               null, location: '${f.root}:${f.path}')];
+      final old = {for (final n in _roots) n.key: n};
       setState(() {
         _roots
           ..clear()
-          ..addAll(nodes);
-        _selected = null;
-        _anchor = null;
-        _picked = {};
+          ..addAll(nodes.map((n) => old[n.key] ?? n));
         _loadingRoots = false;
         _error = null;
       });
@@ -325,12 +332,15 @@ class _FileTreePageState extends State<_FileTreePage> {
         if (!mounted || generation != _generation) return;
         final open = _expanded.contains(WorkspacePath(root: n.root, path: n.path)) ||
           (!_treeSet && (project != null || identical(n, _roots.first)));
-        if (open) await _expand(n, true, remember: false);
+        if (open) {
+          n.expanded = true;
+          await _load(n);
+        }
       }
-    } on OpError catch (e) {
+    } on Object catch (e) {
       if (mounted && generation == _generation) {
         setState(() {
-          _error = e.message;
+          _error = e is OpError ? e.message : '$e';
           _loadingRoots = false;
         });
       }
@@ -350,7 +360,7 @@ class _FileTreePageState extends State<_FileTreePage> {
     });
     try {
       final r = await link.call('fs.list', {'root': n.root, 'path': n.path, 'hidden': _hidden}) as Map;
-      if (!mounted || generation != _generation || n.request != request || hidden != _hidden) return;
+      if (!mounted || generation != _generation || n.request != request || hidden != _hidden || !identical(link, ws.link)) return;
       final list = [for (final e in r['entries'] as List) (e as Map).cast<String, dynamic>()];
       final shown = _hidden ? list : list.where((e) => !(e['name'] as String).startsWith('.')).toList();
       // A reload builds new nodes, but a folder the user had open stays open,
@@ -383,13 +393,13 @@ class _FileTreePageState extends State<_FileTreePage> {
         }
       }
       if (restore) {
-        for (final c in nodes.where((c) => c.isDir && c.expanded && c.children == null)) {
+        for (final c in nodes.where((c) => c.isDir && c.expanded)) {
           if (!mounted || generation != _generation) return;
           await _load(c);
         }
       }
-    } on OpError catch (e) {
-      if (mounted && generation == _generation && request == n.request && hidden == _hidden) n.error = e.message;
+    } on Object catch (e) {
+      if (mounted && generation == _generation && request == n.request && hidden == _hidden) n.error = e is OpError ? e.message : '$e';
     } finally {
       if (mounted && generation == _generation && request == n.request) setState(() => n.loading = false);
     }
@@ -442,13 +452,16 @@ class _FileTreePageState extends State<_FileTreePage> {
 
   Future<void> _refreshAll() {
     _refreshAgain = true;
-    return _refreshing ??= _refreshLoop().whenComplete(() => _refreshing = null);
+    if (_refreshing != null) return _refreshing!;
+    late final Future<void> work;
+    work = _refreshLoop().whenComplete(() { if (identical(_refreshing, work)) _refreshing = null; });
+    return _refreshing = work;
   }
 
   Future<void> _refreshLoop() async {
-    while (_refreshAgain && mounted) {
-    _refreshAgain = false;
     final generation = _generation;
+    while (_refreshAgain && mounted && generation == _generation) {
+    _refreshAgain = false;
     Future<void> walk(_Node n) async {
       if (!mounted || generation != _generation || !n.expanded) return;
       await _load(n, restore: false);
@@ -777,6 +790,7 @@ class _FileTreePageState extends State<_FileTreePage> {
       return;
     }
     if (cut && items.any((i) => _hasUnsaved(i.root, i.path))) return _warnUnsaved();
+    final clipboard = ws.fileClipboard.value, observed = ws.tabs.toSet();
     setState(() => _busy = '正在准备粘贴…');
     PasteResult? res;
     try {
@@ -785,7 +799,10 @@ class _FileTreePageState extends State<_FileTreePage> {
       if (listing == null) return;
       final existing = {for (final e in listing['entries'] as List) (e as Map)['name'] as String};
       res = await pasteItems(
-        call: (op, args) => link.call(op, args, op == 'fs.copy' || op == 'fs.delete' ? const Duration(minutes: 30) : const Duration(seconds: 60)),
+        call: (op, args) {
+          if (!identical(link, ws.link)) throw OpError(codeUnavailable, '连接已变化，请核对文件后重试');
+          return link.call(op, args, op == 'fs.copy' || op == 'fs.delete' ? const Duration(minutes: 30) : const Duration(seconds: 60));
+        },
         items: items,
         cut: cut,
         destRoot: dest.root,
@@ -801,9 +818,10 @@ class _FileTreePageState extends State<_FileTreePage> {
     }
     if (!mounted) return;
     for (final m in res.moved) {
-      ws.dropTabs((t) => t.id == 'file:${m.root}:${m.path}' || t.id.startsWith('file:${m.root}:${m.path}/'));
+      ws.dropTabs((t) => observed.contains(t) && !t.dirty.value &&
+          (t.id == 'file:${m.root}:${m.path}' || t.id.startsWith('file:${m.root}:${m.path}/')));
     }
-    if (cut && res.moved.isNotEmpty) {
+    if (cut && res.moved.isNotEmpty && identical(clipboard, ws.fileClipboard.value)) {
       // what was moved is gone from the old place: it cannot be pasted again
       final left = [for (final i in items) if (!res.moved.any((m) => m.root == i.root && m.path == i.path)) i];
       ws.fileClipboard.value = left.isEmpty ? null : FileClipboard(left, cut: true);

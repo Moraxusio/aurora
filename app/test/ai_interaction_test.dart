@@ -225,10 +225,21 @@ void main() {
   }
 
   Future<void> page(WidgetTester t, String id) async {
+    final selector = find.byKey(const ValueKey('ai-settings-nav-selector'));
+    if (selector.evaluate().isNotEmpty) {
+      await t.ensureVisible(selector);
+      await t.pumpAndSettle();
+      await t.tap(selector);
+      await t.pumpAndSettle();
+    }
     final nav = find.byKey(ValueKey('ai-settings-nav-$id'));
     await t.ensureVisible(nav);
-    await t.tap(nav);
     await t.pumpAndSettle();
+    await t.tap(nav.hitTestable());
+    await t.pumpAndSettle();
+    if (selector.evaluate().isNotEmpty) {
+      expect(t.widget<DropdownButton<String>>(selector).value, id);
+    }
   }
 
   Future<void> provider(WidgetTester t, String from, String label) async {
@@ -335,6 +346,8 @@ void main() {
       );
       await t.tap(find.text('模型'));
       await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('ai-picker-provider-a')));
+      await t.pumpAndSettle();
       await t.tap(find.text('连接 B'));
       await t.pumpAndSettle();
       await t.ensureVisible(find.text('high'));
@@ -363,7 +376,7 @@ void main() {
       await t.tap(find.byKey(const ValueKey('ai-send-btn')));
       await frames(t);
       expect(link.rpcCalls.where((x) => x.$1 == 'ai.run'), isEmpty);
-      expect(find.text('规划'), findsOneWidget);
+      expect(find.textContaining('规划 · 询问'), findsOneWidget);
       expect(t.takeException(), isNull);
       await snapshot(t, 'conversation-narrow-dark');
     },
@@ -730,9 +743,13 @@ void main() {
     t,
   ) async {
     await pump(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
-    await t.tap(find.byKey(const ValueKey('ai-delivery-mode')));
+    await t.tap(find.byKey(const ValueKey('ai-send-options')));
     await frames(t);
-    await t.tap(find.text('排队发送 · 当前任务结束后'));
+    await t.tap(find.byKey(const ValueKey('ai-send-delivery-0')));
+    await frames(t);
+    await t.tap(find.text('排队发送 · 当前任务结束后').last);
+    await frames(t);
+    await t.tap(find.byKey(const ValueKey('ai-send-options-apply')));
     await frames(t);
     await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), '下一项任务');
     await t.tap(find.byKey(const ValueKey('ai-send-btn')));
@@ -851,7 +868,13 @@ void main() {
         'settings pages stay independent at ${size.width} ${brightness.name}',
         (t) async {
           await settings(t, size: size, brightness: brightness);
-          for (final id in ['connection', 'models', 'execution', 'defaults']) {
+          for (final id in [
+            'overview',
+            'connection',
+            'models',
+            'execution',
+            'defaults',
+          ]) {
             await page(t, id);
             expect(
               find.byKey(const ValueKey('ai-save-settings')).hitTestable(),

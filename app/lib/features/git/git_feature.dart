@@ -4,7 +4,7 @@
 // loses work (discard) asks first; a pull or push that needs a decision
 // (diverged history, rejected push) puts the choice to the user.
 import 'package:aurora_profile/aurora_profile.dart' show WorkspacePath;
-import 'package:aurora_wire/aurora_wire.dart' show OpError, codeConflict;
+import 'package:aurora_wire/aurora_wire.dart' show Link, OpError, codeConflict;
 import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../kernel/editor_tab.dart';
@@ -85,6 +85,11 @@ class GitPanel extends StatefulWidget {
 class _GitPanelState extends State<GitPanel> {
   late final GitModel _git = GitModel(widget.ws);
   final _message = TextEditingController();
+  final Map<(String, String), TextEditingValue> _drafts = {};
+  (String, String)? _draftRepo;
+  Link? _link;
+  bool _deciding = false;
+  bool get _busy => _git.busy || _deciding;
   bool _changesOpen = true, _stagedOpen = true, _historyOpen = false, _branchesOpen = false;
   bool _stashOpen = false, _tagsOpen = false, _remotesOpen = false;
 
@@ -96,40 +101,95 @@ class _GitPanelState extends State<GitPanel> {
   void initState() {
     super.initState();
     _git.addListener(_tick);
+    _link = ws.link;
+    ws.addListener(_connectionChanged);
     _git.findRepos();
   }
 
   @override
   void dispose() {
     _git.removeListener(_tick);
+    ws.removeListener(_connectionChanged);
     _git.dispose();
     _message.dispose();
     super.dispose();
   }
 
   void _tick() {
+    final repo = _git.repo;
+    final key = repo == null ? null : (repo.root, repo.repo);
+    if (key != _draftRepo) {
+      if (_draftRepo != null) _drafts[_draftRepo!] = _message.value;
+      _draftRepo = key;
+      _message.value = _drafts[key] ?? TextEditingValue.empty;
+    }
     if (mounted) setState(() {});
   }
 
+  void _connectionChanged() {
+    if (identical(_link, ws.link)) return;
+    _link = ws.link;
+    if (_link != null) _reload();
+  }
+
+  Future<void> _reload() async {
+    await _git.findRepos();
+    if (!mounted) return;
+    if (_historyOpen) _git.loadLog();
+    if (_branchesOpen) _git.loadBranches();
+    if (_stashOpen) _git.loadStashes();
+    if (_tagsOpen) _git.loadTags();
+  }
+
+  /// Every decision belongs to the repository/connection that opened it.
+  /// Single-flight covers the dialog as well as the subsequent write.
+  Future<T?> _decide<T>(Future<T?> Function() show) async {
+    if (_busy || !mounted) return null;
+    final repo = _git.repo, link = ws.link;
+    if (repo == null || link == null) return null;
+    setState(() => _deciding = true);
+    try {
+      final answer = await show();
+      if (!mounted) return null;
+      if (!identical(repo, _git.repo) || !identical(link, ws.link) || ws.app.selected != ws.serverId) {
+        ws.toast('仓库或连接已变化，请在目标仓库重新操作', error: true);
+        return null;
+      }
+      return answer;
+    } finally {
+      if (mounted) setState(() => _deciding = false);
+    }
+  }
+
+  Future<bool> _confirm({required String title, required String body, required String ok, bool danger = false}) async =>
+    await _decide(() => confirmDialog(context, title: title, body: body, ok: ok, danger: danger)) == true;
+
+  Future<String?> _ask({required String title, String? initial, String? hint, required String ok}) =>
+    _decide(() => askText(context, title: title, initial: initial ?? '', hint: hint, ok: ok));
+
   Future<void> _commit({bool amend = false}) async {
     final st = _git.status;
-    if (st == null) return;
-    final msg = _message.text.trim();
+    if (st == null || _busy) return;
+    final draft = _message.text;
+    final target = _git.repo;
+    final msg = draft.trim();
     if (msg.isEmpty && !amend) return ws.toast('先写提交说明', error: true);
     // Nothing staged: offer to commit all tracked changes, as an IDE does.
     var all = false;
     if (st.stagedFiles.isEmpty && !amend) {
       if (st.changedFiles.isEmpty) return ws.toast('没有可提交的改动', error: true);
-      all = await confirmDialog(context, title: '没有暂存的改动', body: '提交所有已修改的文件（不含新文件）？', ok: '全部提交');
+      all = await _confirm(title: '没有暂存的改动', body: '提交所有已修改的文件（不含新文件）？', ok: '全部提交');
       if (!all) return;
     }
     if (await _git.commit(msg, amend: amend, all: all)) {
-      _message.clear();
+      if (!mounted) return;
+      if (identical(target, _git.repo) && _message.text == draft) _message.clear();
       if (_historyOpen) _git.loadLog();
     }
   }
 
   Future<void> _sync(String action) async {
+    if (_busy) return;
     var r = await _git.sync(action);
     if (r.ok) {
       ws.toast(switch (action) { 'fetch' => '已获取', 'pull' => '已拉取', _ => '已推送' });
@@ -155,7 +215,7 @@ class _GitPanelState extends State<GitPanel> {
 
   Future<String?> _choose(String title, String body, Map<String, String> options) {
     final ide = Ide.of(context);
-    return showWorkbenchDialog<String>(
+    return _decide(() => showWorkbenchDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(title),
@@ -165,7 +225,7 @@ class _GitPanelState extends State<GitPanel> {
           for (final e in options.entries) OutlinedButton(onPressed: () => Navigator.pop(c, e.key), child: Text(e.value)),
         ],
       ),
-    );
+    ));
   }
 
   void _openDiff(GitFile f, {required bool staged}) {
@@ -185,7 +245,7 @@ class _GitPanelState extends State<GitPanel> {
   Future<void> _discard(List<GitFile> files) async {
     final names = files.length == 1 ? files.first.path : '${files.length} 个文件';
     final untracked = files.where((f) => f.untracked).length;
-    final ok = await confirmDialog(context,
+    final ok = await _confirm(
         title: '还原 $names？', body: '${untracked > 0 ? '新文件会被删除，' : ''}对文件的修改会丢失，不能恢复。', ok: '还原', danger: true);
     if (ok) await _git.discard([for (final f in files) f.path]);
   }
@@ -208,8 +268,9 @@ class _GitPanelState extends State<GitPanel> {
     return Column(children: [
       _repoBar(ide, st),
       const Divider(),
+      if (_busy) const LinearProgressIndicator(minHeight: 2),
       if (_git.error != null)
-        Padding(padding: const EdgeInsets.all(10), child: Text(_git.error!, style: TextStyle(color: ide.error, fontSize: 12)))
+        Expanded(child: EmptyHint(icon: Icons.error_outline, text: _git.error!, actionLabel: '重试', onAction: _reload))
       else if (st == null)
         const Expanded(child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
       else
@@ -219,12 +280,10 @@ class _GitPanelState extends State<GitPanel> {
 
   Widget _repoBar(Ide ide, GitStatus? st) {
     return Container(
-      height: 34,
       color: ide.sideBar,
-      padding: const EdgeInsets.only(left: 8, right: 2),
-      child: Row(children: [
-        Expanded(
-          child: WorkbenchMenuButton<GitRepo>(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          WorkbenchMenuButton<GitRepo>(
             tooltip: '切换仓库',
             enabled: _git.repos.length > 1,
             onSelected: _git.select,
@@ -236,80 +295,80 @@ class _GitPanelState extends State<GitPanel> {
               if (_git.repos.length > 1) Icon(Icons.arrow_drop_down, size: 18, color: ide.textDim),
             ]),
           ),
-        ),
-        if (st != null) ...[
-          IconBtn(Icons.cloud_download_outlined, '获取（fetch）', _git.busy ? null : () => _sync('fetch')),
-          IconBtn(Icons.arrow_downward, st.behind > 0 ? '拉取（落后 ${st.behind}）' : '拉取（pull）', _git.busy ? null : () => _sync('pull'), color: st.behind > 0 ? ide.accent : null),
-          IconBtn(Icons.arrow_upward, st.ahead > 0 ? '推送（领先 ${st.ahead}）' : '推送（push）', _git.busy ? null : () => _sync('push'), color: st.ahead > 0 ? ide.accent : null),
-        ],
-        IconBtn(Icons.refresh, '刷新', () {
-          _git.refresh();
-          if (_historyOpen) _git.loadLog();
-          if (_branchesOpen) _git.loadBranches();
-        }),
+        UiToolbar(padding: EdgeInsets.zero, children: [
+          if (st != null) ...[
+            TextButton.icon(onPressed: _busy ? null : () => _sync('pull'), icon: const Icon(Icons.arrow_downward, size: 14), label: Text(st.behind > 0 ? '拉取 ${st.behind}' : '拉取')),
+            TextButton.icon(onPressed: _busy ? null : () => _sync('push'), icon: const Icon(Icons.arrow_upward, size: 14), label: Text(st.ahead > 0 ? '推送 ${st.ahead}' : '推送')),
+            IconBtn(Icons.cloud_download_outlined, '获取（fetch）', _busy ? null : () => _sync('fetch')),
+          ],
+          IconBtn(Icons.refresh, '刷新', _git.loadingRepos ? null : _reload),
+        ]),
       ]),
     );
   }
 
   Widget _body(Ide ide, GitStatus st) {
     final conflicts = st.conflicts, staged = st.stagedFiles, changed = st.changedFiles;
-    return ListView(children: [
-      _branchLine(ide, st),
-      if (st.operation.isNotEmpty) _operationBanner(ide, st),
-      _commitBox(ide, st),
+    Widget box(Widget child) => SliverToBoxAdapter(child: child);
+    Widget files(List<GitFile> values, {required bool staged, bool conflict = false}) =>
+      SliverList.builder(itemCount: values.length, itemBuilder: (_, i) => _fileRow(values[i], staged: staged, conflict: conflict));
+    return CustomScrollView(slivers: [
+      box(_branchLine(ide, st)),
+      if (st.operation.isNotEmpty) box(_operationBanner(ide, st)),
+      box(_commitBox(ide, st)),
       if (conflicts.isNotEmpty) ...[
-        SectionHeader('冲突  ${conflicts.length}', expanded: true),
-        for (final f in conflicts) _fileRow(f, staged: false, conflict: true),
+        box(SectionHeader('冲突  ${conflicts.length}', expanded: true)),
+        files(conflicts, staged: false, conflict: true),
       ],
-      SectionHeader('暂存的更改  ${staged.length}', expanded: _stagedOpen, onTap: () => setState(() => _stagedOpen = !_stagedOpen), actions: [
-        if (staged.isNotEmpty) IconBtn(Icons.remove, '全部取消暂存', _git.unstageAll),
-      ]),
-      if (_stagedOpen) ...[for (final f in staged) _fileRow(f, staged: true)],
-      SectionHeader('更改  ${changed.length}', expanded: _changesOpen, onTap: () => setState(() => _changesOpen = !_changesOpen), actions: [
-        if (changed.isNotEmpty) IconBtn(Icons.undo, '全部还原', () => _discard(changed), color: ide.error),
-        if (changed.isNotEmpty) IconBtn(Icons.add, '全部暂存', _git.stageAll),
-      ]),
+      box(SectionHeader('暂存的更改  ${staged.length}', expanded: _stagedOpen, onTap: () => setState(() => _stagedOpen = !_stagedOpen), actions: [
+        if (staged.isNotEmpty) IconBtn(Icons.remove, '全部取消暂存', _busy ? null : _git.unstageAll),
+      ])),
+      if (_stagedOpen) files(staged, staged: true),
+      box(SectionHeader('更改  ${changed.length}', expanded: _changesOpen, onTap: () => setState(() => _changesOpen = !_changesOpen), actions: [
+        if (changed.isNotEmpty) IconBtn(Icons.undo, '全部还原', _busy ? null : () => _discard(changed), color: ide.error),
+        if (changed.isNotEmpty) IconBtn(Icons.add, '全部暂存', _busy ? null : _git.stageAll),
+      ])),
       if (_changesOpen) ...[
-        for (final f in changed) _fileRow(f, staged: false),
+        files(changed, staged: false),
         if (changed.isEmpty && staged.isEmpty && conflicts.isEmpty)
-          Padding(padding: const EdgeInsets.all(14), child: Text('没有改动', style: TextStyle(color: ide.textDim))),
+          box(Padding(padding: const EdgeInsets.all(14), child: Text('工作区干净，没有待提交的改动', style: TextStyle(color: ide.textDim)))),
       ],
-      if (st.truncated) Padding(padding: const EdgeInsets.all(10), child: Text('改动太多，只显示前 5000 个', style: TextStyle(color: ide.warn, fontSize: 12))),
-      SectionHeader('分支', expanded: _branchesOpen, onTap: () {
+      if (st.truncated) box(Padding(padding: const EdgeInsets.all(10), child: Text('改动太多，只显示前 5000 个', style: TextStyle(color: ide.warn, fontSize: 12)))),
+      box(SectionHeader('分支', expanded: _branchesOpen, onTap: () {
         setState(() => _branchesOpen = !_branchesOpen);
         if (_branchesOpen) _git.loadBranches();
       }, actions: [
-        IconBtn(Icons.add, '新建分支', _newBranch),
-      ]),
-      if (_branchesOpen) ..._branchRows(ide),
-      SectionHeader('历史', expanded: _historyOpen, onTap: () {
+        IconBtn(Icons.add, '新建分支', _busy ? null : _newBranch),
+      ])),
+      if (_branchesOpen) SliverList.list(children: _branchRows(ide)),
+      box(SectionHeader('历史', expanded: _historyOpen, onTap: () {
         setState(() => _historyOpen = !_historyOpen);
         if (_historyOpen) _git.loadLog();
-      }),
-      if (_historyOpen) ..._historyRows(ide),
+      })),
+      if (_historyOpen) SliverList.list(children: _historyRows(ide)),
       if (_has('git.stash')) ...[
-        SectionHeader('储藏  ${st.stashes}', expanded: _stashOpen, onTap: () {
+        box(SectionHeader('储藏  ${st.stashes}', expanded: _stashOpen, onTap: () {
           setState(() => _stashOpen = !_stashOpen);
           if (_stashOpen) _git.loadStashes();
         }, actions: [
-          IconBtn(Icons.archive_outlined, '储藏改动（stash）', _git.busy ? null : _stashPush),
-        ]),
-        if (_stashOpen) ..._stashRows(ide),
+          IconBtn(Icons.archive_outlined, '储藏改动（stash）', _busy ? null : _stashPush),
+        ])),
+        if (_stashOpen) SliverList.list(children: _stashRows(ide)),
       ],
       if (_has('git.tag')) ...[
-        SectionHeader('标签', expanded: _tagsOpen, onTap: () {
+        box(SectionHeader('标签', expanded: _tagsOpen, onTap: () {
           setState(() => _tagsOpen = !_tagsOpen);
           if (_tagsOpen) _git.loadTags();
         }, actions: [
-          IconBtn(Icons.add, '在 HEAD 上打标签', () => _newTag(null)),
-        ]),
-        if (_tagsOpen) ..._tagRows(ide),
+          IconBtn(Icons.add, '在 HEAD 上打标签', _busy ? null : () => _newTag(null)),
+        ])),
+        if (_tagsOpen) SliverList.list(children: _tagRows(ide)),
       ],
       if (_has('git.remote')) ...[
-        SectionHeader('远程仓库  ${st.remotes.length}', expanded: _remotesOpen, onTap: () => setState(() => _remotesOpen = !_remotesOpen), actions: [
-          IconBtn(Icons.add, '添加远程仓库', _addRemote),
-        ]),
-        if (_remotesOpen) ..._remoteRows(ide, st),
+        box(SectionHeader('远程仓库  ${st.remotes.length}', expanded: _remotesOpen, onTap: () => setState(() => _remotesOpen = !_remotesOpen), actions: [
+          IconBtn(Icons.add, '添加远程仓库', _busy ? null : _addRemote),
+        ])),
+        if (_remotesOpen) SliverList.list(children: _remoteRows(ide, st)),
       ],
     ]);
   }
@@ -322,7 +381,7 @@ class _GitPanelState extends State<GitPanel> {
     if (st.stagedFiles.isEmpty && st.changedFiles.isEmpty) return ws.toast('没有可以储藏的改动', error: true);
     final msg = TextEditingController();
     var untracked = st.changedFiles.any((f) => f.untracked);
-    final ok = await showWorkbenchDialog<bool>(
+    final ok = await _decide(() => showWorkbenchDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
@@ -342,12 +401,12 @@ class _GitPanelState extends State<GitPanel> {
           ],
         ),
       ),
-    );
+    ));
     final text = msg.text;
     msg.dispose();
     if (ok != true) return;
     final r = await _git.stash('push', message: text, untracked: untracked);
-    if (r.ok) {
+    if (r.ok && mounted) {
       ws.toast('已储藏，工作区已恢复干净');
       setState(() => _stashOpen = true);
     }
@@ -381,7 +440,7 @@ class _GitPanelState extends State<GitPanel> {
             MenuItem('恢复并删除', () => _stashApply(s, pop: true), icon: Icons.unarchive_outlined),
             const MenuItem.separator(),
             MenuItem('删除…', () async {
-              if (await confirmDialog(context, title: '删除 ${s.ref}？', body: '“${s.message}”里的改动会丢失，不能恢复。', ok: '删除', danger: true)) {
+              if (await _confirm(title: '删除 ${s.ref}？', body: '“${s.message}”里的改动会丢失，不能恢复。', ok: '删除', danger: true)) {
                 final r = await _git.stash('drop', index: s.index);
                 if (r.ok) ws.toast('已删除 ${s.ref}');
               }
@@ -395,7 +454,7 @@ class _GitPanelState extends State<GitPanel> {
 
   Future<void> _newTag(GitCommit? at) async {
     final name = TextEditingController(), msg = TextEditingController();
-    final ok = await showWorkbenchDialog<bool>(
+    final ok = await _decide(() => showWorkbenchDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(at == null ? '在 HEAD 上打标签' : '在 ${at.short} 上打标签'),
@@ -409,14 +468,14 @@ class _GitPanelState extends State<GitPanel> {
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('创建')),
         ],
       ),
-    );
+    ));
     final n = name.text.trim(), m = msg.text.trim();
     name.dispose();
     msg.dispose();
     if (ok != true || n.isEmpty) return;
     if (await _git.createTag(n, rev: at?.hash, message: m.isEmpty ? null : m)) {
       ws.toast('已创建标签 $n。推送标签：在终端里 git push origin $n');
-      setState(() => _tagsOpen = true);
+      if (mounted) setState(() => _tagsOpen = true);
     }
   }
 
@@ -434,7 +493,7 @@ class _GitPanelState extends State<GitPanel> {
             MenuItem('切换到这个标签（分离 HEAD）', () => _checkoutRev(t.name), icon: Icons.swap_horiz),
             const MenuItem.separator(),
             MenuItem('删除本地标签…', () async {
-              if (await confirmDialog(context, title: '删除标签 ${t.name}？', body: '只删除本地的标签，远程的不受影响。', ok: '删除', danger: true)) {
+              if (await _confirm(title: '删除标签 ${t.name}？', body: '只删除本地的标签，远程的不受影响。', ok: '删除', danger: true)) {
                 if (await _git.deleteTag(t.name)) ws.toast('已删除标签 ${t.name}');
               }
             }, icon: Icons.delete_outline, danger: true),
@@ -451,7 +510,7 @@ class _GitPanelState extends State<GitPanel> {
 
   Future<void> _addRemote() async {
     final name = TextEditingController(text: (_git.status?.remotes.isEmpty ?? true) ? 'origin' : ''), url = TextEditingController();
-    final ok = await showWorkbenchDialog<bool>(
+    final ok = await _decide(() => showWorkbenchDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('添加远程仓库'),
@@ -465,7 +524,7 @@ class _GitPanelState extends State<GitPanel> {
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('添加')),
         ],
       ),
-    );
+    ));
     final n = name.text.trim(), u = url.text.trim();
     name.dispose();
     url.dispose();
@@ -483,7 +542,7 @@ class _GitPanelState extends State<GitPanel> {
           label: r,
           menu: () => [
             MenuItem('删除…', () async {
-              if (await confirmDialog(context, title: '删除远程仓库 $r？', body: '只删除本地的配置和远程分支的记录，远程仓库本身不受影响。', ok: '删除', danger: true)) {
+              if (await _confirm(title: '删除远程仓库 $r？', body: '只删除本地的配置和远程分支的记录，远程仓库本身不受影响。', ok: '删除', danger: true)) {
                 if (await _git.removeRemote(r)) ws.toast('已删除远程仓库 $r');
               }
             }, icon: Icons.delete_outline, danger: true),
@@ -519,33 +578,30 @@ class _GitPanelState extends State<GitPanel> {
 
   Future<void> _rebase(GitBranch b) async {
     final cur = _git.status?.branch ?? '';
-    if (!await confirmDialog(context, title: '把 $cur 变基到 ${b.name}？', body: '$cur 上独有的提交会在 ${b.name} 之后重新应用，提交号会改变。已推送的分支变基后需要强制推送。', ok: '变基')) return;
+    if (!await _confirm(title: '把 $cur 变基到 ${b.name}？', body: '$cur 上独有的提交会在 ${b.name} 之后重新应用，提交号会改变。已推送的分支变基后需要强制推送。', ok: '变基')) return;
     await _runOp('rebase', b.name, done: '已变基到 ${b.name}');
   }
 
   Future<void> _renameBranch(GitBranch b) async {
-    final to = await askText(context, title: '重命名分支 ${b.name}', initial: b.name, ok: '重命名');
+    final to = await _ask(title: '重命名分支 ${b.name}', initial: b.name, ok: '重命名');
     if (to == null || to.trim().isEmpty || to.trim() == b.name) return;
     if (await _git.branch('rename', b.name, to: to.trim())) ws.toast('已重命名为 ${to.trim()}');
   }
 
   Future<void> _deleteBranch(GitBranch b) async {
-    if (!await confirmDialog(context, title: '删除分支 ${b.name}？', body: '只删除本地分支。', ok: '删除', danger: true)) return;
-    final l = ws.link;
-    if (l == null || _git.repo == null) return;
+    if (!await _confirm(title: '删除分支 ${b.name}？', body: '只删除本地分支。', ok: '删除', danger: true)) return;
+    final target = _git.repo, link = ws.link;
     try {
-      await l.call('git.branch', {'root': _git.repo!.root, 'repo': _git.repo!.repo, 'action': 'delete', 'branch': b.name});
-      ws.toast('已删除分支 ${b.name}');
+      if (await _git.branch('delete', b.name, throwConflict: true)) ws.toast('已删除分支 ${b.name}');
     } on OpError catch (e) {
-      if (!mounted) return;
+      if (!mounted || !identical(target, _git.repo) || !identical(link, ws.link)) return;
       // not merged: say what is lost and ask again
-      if (e.code == codeConflict && await confirmDialog(context, title: '分支没有合并', body: '${e.message}\n\n仍然删除？', ok: '强制删除', danger: true)) {
+      if (e.code == codeConflict && await _confirm(title: '分支没有合并', body: '${e.message}\n\n仍然删除？', ok: '强制删除', danger: true)) {
         if (await _git.branch('delete', b.name, force: true)) ws.toast('已删除分支 ${b.name}');
       } else if (e.code != codeConflict) {
         ws.toast(e.message, error: true);
       }
     }
-    await _git.loadBranches();
   }
 
   Future<void> _setUpstream(GitBranch b) async {
@@ -557,7 +613,7 @@ class _GitPanelState extends State<GitPanel> {
   }
 
   Future<void> _branchAt(GitCommit c) async {
-    final name = await askText(context, title: '从 ${c.short} 新建分支', hint: '分支名', ok: '创建并切换');
+    final name = await _ask(title: '从 ${c.short} 新建分支', hint: '分支名', ok: '创建并切换');
     if (name == null || name.trim().isEmpty) return;
     if (await _git.checkout(name.trim(), create: true, from: c.hash)) ws.toast('已切换到新分支 ${name.trim()}');
   }
@@ -569,7 +625,7 @@ class _GitPanelState extends State<GitPanel> {
       'hard': '硬重置：丢弃所有改动',
     });
     if (how == null || !mounted) return;
-    if (how == 'hard' && !await confirmDialog(context, title: '丢弃所有未提交的改动？', body: '硬重置会丢弃工作区和暂存区的全部改动，不能恢复。', ok: '硬重置', danger: true)) return;
+    if (how == 'hard' && !await _confirm(title: '丢弃所有未提交的改动？', body: '硬重置会丢弃工作区和暂存区的全部改动，不能恢复。', ok: '硬重置', danger: true)) return;
     await _runOp('reset', c.hash, mode: how, done: '已重置到 ${c.short}');
   }
 
@@ -587,10 +643,13 @@ class _GitPanelState extends State<GitPanel> {
     Widget count(IconData i, int n) => Row(mainAxisSize: MainAxisSize.min, children: [Icon(i, size: 11, color: ide.accent), const SizedBox(width: 2), Text('$n')]);
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.l + 2, Space.s, Space.m, Space.xs),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
         Icon(Icons.fork_right_rounded, size: 15, color: ide.accent),
         const SizedBox(width: 6),
         Flexible(child: Text(st.detached ? '分离的 HEAD ${st.oid.length >= 7 ? st.oid.substring(0, 7) : st.oid}' : st.branch, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: ide.text))),
+        ]),
+        Wrap(spacing: Space.xs, runSpacing: Space.xs, children: [
         if (st.upstream.isNotEmpty) ...[
           if (st.ahead > 0) pill(count(Icons.arrow_upward_rounded, st.ahead), tip: '领先 ${st.upstream} ${st.ahead} 个提交'),
           if (st.behind > 0) pill(count(Icons.arrow_downward_rounded, st.behind), tip: '落后 ${st.upstream} ${st.behind} 个提交'),
@@ -598,6 +657,7 @@ class _GitPanelState extends State<GitPanel> {
         ] else if (!st.detached)
           pill(const Text('无上游')),
         if (st.stashes > 0) pill(Text('储藏 ${st.stashes}'), tip: '${st.stashes} 个储藏（stash）'),
+        ]),
       ]),
     );
   }
@@ -608,13 +668,16 @@ class _GitPanelState extends State<GitPanel> {
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(color: ide.warn.withValues(alpha: 0.12), border: Border.all(color: ide.warn.withValues(alpha: 0.5)), borderRadius: BorderRadius.circular(4)),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
         Icon(Icons.warning_amber, size: 16, color: ide.warn),
         const SizedBox(width: 8),
         Expanded(child: Text('$name 进行中${st.conflicts.isNotEmpty ? '，还有 ${st.conflicts.length} 个冲突' : ''}', style: const TextStyle(fontSize: 12))),
+        ]),
+        Wrap(spacing: Space.xs, runSpacing: Space.xs, children: [
         TextButton(
           onPressed: () async {
-            if (await confirmDialog(context, title: '放弃$name？', body: '回到$name之前的状态。', ok: '放弃', danger: true)) {
+            if (await _confirm(title: '放弃$name？', body: '回到$name之前的状态。', ok: '放弃', danger: true)) {
               await _runOp('abort', '', done: '已放弃$name');
             }
           },
@@ -623,19 +686,20 @@ class _GitPanelState extends State<GitPanel> {
         if (st.operation != 'merge')
           TextButton(
             onPressed: () async {
-              if (await confirmDialog(context, title: '跳过当前提交？', body: '这一个提交的改动不会被应用。', ok: '跳过')) {
+              if (await _confirm(title: '跳过当前提交？', body: '这一个提交的改动不会被应用。', ok: '跳过')) {
                 await _runOp('skip', '', done: '已跳过');
               }
             },
             child: const Text('跳过'),
           ),
-        if (st.conflicts.isEmpty) TextButton(onPressed: () => _runOp('continue', '', done: '$name 已完成'), child: const Text('继续')),
+        if (st.conflicts.isEmpty) TextButton(onPressed: _busy ? null : () => _runOp('continue', '', done: '$name 已完成'), child: const Text('继续')),
+        ]),
       ]),
     );
   }
 
   Widget _commitBox(Ide ide, GitStatus st) {
-    final canCommit = !_git.busy && (st.stagedFiles.isNotEmpty || st.changedFiles.isNotEmpty);
+    final canCommit = !_busy && (st.stagedFiles.isNotEmpty || st.changedFiles.isNotEmpty);
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -714,7 +778,7 @@ class _GitPanelState extends State<GitPanel> {
   }
 
   Future<void> _newBranch() async {
-    final name = await askText(context, title: '新建分支', hint: '分支名', ok: '创建并切换');
+    final name = await _ask(title: '新建分支', hint: '分支名', ok: '创建并切换');
     if (name == null || name.isEmpty) return;
     if (await _git.checkout(name, create: true)) ws.toast('已切换到新分支 $name');
   }
@@ -758,7 +822,7 @@ class _GitPanelState extends State<GitPanel> {
   Future<void> _switchTo(GitBranch b) async {
     final st = _git.status;
     if (st != null && (st.stagedFiles.isNotEmpty || st.changedFiles.isNotEmpty)) {
-      final ok = await confirmDialog(context, title: '有未提交的改动', body: '切换分支时，没有冲突的改动会带过去；有冲突 git 会拒绝切换。继续？', ok: '切换');
+      final ok = await _confirm(title: '有未提交的改动', body: '切换分支时，没有冲突的改动会带过去；有冲突 git 会拒绝切换。继续？', ok: '切换');
       if (!ok) return;
     }
     // a remote branch becomes a local one that tracks it
@@ -787,12 +851,12 @@ class _GitPanelState extends State<GitPanel> {
             if (_has('git.op')) ...[
               const MenuItem.separator(),
               MenuItem('拣选到当前分支（cherry-pick）', () async {
-                if (await confirmDialog(context, title: '拣选 ${c.short}？', body: '把“${c.subject}”的改动作为新提交应用到当前分支。', ok: '拣选')) {
+                if (await _confirm(title: '拣选 ${c.short}？', body: '把“${c.subject}”的改动作为新提交应用到当前分支。', ok: '拣选')) {
                   await _runOp('cherry-pick', c.hash, done: '已拣选 ${c.short}');
                 }
               }, icon: Icons.call_split),
               MenuItem('撤销这次提交（revert）', () async {
-                if (await confirmDialog(context, title: '撤销 ${c.short}？', body: '新建一次提交，反向应用“${c.subject}”的改动。原提交保留在历史里。', ok: '撤销')) {
+                if (await _confirm(title: '撤销 ${c.short}？', body: '新建一次提交，反向应用“${c.subject}”的改动。原提交保留在历史里。', ok: '撤销')) {
                   await _runOp('revert', c.hash, done: '已撤销 ${c.short}');
                 }
               }, icon: Icons.undo),
@@ -804,12 +868,13 @@ class _GitPanelState extends State<GitPanel> {
   }
 
   void _openCommit(GitCommit c) {
+    final repo = _git.repo!;
     ws.openTab(EditorTab(
       id: 'commit:${_git.repo!.root}:${_git.repo!.repo}:${c.hash}',
       title: '${c.short} ${c.subject}',
       icon: Icons.commit,
       tooltip: '${c.hash}\n${c.author}',
-      builder: (_) => CommitView(ws: ws, git: _git, commit: c),
+      builder: (_) => CommitView(ws: ws, git: _git, repository: repo, commit: c),
     ));
   }
 }
@@ -818,13 +883,15 @@ class _GitPanelState extends State<GitPanel> {
 class CommitView extends StatefulWidget {
   final Workspace ws;
   final GitModel git;
+  final GitRepo? repository;
   final GitCommit commit;
-  const CommitView({super.key, required this.ws, required this.git, required this.commit});
+  const CommitView({super.key, required this.ws, required this.git, this.repository, required this.commit});
   @override
   State<CommitView> createState() => _CommitViewState();
 }
 
 class _CommitViewState extends State<CommitView> {
+  late final GitModel _git = GitModel(widget.ws)..repo = widget.repository ?? widget.git.repo;
   String _message = '';
   List<GitFile>? _files;
   String? _error;
@@ -835,26 +902,30 @@ class _CommitViewState extends State<CommitView> {
     _load();
   }
 
+  @override
+  void dispose() { _git.dispose(); super.dispose(); }
+
   Future<void> _load() async {
     final link = widget.ws.link;
-    final repo = widget.git.repo;
+    final repo = _git.repo;
     if (link == null || repo == null) return setState(() => _error = '未连接');
     try {
       final r = (await link.call('git.commitFiles', {'root': repo.root, 'repo': repo.repo, 'rev': widget.commit.hash}) as Map).cast<String, dynamic>();
-      if (!mounted) return;
+      if (!mounted || !identical(link, widget.ws.link)) return;
       setState(() {
         _message = (r['message'] as String?) ?? widget.commit.subject;
+        _error = null;
         _files = [for (final f in (r['files'] as List? ?? const [])) GitFile((f as Map)['path'] as String, f['orig'] as String?, f['x'] as String? ?? 'M', '.')];
       });
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted && identical(link, widget.ws.link)) setState(() => _error = '$e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
-    if (_error != null) return EmptyHint(icon: Icons.error_outline, text: _error!);
+    if (_error != null) return EmptyHint(icon: Icons.error_outline, text: _error!, actionLabel: '重试', onAction: _load);
     if (_files == null) return const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)));
     final c = widget.commit;
     return ListView(padding: const EdgeInsets.all(14), children: [
@@ -869,7 +940,7 @@ class _CommitViewState extends State<CommitView> {
           label: f.path,
           detail: f.orig == null ? null : '← ${f.orig}',
           trailing: Text(f.x, style: TextStyle(color: switch (f.x) { 'A' => ide.ok, 'D' => ide.error, _ => ide.warn }, fontWeight: FontWeight.w700, fontSize: 12)),
-          onTap: () => widget.ws.openTab(diffTab(widget.ws, widget.git, path: f.path, staged: false, commit: c.hash)),
+          onTap: () => widget.ws.openTab(diffTab(widget.ws, _git, path: f.path, staged: false, commit: c.hash)),
         ),
     ]);
   }

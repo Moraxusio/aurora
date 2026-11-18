@@ -113,6 +113,7 @@ Future<void> main(List<String> args) async {
       'lsp.start',
       'dap.start',
       'ai.extensions',
+      'ai.run.options',
       'ai.mcp.probe',
       'ai.propose',
     ]) {
@@ -303,7 +304,21 @@ Future<void> main(List<String> args) async {
     );
     final aiScope = {'root': folder.root, 'workdir': folder.path};
     final extensions = await link.call('ai.extensions', aiScope) as Map;
+    require(extensions['controls_version'] == 1, 'Missing project controls');
     final aiConfig = Map<String, dynamic>.from(extensions['config'] as Map);
+    aiConfig['budgetEnabled'] = false;
+    aiConfig['subagents'] = {
+      'enabled': true,
+      'maxParallel': 4,
+      'maxTotal': 12,
+      'readOnly': true,
+    };
+    aiConfig['tools'] = {
+      'maxCallsPerStep': 8,
+      'repeatLimit': 4,
+      'shellDefaultSeconds': 30,
+      'shellMaxSeconds': 60,
+    };
     aiConfig['instructions'] = ['instructions.md'];
     aiConfig['budget'] = {
       'steps': 3,
@@ -338,6 +353,58 @@ Future<void> main(List<String> args) async {
       'AI configuration did not persist',
     );
     stdout.writeln('PASS AI instructions, skills and budget persistence');
+    final controls = await link.call('ai.run.options', aiScope) as Map;
+    require(
+      controls['source'] == 'project' &&
+          controls['budgetEnabled'] == false &&
+          controls['subagents']['maxParallel'] == 4 &&
+          controls['subagents']['maxTotal'] == 12 &&
+          controls['subagents']['readOnly'] == true &&
+          controls['nestedSubagents'] == false &&
+          reread['config']['tools']['shellMaxSeconds'] == 60,
+      'Effective run options do not match saved project policy',
+    );
+    stdout.writeln(
+      'PASS effective budget, subagent and tool policies over signed TLS',
+    );
+    if ((extensions['budget_version'] as num? ?? 1) >= 2) {
+      aiConfig['budget'] = {
+        'steps': 0,
+        'seconds': 0,
+        'tokens': 0,
+        'cost': 0,
+        'outputBytes': 0,
+      };
+      aiConfig['autoTitle'] = false;
+      aiConfig['autoCompact'] = false;
+      aiConfig['snapshot'] = {
+        'maxFiles': 0,
+        'ignore': ['**/unused/**'],
+      };
+      await link.call('ai.extensions', {
+        ...aiScope,
+        'config': aiConfig,
+        'if_match': reread['etag'],
+      });
+      final savedControl = await link.call('ai.extensions', aiScope) as Map;
+      require(
+        (savedControl['config']['budget'] as Map).values.every((v) => v == 0) &&
+            savedControl['config']['autoTitle'] == false &&
+            savedControl['config']['autoCompact'] == false,
+        'Unlimited budget and automatic feature switches did not persist',
+      );
+      final snapshot = await link.call('ai.snapshots.inspect', aiScope) as Map;
+      require(
+        snapshot['enabled'] == true &&
+            (snapshot['files'] as num) > 0 &&
+            snapshot['policy']['maxFiles'] == 200000 &&
+            snapshot['overTreeBudget'] == false,
+        'Snapshot scope/default inspection failed',
+      );
+      stdout.writeln(
+        'PASS unlimited budget, automatic feature switches and snapshot scope over signed TLS',
+      );
+    }
     stdout.writeln(
       'IDE_SIGNED_AGENT_TEXT_TRANSACTION_TASK_LSP_DAP_EXTENSIONS_OK',
     );

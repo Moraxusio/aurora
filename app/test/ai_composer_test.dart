@@ -24,25 +24,41 @@ void main() {
         AiComposerText.permission('ask', narrow: true),
         AiComposerText.permission('auto', narrow: true),
       ]) {
-        expect(RegExp(r'[A-Za-z]').hasMatch(s), isFalse, reason: '"$s" still has English in the narrow layout');
+        expect(
+          RegExp(r'[A-Za-z]').hasMatch(s),
+          isFalse,
+          reason: '"$s" still has English in the narrow layout',
+        );
       }
     });
 
-    test('the tooltips keep the English mode names beside the Chinese ones', () {
-      expect(AiComposerText.agentTip('plan'), contains('Plan'));
-      expect(AiComposerText.agentTip('build'), contains('Build'));
-      expect(AiComposerText.permissionTip('ask'), contains('Ask'));
-      expect(AiComposerText.permissionTip('auto'), contains('Auto'));
-      expect(AiComposerText.permissionTip('auto'), contains('高风险'));
-    });
+    test(
+      'the tooltips keep the English mode names beside the Chinese ones',
+      () {
+        expect(AiComposerText.agentTip('plan'), contains('Plan'));
+        expect(AiComposerText.agentTip('build'), contains('Build'));
+        expect(AiComposerText.permissionTip('ask'), contains('Ask'));
+        expect(AiComposerText.permissionTip('auto'), contains('Auto'));
+        expect(AiComposerText.permissionTip('auto'), contains('高风险'));
+      },
+    );
 
     test('sending into a running task is called what it is', () {
       expect(AiComposerText.send(running: false, sending: false), '发送');
       expect(AiComposerText.send(running: true, sending: false), '补充指令');
       expect(AiComposerText.send(running: true, sending: true), '准备中');
-      expect(AiComposerText.hint(running: true, agentMode: 'build'), contains('补充指令'));
-      expect(AiComposerText.hint(running: true, agentMode: 'build'), isNot(contains('Steer')));
-      expect(AiComposerText.hint(running: false, agentMode: 'plan'), contains('不修改文件'));
+      expect(
+        AiComposerText.hint(running: true, agentMode: 'build'),
+        contains('补充指令'),
+      );
+      expect(
+        AiComposerText.hint(running: true, agentMode: 'build'),
+        isNot(contains('Steer')),
+      );
+      expect(
+        AiComposerText.hint(running: false, agentMode: 'plan'),
+        contains('不修改文件'),
+      );
     });
   });
 
@@ -59,7 +75,9 @@ void main() {
         profile: Profile(
           servers: [ServerEntry(id: 'server', name: 'fixture')],
           selected: 'server',
-          ai: AiSettings(providers: [AiProvider(id: 'p', name: '新网关', model: 'new-model')]),
+          ai: AiSettings(
+            providers: [AiProvider(id: 'p', name: '新网关', model: 'new-model')],
+          ),
         ),
       );
       ws = Workspace(app, 'server');
@@ -71,65 +89,100 @@ void main() {
       app.dispose();
     });
 
-    Future<void> open(WidgetTester t, {double width = 900, double height = 900}) async {
+    Future<void> open(
+      WidgetTester t, {
+      double width = 900,
+      double height = 900,
+    }) async {
       t.view.physicalSize = Size(width, height);
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.resetPhysicalSize);
       addTearDown(t.view.resetDevicePixelRatio);
-      await t.pumpWidget(MaterialApp(
-        theme: buildTheme(Brightness.dark),
-        home: InputMode.scope(mode: input, child: Scaffold(body: AiStudioView(ws: ws, initialSessionId: 'ses_1'))),
-      ));
+      await t.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(Brightness.dark),
+          home: InputMode.scope(
+            mode: input,
+            child: Scaffold(
+              body: AiStudioView(ws: ws, initialSessionId: 'ses_1'),
+            ),
+          ),
+        ),
+      );
       for (var i = 0; i < 6; i++) {
         await t.pump(const Duration(milliseconds: 50));
       }
     }
 
-    testWidgets('while a permission is pending the run says it waits for the user, not for the model', (t) async {
-      await open(t);
-      expect(find.byKey(const ValueKey('ai-permission-card')), findsOneWidget);
-      expect(find.textContaining('等待你的批准'), findsOneWidget);
-      expect(find.textContaining('等待模型响应'), findsNothing);
-      // the card's own reason is Chinese
-      expect(find.text('这一步会修改服务器上的文件'), findsOneWidget);
-      expect(find.text('File modification requires approval'), findsNothing);
-    });
+    testWidgets(
+      'while a permission is pending the run says it waits for the user, not for the model',
+      (t) async {
+        await open(t);
+        expect(
+          find.byKey(const ValueKey('ai-permission-card')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('等待你的批准'), findsOneWidget);
+        expect(find.textContaining('等待模型响应'), findsNothing);
+        // the card's own reason is Chinese
+        expect(find.text('这一步会修改服务器上的文件'), findsOneWidget);
+        expect(find.text('File modification requires approval'), findsNothing);
+      },
+    );
 
     testWidgets('the approve button names what it covers', (t) async {
       await open(t);
       expect(find.text('本会话始终允许修改文件'), findsOneWidget);
     });
 
-    testWidgets('a running task offers 补充指令, and the switches have Chinese names and tooltips', (t) async {
-      await open(t);
-      expect(find.text('补充指令'), findsOneWidget);
-      expect(find.text('Steer'), findsNothing);
-      expect(find.text('构建 · 可改文件'), findsOneWidget);
-      expect(find.text('先询问'), findsOneWidget);
-      expect(find.byTooltip(AiComposerText.agentTip('build')), findsOneWidget);
-      expect(find.byTooltip(AiComposerText.permissionTip('ask')), findsOneWidget);
-      expect(find.byTooltip(AiComposerText.sendTip(running: true)), findsOneWidget);
-    });
+    testWidgets(
+      'a running task shows concise controls with all options together',
+      (t) async {
+        await open(t);
+        expect(find.text('补充指令'), findsOneWidget);
+        expect(find.text('Steer'), findsNothing);
+        expect(find.byKey(const ValueKey('ai-send-options')), findsOneWidget);
+        await t.tap(find.byKey(const ValueKey('ai-send-options')));
+        await t.pump(const Duration(milliseconds: 300));
+        expect(find.text('本次发送'), findsOneWidget);
+        expect(find.byKey(const ValueKey('ai-send-agent-0')), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('ai-send-permission-0')),
+          findsOneWidget,
+        );
+      },
+    );
 
-    testWidgets('the context size from the model name is marked as an estimate', (t) async {
-      await open(t);
-      await t.tap(find.byKey(const ValueKey('ai-context-indicator')));
-      await t.pump();
-      final usage = t.widget<Text>(find.byKey(const ValueKey('ai-context-usage'))).data!;
-      expect(usage, contains('约 500.0k'));
-      expect(usage, contains('上限为估计值'));
-    });
+    testWidgets(
+      'the context size from the model name is marked as an estimate',
+      (t) async {
+        await open(t);
+        await t.tap(find.byKey(const ValueKey('ai-context-indicator')));
+        await t.pump();
+        final usage = t
+            .widget<Text>(find.byKey(const ValueKey('ai-context-usage')))
+            .data!;
+        expect(usage, contains('约 500.0k'));
+        expect(usage, contains('上限为估计值'));
+      },
+    );
 
-    testWidgets('the switches fit a 360-wide column without overflow', (t) async {
+    testWidgets('the switches fit a 360-wide column without overflow', (
+      t,
+    ) async {
       await open(t, width: 360);
       expect(t.takeException(), isNull);
-      expect(find.byKey(const ValueKey('ai-agent-mode')), findsOneWidget);
-      expect(find.byKey(const ValueKey('ai-permission-mode')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-send-options')), findsOneWidget);
     });
 
-    testWidgets('a 240-high window keeps the input and no chrome overflows', (t) async {
+    testWidgets('a 240-high window keeps the input and no chrome overflows', (
+      t,
+    ) async {
       await open(t, width: 420, height: 240);
-      expect(find.byKey(const ValueKey('ai-prompt-input')).hitTestable(), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('ai-prompt-input')).hitTestable(),
+        findsOneWidget,
+      );
       expect(t.takeException(), isNull);
     });
   });

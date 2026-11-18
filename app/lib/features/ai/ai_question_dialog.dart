@@ -1,6 +1,8 @@
 import 'package:aurora/ui/aurora_ui.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 
+import 'ai_visuals.dart';
+
 class AiQuestionDialog extends StatefulWidget {
   final Map<String, dynamic> question;
   final Future<void> Function(List<List<String>> answers, bool skip) submit;
@@ -78,20 +80,15 @@ class _AiQuestionDialogState extends State<AiQuestionDialog> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    '需要你的选择',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                IconButton(
-                  tooltip: '稍后回答',
-                  onPressed: _busy ? null : () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, size: 18),
-                ),
-              ],
+            child: AiSectionHeading(
+              icon: Icons.help_outline,
+              title: '需要你的选择',
+              subtitle: '回答后继续任务；关闭窗口可稍后回答。',
+              trailing: IconBtn(
+                Icons.close,
+                '稍后回答',
+                _busy ? null : () => Navigator.pop(context),
+              ),
             ),
           ),
           Flexible(
@@ -106,6 +103,11 @@ class _AiQuestionDialogState extends State<AiQuestionDialog> {
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
+                    Text(
+                      _questions[i]['multiple'] == true
+                          ? '可多选，也可补充答案'
+                          : '选择一项，或填写自己的答案',
+                    ),
                     for (final option
                         in _questions[i]['options'] as List? ?? const [])
                       if (option is Map)
@@ -162,8 +164,10 @@ class _AiQuestionDialogState extends State<AiQuestionDialog> {
             ),
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 TextButton(
                   onPressed: _busy ? null : () => _submit(true),

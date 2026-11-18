@@ -265,8 +265,12 @@ func applyOpenCodeHeaders(h http.Header, req LLMRequest) {
 		}
 	}
 
-	// User-configured custom headers override anything above if specified
+	// Preserve the gateway identity contract while allowing custom routing/auth.
 	for k, v := range req.Provider.Headers {
+		switch strings.ToLower(strings.TrimSpace(k)) {
+		case "user-agent", "originator", "x-opencode-client":
+			continue
+		}
 		if strings.TrimSpace(k) != "" {
 			h.Set(k, v)
 		}

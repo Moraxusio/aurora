@@ -161,7 +161,18 @@ Future<PasteResult> pasteItems({
       taken.add(name);
       res.done++;
       res.createdPaths.add(dest);
-      if (cut) res.moved.add(it);
+      if (cut && sameRoot) {
+        res.moved.add(it);
+      } else if (cut) {
+        // Copy has committed. Failure to delete the source is a partial move,
+        // not a failed copy: never try to restore the old destination over it.
+        try {
+          await call('fs.delete', {'root': it.root, 'path': it.path, 'recursive': it.isDir});
+          res.moved.add(it);
+        } on Object catch (e) {
+          res.errors.add('${it.name}：已复制到 $dest，但源文件未能删除；源和目标均保留（${_msg(e)}）');
+        }
+      }
     } on Object catch (e) {
       res.errors.add('${it.name}：${_msg(e)}');
     }
@@ -182,10 +193,6 @@ Future<void> _transfer(RpcCall call, ClipItem it, {required bool cut, required S
     'to': dest,
     if (it.root != destRoot) 'to_root': destRoot,
   });
-  if (cut) {
-    // The copy is complete: only now is the original removed.
-    await call('fs.delete', {'root': it.root, 'path': it.path, 'recursive': it.isDir});
-  }
 }
 
 // ---------------------------------------------------------------- sorting

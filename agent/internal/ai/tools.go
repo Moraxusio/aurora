@@ -370,7 +370,7 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 	}
 	declared := false
 	var definition ToolDef
-	definitions := append(modelToolDefinitions(tc.session.Agent, tc.depth, tc.provider), tc.extensions.definitions(tc.session.Agent, tc.provider)...)
+	definitions := append(configuredToolDefinitions(tc.session.Agent, tc.depth, tc.provider, tc.extensions), tc.extensions.definitions(tc.session.Agent, tc.provider)...)
 	for _, tool := range definitions {
 		if tool.Name == name {
 			declared, definition = true, tool
@@ -1167,11 +1167,15 @@ func execShellTool(ctx context.Context, tc toolContext, rawInput json.RawMessage
 	}
 
 	timeoutMS := in.Timeout
-	if timeoutMS <= 0 {
-		timeoutMS = 120_000
+	policy := defaultToolOptions()
+	if tc.extensions != nil {
+		policy = tc.extensions.config.Tools.resolved()
 	}
-	if timeoutMS > 600_000 {
-		timeoutMS = 600_000
+	if timeoutMS <= 0 {
+		timeoutMS = policy.ShellDefaultSeconds * 1000
+	}
+	if timeoutMS > policy.ShellMaxSeconds*1000 {
+		timeoutMS = policy.ShellMaxSeconds * 1000
 	}
 	cctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
 	defer cancel()
@@ -1391,7 +1395,7 @@ func execTodoWriteTool(tc toolContext, rawInput json.RawMessage) ToolExecResult 
 }
 
 func execSubagentTool(ctx context.Context, tc toolContext, rawInput json.RawMessage, checkPerm func(string, string, map[string]any) error) ToolExecResult {
-	if tc.depth >= 1 {
+	if tc.depth >= 1 || tc.session.ParentID != "" {
 		return ToolExecResult{Output: "Subagent depth limit reached (1): subagents cannot spawn nested subagents.", IsError: true}
 	}
 	var in struct {
@@ -1409,17 +1413,37 @@ func execSubagentTool(ctx context.Context, tc toolContext, rawInput json.RawMess
 	if tc.session.Agent == "plan" {
 		subAgent = "explore" // Plan mode subagents are strictly read-only
 	}
-	if err := checkPerm("subagent", subAgent, map[string]any{"description": in.Description}); err != nil {
-		return ToolExecResult{Output: err.Error(), IsError: true}
+	if tc.extensions != nil {
+		policy := tc.extensions.config.Subagents.resolved()
+		if !enabledByDefault(policy.Enabled) || policy.ReadOnly && subAgent != "explore" {
+			return ToolExecResult{Output: "Subagent disabled by project policy or restricted to read-only exploration.", IsError: true}
+		}
+	}
+	tc.env.mu.Lock()
+	run := tc.env.running[tc.session.ID]
+	tc.env.mu.Unlock()
+	// One spawn approval at a time in the parent. Approved children can run
+	// while the next approval is being answered.
+	if run != nil && run.meter != nil {
+		run.meter.spawnApproval.Lock()
+	}
+	approvalErr := checkPerm("subagent", subAgent, map[string]any{"description": in.Description})
+	if run != nil && run.meter != nil {
+		run.meter.spawnApproval.Unlock()
+	}
+	if approvalErr != nil {
+		return ToolExecResult{Output: approvalErr.Error(), IsError: true}
 	}
 
 	report, childID, err := tc.env.runChildSubagent(ctx, tc.session, tc.provider, subAgent, in.Description, in.Prompt, tc.callID, tc.depth+1)
+	metadata := map[string]any{"child_session_id": childID, "agent": subAgent, "description": in.Description}
 	if err != nil {
-		return ToolExecResult{Output: "Subagent failed: " + err.Error(), IsError: true}
+		metadata["cancelled"] = errors.Is(err, context.Canceled)
+		return ToolExecResult{Output: "Subagent failed: " + err.Error(), IsError: true, Metadata: metadata}
 	}
 	return ToolExecResult{
 		Output:   fmt.Sprintf("<subagent session_id=%q agent=%q>\n%s\n</subagent>", childID, subAgent, report),
-		Metadata: map[string]any{"child_session_id": childID, "agent": subAgent, "description": in.Description},
+		Metadata: metadata,
 	}
 }
 

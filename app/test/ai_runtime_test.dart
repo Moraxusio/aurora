@@ -186,6 +186,7 @@ void main() {
         servers: [ServerEntry(id: 'server', name: 'fixture')],
         selected: 'server',
         ai: AiSettings(
+          showMessageNavigation: true,
           providers: [
             AiProvider(id: 'next-provider', name: '新网关', model: 'new-model'),
           ],
@@ -236,6 +237,59 @@ void main() {
     await t.tap(find.byKey(const ValueKey('ai-context-indicator')));
     await t.pump();
   }
+
+  Future<void> openTask(WidgetTester t, String key) async {
+    await t.tap(find.byKey(const ValueKey('ai-work-list')));
+    await t.pump();
+    final row = find.byKey(ValueKey('ai-work-row-$key'));
+    await t.ensureVisible(row);
+    await t.tap(row);
+    await t.pump();
+  }
+
+  testWidgets('budget stop shows its receipt and explicit recovery actions', (
+    t,
+  ) async {
+    await pump(t, width: 420);
+    final budget = {
+      'id': 'run-fixture',
+      'source': 'project',
+      'tokens': 480000,
+      'steps': 7,
+      'auxiliary': 1,
+      'next_input_tokens': 42000,
+      'blocked_by': 'tokens',
+      'limits': {
+        'tokens': 500000,
+        'steps': 60,
+        'seconds': 900,
+        'outputBytes': 2097152,
+        'cost': 0,
+      },
+    };
+    link.events.emit({
+      'type': 'session.error',
+      'runtime': _runtime,
+      'budget': budget,
+      'message': {
+        'id': 'budget-error',
+        'role': 'assistant',
+        'runtime': _runtime,
+        'error': '预算不足：下一步输入预计 42000 tokens。',
+        'error_code': 'budget.tokens',
+        'budget': budget,
+        'parts': [],
+      },
+    });
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ai-run-budget-summary')), findsOneWidget);
+    await t.ensureVisible(find.text('调整预算'));
+    expect(find.text('继续任务（新预算）'), findsOneWidget);
+    expect(find.textContaining('运行已暂停：预算不足'), findsOneWidget);
+    expect(find.textContaining('未记录来源'), findsNothing);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
     'failed event handshake releases stream before retrying the healthy link',
@@ -387,6 +441,8 @@ void main() {
       });
       await t.pump(const Duration(milliseconds: 50));
       expect(find.byKey(const ValueKey('ai-work-navigation')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('ai-work-list')));
+      await t.pump();
       expect(find.text('Get-ChildItem'), findsOneWidget);
       await t.tap(find.text('Get-ChildItem'));
       await t.pump();
@@ -405,15 +461,15 @@ void main() {
       expect(find.text('synthetic live output'), findsOneWidget);
       link.events.emit({'type': 'tool.done', 'tool_call_id': 'parent-task'});
       await t.pump();
+      await t.tap(find.byKey(const ValueKey('ai-work-list')));
+      await t.pump();
       expect(
-        find.byKey(const ValueKey('ai-work-tab-ses_1:parent-task')),
+        find.byKey(const ValueKey('ai-work-row-ses_1:parent-task')),
         findsOneWidget,
       );
       await t.tap(find.byKey(const ValueKey('ai-work-main')));
       await t.pump();
-      await t.tap(
-        find.byKey(const ValueKey('ai-work-tab-child-1:child-shell')),
-      );
+      await openTask(t, 'child-1:child-shell');
       await t.pump();
       expect(find.text('synthetic live output'), findsOneWidget);
       await t.pumpWidget(const SizedBox());
@@ -450,7 +506,7 @@ void main() {
         'metadata': {'child_session_id': 'child-1'},
       });
       await t.pump();
-      await t.tap(find.byKey(const ValueKey('ai-work-tab-ses_1:parent-task')));
+      await openTask(t, 'ses_1:parent-task');
       for (var i = 0; i < 5; i++) {
         await t.pump(const Duration(milliseconds: 50));
       }
@@ -475,7 +531,7 @@ void main() {
         'delta': List.generate(300, (i) => 'line $i build output').join('\n'),
       });
       await t.pump(const Duration(milliseconds: 50));
-      await t.tap(find.byKey(const ValueKey('ai-work-tab-ses_1:shell')));
+      await openTask(t, 'ses_1:shell');
       await t.pump();
       await t.pump();
       final output =
@@ -548,7 +604,7 @@ void main() {
       });
       await t.pump();
       await t.pump(const Duration(milliseconds: 40));
-      await t.tap(find.byKey(const ValueKey('ai-work-tab-ses_1:shell')));
+      await openTask(t, 'ses_1:shell');
       await t.pump();
       await t.pump();
       expect(find.text('42 files checked'), findsOneWidget);
@@ -597,7 +653,9 @@ void main() {
         link.rpcCalls.where((c) => c.$1 == 'ai.get').length,
         greaterThan(before),
       );
-      final afterSessionSync = link.rpcCalls.where((c) => c.$1 == 'ai.get').length;
+      final afterSessionSync = link.rpcCalls
+          .where((c) => c.$1 == 'ai.get')
+          .length;
       link.events.emit({'type': 'sync.required', 'session_id': ''});
       for (var i = 0; i < 3; i++) {
         await t.pump(const Duration(milliseconds: 30));
@@ -727,6 +785,7 @@ void main() {
         ],
       });
       await t.pump();
+      await t.pump();
       expect(find.byKey(const ValueKey('ai-active-plan')), findsNothing);
       await snapshot(t, 'ai-plan-completed-sidebar');
       link.events.emit({
@@ -814,7 +873,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('ai-message-navigation')).hitTestable(),
+        find.byKey(const ValueKey('ai-chat-font')).hitTestable(),
         findsOneWidget,
       );
       expect(t.takeException(), isNull);

@@ -38,29 +38,57 @@ class NetFeature extends Feature {
 /// belongs to a link: when the link is replaced (reconnect) it is opened again
 /// on the new one, on the same local port.
 class ForwardManager extends ChangeNotifier {
+  final Future<Forward> Function(Link, ForwardSpec) _listen;
+  ForwardManager({Future<Forward> Function(Link, ForwardSpec)? listen})
+      : _listen = listen ?? ((link, spec) => Forward.start(link, host: spec.host, port: spec.port, local: spec.local));
   final Map<String, Map<int, Forward>> _open = {}; // server -> local port -> forward
   final Map<String, Map<int, String>> _failed = {}; // server -> local port -> why it is not open
   final Map<String, Link> _links = {};
+  final Map<String, int> _epochs = {};
+  final Map<String, Future<void>> _tails = {};
+  final Set<(String, int)> _pending = {};
+  bool _disposed = false;
 
   Forward? open(String server, int local) => _open[server]?[local];
   String? failure(String server, int local) => _failed[server]?[local];
+  bool busy(String server, int local) => _pending.contains((server, local));
+
+  void _notify() { if (!_disposed) notifyListeners(); }
+  bool _current(String server, Link link, int epoch) =>
+      !_disposed && _epochs[server] == epoch && identical(_links[server], link);
+
+  Future<T> _serial<T>(String server, Future<T> Function() task) {
+    final result = (_tails[server] ?? Future<void>.value()).then((_) => task());
+    final tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    _tails[server] = tail;
+    unawaited(tail.then((_) {
+      if (identical(_tails[server], tail)) _tails.remove(server);
+    }));
+    return result;
+  }
 
   /// Opens the saved forwards of [entry] on [link], and closes forwards left
   /// on an older link.
   Future<void> attach(ServerEntry entry, Link link) async {
-    if (identical(_links[entry.id], link)) return;
+    if (_disposed || identical(_links[entry.id], link)) return;
     _links[entry.id] = link;
-    await _closeAll(entry.id);
-    for (final spec in entry.forwards) {
-      await _start(entry.id, link, spec);
-    }
-    notifyListeners();
+    final epoch = (_epochs[entry.id] ?? 0) + 1;
+    _epochs[entry.id] = epoch;
+    await _serial(entry.id, () async {
+      await _closeAll(entry.id);
+      for (final spec in entry.forwards.toList()) {
+        if (!_current(entry.id, link, epoch)) return;
+        await _start(entry.id, link, spec, epoch);
+      }
+    });
+    _notify();
   }
 
   Future<void> detach(String server) async {
     _links.remove(server);
-    await _closeAll(server);
-    notifyListeners();
+    _epochs[server] = (_epochs[server] ?? 0) + 1;
+    await _serial(server, () => _closeAll(server));
+    _notify();
   }
 
   Future<void> _closeAll(String server) async {
@@ -73,48 +101,72 @@ class ForwardManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _start(String server, Link link, ForwardSpec spec) async {
+  Future<bool> _start(String server, Link link, ForwardSpec spec, int epoch) async {
+    if (!_current(server, link, epoch)) return false;
+    final existing = open(server, spec.local);
+    if (existing != null && !existing.isClosed) {
+      return existing.host == spec.host && existing.port == spec.port;
+    }
     try {
-      final f = await Forward.start(link, host: spec.host, port: spec.port, local: spec.local);
+      final f = await _listen(link, spec);
+      if (!_current(server, link, epoch)) {
+        await f.close();
+        return false;
+      }
       (_open[server] ??= {})[spec.local] = f;
       _failed[server]?.remove(spec.local);
-    } on SocketException catch (e) {
-      (_failed[server] ??= {})[spec.local] = '本机端口 ${spec.local} 打不开：${e.osError?.message ?? e.message}';
+      return true;
+    } on Object catch (e) {
+      if (_current(server, link, epoch)) {
+        (_failed[server] ??= {})[spec.local] = '本机端口 ${spec.local} 打不开：${e is SocketException ? e.osError?.message ?? e.message : e}';
+      }
+      return false;
     }
   }
 
   /// Starts one forward now. Throws a message string on failure.
   Future<void> add(ServerEntry entry, Link link, ForwardSpec spec) async {
-    await _start(entry.id, link, spec);
-    final why = _failed[entry.id]?[spec.local];
-    if (why != null) throw why;
-    notifyListeners();
+    final key = (entry.id, spec.local), epoch = _epochs[entry.id] ?? 0;
+    if (_disposed || !_pending.add(key)) throw OpError(codeConflict, '转发正在处理');
+    _notify();
+    try {
+      final ok = await _serial(entry.id, () => _start(entry.id, link, spec, epoch));
+      if (!ok) throw OpError(codeUnavailable, failure(entry.id, spec.local) ?? '连接已变化，或本机端口已被其他转发使用');
+    } finally {
+      _pending.remove(key);
+      _notify();
+    }
   }
 
-  Future<void> stop(String server, int local) async {
-    final f = _open[server]?.remove(local);
-    _failed[server]?.remove(local);
-    await f?.close();
-    notifyListeners();
+  Future<void> stop(String server, int local, {Forward? expected}) async {
+    await _serial(server, () async {
+      if (expected != null && !identical(open(server, local), expected)) return;
+      final f = _open[server]?.remove(local);
+      _failed[server]?.remove(local);
+      await f?.close();
+    });
+    _notify();
   }
 
   /// Opens a saved forward that is not running (it failed, or was stopped).
   Future<void> restart(ServerEntry entry, Link link, ForwardSpec spec) async {
-    await stop(entry.id, spec.local);
-    await _start(entry.id, link, spec);
-    notifyListeners();
+    if (busy(entry.id, spec.local)) return;
+    await add(entry, link, spec);
   }
 
   /// Called often by the panel to show live byte counts.
-  void poke() => notifyListeners();
+  void poke() => _notify();
 
   @override
   void dispose() {
+    _disposed = true;
+    _links.clear();
     for (final m in _open.values) {
       for (final f in m.values) {
         f.close();
       }
     }
+    _open.clear();
     super.dispose();
   }
 }
@@ -139,6 +191,10 @@ class _ForwardPanelState extends State<ForwardPanel> with VisiblePolling<Forward
   List<Map<String, dynamic>>? _ports;
   bool _loadingPorts = false;
   String? _portsError;
+  Link? _portsLink;
+  int _portsGeneration = 0;
+  bool _adding = false, _manualOpen = false;
+  final Set<int> _changing = {};
 
   Workspace get ws => widget.ws;
   ForwardManager get mgr => widget.manager;
@@ -156,12 +212,15 @@ class _ForwardPanelState extends State<ForwardPanel> with VisiblePolling<Forward
   void initState() {
     super.initState();
     mgr.addListener(_tick);
+    ws.addListener(_connectionChanged);
+    _portsLink = ws.link;
     _loadPorts();
   }
 
   @override
   void dispose() {
     mgr.removeListener(_tick);
+    ws.removeListener(_connectionChanged);
     super.dispose();
   }
 
@@ -169,21 +228,36 @@ class _ForwardPanelState extends State<ForwardPanel> with VisiblePolling<Forward
     if (mounted) setState(() {});
   }
 
+  void _connectionChanged() {
+    if (identical(_portsLink, ws.link)) return;
+    _portsLink = ws.link;
+    _portsGeneration++;
+    _loadingPorts = false;
+    _ports = null;
+    _loadPorts();
+  }
+
   Future<void> _loadPorts() async {
     final link = ws.link;
-    if (link == null) return;
+    if (_loadingPorts) return;
+    if (link == null) {
+      setState(() => _portsError = '未连接，连接后可查看监听端口');
+      return;
+    }
+    final generation = ++_portsGeneration;
+    bool current() => mounted && generation == _portsGeneration && identical(link, ws.link);
     setState(() => _loadingPorts = true);
     try {
       final r = (await link.call('net.ports') as Map).cast<String, dynamic>();
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _ports = [for (final p in r['ports'] as List) (p as Map).cast<String, dynamic>()];
         _portsError = null;
       });
-    } on OpError catch (e) {
-      if (mounted) setState(() => _portsError = e.message);
+    } on Object catch (e) {
+      if (current()) setState(() => _portsError = e is OpError ? e.message : '$e');
     } finally {
-      if (mounted) setState(() => _loadingPorts = false);
+      if (current()) setState(() => _loadingPorts = false);
     }
   }
 
@@ -206,59 +280,71 @@ class _ForwardPanelState extends State<ForwardPanel> with VisiblePolling<Forward
 
   Future<void> _forward(int port, {String host = '127.0.0.1', String label = '', int? local}) async {
     final entry = ws.entry, link = ws.link;
-    if (entry == null || link == null) return;
+    if (entry == null || link == null || _adding) return;
     if (entry.forwards.any((f) => f.host == host && f.port == port)) {
       return ws.toast('$host:$port 已经在转发了');
     }
-    final spec = ForwardSpec(host: host, port: port, local: local ?? await _freeLocal(port), label: label);
+    setState(() => _adding = true);
+    ForwardSpec? spec;
+    Forward? opened;
     try {
+      spec = ForwardSpec(host: host, port: port, local: local ?? await _freeLocal(port), label: label);
+      if (!mounted || !identical(link, ws.link)) return;
+      if (ws.entry?.forwards.any((f) => f.local == spec!.local) == true) {
+        throw StateError('本机端口 ${spec.local} 已有转发，请换一个端口');
+      }
       await mgr.add(entry, link, spec);
-    } catch (e) {
-      return ws.toast('$e', error: true);
+      opened = mgr.open(entry.id, spec.local);
+      await ws.app.update((p) {
+        if (!identical(link, ws.link) || p.server(entry.id) == null) throw StateError('连接已变化，请重试');
+        p.server(entry.id)!.forwards.add(spec!);
+      });
+      if (mounted) ws.toast('127.0.0.1:${spec.local} → 服务器 $host:$port');
+    } on Object catch (e) {
+      if (opened != null && spec != null) await mgr.stop(entry.id, spec.local, expected: opened);
+      if (mounted) ws.toast(e is OpError ? e.message : '$e', error: true);
+    } finally {
+      if (mounted) setState(() => _adding = false);
     }
-    await ws.app.update((p) => p.server(entry.id)?.forwards.add(spec));
-    ws.toast('127.0.0.1:${spec.local} → 服务器 $host:$port');
   }
 
   Future<void> _addManual() async {
-    final c = TextEditingController();
-    final local = TextEditingController();
-    final ide = Ide.of(context);
-    final ok = await showWorkbenchDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('转发一个端口'),
-        content: SizedBox(
-          width: 380,
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            TextField(controller: c, autofocus: true, decoration: const InputDecoration(labelText: '服务器上的地址', hintText: '8080 或 db.internal:5432', helperText: '只写端口时，指服务器自己的 127.0.0.1')),
-            const SizedBox(height: 12),
-            TextField(controller: local, decoration: const InputDecoration(labelText: '本机端口（可选）', helperText: '留空则优先用同一个端口号，被占用就换一个')),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('取消', style: TextStyle(color: ide.textDim))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('转发')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    final text = c.text.trim();
-    final i = text.lastIndexOf(':');
-    final host = i > 0 ? text.substring(0, i) : '127.0.0.1';
-    final port = int.tryParse(i > 0 ? text.substring(i + 1) : text);
-    final lp = local.text.trim().isEmpty ? null : int.tryParse(local.text.trim());
-    if (port == null || port < 1 || port > 65535 || (local.text.trim().isNotEmpty && (lp == null || lp < 1 || lp > 65535))) {
-      return ws.toast('端口要在 1 到 65535 之间', error: true);
+    if (_manualOpen || _adding) return;
+    final link = ws.link;
+    _manualOpen = true;
+    try {
+      final value = await showWorkbenchDialog<(String, int, int?)>(
+        context: context, builder: (_) => const ForwardDialog(),
+      );
+      if (value != null && mounted && identical(link, ws.link)) await _forward(value.$2, host: value.$1, local: value.$3);
+    } finally {
+      _manualOpen = false;
     }
-    await _forward(port, host: host, local: lp);
   }
 
   Future<void> _remove(ForwardSpec spec) async {
     final entry = ws.entry;
-    if (entry == null) return;
-    await mgr.stop(entry.id, spec.local);
-    await ws.app.update((p) => p.server(entry.id)?.forwards.removeWhere((f) => f.local == spec.local));
+    if (entry == null || !_changing.add(spec.local)) return;
+    setState(() {});
+    try {
+      await ws.app.update((p) => p.server(entry.id)?.forwards.removeWhere((f) => f.local == spec.local));
+      await mgr.stop(entry.id, spec.local);
+    } on Object catch (e) {
+      if (mounted) ws.toast('删除转发失败：$e', error: true);
+    } finally {
+      _changing.remove(spec.local);
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _restart(ServerEntry entry, ForwardSpec spec) async {
+    final link = ws.link;
+    if (link == null || _changing.contains(spec.local)) return;
+    try {
+      await mgr.restart(entry, link, spec);
+    } on Object catch (e) {
+      if (mounted) ws.toast(e is OpError ? e.message : '$e', error: true);
+    }
   }
 
   Future<void> _openInBrowser(int local) async {
@@ -283,21 +369,33 @@ class _ForwardPanelState extends State<ForwardPanel> with VisiblePolling<Forward
     if (entry == null) return const SizedBox.shrink();
     final forwarded = {for (final f in entry.forwards) f.port};
     final ports = (_ports ?? const []).where((p) => !forwarded.contains(p['port'])).toList();
-    return ListView(children: [
-      SectionHeader('转发中  ${entry.forwards.length}', actions: [IconBtn(Icons.add, '转发一个端口…', _addManual)]),
+    return CustomScrollView(slivers: [
+      SliverToBoxAdapter(child: UiToolbar(children: [
+        FilledButton.icon(onPressed: _adding || ws.link == null ? null : _addManual,
+          busy: _adding, icon: const Icon(Icons.add, size: 16), label: const Text('新建转发')),
+      ])),
+      SliverToBoxAdapter(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SectionHeader('已保存的转发  ${entry.forwards.length}', actions: [IconBtn(Icons.add, _adding ? '正在创建转发…' : '转发一个端口…', _adding || ws.link == null ? null : _addManual)]),
       if (entry.forwards.isEmpty)
         Padding(
           padding: const EdgeInsets.all(14),
           child: Text('还没有转发。从下面服务器上正在监听的端口里选一个，或点 + 输入端口。', style: TextStyle(color: ide.textDim, fontSize: 12)),
         ),
-      for (final f in entry.forwards) _forwardRow(ide, entry, f),
+      ])),
+      SliverList.builder(itemCount: entry.forwards.length,
+        itemBuilder: (_, index) => _forwardRow(ide, entry, entry.forwards[index])),
+      SliverToBoxAdapter(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       SectionHeader('服务器上监听的端口  ${ports.length}', actions: [
         if (_loadingPorts) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5))),
-        IconBtn(Icons.refresh, '刷新', _loadPorts),
+        IconBtn(Icons.refresh, '刷新', _loadingPorts ? null : _loadPorts),
       ]),
       if (_portsError != null) Padding(padding: const EdgeInsets.all(10), child: Text(_portsError!, style: TextStyle(color: ide.error, fontSize: 12))),
-      for (final p in ports)
-        TreeRow(
+      if (ports.isEmpty && !_loadingPorts && _portsError == null)
+        Padding(padding: const EdgeInsets.all(Space.l), child: Text('没有其它监听端口；也可以手动输入目标地址。', style: TextStyle(color: ide.textDim, fontSize: 12))),
+      ])),
+      SliverList.builder(itemCount: ports.length, itemBuilder: (_, index) {
+        final p = ports[index];
+        return TreeRow(
           leading: Icon(Icons.dns_outlined, size: 14, color: ide.textDim),
           label: '${p['port']}',
           detail: [if ((p['process'] as String?)?.isNotEmpty ?? false) p['process'], _where('${p['addr']}')].join(' · '),
@@ -307,7 +405,8 @@ class _ForwardPanelState extends State<ForwardPanel> with VisiblePolling<Forward
             MenuItem('转发到本机', () => _forward(p['port'] as int, label: (p['process'] as String?) ?? ''), icon: Icons.arrow_forward),
             if ((p['command'] as String?)?.isNotEmpty ?? false) MenuItem('复制命令行', () => copyText(p['command'] as String), icon: Icons.copy),
           ],
-        ),
+        );
+      }),
     ]);
   }
 
@@ -315,24 +414,71 @@ class _ForwardPanelState extends State<ForwardPanel> with VisiblePolling<Forward
     final live = mgr.open(entry.id, spec.local);
     final why = mgr.failure(entry.id, spec.local);
     final running = live != null && !live.isClosed;
+    final busy = mgr.busy(entry.id, spec.local) || _changing.contains(spec.local);
     return TreeRow(
       leading: StatusDot(running ? ide.ok : (why != null ? ide.error : ide.textDim)),
       label: '127.0.0.1:${spec.local}  →  ${spec.host == '127.0.0.1' ? '' : '${spec.host}:'}${spec.port}',
       detail: spec.label.isEmpty ? null : spec.label,
-      subtitle: why ?? (running ? '${live.connections} 个连接 · ↑${formatSize(live.bytesOut)} ↓${formatSize(live.bytesIn)}${live.lastError == null ? '' : ' · ${live.lastError}'}' : '未运行'),
+      subtitle: busy ? '正在处理…' : why ?? (running ? '${live.connections} 个连接 · ↑${formatSize(live.bytesOut)} ↓${formatSize(live.bytesIn)}${live.lastError == null ? '' : ' · ${live.lastError}'}' : '未运行'),
       labelColor: running ? null : ide.textDim,
       onTap: running ? () => _openInBrowser(spec.local) : null,
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         if (running) IconBtn(Icons.open_in_browser, '在浏览器打开', () => _openInBrowser(spec.local)),
-        if (!running) IconBtn(Icons.play_arrow, '重新打开', ws.link == null ? null : () => mgr.restart(entry, ws.link!, spec)),
-        IconBtn(Icons.close, '删除这个转发', () => _remove(spec)),
+        if (!running) IconBtn(Icons.play_arrow, '重新打开', ws.link == null || busy ? null : () => _restart(entry, spec)),
+        IconBtn(Icons.close, '删除这个转发', busy ? null : () => _remove(spec)),
       ]),
       menu: () => [
         if (running) MenuItem('在浏览器打开', () => _openInBrowser(spec.local), icon: Icons.open_in_browser),
         MenuItem('复制本机地址', () => copyText('127.0.0.1:${spec.local}'), icon: Icons.copy),
         const MenuItem.separator(),
-        MenuItem('删除', () => _remove(spec), icon: Icons.close, danger: true),
+        MenuItem('删除', busy ? null : () => _remove(spec), icon: Icons.close, danger: true),
       ],
     );
   }
+}
+
+class ForwardDialog extends StatefulWidget {
+  const ForwardDialog({super.key});
+  @override
+  State<ForwardDialog> createState() => _ForwardDialogState();
+}
+
+class _ForwardDialogState extends State<ForwardDialog> {
+  final _address = TextEditingController(), _local = TextEditingController();
+  String? _error;
+  void _submit() {
+    final text = _address.text.trim();
+    final address = splitHostPort(text.contains(':') ? text : '127.0.0.1:$text');
+    final local = _local.text.trim().isEmpty ? null : int.tryParse(_local.text.trim());
+    if (address == null || address.$1.contains(RegExp(r'\s')) ||
+        (_local.text.trim().isNotEmpty && (local == null || local < 1 || local > 65535))) {
+      setState(() => _error = '请输入有效地址，端口须在 1–65535 之间');
+      return;
+    }
+    Navigator.pop(context, (address.$1, address.$2, local));
+  }
+
+  @override
+  void dispose() { _address.dispose(); _local.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('转发一个端口'),
+    content: SizedBox(width: 380, child: SingleChildScrollView(child: Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(controller: _address, autofocus: true, onSubmitted: (_) => _submit(),
+          decoration: const InputDecoration(labelText: '服务器上的地址', hintText: '8080 或 db.internal:5432', helperText: '只写端口时使用 127.0.0.1；IPv6 用 [::1]:8080')),
+        const SizedBox(height: 12),
+        TextField(controller: _local, onSubmitted: (_) => _submit(),
+          decoration: const InputDecoration(labelText: '本机端口（可选）', helperText: '留空则自动选择可用端口')),
+        if (_error != null) Padding(padding: const EdgeInsets.only(top: 8),
+          child: Text(_error!, style: TextStyle(color: Ide.of(context).error))),
+      ],
+    ))),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+      FilledButton(onPressed: _submit, child: const Text('转发')),
+    ],
+  );
 }

@@ -34,16 +34,27 @@ class ProxyModel {
   final Map<String, Future<void>> _queues = {};
   final Map<String, Link> _seenLinks = {};
 
+  /// Explicit links also support standalone callers. Once an application link
+  /// is observed, a disconnect or replacement invalidates its acknowledgement.
+  bool Function() _lease(String id, Link link) {
+    final observed = app.link(id);
+    return () => !link.isClosed &&
+        (observed == null || identical(observed, link)) &&
+        identical(app.link(id), observed) &&
+        (_seenLinks[id] == null || identical(_seenLinks[id], link));
+  }
+
   /// Every fresh authenticated link refreshes its selected subscription and
   /// drains durable pending work. Failed fetches keep the cached parameters.
   Future<void> connected(String id, Link link) async {
     if (identical(_seenLinks[id], link)) return;
     _seenLinks[id] = link;
+    final current = _lease(id, link);
     final c = app.profile.server(id)?.proxy;
     if (c == null) return;
     try {
       if (app.profile.proxySource(c.source)?.url != null) await refresh(c.source);
-      if (app.profile.server(id)?.proxy?.pending == true) {
+      if (current() && app.profile.server(id)?.proxy?.pending == true) {
         await repush(app.profile.server(id)!, link);
       }
     } on Object {
@@ -103,8 +114,8 @@ class ProxyModel {
         failure = r.skipped.isEmpty ? '订阅里没有节点' : r.skipped.first;
         r = null;
       }
-    } on FetchError catch (e) {
-      failure = e.message;
+    } on Object catch (e) {
+      failure = e is FetchError ? e.message : '订阅读取失败，请重试；保留上次的节点';
     }
     final changed = <String>[];
     var gone = 0;
@@ -191,7 +202,11 @@ class ProxyModel {
       final r = await link.call('proxy.check', {'nodes': [for (final n in part) n.toCheck()]}) as Map;
       final reasons = (r['reasons'] as List).cast<String>();
       for (var k = 0; k < part.length; k++) {
-        if (reasons[k].isNotEmpty) out[part[k].key] = reasons[k];
+        if (k >= reasons.length) {
+          out[part[k].key] = 'agent 未返回此节点的能力结果，请重试';
+        } else if (reasons[k].isNotEmpty) {
+          out[part[k].key] = reasons[k];
+        }
       }
     }
     return out;
@@ -209,8 +224,8 @@ class ProxyModel {
       } else {
         row.testError = (r['error'] as String?) ?? '失败';
       }
-    } on OpError catch (e) {
-      row.testError = e.message;
+    } on Object catch (e) {
+      row.testError = e is OpError ? e.message : '测速失败，请检查连接后重试';
     }
   }
 
@@ -232,10 +247,16 @@ class ProxyModel {
 
   /// Tells the server to use [row] and remembers the choice.
   Future<void> choose(ServerEntry server, Link link, NodeRow row) async {
+    final current = _lease(server.id, link);
     await _serialize(server.id, () async {
+      if (!current()) throw OpError(codeUnavailable, '连接已变化，请重试');
       await app.update((p) {
         final e = p.server(server.id);
-        if (e == null) return;
+        if (!current() || e == null) throw OpError(codeUnavailable, '连接已变化，请重试');
+        final source = p.proxySource(row.source.id);
+        if (source == null || _find(source.nodes, row.node.key) == null) {
+          throw OpError(codeConflict, '节点已从来源中移除，请重新选择');
+        }
         e.proxy = ProxyChoice(source: row.source.id, key: row.node.key, name: row.node.name, pending: true, revision: (e.proxy?.revision ?? 0) + 1);
       });
       await _push(server.id, link);
@@ -243,9 +264,18 @@ class ProxyModel {
   }
 
   Future<void> clear(ServerEntry server, Link link) async {
+    final current = _lease(server.id, link);
     await _serialize(server.id, () async {
+      if (!current()) throw OpError(codeUnavailable, '连接已变化，请重试');
+      final before = app.profile.server(server.id)?.proxy;
       await link.call('proxy.clear');
-      await app.update((p) => p.server(server.id)?.proxy = null);
+      await app.update((p) {
+        if (!current()) throw OpError(codeUnavailable, '连接已变化，清除结果未确认，请重试');
+        final choice = p.server(server.id)?.proxy;
+        if (choice?.source == before?.source && choice?.key == before?.key && choice?.revision == before?.revision) {
+          p.server(server.id)?.proxy = null;
+        }
+      });
     });
   }
 
@@ -268,6 +298,8 @@ class ProxyModel {
   }
 
   Future<bool> _push(String id, Link link) async {
+    final connected = _lease(id, link);
+    if (!connected()) throw OpError(codeUnavailable, '连接已变化，节点参数仍待同步');
     final c = app.profile.server(id)?.proxy;
     if (c == null) return true;
     final src = app.profile.proxySource(c.source);
@@ -289,6 +321,7 @@ class ProxyModel {
     try {
       await link.call('proxy.set', {'node': n.toAgent()});
       await app.update((p) {
+        if (!connected()) throw OpError(codeUnavailable, '连接已变化，节点参数仍待同步');
         final current = p.server(id)?.proxy;
         if (current != null && current.source == source && current.key == key && current.revision == rev) {
           current.pending = false;

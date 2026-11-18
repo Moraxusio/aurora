@@ -5,6 +5,8 @@ package systemd
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"aurora3/internal/wire"
@@ -74,5 +76,34 @@ func TestNoActionsFunction(t *testing.T) {
 	b, _ := json.Marshal(map[string]string{"name": "x.service", "action": "start"})
 	if _, err := e.svcAction(context.Background(), b); wire.CodeOf(err) != wire.CodeForbidden {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestInfoFailureIsNotAnEmptySuccess(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "systemctl"), []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	e := &Env{}
+	if result, err := e.svcInfo(context.Background(), json.RawMessage(`{"name":"fixture.service"}`)); err == nil || result != nil {
+		t.Fatalf("failed status query reported success: %v, %v", result, err)
+	}
+}
+
+func TestConcurrentActionIsRejectedBeforeExecuting(t *testing.T) {
+	e := &Env{
+		Actions: func() map[string][]string { return map[string][]string{"fixture.service": {"restart"}} },
+		busy:    map[string]bool{"fixture.service": true},
+	}
+	t.Setenv("PATH", t.TempDir())
+	_, err := e.svcAction(context.Background(), json.RawMessage(`{"name":"fixture.service","action":"restart"}`))
+	if wire.CodeOf(err) != wire.CodeConflict {
+		t.Fatalf("expected busy rejection without invoking systemctl: %v", err)
+	}
+	delete(e.busy, "fixture.service")
+	_, err = e.svcAction(context.Background(), json.RawMessage(`{"name":"fixture.service","action":"restart"}`))
+	if wire.CodeOf(err) != wire.CodeInternal || e.busy["fixture.service"] {
+		t.Fatalf("failed action must release its lease: %v, %+v", err, e.busy)
 	}
 }

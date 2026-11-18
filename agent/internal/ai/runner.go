@@ -17,14 +17,15 @@ import (
 	"aurora3/internal/paths"
 )
 
-const maxRunnerSteps = 60
-
 type activeRun struct {
-	cancel   context.CancelFunc
-	inbox    []InboxItem
-	queued   []InboxItem
-	provider ProviderConfig
-	meter    *runMeter
+	cancel        context.CancelFunc
+	stopRequested bool // guarded by Env.mu; cleanup cancellation is not a user stop
+	turnCtx       context.Context
+	turnCancel    context.CancelFunc
+	inbox         []InboxItem
+	queued        []InboxItem
+	provider      ProviderConfig
+	meter         *runMeter
 }
 
 // Env is the state and dependencies of the "ai" service on the agent.
@@ -474,6 +475,9 @@ func (e *Env) GetSession(id string) (Session, bool, *PermissionQuestion, error) 
 		return Session{}, false, nil, e.sessionStorageError(id)
 	}
 	_, isRun := e.running[id]
+	if run := e.running[id]; run != nil {
+		s.Budget = run.meter.snapshot()
+	}
 	var out Session
 	_ = e.sessionIOLocked(id, func() error { out = cloneSession(s); return nil })
 	for i := range out.Inbox {
@@ -576,6 +580,9 @@ func (e *Env) StopSession(id string) bool {
 	e.waitSessionLocked(id)
 	ar, ok := e.running[id]
 	maintenance := e.maintenance[id]
+	if ok {
+		ar.stopRequested = true
+	}
 	e.mu.Unlock()
 	if ok && ar.cancel != nil {
 		ar.cancel()
@@ -660,6 +667,7 @@ type RunInput struct {
 	Attachments     []ContextAttachment `json:"attachments,omitempty"`
 	Delivery        string              `json:"delivery,omitempty"` // "steer" | "queue"
 	Provider        ProviderConfig      `json:"provider"`
+	Options         *RunOptions         `json:"options,omitempty"`
 }
 
 // StartRun creates or resumes a session, enqueues the user prompt (supporting live steering
@@ -668,6 +676,17 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	e.init()
 	if e.recoveryErr != nil {
 		return SessionSummary{}, e.recoveryErr
+	}
+	if in.Options != nil {
+		data, err := json.Marshal(in.Options)
+		if err != nil {
+			return SessionSummary{}, err
+		}
+		var options RunOptions
+		if err = json.Unmarshal(data, &options); err != nil {
+			return SessionSummary{}, err
+		}
+		in.Options = &options
 	}
 	var prepErr error
 	in.Provider, prepErr = prepareSubscription(in.Provider)
@@ -715,6 +734,9 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		for _, item := range s.Inbox {
 			if item.ID == in.InboxID {
 				in.Text, in.Attachments = item.Text, item.Attachments
+				if in.Options == nil {
+					in.Options = item.Options
+				}
 				found = true
 				break
 			}
@@ -776,6 +798,57 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		e.sessions[s.ID] = s
 	}
 
+	// Resuming a child preserves its read-only role and delegation boundary.
+	depth := 0
+	if s.ParentID != "" {
+		depth = 1
+		if e.running[s.ParentID] != nil {
+			e.mu.Unlock()
+			return SessionSummary{}, errors.New("子代理由主任务调度中；请在主对话补充指令，主任务结束后可继续子会话")
+		}
+		if s.Agent == "explore" {
+			agentMode = "explore"
+		}
+	}
+	if in.Delivery != "" && in.Delivery != "steer" && in.Delivery != "queue" {
+		if in.SessionID == "" {
+			delete(e.sessions, s.ID)
+		}
+		e.mu.Unlock()
+		return SessionSummary{}, errors.New("未知发送方式")
+	}
+	var budgetConfig ExtensionConfig
+	budgetSource := "default"
+	if ar := e.running[s.ID]; ar != nil && in.Delivery != "queue" {
+		if in.Options.changed() {
+			e.mu.Unlock()
+			return SessionSummary{}, errors.New("补充指令沿用当前任务设置；请改为排队发送以使用独立预算")
+		}
+		budgetConfig, budgetSource = ar.meter.config, ar.meter.source
+	} else {
+		_, _, budgetWork, budgetErr := e.resolveWorkspace(s.Root, s.Workdir)
+		var tag string
+		if budgetErr == nil {
+			budgetConfig, tag, budgetErr = loadExtensionConfig(budgetWork)
+		}
+		if budgetErr == nil {
+			budgetConfig, budgetErr = applyRunOptions(budgetConfig, in.Options)
+		}
+		if budgetErr != nil {
+			if in.SessionID == "" {
+				delete(e.sessions, s.ID)
+			}
+			e.mu.Unlock()
+			return SessionSummary{}, budgetErr
+		}
+		if tag != "" {
+			budgetSource = "project"
+		}
+		if in.Options.changed() {
+			budgetSource = "message"
+		}
+	}
+
 	// If already running, push into activeRun.inbox for OpenCode-style live steering!
 	if ar, busy := e.running[s.ID]; busy {
 		item := InboxItem{
@@ -789,6 +862,9 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 			PermissionRules: append([]PermissionRule(nil), in.PermissionRules...),
 			Provider:        in.Provider,
 			Runtime:         runtimeInfo(in.Provider),
+			Options:         in.Options,
+			AdmittedConfig:  &budgetConfig,
+			ConfigSource:    budgetSource,
 		}
 		if item.Delivery != "queue" {
 			item.Delivery = "steer"
@@ -823,18 +899,8 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		return sum, nil
 	}
 
-	_, _, budgetWork, budgetErr := e.resolveWorkspace(s.Root, s.Workdir)
-	var budgetConfig ExtensionConfig
-	if budgetErr == nil {
-		budgetConfig, _, budgetErr = loadExtensionConfig(budgetWork)
-	}
-	if budgetErr != nil {
-		if in.SessionID == "" {
-			delete(e.sessions, s.ID)
-		}
-		e.mu.Unlock()
-		return SessionSummary{}, budgetErr
-	}
+	meter := newRunMeter(budgetConfig)
+	meter.source = budgetSource
 	before := *s
 	before.Messages = append([]Message(nil), s.Messages...)
 	before.Inbox = append([]InboxItem(nil), s.Inbox...)
@@ -846,6 +912,7 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	s.Model = in.Provider.Model
 	s.Protocol = in.Provider.Protocol
 	s.UpdatedAt = time.Now().UnixMilli()
+	s.Budget = meter.snapshot()
 	if in.InboxID != "" {
 		for i, item := range s.Inbox {
 			if item.ID == in.InboxID {
@@ -883,6 +950,7 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		Agent:     agentMode,
 		Parts:     e.userParts(in.Text, in.Attachments),
 		CreatedAt: time.Now().UnixMilli(),
+		Budget:    meter.snapshot(),
 	}
 	s.Messages = append(s.Messages, userMsg)
 	if err := e.persistSessionLocked(s); err != nil {
@@ -894,12 +962,14 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		return SessionSummary{}, err
 	}
 
-	meter := newRunMeter(budgetConfig)
-	runCtx, cancel := context.WithDeadline(context.Background(), meter.deadline)
+	runCtx, cancel := context.WithCancel(context.Background())
+	turnCtx, turnCancel := meter.context(runCtx)
 	ar := &activeRun{
-		cancel:   cancel,
-		provider: in.Provider,
-		meter:    meter,
+		cancel:     cancel,
+		turnCtx:    turnCtx,
+		turnCancel: turnCancel,
+		provider:   in.Provider,
+		meter:      meter,
 	}
 	e.running[s.ID] = ar
 
@@ -915,6 +985,7 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		UpdatedAt:    s.UpdatedAt,
 	}
 	sid := s.ID
+	meter.onChange = func() { e.publishRunBudget(sid, meter) }
 	firstPromptText := in.Text
 	provCopy := in.Provider
 	e.mu.Unlock()
@@ -930,13 +1001,14 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 		Type:      "session.status",
 		SessionID: sid,
 		Status:    "running",
+		Budget:    meter.snapshot(),
 	})
 
-	if isFirstPrompt && strings.TrimSpace(firstPromptText) != "" {
-		go e.generateTitleAsync(sid, firstPromptText, provCopy, meter)
+	if isFirstPrompt && strings.TrimSpace(firstPromptText) != "" && enabledByDefault(budgetConfig.AutoTitle) {
+		go e.generateTitleAsync(turnCtx, sid, firstPromptText, provCopy, meter)
 	}
 
-	go e.runLoop(runCtx, sid, 0)
+	go e.runLoop(runCtx, sid, depth)
 	return sum, nil
 }
 
@@ -962,8 +1034,8 @@ func fallbackTitle(text string) string {
 	return string(runes)
 }
 
-func (e *Env) generateTitleAsync(sessionID, promptText string, cfg ProviderConfig, meters ...*runMeter) {
-	cctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+func (e *Env) generateTitleAsync(ctx context.Context, sessionID, promptText string, cfg ProviderConfig, meters ...*runMeter) {
+	cctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 
 	temp := 0.3
@@ -1005,10 +1077,12 @@ func (e *Env) generateTitleAsync(sessionID, promptText string, cfg ProviderConfi
 
 	e.mu.Lock()
 	s := e.sessionLocked(sessionID)
-	if s != nil {
+	if s != nil && ctx.Err() == nil && (meter == nil || s.Budget != nil && s.Budget.ID == meter.id) {
 		s.Title = title
 		s.UpdatedAt = time.Now().UnixMilli()
 		_ = e.persistSessionLocked(s)
+	} else {
+		s = nil
 	}
 	e.mu.Unlock()
 	if s != nil {
@@ -1026,15 +1100,35 @@ func (e *Env) finishRunLocked(sessionID string, owned *activeRun) {
 		return
 	}
 	e.perms.CancelSession(sessionID)
+	owned.cancel()
+	if owned.turnCancel != nil {
+		owned.turnCancel()
+	}
 	delete(e.running, sessionID)
 	if s := e.sessionLocked(sessionID); s != nil {
 		recoverInterruptedTools(s)
+		s.Budget = owned.meter.snapshot()
 		_ = e.persistSessionLocked(s)
 	}
-	e.broadcastLocked(StreamEvent{Type: "session.status", SessionID: sessionID, Status: "idle"})
+	e.broadcastLocked(StreamEvent{Type: "session.status", SessionID: sessionID, Status: "idle", Budget: owned.meter.snapshot()})
 }
 
-func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
+func (e *Env) publishRunBudget(sessionID string, meter *runMeter) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	s := e.sessionLocked(sessionID)
+	if s == nil || s.Budget == nil || s.Budget.ID != meter.id {
+		return // a late title receipt cannot replace a newer run's counters
+	}
+	state := meter.snapshot()
+	s.Budget = state
+	if e.running[sessionID] == nil {
+		_ = e.persistSessionLocked(s)
+	}
+	e.broadcastLocked(StreamEvent{Type: "run.budget", SessionID: sessionID, Budget: state})
+}
+
+func (e *Env) runLoop(baseCtx context.Context, sessionID string, depth int) {
 	e.mu.Lock()
 	owned := e.running[sessionID]
 	e.mu.Unlock()
@@ -1044,11 +1138,14 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		e.mu.Unlock()
 	}()
 
-	type recentCall struct {
-		name string
-		args string
+	if owned == nil {
+		return
 	}
-	var lastCalls []recentCall
+	ctx := owned.turnCtx
+	if ctx == nil {
+		ctx = baseCtx
+	}
+	var lastCalls []toolSignature
 	idleBoundary := false
 	var extensions *extensionRuntime
 	defer func() {
@@ -1057,8 +1154,13 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		}
 	}()
 
-	for step := 0; step < maxRunnerSteps; step++ {
+	for step := 0; ; step++ {
 		if ctx.Err() != nil {
+			if owned != nil {
+				if err := owned.meter.timeError(); err != nil {
+					e.recordRunError(sessionID, "", "", err, LLMResponse{})
+				}
+			}
 			return
 		}
 
@@ -1072,8 +1174,32 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		// Move queued follow-ups only after the previous model/tool turn has
 		// completed. This keeps the two composer delivery modes meaningful.
 		if idleBoundary && len(ar.inbox) == 0 && len(ar.queued) > 0 {
+			item := ar.queued[0]
+			if item.AdmittedConfig == nil {
+				e.mu.Unlock()
+				e.recordError(sessionID, "", "排队输入缺少有效设置，请在待发送中重新发送。")
+				return
+			}
+			if ar.turnCancel != nil {
+				ar.turnCancel()
+			}
+			meter := newRunMeter(*item.AdmittedConfig)
+			meter.source = item.ConfigSource
+			meter.onChange = func() { e.publishRunBudget(sessionID, meter) }
+			ar.meter = meter
+			ar.turnCtx, ar.turnCancel = meter.context(baseCtx)
+			ctx = ar.turnCtx
+			s.Budget = meter.snapshot()
+			step = 0
 			ar.inbox = append(ar.inbox, ar.queued[0])
 			ar.queued = ar.queued[1:]
+			// Recreate extension connections with this message's admitted policy.
+			if extensions != nil {
+				e.mu.Unlock()
+				extensions.close()
+				extensions = nil
+				e.mu.Lock()
+			}
 		}
 		// Drain interactive steering messages submitted while running.
 		var delivered []Message
@@ -1113,6 +1239,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 					Agent:     s.Agent,
 					Parts:     e.userParts(item.Text, item.Attachments),
 					CreatedAt: item.CreatedAt,
+					Budget:    ar.meter.snapshot(),
 				}
 				s.Messages = append(s.Messages, um)
 				delivered = append(delivered, um)
@@ -1142,31 +1269,38 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			return
 		}
 		if extensions == nil {
-			extensions, err = e.loadExtensions(ctx, rt.Path, absWorkdir, prov)
+			extensions, err = e.loadExtensions(ctx, rt.Path, absWorkdir, prov, owned.meter.config)
 			if err != nil {
-				e.recordError(sessionID, prov.Model, err.Error())
+				if deadlineErr := owned.meter.timeError(); deadlineErr != nil {
+					err = deadlineErr
+				}
+				e.recordRunError(sessionID, prov.Model, "", err, LLMResponse{})
 				return
 			}
 		}
 
 		// Auto-compaction check before issuing step request (matching OpenCode's runner)
-		if depth == 0 && ShouldAutoCompact(&sessSnap, prov) {
+		if depth == 0 && enabledByDefault(extensions.config.AutoCompact) && ShouldAutoCompact(&sessSnap, prov) {
 			if _, cerr := e.compactInternal(ctx, sessionID, prov, absWorkdir, false); cerr == nil {
 				e.mu.Lock()
 				if cur := e.sessionLocked(sessionID); cur != nil {
 					sessSnap = cloneSession(cur)
 				}
 				e.mu.Unlock()
+			} else {
+				var limit *budgetError
+				if errors.As(cerr, &limit) {
+					e.recordRunError(sessionID, prov.Model, "", cerr, LLMResponse{})
+					return
+				}
 			}
 		}
 
-		tools := modelToolDefinitions(sessSnap.Agent, depth, prov)
+		tools := configuredToolDefinitions(sessSnap.Agent, depth, prov, extensions)
 		tools = append(tools, extensions.definitions(sessSnap.Agent, prov)...)
 		toolNames := make([]string, len(tools))
-		declaredTools := map[string]bool{}
 		for i, t := range tools {
 			toolNames[i] = t.Name
-			declaredTools[t.Name] = true
 		}
 		sysPrompts := BuildSystemPrompts(sessSnap.Agent, prov, absWorkdir, toolNames, renderInstructions(extensions.instructions))
 		activeMsgs := BuildActiveHistory(sessSnap.Messages)
@@ -1194,6 +1328,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			MessageID: asstMsgID,
 			Runtime:   runtime,
 			Context:   contextState,
+			Budget:    owned.meter.snapshot(),
 		})
 
 		llmResp, llmErr := streamBudgeted(ctx, LLMRequest{
@@ -1233,16 +1368,16 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		}, owned.meter)
 
 		if llmErr != nil {
-			if ctx.Err() != nil {
+			if ctx.Err() != nil && owned.meter.timeError() == nil && len(llmResp.Parts) == 0 {
 				return
 			}
 			// Context overflow recovery: run overflow compaction once and retry step!
-			if depth == 0 && IsContextOverflowError(llmErr) {
+			if depth == 0 && enabledByDefault(extensions.config.AutoCompact) && IsContextOverflowError(llmErr) {
 				if _, cerr := e.compactInternal(ctx, sessionID, prov, absWorkdir, true); cerr == nil {
 					continue
 				}
 			}
-			e.recordError(sessionID, prov.Model, llmErr.Error())
+			e.recordRunError(sessionID, prov.Model, asstMsgID, llmErr, llmResp)
 			return
 		}
 
@@ -1262,12 +1397,12 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 		progressMessage := Message{ID: asstMsgID, SessionID: sessionID, Role: "assistant",
 			Agent: sessSnap.Agent, Model: prov.Model, Runtime: runtime, Finish: "tool-running",
 			Parts: append([]Part(nil), llmResp.Parts...), CreatedAt: time.Now().UnixMilli()}
-		if depth == 0 && sessSnap.Agent == "build" {
+		if depth == 0 && sessSnap.Agent == "build" && enabledByDefault(extensions.config.Snapshots) {
 			for _, call := range toolCalls {
 				if call.ToolName == "write" || call.ToolName == "edit" || call.ToolName == "apply_patch" ||
 					call.ToolName == "shell" || call.ToolName == "subagent" || strings.HasPrefix(call.ToolName, "mcp_") {
 					var captureErr error
-					startTree, captureErr = e.snapshots.CaptureChecked(ctx, absWorkdir)
+					startTree, captureErr = e.snapshots.CaptureConfigured(ctx, absWorkdir, extensions.config.Snapshot)
 					if captureErr != nil {
 						snapshotWarning = captureErr.Error()
 					}
@@ -1285,117 +1420,19 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			}
 		}
 
-		// Execute tool calls sequentially (preserving snapshot & doom-loop determinism; read-only calls are fast)
-		var resultParts []Part
-		for callIndex, call := range toolCalls {
-			if ctx.Err() != nil {
-				resultParts = append(resultParts, Part{Type: "tool-result", ID: NewID("prt"),
-					ToolName: call.ToolName, ToolCallID: call.ToolCallID, IsError: true,
-					Output: "Not executed: the user stopped this run."})
-				continue
-			}
-			e.broadcast(StreamEvent{
-				Type:       "tool.running",
-				SessionID:  sessionID,
-				MessageID:  asstMsgID,
-				ToolCallID: call.ToolCallID,
-				ToolName:   call.ToolName,
-				Input:      call.Input,
-				Metadata:   toolRuntimeMetadata(call.ToolName, prov, e.proxyFor(prov)),
-			})
-
-			// OpenCode 3-strike doom-loop detector
-			sig := recentCall{name: call.ToolName, args: strings.TrimSpace(string(call.Input))}
-			lastCalls = append(lastCalls, sig)
-			if len(lastCalls) > 3 {
-				lastCalls = lastCalls[len(lastCalls)-3:]
-			}
-			var execRes ToolExecResult
-			if callIndex >= 64 {
-				execRes = ToolExecResult{Output: "Not executed: a step supports at most 64 tool calls. Split the task into smaller steps.", IsError: true}
-			} else if declaredTools[call.ToolName] && len(lastCalls) == 3 && lastCalls[0] == lastCalls[1] && lastCalls[1] == lastCalls[2] {
-				q := PermissionQuestion{
-					ID:        NewID("perm"),
-					SessionID: sessionID,
-					MessageID: asstMsgID,
-					CallID:    call.ToolCallID,
-					Tool:      call.ToolName,
-					Action:    "doom_loop",
-					Resource:  call.ToolName + " " + truncateShort(sig.args, 120),
-					Reason:    "Agent invoked the exact same tool & arguments 3 times in a row. Continue anyway?",
-				}
-				if perr := e.perms.Ask(ctx, q, func(pq PermissionQuestion) {
-					e.broadcast(StreamEvent{
-						Type:       "permission.ask",
-						SessionID:  sessionID,
-						MessageID:  asstMsgID,
-						ToolCallID: call.ToolCallID,
-						Permission: &pq,
-					})
-				}); perr != nil {
-					execRes = ToolExecResult{Output: perr.Error(), IsError: true}
-				} else {
-					lastCalls = nil
-					execRes = executeTool(ctx, toolContext{
-						env:        e,
-						session:    &sessSnap,
-						provider:   prov,
-						rootPath:   rt.Path,
-						absWorkdir: absWorkdir,
-						messageID:  asstMsgID,
-						callID:     call.ToolCallID,
-						depth:      depth,
-						extensions: extensions,
-					}, call.ToolName, call.Input)
-				}
-			} else {
-				execRes = executeTool(ctx, toolContext{
-					env:        e,
-					session:    &sessSnap,
-					provider:   prov,
-					rootPath:   rt.Path,
-					absWorkdir: absWorkdir,
-					messageID:  asstMsgID,
-					callID:     call.ToolCallID,
-					depth:      depth,
-					extensions: extensions,
-				}, call.ToolName, call.Input)
-			}
-
-			resPart := Part{
-				Type:        "tool-result",
-				ID:          NewID("prt"),
-				ToolName:    call.ToolName,
-				ToolCallID:  call.ToolCallID,
-				Output:      execRes.Output,
-				IsError:     execRes.IsError,
-				Metadata:    execRes.Metadata,
-				Attachments: execRes.Attachments,
-			}
-			resultParts = append(resultParts, resPart)
-			progressMessage.Parts = append(append([]Part(nil), llmResp.Parts...), resultParts...)
-			if err := e.checkpointStep(progressMessage); err != nil {
-				e.recordError(sessionID, prov.Model, "工具已返回，但结果保存失败；后续调用已暂停，请核对实际状态："+err.Error())
-				return
-			}
-
-			e.broadcast(StreamEvent{
-				Type:       "tool.done",
-				SessionID:  sessionID,
-				MessageID:  asstMsgID,
-				ToolCallID: call.ToolCallID,
-				ToolName:   call.ToolName,
-				Input:      call.Input,
-				Output:     execRes.Output,
-				IsError:    execRes.IsError,
-				Metadata:   execRes.Metadata,
-			})
+		resultParts, toolErr := e.executeStepTools(ctx, toolContext{
+			env: e, session: &sessSnap, provider: prov, rootPath: rt.Path,
+			absWorkdir: absWorkdir, messageID: asstMsgID, depth: depth, extensions: extensions,
+		}, toolCalls, progressMessage, &lastCalls)
+		if toolErr != nil {
+			e.recordError(sessionID, prov.Model, "工具结果保存失败，任务已暂停；请核对实际状态："+toolErr.Error())
+			return
 		}
 
 		// Capture end-of-step shadow-git snapshot if tools ran
 		var stepSnap *StepSnapshot
 		if startTree != "" && len(toolCalls) > 0 {
-			endTree, captureErr := e.snapshots.CaptureChecked(context.Background(), absWorkdir)
+			endTree, captureErr := e.snapshots.CaptureConfigured(context.Background(), absWorkdir, extensions.config.Snapshot)
 			if captureErr != nil {
 				snapshotWarning = captureErr.Error()
 			}
@@ -1430,6 +1467,7 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			Runtime:   runtime,
 			Finish:    llmResp.Finish,
 			Usage:     &usageCopy,
+			Budget:    owned.meter.snapshot(),
 			Snapshot:  stepSnap,
 			CreatedAt: time.Now().UnixMilli(),
 		}
@@ -1477,14 +1515,17 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			TotalUsage: &totalUsage,
 			Runtime:    runtime,
 			Context:    contextState,
+			Budget:     owned.meter.snapshot(),
 		})
 		if persistErr != nil {
 			e.recordError(sessionID, prov.Model, "步骤结果保存失败，任务已暂停："+persistErr.Error())
 			return
 		}
 
+		// The next iteration records a time-budget stop even when the deadline
+		// expired during tool execution rather than during the model stream.
 		if ctx.Err() != nil {
-			return
+			continue
 		}
 		// Continue loop if model made tool calls or user sent steering inbox messages
 		idleBoundary = len(toolCalls) == 0
@@ -1502,22 +1543,47 @@ func (e *Env) runLoop(ctx context.Context, sessionID string, depth int) {
 			}
 		}
 	}
-	e.recordError(sessionID, "", "已达到单次任务的工具步骤上限，请确认当前结果后发送新的指令继续。")
 }
 
 func (e *Env) recordError(sessionID, model, errMsg string) {
+	e.recordRunError(sessionID, model, "", errors.New(errMsg), LLMResponse{})
+}
+
+func (e *Env) recordRunError(sessionID, model, messageID string, err error, response LLMResponse) {
+	if messageID == "" {
+		messageID = NewID("msg")
+	}
 	msg := Message{
-		ID:        NewID("msg"),
+		ID:        messageID,
 		SessionID: sessionID,
 		Role:      "assistant",
 		Model:     model,
 		Finish:    "error",
-		Error:     errMsg,
+		Error:     err.Error(),
+		Parts:     response.Parts,
 		CreatedAt: time.Now().UnixMilli(),
 	}
+	var limit *budgetError
+	if errors.As(err, &limit) {
+		msg.ErrorCode = "budget." + limit.kind
+	}
+	if response.Usage.TotalTokens > 0 {
+		msg.Usage = &response.Usage
+	}
+	var total Usage
 	e.mu.Lock()
 	if s := e.sessionLocked(sessionID); s != nil {
+		if ar := e.running[sessionID]; ar != nil {
+			msg.Runtime = runtimeInfo(ar.provider)
+			msg.Model = ar.provider.Model
+			msg.Budget = ar.meter.snapshot()
+			s.Runtime = msg.Runtime
+			s.Budget = msg.Budget
+		}
+		msg.Agent = s.Agent
 		s.Messages = append(s.Messages, msg)
+		s.TotalUsage.Add(response.Usage)
+		total = s.TotalUsage
 		s.UpdatedAt = msg.CreatedAt
 		_ = e.persistSessionLocked(s)
 	}
@@ -1525,15 +1591,39 @@ func (e *Env) recordError(sessionID, model, errMsg string) {
 
 	msgCopy := msg
 	e.broadcast(StreamEvent{
-		Type:      "session.error",
-		SessionID: sessionID,
-		MessageID: msg.ID,
-		Error:     errMsg,
-		Message:   &msgCopy,
+		Type:       "session.error",
+		SessionID:  sessionID,
+		MessageID:  msg.ID,
+		Error:      msg.Error,
+		Message:    &msgCopy,
+		Runtime:    msg.Runtime,
+		Budget:     msg.Budget,
+		TotalUsage: &total,
 	})
 }
 
 func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov ProviderConfig, agentType, desc, prompt, parentCallID string, depth int) (string, string, error) {
+	if parent.ParentID != "" || depth != 1 {
+		return "", "", errors.New("子代理不能继续创建子代理")
+	}
+	e.mu.Lock()
+	run := e.running[parent.ID]
+	persisted := e.sessionLocked(parent.ID)
+	valid := run != nil && persisted != nil && persisted.ParentID == ""
+	e.mu.Unlock()
+	if !valid {
+		return "", "", errors.New("主任务已经停止或不是主会话")
+	}
+	meter := run.meter
+	policy := meter.config.Subagents.resolved()
+	if policy.ReadOnly && agentType != "explore" {
+		return "", "", errors.New("此项目仅允许只读子代理")
+	}
+	release, err := meter.acquireChild(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	defer release()
 	now := time.Now().UnixMilli()
 	child := &Session{
 		ID:              NewID("ses"),
@@ -1571,17 +1661,24 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 	defer cancel()
 
 	e.mu.Lock()
-	e.sessions[child.ID] = child
-	var meter *runMeter
-	if run := e.running[parent.ID]; run != nil {
-		meter = run.meter
+	if ctx.Err() != nil || e.running[parent.ID] != run {
+		e.mu.Unlock()
+		return "", "", errors.New("主任务已经停止")
 	}
-	e.running[child.ID] = &activeRun{
+	e.sessions[child.ID] = child
+	child.Budget = meter.snapshot()
+	childRun := &activeRun{
 		cancel:   cancel,
 		provider: prov,
 		meter:    meter,
 	}
-	_ = e.persistSessionLocked(child)
+	e.running[child.ID] = childRun
+	if err := e.persistSessionLocked(child); err != nil {
+		delete(e.running, child.ID)
+		delete(e.sessions, child.ID)
+		e.mu.Unlock()
+		return "", "", err
+	}
 	e.mu.Unlock()
 	input, _ := json.Marshal(map[string]string{"agent": agentType, "description": desc})
 	e.broadcast(StreamEvent{Type: "tool.running", SessionID: parent.ID, ToolCallID: parentCallID, ToolName: "subagent", Input: input, Metadata: map[string]any{"child_session_id": child.ID, "agent": agentType, "description": desc, "started_at": now}})
@@ -1590,6 +1687,7 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 
 	e.mu.Lock()
 	finished := e.sessionLocked(child.ID)
+	stopped := childRun.stopRequested
 	var report string
 	var runErr string
 	if finished != nil {
@@ -1614,7 +1712,13 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 	}
 	e.mu.Unlock()
 
-	if report == "" && runErr != "" {
+	if ctx.Err() != nil {
+		return report, child.ID, ctx.Err()
+	}
+	if stopped {
+		return report, child.ID, fmt.Errorf("子代理已停止: %w", context.Canceled)
+	}
+	if runErr != "" {
 		return "", child.ID, errors.New(runErr)
 	}
 	if report == "" {

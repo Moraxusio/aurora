@@ -29,6 +29,7 @@ import 'package:xterm/xterm.dart' show TerminalView;
 import 'ai_feature_test.dart' show FakeAiLink;
 import 'support/workspace_fixture.dart';
 import 'support/terminal_fixture.dart';
+import 'support/workbench_tools_workflow.dart';
 
 const _code = '''import 'package:flutter/material.dart';
 
@@ -249,6 +250,17 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets(
+    'production tools in both themes, zoom and narrow windows',
+    (t) async {
+      t.view.physicalSize = const Size(1440, 900);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.resetPhysicalSize); addTearDown(t.view.resetDevicePixelRatio);
+      await exerciseWorkbenchTools(t, frame: frame, capture: (name) => snapshot(t, name),
+        resize: (size) async { t.view.physicalSize = size; await t.pump(); });
+    },
+  );
 
   testWidgets(
     'real workbench stays quiet, responsive and stateful in both themes',

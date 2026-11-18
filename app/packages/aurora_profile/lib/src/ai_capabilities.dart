@@ -39,6 +39,8 @@ class AiModelOptions {
   /// protocol | disabled | anthropic-adaptive | anthropic-budget
   String reasoningMode;
   int thinkingBudget;
+  int contextWindow;
+  int maxTokens;
 
   AiModelOptions({
     Map<String, bool>? capabilities,
@@ -46,6 +48,8 @@ class AiModelOptions {
     Map<String, String>? reasoningEfforts,
     this.reasoningMode = 'protocol',
     this.thinkingBudget = 0,
+    this.contextWindow = 0,
+    this.maxTokens = 0,
   }) : capabilities = capabilities ?? {},
        reasoningEfforts = reasoningEfforts ?? {};
 
@@ -66,6 +70,8 @@ class AiModelOptions {
         ? j['reasoning_mode'] as String
         : 'protocol',
     thinkingBudget: (j['thinking_budget'] as num?)?.toInt() ?? 0,
+    contextWindow: (j['context_window'] as num?)?.toInt() ?? 0,
+    maxTokens: (j['max_tokens'] as num?)?.toInt() ?? 0,
   );
 
   Map<String, dynamic> toJson() => {
@@ -74,5 +80,7 @@ class AiModelOptions {
     if (reasoningEfforts.isNotEmpty) 'reasoning_efforts': reasoningEfforts,
     if (reasoningMode != 'protocol') 'reasoning_mode': reasoningMode,
     if (thinkingBudget > 0) 'thinking_budget': thinkingBudget,
+    if (contextWindow != 0) 'context_window': contextWindow,
+    if (maxTokens != 0) 'max_tokens': maxTokens,
   };
 }

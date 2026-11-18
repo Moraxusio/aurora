@@ -943,12 +943,12 @@ class Workspace extends ChangeNotifier {
 
   void toast(String msg, {bool error = false}) => Toast.show(msg, error: error);
 
-  /// Runs [f] and shows an agent error as a message instead of throwing.
+  /// Runs a user action and reports transport, storage and agent failures.
   Future<T?> guard<T>(Future<T> Function() f) async {
     try {
       return await f();
-    } on OpError catch (e) {
-      toast(e.message, error: true);
+    } on Object catch (e) {
+      if (!_disposed) toast(e is OpError ? e.message : '$e', error: true);
     }
     return null;
   }

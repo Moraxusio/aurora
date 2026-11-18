@@ -311,6 +311,33 @@ class AiContextInfo {
   double? get ratio => limit > 0 ? tokens / limit : null;
 }
 
+class AiRunBudget {
+  final Map<String, dynamic> data;
+  AiRunBudget.fromJson(Map json) : data = Map<String, dynamic>.from(json);
+  num _n(String k) => data[k] is num ? data[k] as num : 0;
+  num limit(String k) => (data['limits'] as Map?)?[k] as num? ?? 0;
+  String get id => '${data['id'] ?? ''}';
+  String get source => '${data['source'] ?? ''}';
+  String get blockedBy => '${data['blocked_by'] ?? ''}';
+  bool get estimated => data['estimated'] == true;
+  bool get unpriced => data['unpriced'] == true;
+  bool get enabled => data['enabled'] != false;
+  int get childrenActive => _n('children_active').toInt();
+  int get childrenStarted => _n('children_started').toInt();
+  int get maxParallel =>
+      (data['subagents'] as Map?)?['maxParallel'] as int? ?? 1;
+  int get tokens => _n('tokens').toInt();
+  int get reserved => _n('reserved_tokens').toInt();
+  int get steps => _n('steps').toInt();
+  int get auxiliary => _n('auxiliary').toInt();
+  int get outputBytes => _n('output_bytes').toInt();
+  int get nextInput => _n('next_input_tokens').toInt();
+  double get cost => _n('cost').toDouble();
+  double get elapsed => _n('elapsed_seconds').toDouble();
+  String get summary =>
+      '${enabled ? '本次运行' : '预算已关闭 · 已用'} $tokens / ${limit('tokens') == 0 ? '不限' : limit('tokens')} tokens';
+}
+
 class AiMessage {
   final String id;
   final String sessionId;
@@ -321,6 +348,8 @@ class AiMessage {
   final List<AiPart> parts;
   final String finish;
   final String error;
+  final String errorCode;
+  final AiRunBudget? budget;
   final AiUsage? usage;
   final AiStepSnapshot? snapshot;
   final int createdAt;
@@ -335,6 +364,8 @@ class AiMessage {
     required this.parts,
     this.finish = '',
     this.error = '',
+    this.errorCode = '',
+    this.budget,
     this.usage,
     this.snapshot,
     this.createdAt = 0,
@@ -360,6 +391,10 @@ class AiMessage {
     ],
     finish: j['finish'] as String? ?? '',
     error: j['error'] as String? ?? '',
+    errorCode: j['error_code'] as String? ?? '',
+    budget: j['budget'] is Map
+        ? AiRunBudget.fromJson(j['budget'] as Map)
+        : null,
     usage: j['usage'] is Map
         ? AiUsage.fromJson((j['usage'] as Map).cast<String, dynamic>())
         : null,
@@ -387,6 +422,7 @@ class AiSession {
   int lastInputTokens;
   AiRuntimeInfo? runtime;
   AiContextInfo? context;
+  AiRunBudget? budget;
   List<AiMessage> messages;
   int createdAt;
   int updatedAt;
@@ -406,6 +442,7 @@ class AiSession {
     this.lastInputTokens = 0,
     this.runtime,
     this.context,
+    this.budget,
     List<AiMessage>? messages,
     this.createdAt = 0,
     this.updatedAt = 0,
@@ -435,6 +472,9 @@ class AiSession {
         : null,
     context: j['context'] is Map
         ? AiContextInfo.fromJson((j['context'] as Map).cast<String, dynamic>())
+        : null,
+    budget: j['budget'] is Map
+        ? AiRunBudget.fromJson(j['budget'] as Map)
         : null,
     messages: [
       for (final m in (j['messages'] as List? ?? const []))

@@ -2,6 +2,7 @@ import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../kernel/workspace.dart';
+import '../../kernel/input_mode.dart';
 import '../../theme/ide_theme.dart';
 
 class ProjectWorkspaceBar extends StatelessWidget {
@@ -11,9 +12,7 @@ class ProjectWorkspaceBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context), current = ws.project;
-    return Container(height: 36, padding: const EdgeInsets.only(left: 12, right: 4),
-      color: ide.sideBar,
-      child: Row(children: [
+    final heading = Row(children: [
         Icon(current == null ? Icons.folder_outlined : Icons.folder_open_outlined, size: 15, color: ide.textDim),
         const SizedBox(width: 7),
         Expanded(child: WorkbenchMenuButton<String>(key: const ValueKey('project-switcher'), tooltip: '切换工作区',
@@ -50,8 +49,22 @@ class ProjectWorkspaceBar extends StatelessWidget {
           child: Row(children: [Expanded(child: Text(current?.name ?? '文件', maxLines: 1, overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5))), Icon(Icons.expand_more, size: 15, color: ide.textDim)]),
         )),
-         ...actions,
-      ]));
+      ]);
+    return Container(
+      constraints: const BoxConstraints(minHeight: 36),
+      padding: const EdgeInsets.fromLTRB(12, 2, 4, 2),
+      color: ide.sideBar,
+      child: LayoutBuilder(builder: (_, box) {
+        final actionsWidth = actions.length * InputMode.row(context);
+        final wrap = actions.isNotEmpty && box.maxWidth < 140 + actionsWidth;
+        // Keep the same element hierarchy when input mode or width changes:
+        // rebuilding an open menu's owner would discard its pending selection.
+        return Wrap(alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          SizedBox(width: wrap ? box.maxWidth : box.maxWidth - actionsWidth, child: heading),
+          ...actions,
+        ]);
+      }),
+    );
   }
 }
 

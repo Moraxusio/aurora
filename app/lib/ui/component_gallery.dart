@@ -98,6 +98,14 @@ class _ComponentGalleryState extends State<ComponentGallery> {
                 body: '错误状态保留用户输入，并提供重试入口。',
               ),
               const SizedBox(height: Space.l),
+              UiPanelHeader(title: '工作区工具', subtitle: '标题、上下文与常用操作', icon: Icons.folder_open,
+                actions: [IconBtn(Icons.refresh, '刷新面板', () => setState(() => status = '面板已刷新'))]),
+              Row(children: [
+                for (final (label, icon) in const [('文件', Icons.folder_outlined), ('搜索', Icons.search), ('Git', Icons.fork_right)])
+                  SizedBox(width: 68, child: UiNavigationItem(icon: icon, label: label, tooltip: label,
+                    selected: label == '文件', onTap: () => setState(() => status = '导航到$label'))),
+              ]),
+              const SizedBox(height: Space.l),
               const KeyCaps('Ctrl+Shift+P'),
             ],
           ),

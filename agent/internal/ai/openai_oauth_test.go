@@ -234,7 +234,7 @@ func TestSubscriptionAuxiliaryCalls(t *testing.T) {
 	e.init()
 	e.sessions["session-fixture"] = &Session{ID: "session-fixture", Root: "work", Workdir: "/", Agent: "build", Title: "New", LastInputToks: 40000, Context: &ContextInfo{Tokens: 40000, LastInput: 40000, Overhead: 500}, Messages: []Message{{ID: "user-fixture", Role: "user", Parts: []Part{{Type: "text", Text: strings.Repeat("long history ", 20000)}}}}}
 	cfg := ProviderConfig{Name: "ChatGPT", Protocol: "openai-responses", Model: "gpt-6.1-sol", AuthMode: ChatGPTAuthMode, APIKey: "secret-access-fixture", AccountID: "secret-account-fixture", ExpiresAt: time.Now().Add(time.Hour).UnixMilli()}
-	e.generateTitleAsync("session-fixture", "a prompt", cfg)
+	e.generateTitleAsync(context.Background(), "session-fixture", "a prompt", cfg)
 	if e.sessions["session-fixture"].Title != "summary" {
 		t.Fatal("title generation failed")
 	}

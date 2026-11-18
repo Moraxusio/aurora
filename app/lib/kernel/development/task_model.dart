@@ -428,6 +428,7 @@ class TaskModel extends ChangeNotifier {
       var complete = false;
       while (current()) {
         final frame = await stream.read();
+        if (!current()) break;
         if (frame == null || frame.type == typeEnd) break;
         if (frame.type != typeJson) throw const ProtocolError('任务返回无效帧');
         final event = jsonDecode(utf8.decode(frame.payload)) as Map;

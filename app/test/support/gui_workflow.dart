@@ -40,8 +40,12 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
   await frames(8);
   final ws = (t.state(find.byType(Shell)) as dynamic).debugWorkspace as Workspace;
   try {
-    await click(find.byKey(const ValueKey('project-switcher')));
+    final switcher = find.byKey(const ValueKey('project-switcher'));
+    final switcherState = t.state(switcher);
+    await click(switcher);
+    expect(t.state(switcher), same(switcherState), reason: 'changing input mode must retain the open menu owner');
     await click(find.text('Alpha').last);
+    expect(ws.projectKey, 'a', reason: 'pointer selection must switch the active project');
     await click(row('src'));
     await click(row('main.dart'));
     await click(row('workbench.dart'));
@@ -80,12 +84,15 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
       await click(find.byTooltip('返回对话'));
       expect(t.state(prompt), same(chat));
       expect(t.widget<TextField>(prompt).controller!.text, 'draft at $percent%');
-      await click(find.byTooltip('展开 AI 对话'));
-      await click(find.byTooltip('还原 AI 侧栏'));
+      await click(find.byTooltip('侧栏布局'));
+      await click(find.text('展开 AI 对话'));
+      await click(find.byTooltip('侧栏布局'));
+      await click(find.text('还原 AI 侧栏'));
       await click(find.byKey(const ValueKey('ai-context-indicator')));
       expect(t.getSize(find.byKey(const ValueKey('ai-runtime-bar'))).height, greaterThan(0));
       await t.sendKeyEvent(LogicalKeyboardKey.escape, physicalKey: PhysicalKeyboardKey.escape); await frames();
-      await click(find.byTooltip('隐藏 AI 侧栏（保留对话）'));
+      await click(find.byTooltip('侧栏布局'));
+      await click(find.text('隐藏侧栏 · 保留对话'));
 
       if (ws.terminalTabs.isEmpty) {
         await click(find.byTooltip('终端'));

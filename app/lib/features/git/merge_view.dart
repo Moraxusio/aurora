@@ -22,7 +22,7 @@ EditorTab mergeTab(Workspace ws, GitModel git, String path) {
     title: '合并 ${path.split('/').last}',
     icon: Icons.merge_type,
     tooltip: path,
-    builder: (_) => MergeView(key: key, ws: ws, git: git, path: path),
+    builder: (_) => MergeView(key: key, ws: ws, git: git, repository: r, path: path),
   );
   tab.confirmClose = () async => key.currentState?.confirmClose() ?? true;
   return tab;
@@ -31,22 +31,24 @@ EditorTab mergeTab(Workspace ws, GitModel git, String path) {
 class MergeView extends StatefulWidget {
   final Workspace ws;
   final GitModel git;
+  final GitRepo? repository;
   final String path; // inside the repository
-  const MergeView({super.key, required this.ws, required this.git, required this.path});
+  const MergeView({super.key, required this.ws, required this.git, this.repository, required this.path});
   @override
   State<MergeView> createState() => MergeViewState();
 }
 
 class MergeViewState extends State<MergeView> {
+  late final GitModel _git = GitModel(widget.ws)..repo = widget.repository ?? widget.git.repo;
   ConflictFile? _file;
   String? _etag;
   String? _error;
   bool _saving = false;
   bool _changed = false;
 
-  String get _root => widget.git.repo!.root;
+  String get _root => _git.repo!.root;
   String get _abs {
-    final repo = widget.git.repo!.repo;
+    final repo = _git.repo!.repo;
     return repo == '/' || repo.isEmpty ? '/${widget.path}' : '$repo/${widget.path}';
   }
 
@@ -56,12 +58,15 @@ class MergeViewState extends State<MergeView> {
     _load();
   }
 
+  @override
+  void dispose() { _git.dispose(); super.dispose(); }
+
   Future<void> _load() async {
     final link = widget.ws.link;
     if (link == null) return setState(() => _error = '未连接');
     try {
       final r = (await link.call('fs.read', {'root': _root, 'path': _abs}) as Map).cast<String, dynamic>();
-      if (!mounted) return;
+      if (!mounted || !identical(link, widget.ws.link)) return;
       if (r['binary'] == true || r['truncated'] == true) {
         return setState(() => _error = '这个文件是二进制或超过 512 KB，不能在这里合并。可以在终端里用 git checkout --ours / --theirs 选一边。');
       }
@@ -73,20 +78,21 @@ class MergeViewState extends State<MergeView> {
         _changed = false;
       });
       _status();
-    } on OpError catch (e) {
-      if (mounted) setState(() => _error = e.message);
+    } on Object catch (e) {
+      if (mounted && identical(link, widget.ws.link)) setState(() => _error = e is OpError ? e.message : '$e');
     }
   }
 
   void _status() {
     final f = _file;
-    final t = widget.ws.tab('merge:${widget.git.repo!.root}:${widget.git.repo!.repo}:${widget.path}');
+    final t = widget.ws.tab('merge:${_git.repo!.root}:${_git.repo!.repo}:${widget.path}');
     if (t == null || f == null) return;
     t.dirty.value = _changed;
     t.status.value = f.conflicts.isEmpty ? '没有冲突标记' : '还有 ${f.unresolved} / ${f.conflicts.length} 处冲突';
   }
 
   void _resolve(Conflict c, List<String>? lines) {
+    if (_saving) return;
     setState(() {
       c.resolution = lines;
       _changed = true;
@@ -101,6 +107,7 @@ class MergeViewState extends State<MergeView> {
     setState(() => _saving = true);
     try {
       final r = (await link.call('fs.write', {'root': _root, 'path': _abs, 'content': f.join(), 'if_match': _etag}) as Map).cast<String, dynamic>();
+      if (!mounted || !identical(link, widget.ws.link)) return false;
       _etag = r['etag'] as String? ?? _etag;
       // what is on disk now: resolved blocks are text, the rest still conflicts
       final again = parseConflicts(f.join());
@@ -113,13 +120,13 @@ class MergeViewState extends State<MergeView> {
       widget.ws.filesRevision.value++;
       if (again.conflicts.isEmpty) {
         final stage = await confirmDialog(context, title: '冲突都已解决', body: '暂存 ${widget.path}，把它标记为已解决？', ok: '暂存');
-        if (stage) await widget.git.stage([widget.path]);
+        if (stage && mounted && identical(link, widget.ws.link)) await _git.stage([widget.path]);
       } else {
         widget.ws.toast('已保存，还有 ${again.conflicts.length} 处冲突');
       }
       return true;
-    } on OpError catch (e) {
-      widget.ws.toast(e.code == codeConflict ? '文件在别处被修改了，请重新载入后再合并' : e.message, error: true);
+    } on Object catch (e) {
+      widget.ws.toast(e is OpError && e.code == codeConflict ? '文件在别处被修改了，请重新载入后再合并' : e is OpError ? e.message : '$e', error: true);
       return false;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -199,7 +206,7 @@ class MergeViewState extends State<MergeView> {
           FilledButton(onPressed: _changed && !_saving ? _save : null, child: Text(_saving ? '正在保存…' : '保存')),
           if (f.conflicts.isEmpty) ...[
             const SizedBox(width: 6),
-            OutlinedButton(onPressed: () => widget.git.stage([widget.path]), child: const Text('暂存（标记为已解决）')),
+            OutlinedButton(onPressed: _saving ? null : () => _git.stage([widget.path]), child: const Text('暂存（标记为已解决）')),
           ],
         ]),
       ),

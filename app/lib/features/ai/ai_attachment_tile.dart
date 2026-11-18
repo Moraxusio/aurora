@@ -4,7 +4,6 @@ import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora/ui/aurora_ui.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-
 import 'package:flutter/services.dart';
 
 import '../../theme/ide_theme.dart';
@@ -21,6 +20,7 @@ class AiAttachmentTile extends StatefulWidget {
 
 class _AiAttachmentTileState extends State<AiAttachmentTile> {
   Future<Uint8List>? data;
+  bool _opening = false;
   bool get isImage => widget.part.mime.startsWith('image/');
   @override
   void initState() {
@@ -41,12 +41,18 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
   }
 
   Future<void> _open() async {
+    if (_opening) return;
+    final link = widget.link, part = widget.part;
+    setState(() => _opening = true);
     try {
       final bytes = await (data ??= downloadAiAttachment(
         widget.link,
         widget.part.attachmentId,
       ));
-      if (!mounted) return;
+      if (!mounted ||
+          !identical(widget.link, link) ||
+          widget.part.attachmentId != part.attachmentId)
+        return;
       await showWorkbenchDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -73,7 +79,7 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
                     child: SelectableText(
                       widget.part.mime.startsWith('text/')
                           ? utf8.decode(bytes)
-                          : 'PDF 已作为原始文档附件提供给模型。',
+                          : '此附件没有可用的文本预览。',
                     ),
                   ),
           ),
@@ -87,10 +93,13 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
       );
     } on Object {
       if (mounted) {
+        data = null; // A failed download can be retried from the same tile.
         ScaffoldMessenger.maybeOf(
           context,
         )?.showSnackBar(const SnackBar(content: Text('附件读取失败，文件可能已清理或服务器未连接')));
       }
+    } finally {
+      if (mounted) setState(() => _opening = false);
     }
   }
 
@@ -106,7 +115,7 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
           borderRadius: BorderRadius.circular(10),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: _open,
+            onTap: _opening ? null : _open,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -168,7 +177,9 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
                         ),
                       ),
                       Text(
-                        '${(widget.part.size / 1024).toStringAsFixed(0)} KiB',
+                        _opening
+                            ? '读取中…'
+                            : '${(widget.part.size / 1024).toStringAsFixed(0)} KiB',
                         style: TextStyle(fontSize: 11.5, color: ide.textDim),
                       ),
                     ],

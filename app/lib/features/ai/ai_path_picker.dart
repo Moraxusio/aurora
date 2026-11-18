@@ -17,7 +17,13 @@ Future<AiPathChoice?> showAiPathPicker(
   bool directory = true,
 }) => showWorkbenchDialog<AiPathChoice>(
   context: context,
-  builder: (_) => _PathPicker(link: link, roots: roots, initialRoot: root, initialPath: path, directory: directory),
+  builder: (_) => _PathPicker(
+    link: link,
+    roots: roots,
+    initialRoot: root,
+    initialPath: path,
+    directory: directory,
+  ),
 );
 
 class _PathPicker extends StatefulWidget {
@@ -64,7 +70,10 @@ class _PathPickerState extends State<_PathPicker> {
       entries = [];
     });
     try {
-      final r = await widget.link.call('fs.list', {'root': root, 'path': path}) as Map;
+      final r = await widget.link.call('fs.list', {
+        'root': root,
+        'path': path,
+      }) as Map;
       if (!mounted || g != generation) return;
       final items = [
         for (final e in r['entries'] as List? ?? [])
@@ -81,8 +90,14 @@ class _PathPickerState extends State<_PathPicker> {
             (widget.directory && e['type'] != 'dir');
       });
       items.sort((a, b) {
-        final d = (a['type'] == 'dir' ? 0 : 1).compareTo(b['type'] == 'dir' ? 0 : 1);
-        return d != 0 ? d : (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase());
+        final d = (a['type'] == 'dir' ? 0 : 1).compareTo(
+          b['type'] == 'dir' ? 0 : 1,
+        );
+        return d != 0
+            ? d
+            : (a['name'] as String).toLowerCase().compareTo(
+                (b['name'] as String).toLowerCase(),
+              );
       });
       setState(() {
         entries = items;
@@ -116,18 +131,35 @@ class _PathPickerState extends State<_PathPicker> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                widget.directory ? '选择会话工作目录' : widget.link.server.kind == 'local' ? '选择本机文件' : '选择服务器文件',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: ide.text),
+                widget.directory
+                    ? '选择会话工作目录'
+                    : widget.link.server.kind == 'local'
+                    ? '选择本机文件'
+                    : '选择服务器文件',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: ide.text,
+                ),
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
                 key: ValueKey('ai-picker-root-$root'),
-                initialValue: widget.roots.any((r) => r['id'] == root) ? root : null,
+                initialValue: widget.roots.any((r) => r['id'] == root)
+                    ? root
+                    : null,
                 isExpanded: true,
-                decoration: InputDecoration(labelText: widget.link.server.kind == 'local' ? '本机根目录' : '服务器根目录'),
+                decoration: InputDecoration(
+                  labelText: widget.link.server.kind == 'local'
+                      ? '本机根目录'
+                      : '服务器根目录',
+                ),
                 items: [
                   for (final r in widget.roots)
-                    DropdownMenuItem(value: r['id'] as String, child: Text('${r['label'] ?? r['id']}')),
+                    DropdownMenuItem(
+                      value: r['id'] as String,
+                      child: Text('${r['label'] ?? r['id']}'),
+                    ),
                 ],
                 onChanged: (v) {
                   if (v != null) {
@@ -146,9 +178,15 @@ class _PathPickerState extends State<_PathPicker> {
                       onPressed: path == '/' ? null : () => _go(_parent(path)),
                       icon: const Icon(Icons.arrow_upward, size: 18),
                     ),
-                    TextButton(onPressed: () => _go('/'), child: const Text('/')),
+                    TextButton(
+                      onPressed: () => _go('/'),
+                      child: const Text('/'),
+                    ),
                     for (var i = 0; i < parts.length; i++)
-                      TextButton(onPressed: () => _go('/${parts.take(i + 1).join('/')}'), child: Text('${parts[i]} /')),
+                      TextButton(
+                        onPressed: () => _go('/${parts.take(i + 1).join('/')}'),
+                        child: Text('${parts[i]} /'),
+                      ),
                   ],
                 ),
               ),
@@ -162,7 +200,10 @@ class _PathPickerState extends State<_PathPicker> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(error!),
-                            TextButton(onPressed: _load, child: const Text('重试')),
+                            TextButton(
+                              onPressed: _load,
+                              child: const Text('重试'),
+                            ),
                           ],
                         ),
                       )
@@ -183,17 +224,26 @@ class _PathPickerState extends State<_PathPicker> {
                             key: ValueKey('ai-path-$name'),
                             dense: true,
                             leading: Icon(
-                              isDir ? Icons.folder_outlined : Icons.description_outlined,
+                              isDir
+                                  ? Icons.folder_outlined
+                                  : Icons.description_outlined,
                               color: isDir ? ide.accent : ide.textDim,
                             ),
                             title: Text(name),
-                            trailing: isDir ? const Icon(Icons.chevron_right, size: 18) : null,
+                            trailing: isDir
+                                ? const Icon(Icons.chevron_right, size: 18)
+                                : null,
                             onTap: () {
-                              final next = path == '/' ? '/$name' : '$path/$name';
+                              final next = path == '/'
+                                  ? '/$name'
+                                  : '$path/$name';
                               if (isDir) {
                                 _go(next);
                               } else {
-                                Navigator.pop(context, AiPathChoice(root, next, name));
+                                Navigator.pop(
+                                  context,
+                                  AiPathChoice(root, next, name),
+                                );
                               }
                             },
                           );
@@ -210,13 +260,19 @@ class _PathPickerState extends State<_PathPicker> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('取消'),
+                  ),
                   if (widget.directory)
                     FilledButton(
                       key: const ValueKey('ai-select-directory'),
                       onPressed: loading || error != null
                           ? null
-                          : () => Navigator.pop(context, AiPathChoice(root, path, parts.lastOrNull ?? '/')),
+                          : () => Navigator.pop(
+                              context,
+                              AiPathChoice(root, path, parts.lastOrNull ?? '/'),
+                            ),
                       child: const Text('选择当前目录'),
                     ),
                 ],

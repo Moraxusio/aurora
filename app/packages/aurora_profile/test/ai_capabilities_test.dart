@@ -4,6 +4,34 @@ import 'package:aurora_profile/aurora_profile.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'model context/output overrides survive profile and wire resolution',
+    () {
+      final original = AiProvider(
+        id: 'p',
+        name: 'fixture',
+        model: 'm',
+        contextWindow: 32000,
+        maxTokens: 4096,
+        modelContextWindows: {'m': 64000},
+        modelOptions: {
+          'm': AiModelOptions(contextWindow: 128000, maxTokens: 16384),
+        },
+      );
+      final p = AiProvider.fromJson(
+        jsonDecode(jsonEncode(original.toJson())) as Map<String, dynamic>,
+      );
+      expect(p.toWireJson()['context_window'], 128000);
+      expect(p.toWireJson()['max_tokens'], 16384);
+      expect(p.toWireJson(modelOverride: 'other')['context_window'], 32000);
+      p.modelOptions['m'] = AiModelOptions();
+      expect(p.toWireJson()['max_tokens'], 4096);
+      p.contextWindow = 0;
+      expect(p.toWireJson()['context_window'], 64000);
+      p.authMode = 'chatgpt-device';
+      expect(p.toWireJson(), isNot(contains('max_tokens')));
+    },
+  );
   test('legacy, global and model capabilities resolve in explicit order', () {
     final p = AiProvider(
       id: 'p',

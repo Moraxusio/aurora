@@ -328,6 +328,7 @@ void main() {
       final img = await b.toImage(pixelRatio: t.view.devicePixelRatio);
       final data = await img.toByteData(format: ui.ImageByteFormat.png);
       File('$_out/$name.png').writeAsBytesSync(data!.buffer.asUint8List());
+      img.dispose();
     });
   }
 
@@ -386,12 +387,15 @@ void main() {
     testWidgets('wide $tag', (t) async {
       final s = await open(t, const Size(1440, 900), b);
       await snap(t, '$tag-01-welcome');
-      await rail(t, s.$1, 'files');
       for (final name in ['src', 'main.dart', 'README.md']) {
         await tapText(t, name);
       }
       await snap(t, '$tag-02-editor');
-      await t.tap(find.byTooltip('命令面板（Ctrl+Shift+P）').first);
+      await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyP);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await snap(t, '$tag-03-palette');
       await t.sendKeyEvent(LogicalKeyboardKey.escape);
       await settle(t);
@@ -404,6 +408,8 @@ void main() {
         await snap(t, '$tag-10-$id');
       }
       await rail(t, s.$1, 'ai');
+      await t.tap(find.byTooltip('AI 对话历史'));
+      await settle(t);
       await t.tap(find.byKey(const ValueKey('ai-session-ses_shot1')).first);
       await settle(t);
       await snap(t, '$tag-15-ai-studio');

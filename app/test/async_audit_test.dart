@@ -46,6 +46,7 @@ class _WatchLink extends FileTreeLink {
 
 class _GitLink extends FileTreeLink {
   final held = <String, Completer<Object?>>{};
+  final requests = <String>[];
   String label = 'new';
   Map<String, Object?> result(String op, [String? name]) {
     name ??= label;
@@ -81,6 +82,7 @@ class _GitLink extends FileTreeLink {
     Object? args,
     Duration timeout = const Duration(seconds: 60),
   ]) async {
+    requests.add(op);
     final gate = held.remove(op);
     if (gate != null) return gate.future;
     if (op.startsWith('git.')) return result(op);
@@ -96,6 +98,43 @@ class _SwitchingApp extends WorkspaceApp {
 }
 
 void main() {
+  test('git mutations reject repeated clicks and always release busy', () async {
+    final link = _GitLink();
+    final app = _SwitchingApp(link);
+    final ws = Workspace(app, 'server');
+    final model = GitModel(ws)..repo = GitRepo('home', '/project', 'project');
+    addTearDown(() { model.dispose(); ws.dispose(); app.dispose(); });
+    final gate = Completer<Object?>();
+    link.held['git.stage'] = gate;
+    final first = model.act('git.stage');
+    expect(model.busy, isTrue);
+    expect(await model.act('git.stage'), isFalse);
+    expect(link.requests.where((op) => op == 'git.stage'), hasLength(1));
+    gate.completeError(StateError('transport failed'));
+    expect(await first, isFalse);
+    expect(model.busy, isFalse);
+    final next = Completer<Object?>()..complete({});
+    link.held['git.stage'] = next;
+    expect(await model.act('git.stage'), isTrue);
+  });
+
+  test('old git write cannot report success or refresh another repository', () async {
+    final link = _GitLink();
+    final app = _SwitchingApp(link);
+    final ws = Workspace(app, 'server');
+    final model = GitModel(ws)..repo = GitRepo('home', '/old', 'old');
+    addTearDown(() { model.dispose(); ws.dispose(); app.dispose(); });
+    final gate = Completer<Object?>();
+    link.held['git.commit'] = gate;
+    final pending = model.act('git.commit');
+    await model.openRepo(GitRepo('home', '/new', 'new'));
+    final reads = link.requests.where((op) => op == 'git.status').length;
+    gate.complete({});
+    expect(await pending, isFalse);
+    expect(link.requests.where((op) => op == 'git.status'), hasLength(reads));
+    expect(model.busy, isFalse);
+  });
+
   testWidgets('watch reconnect overtakes an old pending handshake', (
     tester,
   ) async {

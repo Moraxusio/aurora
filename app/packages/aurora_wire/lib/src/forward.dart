@@ -26,6 +26,7 @@ class Forward {
   /// The last connection error (the server could not reach the port).
   String? lastError;
   final Set<Socket> _open = {};
+  final Set<OpStream> _streams = {};
   bool _closed = false;
 
   Forward._(this.host, this.port, this.local, this._server, this._link);
@@ -53,10 +54,23 @@ class Forward {
     OpStream? s;
     try {
       s = await _link.open('net.dial', {'host': host, 'port': port}, Priority.bulk);
+      if (_closed) {
+        s.reset();
+        _end(sock);
+        return;
+      }
+      _streams.add(s);
       await s.response(); // the agent reached the port
-    } on OpError catch (e) {
-      lastError = e.message;
+      if (_closed) {
+        _streams.remove(s);
+        s.reset();
+        _end(sock);
+        return;
+      }
+    } on Object catch (e) {
+      if (!_closed) lastError = e is OpError ? e.message : '$e';
       _end(sock);
+      _streams.remove(s);
       s?.reset();
       return;
     }
@@ -87,6 +101,8 @@ class Forward {
       // the link dropped or the socket went away
     }
     await sub.cancel();
+    _streams.remove(stream);
+    stream.reset();
     _end(sock);
   }
 
@@ -100,6 +116,10 @@ class Forward {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    for (final stream in _streams) {
+      stream.reset();
+    }
+    _streams.clear();
     await _server.close();
     for (final s in _open.toList()) {
       s.destroy();

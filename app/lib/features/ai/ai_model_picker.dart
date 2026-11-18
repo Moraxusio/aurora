@@ -220,8 +220,8 @@ class _ModelPickerState extends State<_ModelPicker> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: AiSectionHeading(
                 icon: Icons.memory_outlined,
-                title: '本次对话设置',
-                subtitle: '仅当前会话 · 应用于后续发送的消息',
+                title: '选择模型',
+                subtitle: '当前对话 · 模型与思考强度用于后续发送',
                 trailing: IconBtn(
                   Icons.close,
                   '关闭',
@@ -242,28 +242,32 @@ class _ModelPickerState extends State<_ModelPicker> {
                           Space.l,
                           0,
                         ),
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey('ai-picker-provider-${prov.id}'),
+                          initialValue: prov.id,
+                          isExpanded: true,
+                          decoration: const InputDecoration(labelText: '模型连接'),
+                          items: [
                             for (final p in ai.providers)
-                              ChoiceChip(
-                                visualDensity: VisualDensity.compact,
-                                label: Text(
+                              DropdownMenuItem(
+                                value: p.id,
+                                child: Text(
                                   p.name,
-                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                selected: p.id == prov.id,
-                                onSelected: (_) => setState(() {
-                                  _providerId = p.id;
-                                  _modelId = p.model;
-                                  _reasoningOverride = null;
-                                  _note = null;
-                                  _fetching = false;
-                                  _fetchGeneration++;
-                                }),
                               ),
                           ],
+                          onChanged: (id) => setState(() {
+                            final p = ai.providers.firstWhere(
+                              (p) => p.id == id,
+                            );
+                            _providerId = p.id;
+                            _modelId = p.model;
+                            _reasoningOverride = null;
+                            _note = null;
+                            _fetching = false;
+                            _fetchGeneration++;
+                          }),
                         ),
                       ),
                     PickerField(
@@ -284,118 +288,86 @@ class _ModelPickerState extends State<_ModelPicker> {
                     Divider(height: 1, color: ide.border),
                     SizedBox(
                       height: 180,
-                      child: ListView(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: Space.s),
-                        children: [
-                          if (canUseTyped)
-                            PickerRow(
-                              selected: selectedModel == typed,
-                              onTap: () => setState(() => _modelId = typed),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.keyboard_return_rounded,
-                                    size: 15,
-                                    color: ide.accent,
-                                  ),
-                                  const SizedBox(width: Space.m),
-                                  Expanded(
-                                    child: Text(
-                                      '使用 "$typed"',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: ide.accent,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
+                      child: models.isEmpty && !canUseTyped
+                          ? const Center(child: Text('暂无匹配模型。可拉取目录，或输入模型 ID。'))
+                          : ListView.builder(
+                              itemExtent: PickerRow.heightOf(context),
+                              itemCount: models.length + (canUseTyped ? 1 : 0),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: Space.s,
                               ),
-                            ),
-                          for (final m in models)
-                            PickerRow(
-                              selected: m == selectedModel,
-                              onTap: () => setState(() => _modelId = m),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: 18,
-                                    child: m == selectedModel
-                                        ? Icon(
-                                            Icons.check_rounded,
-                                            size: 15,
-                                            color: ide.accent,
-                                          )
-                                        : null,
-                                  ),
-                                  const SizedBox(width: Space.s),
-                                  Expanded(
-                                    child: Text(
-                                      m,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: ide.text,
+                              itemBuilder: (_, index) {
+                                final custom = canUseTyped && index == 0;
+                                final m = custom
+                                    ? typed
+                                    : models[index - (canUseTyped ? 1 : 0)];
+                                return PickerRow(
+                                  selected: m == selectedModel,
+                                  onTap: () => setState(() => _modelId = m),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 18,
+                                        child: m == selectedModel
+                                            ? Icon(
+                                                Icons.check_rounded,
+                                                size: 15,
+                                                color: ide.accent,
+                                              )
+                                            : null,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  if (prov.effectiveCapabilities(
-                                        m,
-                                        ai.toolDefaults,
-                                      )['image_input'] ==
-                                      true)
-                                    const Tooltip(
-                                      message: '图片输入已开启',
-                                      child: Icon(
-                                        Icons.image_outlined,
-                                        size: 14,
-                                      ),
-                                    ),
-                                  if (prov.effectiveCapabilities(
-                                        m,
-                                        ai.toolDefaults,
-                                      )['image_input'] ==
-                                      false)
-                                    Tooltip(
-                                      message: '图片输入已关闭',
-                                      child: Icon(
-                                        Icons.image_not_supported_outlined,
-                                        size: 14,
-                                        color: ide.textFaint,
-                                      ),
-                                    ),
-                                  if (prov.effectiveContextWindow(m) > 0)
-                                    Tooltip(
-                                      message: '上下文输入预算；目录或手动配置值，不代表订阅权限',
-                                      child: Text(
-                                        '${(prov.effectiveContextWindow(m) / 1000).toStringAsFixed(0)}k',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: ide.textFaint,
+                                      const SizedBox(width: Space.s),
+                                      Expanded(
+                                        child: Text(
+                                          custom ? '使用 "$m"' : m,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: ide.text,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                    ),
-                                ],
-                              ),
+                                      if (prov.effectiveCapabilities(
+                                            m,
+                                            ai.toolDefaults,
+                                          )['image_input'] ==
+                                          true)
+                                        const Tooltip(
+                                          message: '图片输入已开启',
+                                          child: Icon(
+                                            Icons.image_outlined,
+                                            size: 14,
+                                          ),
+                                        ),
+                                      if (prov.effectiveCapabilities(
+                                            m,
+                                            ai.toolDefaults,
+                                          )['image_input'] ==
+                                          false)
+                                        Tooltip(
+                                          message: '图片输入已关闭',
+                                          child: Icon(
+                                            Icons.image_not_supported_outlined,
+                                            size: 14,
+                                            color: ide.textFaint,
+                                          ),
+                                        ),
+                                      if (prov.effectiveContextWindow(m) > 0)
+                                        Tooltip(
+                                          message: '上下文输入预算；目录或手动配置值，不代表订阅权限',
+                                          child: Text(
+                                            '${(prov.effectiveContextWindow(m) / 1000).toStringAsFixed(0)}k',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: ide.textFaint,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
-                          if (models.isEmpty && !canUseTyped)
-                            Padding(
-                              padding: const EdgeInsets.all(Space.xl),
-                              child: Text(
-                                prov.models.isEmpty
-                                    ? '还没有模型列表。点下面的“拉取模型”，或直接输入模型 ID 回车。'
-                                    : '没有匹配的模型',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: ide.textDim,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
                     ),
                     Divider(height: 1, color: ide.border),
                     Padding(
@@ -408,7 +380,10 @@ class _ModelPickerState extends State<_ModelPicker> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Row(
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 6,
+                            runSpacing: 4,
                             children: [
                               Icon(
                                 Icons.psychology_outlined,

@@ -103,14 +103,25 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                   _historyOpen ? Icons.arrow_back : Icons.history,
                   _history,
                 ),
-                _action(
-                  ws.assistantPanel.maximized ? '还原 AI 侧栏' : '展开 AI 对话',
-                  ws.assistantPanel.maximized
-                      ? Icons.close_fullscreen
-                      : Icons.open_in_full,
-                  ws.toggleAssistantMaximized,
+                WorkbenchMenuButton<String>(
+                  tooltip: '侧栏布局',
+                  onSelected: (v) => v == 'size'
+                      ? ws.toggleAssistantMaximized()
+                      : ws.hideAssistantPanel(),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'size',
+                      child: Text(
+                        ws.assistantPanel.maximized ? '还原 AI 侧栏' : '展开 AI 对话',
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'hide',
+                      child: Text('隐藏侧栏 · 保留对话'),
+                    ),
+                  ],
+                  icon: const Icon(Icons.more_horiz, size: 17),
                 ),
-                _action('隐藏 AI 侧栏（保留对话）', Icons.close, ws.hideAssistantPanel),
               ],
             ),
           ),

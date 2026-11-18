@@ -101,11 +101,9 @@ class AiPermissionCard extends StatelessWidget {
             children: [
               Icon(Icons.shield_outlined, size: 18, color: ide.warn),
               const SizedBox(width: Space.s + 2),
-              // The title keeps its old wording: "需要授权执行 edit" is what tests and
-              // users already know the card by.
               Expanded(
                 child: Text(
-                  compact ? '需要批准 · ${permissionTitle(q)}' : '需要授权执行 ${q.tool}',
+                  '需要批准 · ${permissionTitle(q)}',
                   style: TextStyle(
                     fontSize: compact ? 12 : 13,
                     fontWeight: FontWeight.w600,
@@ -220,7 +218,7 @@ class AiPermissionCard extends StatelessWidget {
                     onPressed: busy
                         ? null
                         : () => onDecide(allow: true, always: true),
-                    child: const Text('始终允许'),
+                    child: const Text('本会话允许'),
                   ),
                 ),
                 FilledButton(

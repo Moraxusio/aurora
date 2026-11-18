@@ -45,6 +45,40 @@ class _SearchLink extends FileTreeLink {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final issue in ['incomplete', 'skipped_large']) {
+    test('replacement is blocked for $issue search results', () async {
+      final link = _SearchLink();
+      final connected = WorkspaceApp(wire: link);
+      final ws = Workspace(connected, 'server');
+      final model = SearchModel(ws, folders: (_) async => [const SearchFolder('home', '/', 'home')]);
+      final pending = model.search(const SearchOptions('needle'));
+      await Future<void>.delayed(Duration.zero);
+      link.streams.single.result.complete({
+        'files': [], issue: issue == 'incomplete' ? true : 2, 'errors': 1,
+      });
+      await pending;
+      expect(model.incomplete, isTrue);
+      await expectLater(model.previewReplacement('value'), throwsA(isA<StateError>().having((e) => e.message, 'reason', contains('不完整'))));
+      model.dispose(); ws.dispose(); connected.dispose();
+    });
+  }
+
+  test('cancelling a new query cannot reuse the previous replacement options', () async {
+    final link = _SearchLink();
+    final app = WorkspaceApp(wire: link);
+    final space = Workspace(app, 'server');
+    final model = SearchModel(space, folders: (_) async => [const SearchFolder('home', '/', 'home')]);
+    final first = model.search(const SearchOptions('old'));
+    await Future<void>.delayed(Duration.zero);
+    link.streams.single.result.complete({'files': []});
+    await first;
+    final second = model.search(const SearchOptions('new'));
+    await Future<void>.delayed(Duration.zero);
+    model.cancel();
+    await second;
+    await expectLater(model.previewReplacement('value'), throwsA(isA<StateError>().having((e) => e.message, 'reason', contains('先完成搜索'))));
+    model.dispose(); space.dispose(); app.dispose();
+  });
   test('editing a search query resets its backend stream and ignores the old result', () async {
     final link = _SearchLink();
     final connected = WorkspaceApp(wire: link);

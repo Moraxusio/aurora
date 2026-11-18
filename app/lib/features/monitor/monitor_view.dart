@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 
 import '../../kernel/editor_tab.dart';
 import '../../kernel/feature.dart';
+import '../../kernel/retained_pane.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import '../systemd/systemd_feature.dart' show systemLogTab;
@@ -57,12 +58,38 @@ EditorTab monitorTab(Workspace ws) => EditorTab(
   id: 'monitor',
   title: '监控',
   icon: Icons.monitor_heart_outlined,
-  builder: (_) => LinkGate(
-    ws: ws,
-    builder: (_, link) =>
-        MonitorTab(link: link, gpuDetails: ws.hasOp('gpu.info')),
-  ),
+  builder: (_) => _WorkspaceMonitor(ws: ws),
 );
+
+class _WorkspaceMonitor extends StatefulWidget {
+  final Workspace ws;
+  const _WorkspaceMonitor({required this.ws});
+  @override
+  State<_WorkspaceMonitor> createState() => _WorkspaceMonitorState();
+}
+
+class _WorkspaceMonitorState extends State<_WorkspaceMonitor> {
+  Link? _last;
+  bool _gpuDetails = false;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.ws,
+    builder: (_, _) {
+      final link = widget.ws.link;
+      if (link != null) {
+        _last = link;
+        _gpuDetails = widget.ws.hasOp('gpu.info');
+      }
+      return Stack(fit: StackFit.expand, children: [
+        if (_last != null) RetainedPane(
+          visible: link != null,
+          child: MonitorTab(link: _last!, gpuDetails: _gpuDetails),
+        ),
+        if (link == null) NotConnected(ws: widget.ws),
+      ]);
+    },
+  );
+}
 
 class MonitorTab extends StatefulWidget {
   final Link link;

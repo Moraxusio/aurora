@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"aurora3/internal/paths"
@@ -24,6 +25,8 @@ import (
 type Env struct {
 	Actions func() map[string][]string
 	Audit   Auditor
+	mu      sync.Mutex
+	busy    map[string]bool
 }
 
 type Auditor interface {
@@ -115,7 +118,10 @@ func (s *Env) svcInfo(ctx context.Context, raw json.RawMessage) (any, error) {
 	}
 	cctx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
-	out, _ := exec.CommandContext(cctx, "systemctl", "show", a.Name, "--no-pager", "--property=ActiveState,SubState,Description,LoadState,MainPID,ActiveEnterTimestamp,UnitFileState,FragmentPath").Output()
+	out, err := exec.CommandContext(cctx, "systemctl", "show", a.Name, "--no-pager", "--property=ActiveState,SubState,Description,LoadState,MainPID,ActiveEnterTimestamp,UnitFileState,FragmentPath").Output()
+	if err != nil {
+		return nil, wire.Errf(wire.CodeUnavailable, "无法读取服务状态：%v", err)
+	}
 	v := map[string]string{}
 	for _, line := range strings.Split(string(out), "\n") {
 		if k, val, ok := strings.Cut(line, "="); ok {
@@ -160,14 +166,34 @@ func (s *Env) svcAction(ctx context.Context, raw json.RawMessage) (any, error) {
 	if !permitted {
 		return nil, wire.Errf(wire.CodeForbidden, "未授权的服务操作：请先在服务详情里允许“%s”", a.Action)
 	}
+	s.mu.Lock()
+	if s.busy[a.Name] {
+		s.mu.Unlock()
+		return nil, wire.Errf(wire.CodeConflict, "此服务正在执行操作，请等待结果后刷新")
+	}
+	if s.busy == nil {
+		s.busy = make(map[string]bool)
+	}
+	s.busy[a.Name] = true
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.busy, a.Name)
+		s.mu.Unlock()
+	}()
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(cctx, "systemctl", a.Action, a.Name).CombinedOutput()
-	s.Audit.Write("svc."+a.Action, map[string]any{"name": a.Name, "ok": err == nil})
+	if s.Audit != nil {
+		s.Audit.Write("svc."+a.Action, map[string]any{"name": a.Name, "ok": err == nil})
+	}
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		if len(msg) > 300 {
 			msg = msg[len(msg)-300:]
+		}
+		if msg == "" {
+			msg = err.Error()
 		}
 		return nil, wire.Errf(wire.CodeInternal, "服务操作失败：%s", msg)
 	}

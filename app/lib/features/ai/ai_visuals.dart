@@ -17,6 +17,49 @@ abstract final class AiVisuals {
       );
 }
 
+/// One page selector instead of a wall of icons/chips. Narrow dialogs keep the
+/// current location visible and expose every page without horizontal scrolling.
+class AiPageNavigation extends StatelessWidget {
+  final Map<String, String> pages;
+  final String selected, keyPrefix;
+  final ValueChanged<String> onSelected;
+  const AiPageNavigation({
+    super.key,
+    required this.pages,
+    required this.selected,
+    required this.onSelected,
+    required this.keyPrefix,
+  });
+  @override
+  Widget build(BuildContext context) => InputDecorator(
+    decoration: const InputDecoration(labelText: '设置页面'),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        key: ValueKey('$keyPrefix-selector'),
+        value: selected,
+        isExpanded: true,
+        selectedItemBuilder: (_) => [
+          for (final page in pages.values)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(page, overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        items: [
+          for (final page in pages.entries)
+            DropdownMenuItem(
+              value: page.key,
+              child: Text(page.value, key: ValueKey('$keyPrefix-${page.key}')),
+            ),
+        ],
+        onChanged: (v) {
+          if (v != null) onSelected(v);
+        },
+      ),
+    ),
+  );
+}
+
 class AiSectionHeading extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -77,7 +120,7 @@ class AiSectionHeading extends StatelessWidget {
   }
 }
 
-enum AiWorkStatus { running, completed, error, interrupted }
+enum AiWorkStatus { running, completed, stopped, error, interrupted }
 
 class AiStatusMark extends StatelessWidget {
   final AiWorkStatus status;
@@ -86,6 +129,7 @@ class AiStatusMark extends StatelessWidget {
   static String text(AiWorkStatus status) => switch (status) {
     AiWorkStatus.running => '运行中',
     AiWorkStatus.completed => '已完成',
+    AiWorkStatus.stopped => '已停止',
     AiWorkStatus.error => '失败',
     AiWorkStatus.interrupted => '未确认',
   };
@@ -95,6 +139,7 @@ class AiStatusMark extends StatelessWidget {
     final color = switch (status) {
       AiWorkStatus.running => ide.accent,
       AiWorkStatus.completed => ide.ok,
+      AiWorkStatus.stopped => ide.textDim,
       AiWorkStatus.error => ide.error,
       AiWorkStatus.interrupted => ide.textDim,
     };
@@ -105,6 +150,7 @@ class AiStatusMark extends StatelessWidget {
           switch (status) {
             AiWorkStatus.running => Icons.pending_outlined,
             AiWorkStatus.completed => Icons.check_circle_outline,
+            AiWorkStatus.stopped => Icons.stop_circle_outlined,
             AiWorkStatus.error => Icons.error_outline,
             AiWorkStatus.interrupted => Icons.pause_circle_outline,
           },

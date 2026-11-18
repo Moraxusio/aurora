@@ -24,6 +24,7 @@ import 'package:xterm/xterm.dart';
 
 import '../test/support/monitor_workflow.dart';
 import '../test/support/workspace_fixture.dart';
+import '../test/support/workbench_tools_workflow.dart';
 import '../test/ai_runtime_test.dart' show EventStream;
 import 'native_window.dart';
 import 'native_cpu_trace.dart';
@@ -71,6 +72,9 @@ void main() {
   testWidgets(
     'production desktop monitor and concurrent workbench frame budgets',
     (t) async {
+      // Profile needs the active native text-input client for enterText.
+      t.testTextInput.register();
+      addTearDown(t.testTextInput.unregister);
       const output = String.fromEnvironment('AURORA_REVIEW_OUT');
       const enforce = bool.fromEnvironment(
         'AURORA_ENFORCE_BUDGET',
@@ -88,6 +92,15 @@ void main() {
         image.dispose();
       }
 
+      NativeTestWindow? toolsWindow;
+      try {
+        await exerciseWorkbenchTools(t, frame: frame, capture: screenshot,
+          resize: (size) async {
+            // The Windows runner shows its window after the first Flutter frame.
+            (toolsWindow ??= NativeTestWindow()).resize(size);
+            await t.pump(const Duration(milliseconds: 500));
+          });
+      } finally { toolsWindow?.restore(); }
       await exerciseMonitor(t, frame: frame, capture: screenshot);
 
       final features = Features();

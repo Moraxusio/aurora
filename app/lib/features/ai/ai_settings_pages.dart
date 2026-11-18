@@ -1,10 +1,11 @@
 part of 'ai_settings_dialog.dart';
 
 const _sections = [
+  ('overview', '配置总览', Icons.dashboard_outlined, '配置范围、生效顺序与常用入口'),
   ('connection', '连接', Icons.cable_outlined, '登录、接口与网络'),
   ('models', '模型', Icons.memory_outlined, '逐模型设置能力和思考参数'),
   ('execution', '工具与权限', Icons.shield_outlined, '全局工具默认值与执行权限'),
-  ('defaults', '对话', Icons.tune_rounded, '新会话默认值'),
+  ('defaults', '对话与显示', Icons.tune_rounded, '新会话默认值、输入与阅读体验'),
 ];
 
 extension _SettingsPages on _AiSettingsDialogState {
@@ -96,19 +97,17 @@ extension _SettingsPages on _AiSettingsDialogState {
                         ),
                         Divider(height: 1, color: ide.border),
                         if (!wide)
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
-                              ),
-                              child: Row(
-                                children: [
-                                  for (final s in _sections)
-                                    _nav(ide, s, compact: true),
-                                ],
-                              ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            child: AiPageNavigation(
+                              pages: {for (final s in _sections) s.$1: s.$2},
+                              selected: _section,
+                              keyPrefix: 'ai-settings-nav',
+                              onSelected: (v) => _change(() {
+                                _section = v;
+                                _error = null;
+                                _note = null;
+                              }),
                             ),
                           ),
                         Expanded(
@@ -130,12 +129,9 @@ extension _SettingsPages on _AiSettingsDialogState {
                                       right: BorderSide(color: ide.border),
                                     ),
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
+                                  child: ListView(
                                     children: [
                                       for (final s in _sections) _nav(ide, s),
-                                      const Spacer(),
                                       Padding(
                                         padding: const EdgeInsets.all(10),
                                         child: Text(
@@ -184,6 +180,7 @@ extension _SettingsPages on _AiSettingsDialogState {
                                         const SizedBox(height: 18),
                                       ],
                                       switch (_section) {
+                                        'overview' => _overviewPage(ide),
                                         'connection' => _connectionPage(ide),
                                         'models' =>
                                           _current == null
@@ -531,6 +528,27 @@ extension _SettingsPages on _AiSettingsDialogState {
           ),
         ],
         const SizedBox(height: 18),
+        if (!p.isSubscription)
+          ExpansionTile(
+            key: const ValueKey('ai-custom-headers'),
+            tilePadding: EdgeInsets.zero,
+            title: const Text('自定义请求头', style: TextStyle(fontSize: 13)),
+            subtitle: const Text('用于网关路由等高级配置'),
+            children: [
+              TextField(
+                controller: _headers,
+                minLines: 2,
+                maxLines: 8,
+                decoration: InputDecoration(
+                  labelText: '每行 名称: 值',
+                  errorText: _headerErrors[p.id],
+                  errorMaxLines: 3,
+                  helperText: '凭据随本机加密配置保存。OpenCode 的三个身份标识由协议保持。',
+                  helperMaxLines: 3,
+                ),
+              ),
+            ],
+          ),
         Wrap(
           spacing: 8,
           runSpacing: 6,
@@ -723,6 +741,15 @@ extension _SettingsPages on _AiSettingsDialogState {
           title: const Text('连接级预设', style: TextStyle(fontSize: 13)),
           children: [
             _field(_context, '统一上下文上限', numeric: true, hint: '留空使用模型目录值 / 估计值'),
+            if (!p.isSubscription) ...[
+              const SizedBox(height: 12),
+              _field(
+                _maxTokens,
+                '单次最大输出 tokens',
+                numeric: true,
+                hint: '留空由 agent 默认（运行中预留 8192）',
+              ),
+            ],
             const SizedBox(height: 12),
             AiReasoningField(
               key: ValueKey('ai-connection-effort-${p.id}'),
@@ -735,6 +762,60 @@ extension _SettingsPages on _AiSettingsDialogState {
       ],
     );
   }
+
+  Widget _overviewPage(Ide ide) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _notice(
+        ide,
+        '配置按用途管理：连接负责访问模型，模型覆盖负责能力与参数，项目配置负责运行预算、快照、指令、技能和 MCP。保存后用于后续请求；正在执行的运行沿用已接收的配置。',
+      ),
+      const SizedBox(height: 16),
+      for (final s in _sections.where((s) => s.$1 != 'overview'))
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(s.$3, color: ide.accent),
+          title: Text(s.$2),
+          subtitle: Text(
+            s.$1 == 'connection'
+                ? '${_ai.providers.length} 个连接 · 默认 ${_ai.activeProvider?.name ?? '未设置'}'
+                : s.$1 == 'models'
+                ? '默认模型 ${_ai.activeProvider?.model ?? '未设置'} · 上下文、输出、思考与能力覆盖'
+                : s.$4,
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _change(() => _section = s.$1),
+        ),
+      const Divider(),
+      ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(Icons.folder_special_outlined, color: ide.accent),
+        title: const Text('项目预算、快照与扩展'),
+        subtitle: const Text('保存在工作目录 .aurora/ai.json；表单编辑，独立保存。'),
+        trailing: const Icon(Icons.open_in_new),
+        onTap: widget.ws?.link?.server.caps.contains('ai.extensions') != true
+            ? null
+            : () async {
+                final folder = await selectWorkspaceFolder(context, widget.ws!);
+                if (!mounted || folder == null) return;
+                await _close();
+                if (mounted && _closing) {
+                  await openAiExtensions(
+                    context,
+                    widget.ws!,
+                    root: folder.root,
+                    workdir: folder.path,
+                  );
+                }
+              },
+      ),
+      const SizedBox(height: 16),
+      _notice(
+        ide,
+        '参数优先级：会话思考选择 → 模型覆盖 → 连接预设／模型目录 → agent 默认。\n工具能力：模型覆盖 → 全局工具默认；权限规则单独判断。\n会话预算不等于上下文窗口，也不等于整个会话累计用量。',
+      ),
+    ],
+  );
 
   Widget _defaultsPage(Ide ide) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -783,6 +864,51 @@ extension _SettingsPages on _AiSettingsDialogState {
       ),
       const SizedBox(height: 20),
       _notice(ide, '在对话输入区切换模型、思考强度或工作模式，只影响该会话的后续输入。正在执行的步骤会显示其实际使用的模型。'),
+      const AiSectionHeading(icon: Icons.keyboard_outlined, title: '输入与阅读'),
+      DropdownButtonFormField<String>(
+        key: const ValueKey('ai-send-key'),
+        initialValue: _ai.sendKey,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: '发送快捷键'),
+        items: const [
+          DropdownMenuItem(
+            value: 'enter',
+            child: Text('Enter 发送 · Shift+Enter 换行'),
+          ),
+          DropdownMenuItem(
+            value: 'ctrl-enter',
+            child: Text('Ctrl / Cmd+Enter 发送 · Enter 换行'),
+          ),
+        ],
+        onChanged: (v) => _change(() => _ai.sendKey = v!),
+      ),
+      const SizedBox(height: 12),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('默认展开思考过程'),
+        subtitle: const Text('关闭时折叠呈现，随时可以展开。'),
+        value: _ai.expandReasoning,
+        onChanged: (v) => _change(() => _ai.expandReasoning = v),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('工具失败时展开详情'),
+        value: _ai.expandErrors,
+        onChanged: (v) => _change(() => _ai.expandErrors = v),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('显示新对话建议'),
+        value: _ai.showQuickPrompts,
+        onChanged: (v) => _change(() => _ai.showQuickPrompts = v),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('常驻消息导航'),
+        subtitle: const Text('默认收在对话菜单；Alt+↑ / ↓ 始终可跳转消息。'),
+        value: _ai.showMessageNavigation,
+        onChanged: (v) => _change(() => _ai.showMessageNavigation = v),
+      ),
     ],
   );
 
@@ -1056,14 +1182,14 @@ extension _SettingsPages on _AiSettingsDialogState {
               color: ide.text,
             ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
             children: [
-              IconButton(
-                tooltip: '上移规则',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.arrow_upward, size: 16),
-                onPressed: i == 0
+              IconBtn(
+                Icons.arrow_upward,
+                '上移规则',
+                i == 0
                     ? null
                     : () => _change(() {
                         _ai.permissionRules.removeAt(i);
@@ -1075,11 +1201,10 @@ extension _SettingsPages on _AiSettingsDialogState {
                         }
                       }),
               ),
-              IconButton(
-                tooltip: '下移规则',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.arrow_downward, size: 16),
-                onPressed: i == _ai.permissionRules.length - 1
+              IconBtn(
+                Icons.arrow_downward,
+                '下移规则',
+                i == _ai.permissionRules.length - 1
                     ? null
                     : () => _change(() {
                         _ai.permissionRules.removeAt(i);
@@ -1091,19 +1216,15 @@ extension _SettingsPages on _AiSettingsDialogState {
                         }
                       }),
               ),
-              IconButton(
-                tooltip: '编辑规则',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.edit_outlined, size: 16),
-                onPressed: r.scope != 'global' && !here
-                    ? null
-                    : () => _editRule(i),
+              IconBtn(
+                Icons.edit_outlined,
+                '编辑规则',
+                r.scope != 'global' && !here ? null : () => _editRule(i),
               ),
-              IconButton(
-                tooltip: '删除规则',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.delete_outline, size: 16),
-                onPressed: () => _change(() {
+              IconBtn(
+                Icons.delete_outline,
+                '删除规则',
+                () => _change(() {
                   _ai.permissionRules.removeAt(i);
                   if (_editingRule == i) {
                     _resetRule();

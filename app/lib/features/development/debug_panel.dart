@@ -115,7 +115,7 @@ class DebugPanel extends StatelessWidget {
             IconBtn(
               Icons.play_arrow,
               model.stopped ? '继续 (F5)' : '启动调试',
-              model.stopped
+              model.stopped && !model.controlling
                   ? () => _action(() => model.control('continue'))
                   : !model.active && model.supported
                   ? () => startConfiguredDebug(context, ws)
@@ -124,33 +124,33 @@ class DebugPanel extends StatelessWidget {
             IconBtn(
               Icons.pause,
               '暂停',
-              model.phase == DebugPhase.running
+              model.phase == DebugPhase.running && !model.controlling
                   ? () => _action(() => model.control('pause'))
                   : null,
             ),
             IconBtn(
               Icons.redo,
               '单步跳过 (F10)',
-              model.stopped ? () => _action(() => model.control('next')) : null,
+              model.stopped && !model.controlling ? () => _action(() => model.control('next')) : null,
             ),
             IconBtn(
               Icons.south,
               '单步进入 (F11)',
-              model.stopped
+              model.stopped && !model.controlling
                   ? () => _action(() => model.control('stepIn'))
                   : null,
             ),
             IconBtn(
               Icons.north,
               '单步跳出 (Shift+F11)',
-              model.stopped
+              model.stopped && !model.controlling
                   ? () => _action(() => model.control('stepOut'))
                   : null,
             ),
             IconBtn(
               Icons.stop,
               '停止 (Shift+F5)',
-              model.active ? () => _action(model.stop) : null,
+              model.active && model.phase != DebugPhase.stopping ? () => _action(model.stop) : null,
             ),
             IconBtn(Icons.terminal, '调试控制台', () => _console(context)),
           ],

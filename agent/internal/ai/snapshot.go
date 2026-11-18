@@ -165,20 +165,25 @@ func (m *SnapshotManager) Capture(ctx context.Context, worktree string) string {
 }
 
 func (m *SnapshotManager) CaptureChecked(ctx context.Context, worktree string) (string, error) {
+	return m.CaptureConfigured(ctx, worktree, nil)
+}
+
+func (m *SnapshotManager) CaptureConfigured(ctx context.Context, worktree string, options *SnapshotOptions) (string, error) {
 	if m == nil || m.BaseDir == "" || worktree == "" || worktree == "/" {
 		return "", fmt.Errorf("此工作目录未启用快照")
 	}
 	unlock := m.lock(worktree)
 	defer unlock()
 
-	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	policy := options.resolved()
+	cctx, cancel := context.WithTimeout(ctx, time.Duration(policy.TimeoutSeconds)*time.Second)
 	defer cancel()
 
 	gitDir, err := m.ensureRepo(cctx, worktree)
 	if err != nil {
 		return "", err
 	}
-	tree, err := m.captureBounded(cctx, gitDir, worktree)
+	tree, err := m.captureBounded(cctx, gitDir, worktree, policy)
 	return tree, err
 }
 

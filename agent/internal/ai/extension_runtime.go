@@ -31,12 +31,18 @@ type extensionRuntime struct {
 	remote       map[string]remoteTool
 }
 
-func (e *Env) loadExtensions(ctx context.Context, root, work string, provider ProviderConfig) (*extensionRuntime, error) {
+func (e *Env) loadExtensions(ctx context.Context, root, work string, provider ProviderConfig, admitted ...ExtensionConfig) (*extensionRuntime, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	cfg, _, err := loadExtensionConfig(work)
-	if err != nil {
-		return nil, err
+	var cfg ExtensionConfig
+	var err error
+	if len(admitted) > 0 {
+		cfg = admitted[0]
+	} else {
+		cfg, _, err = loadExtensionConfig(work)
+		if err != nil {
+			return nil, err
+		}
 	}
 	r := &extensionRuntime{config: cfg, remote: map[string]remoteTool{}}
 	r.instructions, err = discoverLayeredInstructions(e.StateDir, root, work, cfg.Instructions)

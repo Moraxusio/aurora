@@ -21,6 +21,8 @@
 ## 版本与证据
 
 - [3.24.0 正式版本说明](releases/3.24.0.md)
+- [3.24.0 正式发布与公开下载复核](validation/2026-11-18-release-3.24.0.md)
+- [3.24.0 正式发布原始证据](performance/20261118-release-3.24.0/README.md)
 - [3.24.0-workbench-preview1：功能修复与工作台重构](releases/3.24.0-workbench-preview1.md)
 - [非 AI 功能与 GUI 重构验收](validation/2026-11-16-workbench-redesign.md)
 - [工作台重构原始证据](performance/20261116-workbench-redesign/README.md)

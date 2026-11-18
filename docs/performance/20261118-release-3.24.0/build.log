@@ -1,0 +1,31 @@
+Documentation contract passed: 30 current documents, 59 Markdown files, local links and owned references.
+tmux bundle matches bundle.lock
+aurora3-agent-3.24.0-linux-amd64 3.24.0 15601826 e81a201d41f8c35f52164e82ca87c2879912ac9c8ed7058d3f6c7aed0bee3a02
+product: aurora3-agent
+channel: stable
+version: 3.24.0
+file: aurora3-agent-3.24.0-linux-amd64
+size: 15601826
+sha256: e81a201d41f8c35f52164e82ca87c2879912ac9c8ed7058d3f6c7aed0bee3a02
+aurora3-local-agent-3.24.0-windows-amd64.exe 3.24.0 14711296 b16bf48b6a062bf2b8423026c52c45212d3a3ecc9ffb82bb818b28caec30be7c
+product: aurora3-local-agent
+channel: stable
+version: 3.24.0
+file: aurora3-local-agent-3.24.0-windows-amd64.exe
+size: 14711296
+sha256: b16bf48b6a062bf2b8423026c52c45212d3a3ecc9ffb82bb818b28caec30be7c
+signed upgrade policy aurora3-agent 
+GUI contract passed: 132 Dart source files.
+
+┌─────────────────────────────────────────────────────────┐
+│ A new version of Flutter is available!                  │
+│                                                         │
+│ To update to the latest version, run "flutter upgrade". │
+└─────────────────────────────────────────────────────────┘
+Building Windows application...                                    16.5s
+√ Built build\windows\x64\runner\Release\aurora.exe
+C:\dev\VPS\release4\Aurora-3.24.0\LICENSES.txt: 405 KB
+Documentation contract passed: 30 current documents, 58 Markdown files, local links and owned references.
+ZIP: C:\dev\VPS\release4\Aurora-3.24.0.zip
+SHA256: 41cbb857b862eac64945e978874e28fd8662c422af09a2117119c48a4b57247d
+Folder: C:\dev\VPS\release4\Aurora-3.24.0

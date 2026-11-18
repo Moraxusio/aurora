@@ -1,0 +1,2502 @@
+{
+  "aurora_tls.dll": {
+    "bytes": 1627136,
+    "sha256": "ca2eb91c8e859b8e6bf33cdfcde994c5b17bae1385bcf9c3deb57075cbe8ebcd"
+  },
+  "aurora.exe": {
+    "bytes": 152064,
+    "sha256": "478b7b14f27670bdec3e3e084980cee1ba13f91fc0f8b2f64739ef4522561687"
+  },
+  "BUILD-INFO.json": {
+    "bytes": 676,
+    "sha256": "c17465afe4a43388b543a2d6650c63b5759dcd6120f3387f781e3dee3cc6dafb"
+  },
+  "CHANGES.md": {
+    "bytes": 111,
+    "sha256": "271a98847efc3813a3609aee1081e75669b447af50f897f6d148300e21a5416e"
+  },
+  "dartjni.dll": {
+    "bytes": 64000,
+    "sha256": "fe4247164d72e861d55a8fb5456d9f9118c166ba80a83dae8701cef9cf0b84c2"
+  },
+  "flutter_windows.dll": {
+    "bytes": 21289472,
+    "sha256": "30494fb08f9f101a8fbe42568110aaa160efbd7341f3cfe877dc14214be3a233"
+  },
+  "LICENSE": {
+    "bytes": 11358,
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  "LICENSES.txt": {
+    "bytes": 414688,
+    "sha256": "68ff4bff081b55869f8a306f732bef5d41b7f2143df7ebd2c772a1c316b1b7c9"
+  },
+  "NOTICE": {
+    "bytes": 250,
+    "sha256": "de670cbf7a10f1d8b61ba5daf84fe26e083a1134d1c4475e73993880f04c7998"
+  },
+  "pdfium.dll": {
+    "bytes": 7586816,
+    "sha256": "4b0dec92555d69437bef0df37be630181ab3e83a6823ca264ede355a4f2ef994"
+  },
+  "pdfrx_pdfium_gate.dll": {
+    "bytes": 101376,
+    "sha256": "fe476909ed07f19275adb3e2b42c81f7e75e319ae4eb2d4be2cdb91878c58dd2"
+  },
+  "README.md": {
+    "bytes": 3039,
+    "sha256": "d6ea662bc7742a87efd26a7a3af9f1b947a11f7cf05214a6deba5dc7de1da012"
+  },
+  "README.txt": {
+    "bytes": 906,
+    "sha256": "0229c1c068a833267fb787f11a3ab8dff2f30093d6d68ad13d123ec05bf59ecc"
+  },
+  "SOURCE-HASHES.json": {
+    "bytes": 278883,
+    "sha256": "436fc384031182cd4a7bf231b2feeac0d38ed61753eab1cc4b1c95ea3fc53b1a"
+  },
+  "url_launcher_windows_plugin.dll": {
+    "bytes": 98304,
+    "sha256": "5c8e8d921f7bbf05e023881b17b5b6ad93c79d7db34dab76899943196329c61b"
+  },
+  "agent/policy.json": {
+    "bytes": 120,
+    "sha256": "11b1ff33c0578af5df02b27c4790f2aed46ab8eacd7d57effa6d4135073716dc"
+  },
+  "agent/policy.sig": {
+    "bytes": 89,
+    "sha256": "13c24b60fd35f94f1cb710470d7ed8ac33218fecf2d2d297b881d8e4062b81c0"
+  },
+  "agent/amd64/aurora3-agent-3.24.0-linux-amd64": {
+    "bytes": 15601826,
+    "sha256": "e81a201d41f8c35f52164e82ca87c2879912ac9c8ed7058d3f6c7aed0bee3a02"
+  },
+  "agent/amd64/manifest.json": {
+    "bytes": 260,
+    "sha256": "3eb5f6fe455500bf8c38a0115c2122c3c924aa3a29bc13b7eb5fb510c053f021"
+  },
+  "agent/amd64/manifest.sig": {
+    "bytes": 89,
+    "sha256": "86082a14f2062a1dd47f65092c58b1bbea34474dc960515680ee3e4adb479a44"
+  },
+  "agent/internal/ai/THIRD_PARTY_OPENCODE_LICENSE": {
+    "bytes": 1065,
+    "sha256": "625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b"
+  },
+  "data/app.so": {
+    "bytes": 15811464,
+    "sha256": "f8c1a9970c5d07a2870b2ad1eae373614b05b73f5526ef07bf868475861ba695"
+  },
+  "data/icudtl.dat": {
+    "bytes": 864880,
+    "sha256": "325a86063d26334c2eabe1743cea073b612540fbf3d8fc2ef0b5708e3763a8c7"
+  },
+  "data/flutter_assets/AssetManifest.bin": {
+    "bytes": 367,
+    "sha256": "fbf403726a12e200ab1e227a57852d18483111a426884b6a3640b661a37a5d8d"
+  },
+  "data/flutter_assets/FontManifest.json": {
+    "bytes": 82,
+    "sha256": "28b1eb2b3d2e1ad60b8c8b0f9100b1ccbf492f7fa97f5bebb51ea97e73926e7d"
+  },
+  "data/flutter_assets/NativeAssetsManifest.json": {
+    "bytes": 273,
+    "sha256": "5c2d53868d2b3423a8e4ea3dc9a36deeb972a40a03dfb79cce709d6f3b32e5bb"
+  },
+  "data/flutter_assets/NOTICES.Z": {
+    "bytes": 109255,
+    "sha256": "2eb4eca68268ae959e5b070aabf2c59361ca1e700e61c7314bf998b8dabed52a"
+  },
+  "data/flutter_assets/assets/agent/.gitkeep": {
+    "bytes": 2,
+    "sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6"
+  },
+  "data/flutter_assets/assets/agent/amd64/.gitkeep": {
+    "bytes": 2,
+    "sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6"
+  },
+  "data/flutter_assets/assets/branding/aurora3-256.png": {
+    "bytes": 7978,
+    "sha256": "4779d684b01c2b213b8973a517b94fd486d4973c7c03a33a841a53509b3655d1"
+  },
+  "data/flutter_assets/assets/legal/.gitkeep": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "data/flutter_assets/fonts/MaterialIcons-Regular.otf": {
+    "bytes": 33296,
+    "sha256": "1b59700a809090c2444d574b0f2e568e417138a9cb552376ac182b83a9324825"
+  },
+  "data/flutter_assets/packages/material_ui/shaders/ink_sparkle.frag": {
+    "bytes": 21856,
+    "sha256": "1fe8436a743884cb65078fe8c7b38e18f5365f2a2961270916f426fd13c604af"
+  },
+  "data/flutter_assets/shaders/ink_sparkle.frag": {
+    "bytes": 21856,
+    "sha256": "1fe8436a743884cb65078fe8c7b38e18f5365f2a2961270916f426fd13c604af"
+  },
+  "data/flutter_assets/shaders/stretch_effect.frag": {
+    "bytes": 17616,
+    "sha256": "bc7599dbbbaab310efe41520574138d21fb18a88c8fe4495ed79315309336f6f"
+  },
+  "docs/README.md": {
+    "bytes": 3120,
+    "sha256": "c601f5f10a715ad4f2f3540d66bb11e9c84ea3088c18dfb9df94ce1fd0f30caa"
+  },
+  "docs/architecture/overview.md": {
+    "bytes": 3686,
+    "sha256": "8f52086eec51c9c4ee09aba43d47a68da8b1bdaefbea7a5fc98ecfe7bcf167ae"
+  },
+  "docs/archive/README.md": {
+    "bytes": 2732,
+    "sha256": "cb80294133467009bfff212eea9501b9448dd7217a621ce960639273161265fa"
+  },
+  "docs/archive/2026-11-16/AI_HARNESS.md": {
+    "bytes": 7056,
+    "sha256": "43fc6c46e89a44f8ea720c5bdcb9d673a0b214962c431f0838374ac572b5d9b4"
+  },
+  "docs/archive/2026-11-16/AI_REDESIGN.md": {
+    "bytes": 5304,
+    "sha256": "021b59e7f9ac5b6645a11be18ead29db85710dce7893272aa5c39299e0526053"
+  },
+  "docs/archive/2026-11-16/AI.md": {
+    "bytes": 16661,
+    "sha256": "26b7b3c3863f80898d78147553d510a77912d8d5fe3a92aec25e7eedcceb149e"
+  },
+  "docs/archive/2026-11-16/DESIGN.md": {
+    "bytes": 74188,
+    "sha256": "6dc3b3a2df5967f74eb5233f2b0a3819d1102d0591c55530832103328c9be8fa"
+  },
+  "docs/archive/2026-11-16/GPU_MONITOR.md": {
+    "bytes": 4945,
+    "sha256": "4057b87e29c9ef366852329292e5074b5ce51b9035fc16772a8f29dee267d3cb"
+  },
+  "docs/archive/2026-11-16/GUI_AUDIT.md": {
+    "bytes": 3880,
+    "sha256": "984e0b9eceffe04a4b08baa4419fdedffe335439725e6f76902b31814b0f01c9"
+  },
+  "docs/archive/2026-11-16/GUI_FOUNDATION.md": {
+    "bytes": 9820,
+    "sha256": "0c3ec40b0b950a7d97e62d5727c39a9af5a7109c6b66cebf561b8dbff02e7e52"
+  },
+  "docs/archive/2026-11-16/IDE_REDESIGN.md": {
+    "bytes": 7071,
+    "sha256": "bfda1ba6ba96fcd2235dbccd0f6753a1191dea8f0b1975b6ceff1bfbc13f6d8f"
+  },
+  "docs/archive/2026-11-16/LOCAL_AGENT.md": {
+    "bytes": 8244,
+    "sha256": "b721fb0fd7c87c8b28e27dfb858e2794f54f50b685e48ba63a7c314a11f6d88f"
+  },
+  "docs/archive/2026-11-16/PLAN.md": {
+    "bytes": 161537,
+    "sha256": "ea754e0f8f79158bce35176f7d7cefa78fc7df5a68bc426e9c619a5b9c2b8431"
+  },
+  "docs/archive/2026-11-16/READER_AI.md": {
+    "bytes": 3691,
+    "sha256": "7977ecf648d23e855709a8647fef1900b9d763bab0da96d46caabe070ca0a31c"
+  },
+  "docs/archive/2026-11-16/TABS.md": {
+    "bytes": 7458,
+    "sha256": "5349710b4f11983b34a7bb983eda21bf1a589cd313b10314d74b3227167971e4"
+  },
+  "docs/archive/2026-11-16/UI_REVIEW.md": {
+    "bytes": 5194,
+    "sha256": "27823912f2678bf988ab584c3ded1ad5ea38f1b710593bfbd69f2fde3d9ce728"
+  },
+  "docs/archive/2026-11-16/UI_SYSTEM.md": {
+    "bytes": 6947,
+    "sha256": "e4f9c3b49f7d45fda1b341daa509d3da627854af4502074020651c0b071fa29a"
+  },
+  "docs/archive/2026-11-16/WINDOWS_SIMPLIFICATION.md": {
+    "bytes": 3156,
+    "sha256": "4c51e44aa1e6b2b3cdbe136cad6f574708b7ebc2cd0d915b0f97254e23b5a654"
+  },
+  "docs/archive/2026-11-16/WINDOWS_WORKBENCH.md": {
+    "bytes": 5252,
+    "sha256": "c2f63c214968598bc0b103f52e8707589b3ee331f4e1877de7c8be8f547714b9"
+  },
+  "docs/archive/2026-11-16/WORKBENCH_REVIEW.md": {
+    "bytes": 4015,
+    "sha256": "644ed27a9bae7149b19d6cb7b01384005a452a7a563117f757d063953fa0e4b6"
+  },
+  "docs/archive/pre-v3/OPEN_DECISION_SEARCH.md": {
+    "bytes": 3478,
+    "sha256": "fee1afac83be816ba1b457fb4aea139f898c033201f1cea245292ce143d7fb6a"
+  },
+  "docs/archive/pre-v3/PLAN_V3.md": {
+    "bytes": 10583,
+    "sha256": "a600a985a3d3e70e8b2ff8866e7456c9b3647cec3b96effe9945486681170be7"
+  },
+  "docs/archive/pre-v3/REDESIGN_V3.md": {
+    "bytes": 26997,
+    "sha256": "dd425f2d7404985d1c3ad68a4f6999467d4d8bc4f2cda4a9c6bad830b39c5a22"
+  },
+  "docs/decisions/0001-documentation-structure.md": {
+    "bytes": 1198,
+    "sha256": "3b56e5494c4d4c06085cc0200beccf9f441c9c1738b107b8c89e6556c2bb16f1"
+  },
+  "docs/development/build-and-package.md": {
+    "bytes": 5289,
+    "sha256": "1f68da743d38c8965bda31acfea998abc98ebddf8bdde8f0be0bdb4eaa92caf3"
+  },
+  "docs/development/contributing.md": {
+    "bytes": 2568,
+    "sha256": "16b566c7ae95dc7cb5bfd04e1e971f1ddcab10ab4a2fae6e3e4c37013a7a8c26"
+  },
+  "docs/development/gui.md": {
+    "bytes": 7408,
+    "sha256": "ace6e6b2c60ffc18bef68f4e9f03602a8cc117e1d561b2d4cf6c301daba61948"
+  },
+  "docs/guides/acceptance.md": {
+    "bytes": 5591,
+    "sha256": "77a55a665482ac07aa9565261a576559f233e447fad86646040508e9b52568d2"
+  },
+  "docs/guides/ai.md": {
+    "bytes": 10651,
+    "sha256": "358ba6a98934723604abf4c7c97affb41172b0f5f84dde1268b47a478558c86f"
+  },
+  "docs/guides/development-tools.md": {
+    "bytes": 10342,
+    "sha256": "861c3aa9dbddcd554f3606e35317e7c6f81ab405d40e283a919520965f5c455a"
+  },
+  "docs/guides/getting-started.md": {
+    "bytes": 5467,
+    "sha256": "39ba77ad10ea9fafe2ddc0210057be25528c7ae530d407d0c2a6bbbb6352bacf"
+  },
+  "docs/performance/20261109-scroll.json": {
+    "bytes": 2880,
+    "sha256": "f05fdb9ca36d30e17a8b6c77400687e81e2baa39bcfb604d817c96a30e3ec7fb"
+  },
+  "docs/performance/20261115-gui-foundation.json": {
+    "bytes": 1708,
+    "sha256": "61dcee3ae5364c9d36a31ca0ec983c3b90ee06bb1f5fa538d793349e975c6d11"
+  },
+  "docs/performance/20261115-gui-release.json": {
+    "bytes": 1432,
+    "sha256": "b544a247d4b20bdcc57fcc8d61a26ccd60a702b9bfe6f517d4451696bb51dbbe"
+  },
+  "docs/performance/20261115-reader-ai.json": {
+    "bytes": 2170,
+    "sha256": "36e07498fe744583942127c5db6a40390dbfba0c195105f7f74ae27a91eb962e"
+  },
+  "docs/performance/20261115-release-3.20.0.json": {
+    "bytes": 4455,
+    "sha256": "bb2f1d4b9dd45033f00771b4ecfbac50505631235b866cd76b8c73508562b93c"
+  },
+  "docs/performance/20261115-release-3.21.0.json": {
+    "bytes": 3261,
+    "sha256": "a5fe3b1471d96a7e83c0f857a6296024d430c14cd478ba5f6351206bb1159923"
+  },
+  "docs/performance/20261115-ui-polish.json": {
+    "bytes": 3045,
+    "sha256": "c1bf3d742605e2e75f7c2b725335ce15db29fefbca67757f9dc30c896cd9761a"
+  },
+  "docs/performance/20261116-audit-go-after.txt": {
+    "bytes": 3765,
+    "sha256": "6ebbfdcde317fab2acbf0c087507a1b43b521436367d17c58909bf395fa56e84"
+  },
+  "docs/performance/20261116-audit-go-before.txt": {
+    "bytes": 3768,
+    "sha256": "5a9ef18d5ab14629b5dbad9f20f9ed5d9ecfa1ade20abff57b74b159edf2fd2f"
+  },
+  "docs/performance/20261116-audit-gui-foundation.json": {
+    "bytes": 1499,
+    "sha256": "103198393cebd5c50fd3f427f5f13e475ecaa09a4efd756e38d423d5537a1450"
+  },
+  "docs/performance/20261116-audit-gui-loaded.png": {
+    "bytes": 135543,
+    "sha256": "d4d4c4978943cd7dfec8d055a2f1310456068c495711e539ec9294f543728484"
+  },
+  "docs/performance/20261116-audit-gui-sources.json": {
+    "bytes": 135255,
+    "sha256": "a0e781e17d41c95e2878f2fcd7a2075dc35bede8329cf0a2dfde3d52209db444"
+  },
+  "docs/performance/20261116-audit-native.txt": {
+    "bytes": 2350,
+    "sha256": "087b748bbd8be6e47426ee2c254ee95402ebb1f2a52455eebd0ccfba175ebb65"
+  },
+  "docs/performance/20261116-project-audit.json": {
+    "bytes": 4119,
+    "sha256": "ff2e309d9c8c03e7150a8ad2a2a183f1b07abb5a00046022b7c19ab4a6b2f91b"
+  },
+  "docs/performance/20261116-release-3.21.3.json": {
+    "bytes": 4223,
+    "sha256": "26572fe1f1a05f8f59abf593497d2c945d3856578b345b5c97693ccaa8c40b19"
+  },
+  "docs/performance/20261116-release-3.21.4.json": {
+    "bytes": 5739,
+    "sha256": "8f48171cca3bfb7506ef43ab44c7b0dca35b3d471cdecb036781e37dc8b0d86c"
+  },
+  "docs/performance/20261116-ai-control/ai-smoke.txt": {
+    "bytes": 104,
+    "sha256": "7343672bc43908962de00b81b45620e0ac5d9c0c2810500bf7f5be6f92ca49e5"
+  },
+  "docs/performance/20261116-ai-control/analyze.txt": {
+    "bytes": 38128,
+    "sha256": "b6c7e7dae4faf9da332fb3d290a8abcc3ca171cb8405b9037186fdcae4e815a7"
+  },
+  "docs/performance/20261116-ai-control/artifact-files.json": {
+    "bytes": 32511,
+    "sha256": "87102623b7e564e929aa70083e7a8c6d4d0c0f9edb01e55d0538a09230b0879c"
+  },
+  "docs/performance/20261116-ai-control/artifact-summary.json": {
+    "bytes": 1506,
+    "sha256": "212b24451cd58dfc3b2a1594bdc6d537836d10da096a3fba3c499f412538b1d1"
+  },
+  "docs/performance/20261116-ai-control/artifact.txt": {
+    "bytes": 1655,
+    "sha256": "95c7cd8cb738be244191e38fecf0ba8564fe75bfd24200339d741d492ba8b4ec"
+  },
+  "docs/performance/20261116-ai-control/aurora_install.txt": {
+    "bytes": 4593,
+    "sha256": "9132d925b65e463addffabcd514453bd8c4417913868579c414229d968c3316d"
+  },
+  "docs/performance/20261116-ai-control/aurora_profile.txt": {
+    "bytes": 4464,
+    "sha256": "e005682465b952644984f3e52c1144a8e20036d16160b79045da178fea0baf38"
+  },
+  "docs/performance/20261116-ai-control/aurora_sub.txt": {
+    "bytes": 3594,
+    "sha256": "2ca48a548cfcde3ac334afc153b9a08b3a86a4381994024fbb9ec28daa39617e"
+  },
+  "docs/performance/20261116-ai-control/aurora_wire.txt": {
+    "bytes": 5777,
+    "sha256": "1c907af9bd5093a77d2fefa6ce71932f9211f2b04d598aaaa54b93168d7e7e45"
+  },
+  "docs/performance/20261116-ai-control/build-info.json": {
+    "bytes": 801,
+    "sha256": "d34721c063eedd55992dbf658b6bac81d792876d06cb4db534e8644bcc754f3f"
+  },
+  "docs/performance/20261116-ai-control/build.txt": {
+    "bytes": 1631,
+    "sha256": "88fdfb5dc4cf4dc3f19bf2e327c745389416ad01e02adffae5c9367a1fa0a820"
+  },
+  "docs/performance/20261116-ai-control/docs.txt": {
+    "bytes": 107,
+    "sha256": "adf3b0b621935d9355ed4c69b9502a911a8b7f48dd7c1298c3b165928877e5f6"
+  },
+  "docs/performance/20261116-ai-control/flutter-full.txt": {
+    "bytes": 87526,
+    "sha256": "d630c176e00935f250e450b487760716254284751b34c74c0abda6838a2d4a3d"
+  },
+  "docs/performance/20261116-ai-control/go-linux-ai.txt": {
+    "bytes": 16550,
+    "sha256": "a0505cd2be97f0a18e1c9f973d0468e740bebcc1419f84210d8d6bc6e1a81f4d"
+  },
+  "docs/performance/20261116-ai-control/go-race.txt": {
+    "bytes": 34,
+    "sha256": "3ef337f8639be9fca282b695d84fe7993acb00344743b6bfbba07a95c0b0d404"
+  },
+  "docs/performance/20261116-ai-control/go-windows.txt": {
+    "bytes": 1444,
+    "sha256": "3e1fb5594ba84143681d69d4c19d64e9a1e2a6bde6859d19200c277774cb6899"
+  },
+  "docs/performance/20261116-ai-control/ide-smoke.txt": {
+    "bytes": 2112,
+    "sha256": "2c9dfb05f90fd9524237f65271be27c82bb1bcdb9f0b84055f3954208407c2dd"
+  },
+  "docs/performance/20261116-ai-control/linux-version.txt": {
+    "bytes": 8,
+    "sha256": "ea4d15b2c52b1584707597a352d932aff8557c648469f6271b07edc3da3bff14"
+  },
+  "docs/performance/20261116-ai-control/native-accessibility.ps1": {
+    "bytes": 2921,
+    "sha256": "936fbaa9ec625ff41d743afa26b6b34ca2548dc7d96d7c5c1b35d50a5bdc0302"
+  },
+  "docs/performance/20261116-ai-control/native-profile.json": {
+    "bytes": 1360,
+    "sha256": "4baaa2df7b258145c7ed53ccd2aaf2e0594d3554053836a919784a288734762b"
+  },
+  "docs/performance/20261116-ai-control/native-profile.log": {
+    "bytes": 1913,
+    "sha256": "7a593e48bd1b1318313bbdf7be84734bc60d48502eb767d50e07d103707196fb"
+  },
+  "docs/performance/20261116-ai-control/native-profile.png": {
+    "bytes": 27082,
+    "sha256": "9e2bd65d2f68355c7ccfd44b9c17d52914a93d1758225c2049f98eff560a8058"
+  },
+  "docs/performance/20261116-ai-control/native-source-hashes.json": {
+    "bytes": 156548,
+    "sha256": "ac528679ac8c73beb862f86cc51f8947d03798248a06e5242077fad5c5b946fc"
+  },
+  "docs/performance/20261116-ai-control/README.md": {
+    "bytes": 1955,
+    "sha256": "c5ca34f560155309905e2e5898375ab1ef24343cc90cdeced5153a121711cf16"
+  },
+  "docs/performance/20261116-ai-control/release-native-first.txt": {
+    "bytes": 667,
+    "sha256": "7c88ec05460b40f3ad8bd416a100cd644ad228f1a73ea55a352945200a06c00b"
+  },
+  "docs/performance/20261116-ai-control/release-native-keyboard-attempt.txt": {
+    "bytes": 632,
+    "sha256": "b4fa11b23059815666ed55c030a0de0decac2dd56e3f6465b9989b9ef7e5be09"
+  },
+  "docs/performance/20261116-ai-control/release-native.txt": {
+    "bytes": 393,
+    "sha256": "89ddaf6463ccab723441d80b29398b5091553925a6f39245e651d9b6bdcadf70"
+  },
+  "docs/performance/20261116-ai-control/release-startup-ui.txt": {
+    "bytes": 1038,
+    "sha256": "0b865ee640742f1527a4c96060932fe31ee7444904e4388f72f0a79867cf4961"
+  },
+  "docs/performance/20261116-ai-control/settings-models-1100-light.png": {
+    "bytes": 55581,
+    "sha256": "e27605f2ff5acbbdfb9719d8e134dabcd06c1adf82daecad2b3e4b5c5be2b9d7"
+  },
+  "docs/performance/20261116-ai-control/settings-overview-390-dark.png": {
+    "bytes": 47670,
+    "sha256": "aae8fe201edb8c87db691a445977cbf0103e4ac42ff55b8fa0093f48329c4791"
+  },
+  "docs/performance/20261116-ai-control/signatures.txt": {
+    "bytes": 203,
+    "sha256": "748f3d55e44756b313d1604668015822ccd79e4ad3fa193454e53d01baedfc68"
+  },
+  "docs/performance/20261116-ai-control/smoke-analyze.txt": {
+    "bytes": 53,
+    "sha256": "9e11b76b4a0baf673e7120d8c449bbf291e50a77503e8c6f90c6b236a1dd1421"
+  },
+  "docs/performance/20261116-ai-control/source-hashes.json": {
+    "bytes": 214145,
+    "sha256": "3ff61dcb5b44ba3628a39f4299972d3cfc956c65ed15dbf74e66309f4c94637b"
+  },
+  "docs/performance/20261116-ai-control/ui-contract.txt": {
+    "bytes": 45,
+    "sha256": "41408ec3edc09e96b9a14cdb4768a90f9628c62b9a0b68caa104733f47ad2241"
+  },
+  "docs/performance/20261116-ai-control/verify-launcher.ps1": {
+    "bytes": 5662,
+    "sha256": "91efa81ef10682cb552c65db281459f9a4b38acada9ee4847b622cff28cc7575"
+  },
+  "docs/performance/20261116-ai-redesign/environment.json": {
+    "bytes": 876,
+    "sha256": "119a92fc786ba31753cea2695e5149dd51d0044a2f785451b89e5619a3b20445"
+  },
+  "docs/performance/20261116-ai-redesign/README.md": {
+    "bytes": 2018,
+    "sha256": "06ea1ac586e7a78d633bf0389c385a69ad4eab32e3201780a92a3261b9a6e3f7"
+  },
+  "docs/performance/20261116-ai-redesign/checks/analyze.log": {
+    "bytes": 43863,
+    "sha256": "dac4022b86b476d7cd394ef300d275e986eca41bcee968183c2211f0f39a7cf5"
+  },
+  "docs/performance/20261116-ai-redesign/checks/aurora_install.log": {
+    "bytes": 5678,
+    "sha256": "34269a9714f053b42c44ff07ba371357ab3368a1c696b21c1d6270ae40084585"
+  },
+  "docs/performance/20261116-ai-redesign/checks/aurora_profile.log": {
+    "bytes": 4252,
+    "sha256": "3c56a0dd7ef3980b0134cc2dc1e11029fd226836a5c93784df5758abf9925739"
+  },
+  "docs/performance/20261116-ai-redesign/checks/aurora_sub.log": {
+    "bytes": 3366,
+    "sha256": "829d2acc587136adf69973020ed1dca1619d15ae6b8d671e3807a79f0c6d7199"
+  },
+  "docs/performance/20261116-ai-redesign/checks/aurora_wire.log": {
+    "bytes": 6907,
+    "sha256": "48e1066890429c6b80509922f74ee878a844aa40516f98e49a111d1d4b536028"
+  },
+  "docs/performance/20261116-ai-redesign/checks/controls-final.log": {
+    "bytes": 2154,
+    "sha256": "606a26c0a6ee5be9b330837bd203b383afb8386c2e0933dcc002ec297e509532"
+  },
+  "docs/performance/20261116-ai-redesign/checks/diff-check.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-ai-redesign/checks/docs-final.log": {
+    "bytes": 107,
+    "sha256": "b51dd6c90292ac42a308e407b68a3c9cdbcaaae1b8c82e6b53b49240e504c20f"
+  },
+  "docs/performance/20261116-ai-redesign/checks/flutter.log": {
+    "bytes": 91937,
+    "sha256": "b5d6af87409a1c8dea96fed920894bd13d1990f991cbc98f83c493535c77f680"
+  },
+  "docs/performance/20261116-ai-redesign/checks/go-all.log": {
+    "bytes": 1445,
+    "sha256": "8d0dad3bf5427b045fd073925ae15c0da208b6e5418b1b54f184ad08f6555b07"
+  },
+  "docs/performance/20261116-ai-redesign/checks/go-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-ai-redesign/checks/go-vet.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-ai-redesign/checks/linux-ai-final.log": {
+    "bytes": 17623,
+    "sha256": "af6b5d3e5e41d0ec69c5d4361a0e4207be62ee753b087ad87ad025e959a56015"
+  },
+  "docs/performance/20261116-ai-redesign/checks/race-final.log": {
+    "bytes": 1900,
+    "sha256": "502a42bae3e3ce9e3584813ebb1fa955a0df1c856ab0b3c4a08b4c4158e34275"
+  },
+  "docs/performance/20261116-ai-redesign/checks/ui-contract.log": {
+    "bytes": 45,
+    "sha256": "d964ace362b475644afd8018124c8ed30444adedc7e2de0a6626f2649805ff23"
+  },
+  "docs/performance/20261116-ai-redesign/failures/analyze-first.log": {
+    "bytes": 38863,
+    "sha256": "7cc74801ba132d2aeace56c55c14937a311d309d0c6f3d895f6e7c12972a872a"
+  },
+  "docs/performance/20261116-ai-redesign/failures/analyze-second.log": {
+    "bytes": 17620,
+    "sha256": "491f8ce5e2cda7e655047d3634eca9b2bb06c4eabb1ed921faf3a752dea2e4b8"
+  },
+  "docs/performance/20261116-ai-redesign/failures/aurora_wire.log": {
+    "bytes": 69899,
+    "sha256": "e84ac857a4e1836980f3588ee5ddc624356db3f908b9b6910cac00a1afbeec08"
+  },
+  "docs/performance/20261116-ai-redesign/failures/flutter-all.log": {
+    "bytes": 94898,
+    "sha256": "f5265a24ab2e4c385bf85a284b3d9f5aede42d9f50fe7721ff4e912ac788f8fd"
+  },
+  "docs/performance/20261116-ai-redesign/failures/go-first.log": {
+    "bytes": 11855,
+    "sha256": "99097066d6cdf80a933b8d1115183d1cc8c26abf57ad2a806d622fb8d984c864"
+  },
+  "docs/performance/20261116-ai-redesign/failures/linux-ai.log": {
+    "bytes": 2814,
+    "sha256": "277a7aa3f88fb502ea401fc2a6c94ee02ff47f64ddb79fcb7056bc02df52c1f0"
+  },
+  "docs/performance/20261116-ai-redesign/failures/ui-first.log": {
+    "bytes": 74160,
+    "sha256": "51ac6b1506287235883677ccbbb13d347ab4060bc8bd302ecbe0a32d1116163a"
+  },
+  "docs/performance/20261116-ai-redesign/failures/ui-fourth.log": {
+    "bytes": 7118,
+    "sha256": "2dc3c1207289720cc289bbdae08ffe67fcb5ce50b8b143f6e4b0ed42b5353cbd"
+  },
+  "docs/performance/20261116-ai-redesign/failures/ui-second.log": {
+    "bytes": 62850,
+    "sha256": "8629027f6c9cbf24636b235cbfc622973904d682f2edc3ceeac42a802717baf0"
+  },
+  "docs/performance/20261116-ai-redesign/failures/ui-third.log": {
+    "bytes": 12696,
+    "sha256": "60df91b931417253844fb6c8c9a6d5a7adf22b9eb791a4b3158cc3aa0ae6db98"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/comparison.json": {
+    "bytes": 151,
+    "sha256": "7fce7e0e6989615e1b439b20c3e35bf1eab145bbdf17af9f2092da22e96780d9"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/gui-expanded.png": {
+    "bytes": 91958,
+    "sha256": "44df7ae6afb9e81aa4400edb6eefa57d9d7328849b8ba527679aafc9e7b9e685"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/gui-frames.json": {
+    "bytes": 984,
+    "sha256": "8ab649b0b9c41a9e30f6d5a671f18dc5a09108e29ac7d57d89960dfed10ff394"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/gui-loaded.png": {
+    "bytes": 130962,
+    "sha256": "569e9f8497718892750896325979892425a18ec672648c898edb4e8ffcb7d510"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/gui-zoom-100.png": {
+    "bytes": 91958,
+    "sha256": "44df7ae6afb9e81aa4400edb6eefa57d9d7328849b8ba527679aafc9e7b9e685"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/gui-zoom-125.png": {
+    "bytes": 89245,
+    "sha256": "fe4379a45ce3c3b62bcb3841966605f5ffddbe550a27ba19c4f1867dab770cef"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/gui-zoom-150.png": {
+    "bytes": 88023,
+    "sha256": "28d04f4861414e32dc29df9dc46841a5c4ed98527262a5bd6399bf1778e80030"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/gui-zoom-85.png": {
+    "bytes": 97984,
+    "sha256": "a6d54ef74ed00718016a061d9c5f4744c9978faaaa1e6b31de498ab7a0244e79"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/gui.json": {
+    "bytes": 1562,
+    "sha256": "2a546644505092084f86e4916df7341de67eb70445ce904d505c9edf25fd1bb3"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/native.log": {
+    "bytes": 1816,
+    "sha256": "14ef19d47ef72fa7ceab246242b3b67a0360860f973fc4e86200e6cdd5936849"
+  },
+  "docs/performance/20261116-ai-redesign/native-confirmation/source-hashes.json": {
+    "bytes": 156768,
+    "sha256": "ef8e3c946609a7b6b5172def7a5adace841c0993d76b280faee1d2a716c53c6a"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/environment-during-diagnosis.json": {
+    "bytes": 1158,
+    "sha256": "13e741cdb26ec33091352bf5b7e39f0889ec55747e10e714025a1fb538cabb01"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/gui-expanded.png": {
+    "bytes": 91958,
+    "sha256": "44df7ae6afb9e81aa4400edb6eefa57d9d7328849b8ba527679aafc9e7b9e685"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/gui-frames.json": {
+    "bytes": 1003,
+    "sha256": "bf4a1d5e383a5d7748caeeb56880e3eaf57b11be9148a6548bc329c739fed826"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/gui-loaded.png": {
+    "bytes": 130962,
+    "sha256": "569e9f8497718892750896325979892425a18ec672648c898edb4e8ffcb7d510"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/gui-zoom-100.png": {
+    "bytes": 91958,
+    "sha256": "44df7ae6afb9e81aa4400edb6eefa57d9d7328849b8ba527679aafc9e7b9e685"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/gui-zoom-125.png": {
+    "bytes": 89245,
+    "sha256": "fe4379a45ce3c3b62bcb3841966605f5ffddbe550a27ba19c4f1867dab770cef"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/gui-zoom-150.png": {
+    "bytes": 88023,
+    "sha256": "28d04f4861414e32dc29df9dc46841a5c4ed98527262a5bd6399bf1778e80030"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/gui-zoom-85.png": {
+    "bytes": 97984,
+    "sha256": "a6d54ef74ed00718016a061d9c5f4744c9978faaaa1e6b31de498ab7a0244e79"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/gui.json": {
+    "bytes": 1581,
+    "sha256": "2286b5e2d72f84520d63a1ba84adf71241b82c6a24c8086ad00ee5393bbd382c"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/native.log": {
+    "bytes": 3151,
+    "sha256": "a84fd60a1062a0370a0f55da2987cda9fb293c60c01196bbc5af873799c6b916"
+  },
+  "docs/performance/20261116-ai-redesign/native-foundation-first/source-hashes.json": {
+    "bytes": 156768,
+    "sha256": "b46f929fedcde61493645535c7d5ae963fe4745ffaf81f1b68a873bbd059aafb"
+  },
+  "docs/performance/20261116-ai-redesign/native-interaction/gui.json": {
+    "bytes": 1360,
+    "sha256": "4baaa2df7b258145c7ed53ccd2aaf2e0594d3554053836a919784a288734762b"
+  },
+  "docs/performance/20261116-ai-redesign/native-interaction/gui.png": {
+    "bytes": 27082,
+    "sha256": "9e2bd65d2f68355c7ccfd44b9c17d52914a93d1758225c2049f98eff560a8058"
+  },
+  "docs/performance/20261116-ai-redesign/native-interaction/native.log": {
+    "bytes": 1913,
+    "sha256": "7a712a06f95084a1204e59dbf390d99ab1bf304c79072867be67c56a6920b7e1"
+  },
+  "docs/performance/20261116-ai-redesign/native-interaction/source-hashes.json": {
+    "bytes": 156768,
+    "sha256": "674aa04c6025696dbee483ce82cbc21bfa0df5c0032d3558b45ac5650de30345"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/comparison.json": {
+    "bytes": 206,
+    "sha256": "beb03fd51ca45743d8dad364c3e1afbcedefa4ad5dcf2d1ad77d4eb262a04a78"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/cpu-summary.json": {
+    "bytes": 19160,
+    "sha256": "b3caa6c0361bc2bfd5bf48f83f6d00f15b02ece2574b94fdb8b3bbaf363dc468"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/gui-editor-cpu.json": {
+    "bytes": 50883320,
+    "sha256": "7a1d46c2eb1a45b8df644a49d5ced2b41b43187825b69b49456e6dceacade1e5"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/gui-expanded.png": {
+    "bytes": 92082,
+    "sha256": "822c8aac77f3d52ceff4e456ad311a27042fcdefb11da1750861661848116fc4"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/gui-frames.json": {
+    "bytes": 984,
+    "sha256": "0ec9d5cc34fa74784319efddde1b6515e1c2b80d75d4409dd654049696a50177"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/gui-loaded.png": {
+    "bytes": 130962,
+    "sha256": "569e9f8497718892750896325979892425a18ec672648c898edb4e8ffcb7d510"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/gui-zoom-100.png": {
+    "bytes": 91958,
+    "sha256": "44df7ae6afb9e81aa4400edb6eefa57d9d7328849b8ba527679aafc9e7b9e685"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/gui-zoom-125.png": {
+    "bytes": 89245,
+    "sha256": "fe4379a45ce3c3b62bcb3841966605f5ffddbe550a27ba19c4f1867dab770cef"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/gui-zoom-150.png": {
+    "bytes": 88023,
+    "sha256": "28d04f4861414e32dc29df9dc46841a5c4ed98527262a5bd6399bf1778e80030"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/gui-zoom-85.png": {
+    "bytes": 97984,
+    "sha256": "a6d54ef74ed00718016a061d9c5f4744c9978faaaa1e6b31de498ab7a0244e79"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/gui.json": {
+    "bytes": 1561,
+    "sha256": "bbd8cc712faa69faf28875d108ec1ec5123e76188e4c808a21f459e6f816d706"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/native.log": {
+    "bytes": 1816,
+    "sha256": "1264a6f1de25929326572c1f13415461d2330afa9c32334d4b3c23dea5303123"
+  },
+  "docs/performance/20261116-ai-redesign/native-trace/source-hashes.json": {
+    "bytes": 156768,
+    "sha256": "17bc799eaa4102a0189ac738f536a5c586d39939cec655ad51b2a00ab26532fb"
+  },
+  "docs/performance/20261116-ai-redesign/package/ai-smoke.txt": {
+    "bytes": 104,
+    "sha256": "7343672bc43908962de00b81b45620e0ac5d9c0c2810500bf7f5be6f92ca49e5"
+  },
+  "docs/performance/20261116-ai-redesign/package/artifact-files.json": {
+    "bytes": 58630,
+    "sha256": "f8ae8224a23e181a07e34f2fafbd1558810579cdea61de34848d28a489727698"
+  },
+  "docs/performance/20261116-ai-redesign/package/artifact-summary.json": {
+    "bytes": 1507,
+    "sha256": "d797d0d579ed9f5ea0458e3a058aa7cf155fba9c6a128d2dfb505ec04aae19f3"
+  },
+  "docs/performance/20261116-ai-redesign/package/artifact.txt": {
+    "bytes": 1656,
+    "sha256": "f4ad00106524fa2c8460ac72fea5632dd196baf8cf535482417fc81fdc877061"
+  },
+  "docs/performance/20261116-ai-redesign/package/build-info.json": {
+    "bytes": 801,
+    "sha256": "b99759e967c73a4ea63f853821bc64652cd5eaeb8b4d3b25a3a8e86164b8ab51"
+  },
+  "docs/performance/20261116-ai-redesign/package/build.log": {
+    "bytes": 1631,
+    "sha256": "06e75e4fd56e9716cc74e64457846b84b224a25d8b45b6bbadd090720430385f"
+  },
+  "docs/performance/20261116-ai-redesign/package/check-package.ps1": {
+    "bytes": 2160,
+    "sha256": "18e1013630333a2372750b4d2b0455b69071d126a7537f2df865c7e31fa08232"
+  },
+  "docs/performance/20261116-ai-redesign/package/ide-smoke.txt": {
+    "bytes": 2171,
+    "sha256": "514a32721e3957976fbc0faf489b91cb84f5ca0a45d6f926e2282300f480c677"
+  },
+  "docs/performance/20261116-ai-redesign/package/linux-version.txt": {
+    "bytes": 8,
+    "sha256": "ea4d15b2c52b1584707597a352d932aff8557c648469f6271b07edc3da3bff14"
+  },
+  "docs/performance/20261116-ai-redesign/package/native-accessibility.ps1": {
+    "bytes": 2921,
+    "sha256": "936fbaa9ec625ff41d743afa26b6b34ca2548dc7d96d7c5c1b35d50a5bdc0302"
+  },
+  "docs/performance/20261116-ai-redesign/package/post-build-source-check.json": {
+    "bytes": 238,
+    "sha256": "43f4b6a61c7c2b02acea9706e006946c3423a83bd7a52486f70ccd3d65b449bd"
+  },
+  "docs/performance/20261116-ai-redesign/package/release-native.txt": {
+    "bytes": 393,
+    "sha256": "94ecd6fd7457157c95fa18f7652d423e72db92ebf1316d54a851a9b3b8802fc2"
+  },
+  "docs/performance/20261116-ai-redesign/package/release-startup-ui.txt": {
+    "bytes": 1033,
+    "sha256": "4b70edcc8d8879d8172e28ec8685dbd08d7b79ea711ee6e18839ec105a2cb3c8"
+  },
+  "docs/performance/20261116-ai-redesign/package/signatures.txt": {
+    "bytes": 203,
+    "sha256": "748f3d55e44756b313d1604668015822ccd79e4ad3fa193454e53d01baedfc68"
+  },
+  "docs/performance/20261116-ai-redesign/package/source-hashes.json": {
+    "bytes": 234861,
+    "sha256": "32fe43ec6186011487e0431571d6a25c0aa1c0a3dd1c2d9987c5562ce65ecc83"
+  },
+  "docs/performance/20261116-ai-redesign/package/verification.log": {
+    "bytes": 1137,
+    "sha256": "a1c88c10f439c4d03c9b6051101b4bf11464509b921a6a53388ea56196c2d23d"
+  },
+  "docs/performance/20261116-ai-redesign/package/verify-artifact.ps1": {
+    "bytes": 4266,
+    "sha256": "77eea82d3700dbe6d284ffbaa6cf11942fb02e7892987cd786a3c55108f45a2c"
+  },
+  "docs/performance/20261116-ai-redesign/package/verify-launcher.ps1": {
+    "bytes": 5662,
+    "sha256": "9c3c86cd3c7dcc5e5399beaeddad49aca8de6f731e223769549947b39bcbc820"
+  },
+  "docs/performance/20261116-ai-redesign/package/verify-signatures.dart": {
+    "bytes": 1051,
+    "sha256": "b8874066484085cf06369d1aad4b116b9914c9d3eafbff4b759362f368d279f4"
+  },
+  "docs/performance/20261116-ai-redesign/package/zip.sha256": {
+    "bytes": 97,
+    "sha256": "8b057133ec8e8101befd3faa4d7c669737896f28e85180ef752b0b67359c98a7"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/ai-attachments-mobile.png": {
+    "bytes": 61959,
+    "sha256": "4c0c8bb6e9e5e97f453273ea99259eb25ed49b45fa29aac0cb101c1a1b8247ce"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/ai-child-sidebar.png": {
+    "bytes": 21806,
+    "sha256": "d5c4c1c33df3f193397ca69f2efbd542fded0fdef2a2157c045a5b237cb4b8ff"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/ai-plan-completed-sidebar.png": {
+    "bytes": 51922,
+    "sha256": "f07e79732d3b8eeeed8b8b267fe044fed5eddad2395b7735d29a2d75f41eb1d9"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/ai-runtime-desktop.png": {
+    "bytes": 60362,
+    "sha256": "37d034f829d8cb890dc92eb24523c1d2bcadec440bef7dd36106be353df5dba1"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/ai-runtime-mobile.png": {
+    "bytes": 55654,
+    "sha256": "3ee9be3cc84317d6297a2ba189d4477c9b7f9137ac722764291c45812b2df20f"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/ai-work-light-sidebar.png": {
+    "bytes": 16169,
+    "sha256": "d8ef952d3044c979950c4124d05a958a161d147cf608403915ed04747c76ecce"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/ai-working-agents-desktop.png": {
+    "bytes": 16255,
+    "sha256": "7372e9a5a836c743f4d100bd9d3673726db4e729d3a36cfee15f0e0690091a61"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/ai-working-shell-mobile.png": {
+    "bytes": 56016,
+    "sha256": "f8a7bb2417a7cbd61ee26019fce54cca4e5dea0df6e337f60a0317932ecd297a"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/conversation-1200-dark.png": {
+    "bytes": 41960,
+    "sha256": "42af6f93b6b7bb129d73106256e89a68b82aabce1e736eb981dbf0b7a34389e6"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/conversation-1200-light.png": {
+    "bytes": 41223,
+    "sha256": "a25a63cb844d36d45dd84d45fc7c5c710fe76d2dafccb11fe7ac281256bbf38a"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/conversation-280x600-dark.png": {
+    "bytes": 33289,
+    "sha256": "a25c46f7c4aed3c29fd4e0f4dbbe4bdb5a5b367e9fb3fe2655ecdb0b51e42f82"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/conversation-320x480-dark.png": {
+    "bytes": 28419,
+    "sha256": "1d1f781eb03af299a4a69ced3596a075a62b0a950269eda6c2eb6adb1375e4c6"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/conversation-360-dark.png": {
+    "bytes": 43940,
+    "sha256": "f49b61692bc956dad02011e9d91c0097caf3e637b77e2ba14c5466a437f09bcf"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/conversation-360-light.png": {
+    "bytes": 43097,
+    "sha256": "5c2112affefdc0b62ec52d018953893554bad0e6359fc2902b704445ac160641"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/conversation-420x240-dark.png": {
+    "bytes": 15176,
+    "sha256": "d89873e2becf751c5fefbb8a339ca4c81b6941bd002fd1e7b24cdd4aaaa0783f"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/conversation-narrow-dark.png": {
+    "bytes": 51827,
+    "sha256": "08b5d5f4fd0b6fce0f5e9bccfd0ad45df73ee44d6e62dfeffa778c4b5f227323"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/inbox-running-360-dark.png": {
+    "bytes": 45016,
+    "sha256": "d272647f2ab1e2f293868236fe6ff55db6e9ffd30db00acaafdef857fec4d6d9"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/model-picker-short.png": {
+    "bytes": 18062,
+    "sha256": "89777f742f180ba0d06a1b015c3dfce805aeddba668427bf08d4b20d7ac58b31"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/project-agents-1280-dark.png": {
+    "bytes": 58196,
+    "sha256": "857cbb8a9d53ff5f288ce3ad689c131a538fa35f6f756b69a4d11bf3f39a9c3e"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/project-agents-1280-light.png": {
+    "bytes": 58467,
+    "sha256": "955bf008237863e0457420c89d027cfc17375842778687702219979d91b1581c"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/project-agents-360-dark.png": {
+    "bytes": 45522,
+    "sha256": "bb5d515f4eb986eb64ae7a9d9783c6ad1d49b4f1f93dec687f8a3cb0cd69f022"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/project-agents-360-light.png": {
+    "bytes": 45611,
+    "sha256": "c29658c7afe407eed96deb129e3f6b02c406d72e97047450d7f6f89155b34846"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/project-tools-1280-dark.png": {
+    "bytes": 59002,
+    "sha256": "18c6bc23361a29911dd6eefa2ae492a14ffbbc4832e23cc30731788ed158b2de"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/project-tools-1280-light.png": {
+    "bytes": 59262,
+    "sha256": "d76b4e40dbbac6a79ca3eaa5de59675c508b52baebd790c51791537c4d80a069"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/project-tools-360-dark.png": {
+    "bytes": 46057,
+    "sha256": "f640732fc31c85665a624c7d1ce183a0c2e0a51906cd451bdb1b0d8c80c4c1c0"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/project-tools-360-light.png": {
+    "bytes": 46165,
+    "sha256": "5a183b02217d3cd3b8c6ee2108aaeee1bd9a2a0df18575fafb2a9a4853874ad8"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/question-retry.png": {
+    "bytes": 35685,
+    "sha256": "fd0ce80ab389df6340e240a333070048d366e933b67ded278554d0fbbfdf8266"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/send-options-1200-dark.png": {
+    "bytes": 78466,
+    "sha256": "6f5211b68aed63205adf77b37faa4e712946a997ce55050b0f7aca0f6b03c488"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/send-options-1200-light.png": {
+    "bytes": 77315,
+    "sha256": "0d4473e75256cfd9805f452e289b1540dbf119ce2fdebd02baf28348be3ef577"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/send-options-360-dark.png": {
+    "bytes": 47531,
+    "sha256": "14947aab04ada6fb6d0da5e02bcbddf77d1a454eb72d407be5f5d324ae44330d"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/send-options-360-light.png": {
+    "bytes": 45978,
+    "sha256": "6ddc3b3b8b0429682e9f1073b0aba4fdc96ad7fb634e828cf358a61b8b48361e"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-connection-1100-dark.png": {
+    "bytes": 51819,
+    "sha256": "a4131c13dacd9598b245de3519f66d429e6f5e6f1df73bd0fb4468fd6632347b"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-connection-1100-light.png": {
+    "bytes": 52638,
+    "sha256": "d72db78a966cb6231fa0456216d2e173f197409216c70fd216c1f069a6bb4f14"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-connection-390-dark.png": {
+    "bytes": 36228,
+    "sha256": "e43bbed66fc3ecf839267fbe2a8ddaaac3ac3cdba0ce669c34b4cabd30512680"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-connection-390-light.png": {
+    "bytes": 37132,
+    "sha256": "fa09e1b4bbde91db2c5b18d1f02ce4af2abb8f1ed8bf65a91ea2dad346bae7ad"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-defaults-1100-dark.png": {
+    "bytes": 72720,
+    "sha256": "203e035c6d9035717420f4ca68bc8b457f1901e1473ba5c5e448db9195c144b4"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-defaults-1100-light.png": {
+    "bytes": 73277,
+    "sha256": "b33eb609477042218d72e4e123f9663b12bc4107ed4a5882895f6b5614b20e1a"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-defaults-390-dark.png": {
+    "bytes": 50507,
+    "sha256": "f2db76318b46a854725a6db022c6106a3b1b61ae6a6fe50c402643f35403b5fc"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-defaults-390-light.png": {
+    "bytes": 51263,
+    "sha256": "b067d0d1637fddc4a9f741976c6076cac5203d97a24c032ff2cf93bf168fec88"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-execution-1100-dark.png": {
+    "bytes": 67146,
+    "sha256": "2a9ff90855be462af6e12990189cbfdf9a83116b6266092dc0cc2e0ba2b2f1dd"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-execution-1100-light.png": {
+    "bytes": 67903,
+    "sha256": "74e0b0a6f6ffd601cc2cfcc58c53c2ca7359eb4ebc08da246fe87c2b71f817d3"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-execution-390-dark.png": {
+    "bytes": 50393,
+    "sha256": "37a1e3515527bc05710a0c150f1e7b40827b10d582728a8cedb23e4081b42d04"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-execution-390-light.png": {
+    "bytes": 51188,
+    "sha256": "1b9955c7e872877d017381d53a2103517627da03d96d15e0d489a36edb6928ef"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-models-1100-dark.png": {
+    "bytes": 55760,
+    "sha256": "cd5cb84862536b21005fb525ae51f8216c66ca52f3d36afa7665674457587b1f"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-models-1100-light.png": {
+    "bytes": 55915,
+    "sha256": "4a50646b51642b6010908b795cc6ea9dcce765103a3c992a9a1650cd239d5964"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-models-390-dark.png": {
+    "bytes": 36604,
+    "sha256": "8f175e42de79844946436439be99fdcaadc92910a2910ca3c7a783ff508696de"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-models-390-light.png": {
+    "bytes": 37308,
+    "sha256": "0775c2743448c6a4aafc9d842cb780f103fa8872035c788daa7fb10de2023b09"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-overview-1100-dark.png": {
+    "bytes": 64790,
+    "sha256": "38f1ab79f768c2133a676900ce803682b9b4f7e1e3e1d50da40da1fa96521a30"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-overview-1100-light.png": {
+    "bytes": 64602,
+    "sha256": "6289fe808fc8a1d4f9850b2d3d6c6ea21bee1f24cc680d2b1c7d1fa1bc71503f"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-overview-390-dark.png": {
+    "bytes": 43574,
+    "sha256": "23551b90b1e9e422d65f58c6fc0eeb0d6c05b61dd3391560bbfe020d84a83151"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/settings-overview-390-light.png": {
+    "bytes": 44225,
+    "sha256": "d7d4e5518b270e23680ca5f57914574b05c0fbb4366ab6efb8ec6519d83bcd31"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/tasks-1200-dark.png": {
+    "bytes": 20621,
+    "sha256": "051552603b2d3beea46d17beed4e9db397aafc5e59afa1d6ef58a1c206f0969e"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/tasks-1200-light.png": {
+    "bytes": 20690,
+    "sha256": "ade2d4912d83b9f66ee3674d6775b398711736b406fa9f0aff53166c7953ae13"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/tasks-360-dark.png": {
+    "bytes": 20726,
+    "sha256": "aba20e8b43d7c5924618789784d6044579d8bc9052a9a62473de74f7c3608a3f"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/tasks-360-light.png": {
+    "bytes": 20689,
+    "sha256": "71d414acbf48c7525ce56b9412e23e82bfc081c25c446ebc83c47497816ff5ff"
+  },
+  "docs/performance/20261116-ai-redesign/screenshots/tool-pdf-preview-390.png": {
+    "bytes": 16480,
+    "sha256": "8df5bf6df220c22b915379dd30f02b21a6449e376c9c5f33c3b881a09390e2e9"
+  },
+  "docs/performance/20261116-implementation/ai-editor-context-after.txt": {
+    "bytes": 6743,
+    "sha256": "b0ee9b3b6ab151841e5d589e7cdd33cbc92f58c294c7ba690a9fb786f8181cf8"
+  },
+  "docs/performance/20261116-implementation/ai-editor-context-before.txt": {
+    "bytes": 3922,
+    "sha256": "da05f420d159957a4113352792d852be486fd29274948977a5159028ef824168"
+  },
+  "docs/performance/20261116-implementation/analyze-editor-context.txt": {
+    "bytes": 6104,
+    "sha256": "f9710ee1e5d07324bc4a08f4e4fbf1ef37d1f3a82edd8e00e98fbc9af62aac68"
+  },
+  "docs/performance/20261116-implementation/analyze-final.txt": {
+    "bytes": 35094,
+    "sha256": "34fd46d0db863503a65ab8b4806a033e91d30b26a2803a594e6bc9126843ea40"
+  },
+  "docs/performance/20261116-implementation/flutter-delivery-all.txt": {
+    "bytes": 89309,
+    "sha256": "3d6582c4b13100e39e4bfed50478185ee3ff156ce3ea00fe64a403299832705c"
+  },
+  "docs/performance/20261116-implementation/flutter-delivery-analyze.txt": {
+    "bytes": 37565,
+    "sha256": "8170773e2a4a70332056a2224f1f0f48a27779181450950ecca26c12d0838241"
+  },
+  "docs/performance/20261116-implementation/flutter-final-all.txt": {
+    "bytes": 87245,
+    "sha256": "832520029d7d7fb5f48cff9b8f4e1fe1dc7b4eb198a6171922cbaaf4d71161e7"
+  },
+  "docs/performance/20261116-implementation/go-final-race.txt": {
+    "bytes": 176,
+    "sha256": "e23d6339c83547608cab8d133b7c8030ace4423a5df0ca2f4629ed5658373631"
+  },
+  "docs/performance/20261116-implementation/go-storage-ai-windows.txt": {
+    "bytes": 34,
+    "sha256": "42ccef70e0f9df94ab039394429bb2865ff85130d581689bcff9a00446efb76b"
+  },
+  "docs/performance/20261116-implementation/go-storage-final-linux.txt": {
+    "bytes": 1385,
+    "sha256": "64645ba0d1e0d45dcf48bef5c756c3841f35413c3a2998e833a72566a8a3fee5"
+  },
+  "docs/performance/20261116-implementation/go-storage-final-race.txt": {
+    "bytes": 105,
+    "sha256": "d0eb95746b58a899e106508c7cd7901f6e48b2b37ef9dd20ee9ecc1ab25a90c4"
+  },
+  "docs/performance/20261116-implementation/go-storage-final-windows.txt": {
+    "bytes": 1444,
+    "sha256": "de52a74bfb10dc7b126685414c96a091f6a5c70db7213e7233d5a5db78650747"
+  },
+  "docs/performance/20261116-implementation/go-storage-linux-gate-fixture-failure.txt": {
+    "bytes": 4773,
+    "sha256": "143a0ba1247e44472e4c9cfc7c8a98fa869806d94804853e2283f71a6f2eddad"
+  },
+  "docs/performance/20261116-implementation/native-cpu-diagnostic-sources.json": {
+    "bytes": 143071,
+    "sha256": "899f3cf8eabd615ca3287528b9a8438bb4eddd9acf699b0a7a014a42c98768f5"
+  },
+  "docs/performance/20261116-implementation/native-cpu-diagnostic.json": {
+    "bytes": 1504,
+    "sha256": "425275c83fc6710edb58df4262bc858bb9c04191a68f51fc39b89179b55e4295"
+  },
+  "docs/performance/20261116-implementation/native-cpu-diagnostic.txt": {
+    "bytes": 1816,
+    "sha256": "0b50b3fe30112c58cfee92934f4064d8cbfb3c72c0f8b993b24a48e86600d2d5"
+  },
+  "docs/performance/20261116-implementation/native-cpu-summary.json": {
+    "bytes": 7231,
+    "sha256": "f9c085f97dcdd2bbb10f56d27f75bd447a797eeee25990d62b7cbd53e007f029"
+  },
+  "docs/performance/20261116-implementation/native-editor-cpu.json.gz": {
+    "bytes": 1891374,
+    "sha256": "75769928c2c70a95c42ca2174cc22debaee46a4ceaa2fc71390da1388b51c414"
+  },
+  "docs/performance/20261116-implementation/native-final-expanded.png": {
+    "bytes": 91958,
+    "sha256": "44df7ae6afb9e81aa4400edb6eefa57d9d7328849b8ba527679aafc9e7b9e685"
+  },
+  "docs/performance/20261116-implementation/native-final-frames.json": {
+    "bytes": 985,
+    "sha256": "fec6dde632af646c9e07799e6b825b515ee7d2ff4c92f09977c6fe39eab260fb"
+  },
+  "docs/performance/20261116-implementation/native-final-loaded.png": {
+    "bytes": 136275,
+    "sha256": "99b2543efbe7d50e255ed9d7cff3855fc97bea62e369d6b57a92d58d5624be45"
+  },
+  "docs/performance/20261116-implementation/native-final-sources.json": {
+    "bytes": 156122,
+    "sha256": "4d7b55a818919b8fad6c6c0b41876089238b3809696416767f00ef7ac61463d1"
+  },
+  "docs/performance/20261116-implementation/native-final-zoom-100.png": {
+    "bytes": 91958,
+    "sha256": "44df7ae6afb9e81aa4400edb6eefa57d9d7328849b8ba527679aafc9e7b9e685"
+  },
+  "docs/performance/20261116-implementation/native-final-zoom-125.png": {
+    "bytes": 89245,
+    "sha256": "fe4379a45ce3c3b62bcb3841966605f5ffddbe550a27ba19c4f1867dab770cef"
+  },
+  "docs/performance/20261116-implementation/native-final-zoom-150.png": {
+    "bytes": 88023,
+    "sha256": "28d04f4861414e32dc29df9dc46841a5c4ed98527262a5bd6399bf1778e80030"
+  },
+  "docs/performance/20261116-implementation/native-final-zoom-85.png": {
+    "bytes": 97984,
+    "sha256": "a6d54ef74ed00718016a061d9c5f4744c9978faaaa1e6b31de498ab7a0244e79"
+  },
+  "docs/performance/20261116-implementation/native-final.json": {
+    "bytes": 1563,
+    "sha256": "09e8f91fdb387aca94dc5ef5534d0357ae80cd79632f16bcfdd17c77b94f07be"
+  },
+  "docs/performance/20261116-implementation/native-final.txt": {
+    "bytes": 1816,
+    "sha256": "388bb00ec15546440e81fd30e29016dd43a7c58bae8e40c7af9985e5ef4d6edb"
+  },
+  "docs/performance/20261116-implementation/native-first-failure-sources.json": {
+    "bytes": 143071,
+    "sha256": "00631a91df3a18aa13d1819f10d34801f20f3a61946d74bc04a9a04ef12814b4"
+  },
+  "docs/performance/20261116-implementation/native-first-failure.json": {
+    "bytes": 1505,
+    "sha256": "a8c9e2c956ada39786ea9ee58cff90870661bf60d0187105a0b8ef4e7aea8ccc"
+  },
+  "docs/performance/20261116-implementation/native-first-failure.txt": {
+    "bytes": 3147,
+    "sha256": "6ddafad045e50adeeac3545c83a6841be55ac9064b1a5ea90a447bba4741db01"
+  },
+  "docs/performance/20261116-implementation/package-aurora_install.txt": {
+    "bytes": 5590,
+    "sha256": "772694e600f52596d1d5846af206994d92619503714100b01ada1fb7499e2b55"
+  },
+  "docs/performance/20261116-implementation/package-aurora_profile.txt": {
+    "bytes": 4452,
+    "sha256": "e2019ff5bcbed8362cd276f88f6e5a547ad73d8aa76019beee2104854037ea67"
+  },
+  "docs/performance/20261116-implementation/package-aurora_sub.txt": {
+    "bytes": 3316,
+    "sha256": "38cd61c9996e507fc4473e1e4aebb0370e76a0dd11c2bb32a514219091dd672e"
+  },
+  "docs/performance/20261116-implementation/package-aurora_wire.txt": {
+    "bytes": 6034,
+    "sha256": "760191473bbbe93f28b97791d12807c0d2b9d5f6e8d0ebb8b8d83481464c915b"
+  },
+  "docs/performance/20261116-implementation/README.md": {
+    "bytes": 2331,
+    "sha256": "84ebf572f9230b799b563a04e3ce24cfb5304f16a647058a4b29a0caab7bb16e"
+  },
+  "docs/performance/20261116-implementation/session-final-benchmark.txt": {
+    "bytes": 826,
+    "sha256": "9d5c9623cdf1ef0ddccd4c82dd00c95b79e41304b3f242e34663f66ad0c52e39"
+  },
+  "docs/performance/20261116-implementation/ui-delivery-contract.txt": {
+    "bytes": 45,
+    "sha256": "04f57fecfd79b6d22533b914d2126c1d3fdd0024f2c080b8bad8f455fd384f4c"
+  },
+  "docs/performance/20261116-implementation/validation.json": {
+    "bytes": 2513,
+    "sha256": "a167f7ceadff5f9b5586b7f7a7b3c9f560786b28f5867a43b0d3b70536f2ade4"
+  },
+  "docs/performance/20261116-package-ide-preview1/artifact-check.txt": {
+    "bytes": 2067,
+    "sha256": "b1acb51863212116702a223d8953bd260af759a08d87d082eee203e5befc9997"
+  },
+  "docs/performance/20261116-package-ide-preview1/artifact-files.json": {
+    "bytes": 21292,
+    "sha256": "edbd414b1c5cbefb90133425e7a1d234a5276e444cb407dda71ef1b010f068ad"
+  },
+  "docs/performance/20261116-package-ide-preview1/artifact-summary.json": {
+    "bytes": 1047,
+    "sha256": "d1d0104e3ec62f24c0263cddbf7ce4fa3e8af4ad311ee9bef0b5237b76e59496"
+  },
+  "docs/performance/20261116-package-ide-preview1/BUILD-INFO.json": {
+    "bytes": 2038,
+    "sha256": "b67c403f7ab8164c1cb4115ac62d3e5583e754e852b913a6567dacd2577a616b"
+  },
+  "docs/performance/20261116-package-ide-preview1/build.txt": {
+    "bytes": 1348,
+    "sha256": "1b14bd4212ebf5a261580e2ea9339213726e95de92396fc6a3108e0c27eca2de"
+  },
+  "docs/performance/20261116-package-ide-preview1/final-checks.txt": {
+    "bytes": 5249,
+    "sha256": "70785392a4f9d7c427173ac6330a038d6c48c5a3959900c9d3c78f79d21ad72c"
+  },
+  "docs/performance/20261116-package-ide-preview1/go-signatures-linux-version.txt": {
+    "bytes": 1702,
+    "sha256": "34c9bd4e75c8a9a153d22045811b09518711b45f8c4b03e7307184cd533f510e"
+  },
+  "docs/performance/20261116-package-ide-preview1/ide-smoke-analyze.txt": {
+    "bytes": 53,
+    "sha256": "9e11b76b4a0baf673e7120d8c449bbf291e50a77503e8c6f90c6b236a1dd1421"
+  },
+  "docs/performance/20261116-package-ide-preview1/local-agent-smoke-final.txt": {
+    "bytes": 1560,
+    "sha256": "aaa0115d64a615dc63b5ea9843cc1f87783e1d45a26ce67ef045aca9f95b36fa"
+  },
+  "docs/performance/20261116-package-ide-preview1/packaged-agent-smokes.txt": {
+    "bytes": 1892,
+    "sha256": "ff9154807a60f069e750020db7c197072033304e3f86565144492f0bd24a8468"
+  },
+  "docs/performance/20261116-package-ide-preview1/post-build-source-check.json": {
+    "bytes": 558,
+    "sha256": "adacb9a860f38571577337a0b4d3cacda0af14bc5f657a155e981792444f72c4"
+  },
+  "docs/performance/20261116-package-ide-preview1/preflight-final.txt": {
+    "bytes": 2212,
+    "sha256": "37736d5dc46006f06c1d6f4189b58816bf011de8e1e3ac0f8243d701acb182ce"
+  },
+  "docs/performance/20261116-package-ide-preview1/preflight.txt": {
+    "bytes": 2044,
+    "sha256": "fb256fedaeb44f143aa949373b607394f2d1bc36942946f61661d7652f73ebbf"
+  },
+  "docs/performance/20261116-package-ide-preview1/README.md": {
+    "bytes": 2236,
+    "sha256": "e797980b9d8f4341f7a277f0630300b479ddb84dca0beb0be88df79ed9e115db"
+  },
+  "docs/performance/20261116-package-ide-preview1/release-launcher-final.txt": {
+    "bytes": 1127,
+    "sha256": "b3bdf2afb852bc538904df9e3dc52872b323725efcaf6f71cb872fe2f431f69b"
+  },
+  "docs/performance/20261116-package-ide-preview1/release-launcher-isolated.txt": {
+    "bytes": 1267,
+    "sha256": "6850a21ef92d794ee455c71163618831f0e07a9cba98309008ea546313f796a8"
+  },
+  "docs/performance/20261116-package-ide-preview1/release-launcher-msaa.txt": {
+    "bytes": 1269,
+    "sha256": "9e26bca6340603aee0385b98db58faf7dda309e0b10337b36c290656b4147e81"
+  },
+  "docs/performance/20261116-package-ide-preview1/release-startup-ui.txt": {
+    "bytes": 1048,
+    "sha256": "2636e481085472d16a8f6857b996df097647c156da99055fb7b68811ebfe4d72"
+  },
+  "docs/performance/20261116-package-ide-preview1/release-tray-final.txt": {
+    "bytes": 1134,
+    "sha256": "a72bc63e5fec37e2383c57fce60ec14c40c121c96f81cf86f080485559831ab3"
+  },
+  "docs/performance/20261116-package-ide-preview1/release-window-final.txt": {
+    "bytes": 1467,
+    "sha256": "5fe8da103047a6be678b1ddaa61e56db1afae86fe6197a99ec1113036d719cae"
+  },
+  "docs/performance/20261116-package-ide-preview1/release-window.txt": {
+    "bytes": 1439,
+    "sha256": "46e3fa3a13c3b687a2b23504361aa377468257b713353199ac1696add4e8a722"
+  },
+  "docs/performance/20261116-package-ide-preview1/SOURCE-HASHES.json": {
+    "bytes": 209924,
+    "sha256": "499f854c043121b3f2f1cdd90df65d200dcdc34667cea6a4733930302bec3545"
+  },
+  "docs/performance/20261116-release-3.22.0/acceptance.json": {
+    "bytes": 860,
+    "sha256": "136825ffce563bb99e0be60c211d2add02f22422da804af9801186ebf133a961"
+  },
+  "docs/performance/20261116-release-3.22.0/artifact-check.txt": {
+    "bytes": 2525,
+    "sha256": "1c519132256dc69960d208a767791558c5832e15e354d2fbd4038231a8a48bf9"
+  },
+  "docs/performance/20261116-release-3.22.0/artifact-files.json": {
+    "bytes": 25660,
+    "sha256": "6022686ab7359801a01e3674c1b4596aceedffc554ce3bc3de17601faa0db89c"
+  },
+  "docs/performance/20261116-release-3.22.0/artifact-summary.json": {
+    "bytes": 1471,
+    "sha256": "2c398259a62cdaef26d809b5799974d39105f17bacc8d5aaed63152105309116"
+  },
+  "docs/performance/20261116-release-3.22.0/BUILD-INFO.json": {
+    "bytes": 751,
+    "sha256": "c74dcea567bd47410219ca03f2a9b565d4d2491697cef41b73b9eff1d1592fd7"
+  },
+  "docs/performance/20261116-release-3.22.0/build.txt": {
+    "bytes": 1436,
+    "sha256": "0860cc43602b1eba5af368200ec4f4c56ea1fceab4aeeba7e1bc834bcab8032c"
+  },
+  "docs/performance/20261116-release-3.22.0/go-signatures-final.txt": {
+    "bytes": 402,
+    "sha256": "a567ca4061846dfe347d25ef43bbd223e95ffb7a195d2b044dee6b42d25ff50c"
+  },
+  "docs/performance/20261116-release-3.22.0/headless-acceptance.txt": {
+    "bytes": 2346,
+    "sha256": "427ca62c8de68990898eefb90b52423f72c745344b828ad52f1fdd71940234c6"
+  },
+  "docs/performance/20261116-release-3.22.0/headless-passed.json": {
+    "bytes": 157,
+    "sha256": "5a240259ce533323a5e776b210db5e4417218c329064d0cefcc48b1b2c316273"
+  },
+  "docs/performance/20261116-release-3.22.0/native-passed.json": {
+    "bytes": 149,
+    "sha256": "57100cf5b3503cf09ff23ad7d30eb0d4299773821963270ad2c5fd00e10a1869"
+  },
+  "docs/performance/20261116-release-3.22.0/protected-artifacts.json": {
+    "bytes": 482,
+    "sha256": "d6702e644ae7e1e7dcad72435005f998909ad12dd07410644efab9482c4040b0"
+  },
+  "docs/performance/20261116-release-3.22.0/publication-final.txt": {
+    "bytes": 130,
+    "sha256": "2eef3eebd46f9ef88a0b204ae2014670c3f68b1e839e4a789d91d5c16843b0f2"
+  },
+  "docs/performance/20261116-release-3.22.0/publication-output.txt": {
+    "bytes": 259,
+    "sha256": "a32e10fe951c0cac3d0d72f170fbc2f1b7f7dcf272df63ffd0c382d2a1571a1c"
+  },
+  "docs/performance/20261116-release-3.22.0/publication.json": {
+    "bytes": 1602,
+    "sha256": "1171b3471be162f0bffdb72b1125102ed157993123118c6542a2e87e2ca36adf"
+  },
+  "docs/performance/20261116-release-3.22.0/README.md": {
+    "bytes": 1567,
+    "sha256": "f7d4115fedee2d4de458bab44d3b2841978c6b782fdd8b6fc6f2506ad497d3ad"
+  },
+  "docs/performance/20261116-release-3.22.0/release-tray.txt": {
+    "bytes": 1612,
+    "sha256": "9596316c4db13a8170bd3fd2454b6a8143e153922cfe6ba751317e55b276cf50"
+  },
+  "docs/performance/20261116-release-3.22.0/SHA256SUMS.txt": {
+    "bytes": 177,
+    "sha256": "4a05cbb8b334c68920193b1f42f80863ae63b99b17a0b1b861a121eeaede05d3"
+  },
+  "docs/performance/20261116-release-3.22.0/SOURCE-HASHES.json": {
+    "bytes": 213469,
+    "sha256": "e30fb6ad386a33c0f614951d6572733fbfd8a2265dd6cd1ea38cf9846bcee93c"
+  },
+  "docs/performance/20261116-workbench-redesign/environment.json": {
+    "bytes": 1266,
+    "sha256": "ce10850b6637ddbc702feeab8160a87f903ac580befb7cac50a428b81ed24a1d"
+  },
+  "docs/performance/20261116-workbench-redesign/README.md": {
+    "bytes": 1489,
+    "sha256": "1d62984added686f4d16de2df5c836d3320fd2568e8af15a4ccf6654f64fefaf"
+  },
+  "docs/performance/20261116-workbench-redesign/baseline/ai-preservation.json": {
+    "bytes": 2486,
+    "sha256": "a3978d36343788240b21421b528b72afaeb64bf256a563118809e352b8375999"
+  },
+  "docs/performance/20261116-workbench-redesign/baseline/audit-source-consistency.json": {
+    "bytes": 209,
+    "sha256": "c7d25b7a97f3d0dd83d51647036cde49e543c557d82a5a0e77a6777a64ed944b"
+  },
+  "docs/performance/20261116-workbench-redesign/baseline/baseline.json": {
+    "bytes": 184,
+    "sha256": "28e04984f5c1441d6a55889f653417e996b551b7f9207d1438f201160841f97f"
+  },
+  "docs/performance/20261116-workbench-redesign/baseline/hashes.json": {
+    "bytes": 32383,
+    "sha256": "50ca38d80157a1f73693d9a97943720eeebb3a6b79c0edb948929185529db9b3"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/docs-final.log": {
+    "bytes": 107,
+    "sha256": "aaa713ccb389560b3d5e698d8c4152896181cc9e1fad727f496c7b66e30dcaf3"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/docs-postpackage.log": {
+    "bytes": 107,
+    "sha256": "aaa713ccb389560b3d5e698d8c4152896181cc9e1fad727f496c7b66e30dcaf3"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/go-all.log": {
+    "bytes": 1444,
+    "sha256": "9312145b4931d76a62f428752b252c55ca0383b4b65f4972af6cf9427f278b06"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/go-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/go-race-ai2.log": {
+    "bytes": 35,
+    "sha256": "2ef56ecb8d004863b91478b3ba148e90b4a9a4cfb5d68420d04abed94d8fee46"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/go-race.log": {
+    "bytes": 1105,
+    "sha256": "b26d267464d1cd3787a0d400e767ef255a255f39f8f06608d414906fadcdb672"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/go-vet.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/gui-targeted1.log": {
+    "bytes": 5263,
+    "sha256": "cba538fdcc439dfab7b819ac8b553e0b56e050d5c05bd236caa6cfecc4bf421f"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/repair-targeted1.log": {
+    "bytes": 9413,
+    "sha256": "630f6dfd82c61d3fc3f3de765eb22cea04f81962053123dfd2748aa45d05f50d"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/systemd-linux2.log": {
+    "bytes": 442,
+    "sha256": "7d7decfc0363c779c8c199ba9be438f93305568cabf22c3bcfcfd184f7916d6a"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/analyze-final4.log": {
+    "bytes": 44651,
+    "sha256": "4d7314a5b34597d6d31ac2ebea32764bf8ed8ceba500569889c78e5c56eeb502"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/analyze-native-fixture2.log": {
+    "bytes": 57,
+    "sha256": "651166a847153fedcd035cdfdc168091e4223bfaaed74fdeccaad6386344ac80"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/analyze-native-fixture3.log": {
+    "bytes": 57,
+    "sha256": "651166a847153fedcd035cdfdc168091e4223bfaaed74fdeccaad6386344ac80"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/analyze.log": {
+    "bytes": 44972,
+    "sha256": "95e2c34a54f39049afc9d66d9d37ebc3d65b41cb8add6243d6bdd35cafae898a"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/analyze2.log": {
+    "bytes": 44650,
+    "sha256": "3e3f331417ad9126c11215eb43fd71a7dca0bd28009329372755d65b5468d6bf"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/analyze3.log": {
+    "bytes": 44651,
+    "sha256": "302de5baa57aefe456630385d4cf4e923ed94a83cd870bdbd65b8c891fb1f6cd"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/analyze4.log": {
+    "bytes": 44651,
+    "sha256": "bb1db29d76fba73ed6aededf894c143421d26fb97701a370f325b68809357369"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/aurora_install-fixtures.log": {
+    "bytes": 3481,
+    "sha256": "1779fcbae0e6d9258bd10432f37617d1fb189e042241f871667f3d53455c4529"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/aurora_profile-final.log": {
+    "bytes": 4463,
+    "sha256": "11d1ba3cd5d850971565312aa066152c20c4b69ef93e3f2c533f469f8a9a61c9"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/aurora_sub-final3.log": {
+    "bytes": 3478,
+    "sha256": "e4d756bf924080bef983e3e8a50f4e96f25b672503bcfc18cb7752cbfe67e70c"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/aurora_wire-final.log": {
+    "bytes": 70345,
+    "sha256": "38f841d37ecbc30c1a2b3c918f5e0d5394a93bd7c8bc3dda46b1a356d4bd7c69"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/aurora_wire-final2.log": {
+    "bytes": 23146,
+    "sha256": "73c81e55ec6a7a88c645eb0cba80d1136ed49bcedb65fa613ab8d5ec11ed4b9f"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/aurora_wire-final3.log": {
+    "bytes": 4968,
+    "sha256": "1e58e5b508bf61ac4d62b1b187d1d1d91641dead2e85b068283b9f31bdb75084"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/aurora-workbench-build-fixtures.ps1": {
+    "bytes": 1835,
+    "sha256": "687c40a99c612d24cd3b77d92fa89b26d58a4efab4795de6f42cd3a76ccdaae8"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/aurora-workbench-upgrade-keygen.go": {
+    "bytes": 424,
+    "sha256": "fb025b9daf44abeb2299572fbaa6055b70a8a224a50b7370d5757e8b6066d39d"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/fixture-build.log": {
+    "bytes": 341,
+    "sha256": "d07e8bafe3f1590a03c654f7d0a321fdf3a6db3579cbbf532652f605c6037b3d"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/fixture-build2.log": {
+    "bytes": 235,
+    "sha256": "a9cac20d0e985b3a153aa00a8b9a6361ba26ad3157baaef6091cf02f366c390e"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/flutter-all.log": {
+    "bytes": 100964,
+    "sha256": "00484af970f0cc2ac1e858d765853053549c726c53e9ae90591b057b8dbd9bdb"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/flutter-all2.log": {
+    "bytes": 105239,
+    "sha256": "2a5e5dbc1b48d7d260f5bf6502351ae96761dbbfc62ab2d524a75187e87ca8ab"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/flutter-all3.log": {
+    "bytes": 94693,
+    "sha256": "aac1816d39ca5a69d1c7b892878849ac2a966f7f3ee99fe2329adf94a7e94358"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/flutter-all4.log": {
+    "bytes": 88846,
+    "sha256": "dc7b4f18ad074b48b3310c7de8cfffbe5df7dfe98a98bb7b34fd4682ebdd6980"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/gui-workflow-fix8.log": {
+    "bytes": 3508,
+    "sha256": "f6ddd22cbda846929f4c5d5662809839016111a59188d098c6030969804cbff3"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/gui-workflow-repro4.log": {
+    "bytes": 69023,
+    "sha256": "81698a491441fc224225c6536cd6b3dc56f38f183aa4dcf7f7cd54ea9ba9ffc0"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/gui-workflow-repro5.log": {
+    "bytes": 556,
+    "sha256": "12dee824982990e04cb6e706e6f752d7bca0f163e9b91da9369590f74b7df99d"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/gui-workflow-repro6.log": {
+    "bytes": 278,
+    "sha256": "1ff4a7436950cee0bb9a1199b84afb61bd29051a4de585d1b7438fe0ee8ac212"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/gui-workflow-repro7.log": {
+    "bytes": 3334,
+    "sha256": "6e84b6083267dae3b450f02f7842c4fc58213f188ddda0831d5d3427dd9ca993"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/layout-terminal-targeted.log": {
+    "bytes": 5241,
+    "sha256": "1c68ddad4387101e8d16c3a54b2a2a964120ec69e930b4cc57d96c3650c11749"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/proxy-e2e.log": {
+    "bytes": 285,
+    "sha256": "9281a13252bbb2e65b47214e6016b9eaca7862695faf233e36420116266a1b60"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/proxy-e2e2.log": {
+    "bytes": 407,
+    "sha256": "44bc3dd498efc05ba17f2f14fc071000538c2213d76f60eff5de3c7919a62675"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/responsive-header-targeted.log": {
+    "bytes": 5564,
+    "sha256": "b5ceb2e7deefab2ccb78ffdda99be2a9d84a9b2f6283eb00b2e3985a58532242"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/ui-contract-final.log": {
+    "bytes": 45,
+    "sha256": "d964ace362b475644afd8018124c8ed30444adedc7e2de0a6626f2649805ff23"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/ui-contract-final2.log": {
+    "bytes": 45,
+    "sha256": "d964ace362b475644afd8018124c8ed30444adedc7e2de0a6626f2649805ff23"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/ui-contract-final4.log": {
+    "bytes": 45,
+    "sha256": "d964ace362b475644afd8018124c8ed30444adedc7e2de0a6626f2649805ff23"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/ui-contract.log": {
+    "bytes": 45,
+    "sha256": "d964ace362b475644afd8018124c8ed30444adedc7e2de0a6626f2649805ff23"
+  },
+  "docs/performance/20261116-workbench-redesign/checks/client/upgrade-e2e.log": {
+    "bytes": 1293,
+    "sha256": "880dd2cdac98951c18db887337a8fd63c9511769cb276ef06816153996f57831"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/extra4/sheet-01.png": {
+    "bytes": 143336,
+    "sha256": "c96ef2b6408f0a14d6e3728a2f1a016f75761d269ae87b432d1dccfaa4647774"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/extra4/sheet-02.png": {
+    "bytes": 148361,
+    "sha256": "c4cf8a4e69ad37f3b20e26e7710239284359991eba7689d364a2a2e7a1047234"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/extra4/sheet-03.png": {
+    "bytes": 203860,
+    "sha256": "a56c215ffd8849503d35cb412026c206e32f66218d87820be0a3a4b0bbe5166a"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/extra4/sheet-04.png": {
+    "bytes": 129437,
+    "sha256": "ff9d0cd92388b09af5a55b7e0925cec271b9926562e800fc70c3225541c34710"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/extra4/sheet-05.png": {
+    "bytes": 131182,
+    "sha256": "9da8a0f3b4de18ad84412f88c02a40641f819045a06026dae89ef2f017190420"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/extra4/sheet-06.png": {
+    "bytes": 146552,
+    "sha256": "20b02dc133cb9996da1dd2f7880e5189efaedbd2acaeb3df06484a9a3ee018c1"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/extra4/sheet-07.png": {
+    "bytes": 55004,
+    "sha256": "9d56eac15113cd32d76d5e73d1071755da4df3cd8b3d2ae9de2c23e7b62b3335"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/final4/sheet-01.png": {
+    "bytes": 164294,
+    "sha256": "7fe713953f217b02809dfd0c1c962801d26ebb1cb71a555274cde38ee190a801"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/final4/sheet-02.png": {
+    "bytes": 177018,
+    "sha256": "108c7517bd45b747f3895761b7a41343a99c204a7066012c99bd7d24bb69ce21"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/final4/sheet-03.png": {
+    "bytes": 188252,
+    "sha256": "afd8965eb077bc002362b891d66df3de4fe35320acab85d1970662a9150537af"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/final4/sheet-04.png": {
+    "bytes": 302462,
+    "sha256": "83054e9d2e63e4f5a85e0138859dede43d3babc6e4e125f5a07b2fa29196fa62"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/final4/sheet-05.png": {
+    "bytes": 261596,
+    "sha256": "40ca6dbd6b8ba6b8e7686e8341759fc1485d228007b7ddf036f7c5d98ca3768c"
+  },
+  "docs/performance/20261116-workbench-redesign/contact-sheets/final4/sheet-06.png": {
+    "bytes": 155371,
+    "sha256": "a1f557d64fd391eb407ae47bc1f4c20eb3f9e507134a4670add13f3ab10f51b4"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/analyze-gui1.log": {
+    "bytes": 235,
+    "sha256": "aa23367bc7162dbd2d50ea8962b70d2659d2462365d5a0b2f7059ff13910e0ad"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/analyze-gui2.log": {
+    "bytes": 44526,
+    "sha256": "688124ef357b1df69e9e84e7557609aab353531b23de3f93423638b967b7524c"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/go-targeted.log": {
+    "bytes": 235,
+    "sha256": "01b6f07470c615202e68be92500f63f361915329645c032a460c053c1b4338be"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/gui-targeted2.log": {
+    "bytes": 9148,
+    "sha256": "f653c764e0758e5a450c7e89e83940037c63388aa06239c3b995664512ea975a"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/gui-targeted3.log": {
+    "bytes": 21576,
+    "sha256": "d949742d0a81e874b52b7461e1dc72f763b7439cd100f3a3da83a9ca1aed90eb"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/proxy-e2e-first.log": {
+    "bytes": 132,
+    "sha256": "7d289cb5803278ed85acd977f26ac29e42d7581eb0a162460ff850447abda87b"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/repair-repro.log": {
+    "bytes": 69029,
+    "sha256": "be7744af2922d1ee54433abe3b0af59d8aa1ef7850d719db15a15a8127a66d7b"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/repair-repro2.log": {
+    "bytes": 5968,
+    "sha256": "0f16ec4e53d37939ce025eba2051dc0d06a41091b72ec94a1d7b2a004d634614"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/systemd-linux.log": {
+    "bytes": 2814,
+    "sha256": "aabb9dc9437740b939a8b9ec5ab8484f1fcd4d02e3f02b216f6c3d73702c172d"
+  },
+  "docs/performance/20261116-workbench-redesign/failures/ui-contract.log": {
+    "bytes": 557,
+    "sha256": "dc35273066a608a6f9b062b56d3b18f8f629393f06eedf414dd03c3ef0734ef0"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/cmd-aurora3-release-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/cmd-aurora3-release.log": {
+    "bytes": 948,
+    "sha256": "e41b3095c1ba44736e63909ffdc4818bb38b58f2de2692ca0a5218082e0b0b90"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-ai-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-ai.log": {
+    "bytes": 17620,
+    "sha256": "c96ebcd7d4e95289f436db1e8b8bbe2792823f54c4ae698acbc67a9519804444"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-devtools-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-devtools.log": {
+    "bytes": 1659,
+    "sha256": "5d8ae26b37ec95a8a91f6853b096e601e71e90077f70c2ac9ac344e6f789fce2"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-entry-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-entry.log": {
+    "bytes": 1580,
+    "sha256": "2007a86d5cd86342ede71276e5334a8a0126bba663a5a13cb872b9d24f65279a"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-files-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-files.log": {
+    "bytes": 4550,
+    "sha256": "50b72ea8f9f035b6169b0fca316afd39e14ef4644db7ffddb5fa612bfbecbbb8"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-filetxn-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-filetxn.log": {
+    "bytes": 2070,
+    "sha256": "f046dcae042e385e53fd11b85435bebab5affcb122fd0df0e32397971ba99acb"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-git-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-git.log": {
+    "bytes": 788,
+    "sha256": "54bd6342882eb8f684c472dcb1d84fd03b1140f7c04957088f34a27a01e8f947"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-install-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-install.log": {
+    "bytes": 8718,
+    "sha256": "16f279fa873b1f36b0da3cf0612c76e750a63e12c83601f61f69227d02f83f4d"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-mcp-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-mcp.log": {
+    "bytes": 440,
+    "sha256": "a8a918fe6fa2f901074b48bc3320d8cd3bd73c9c167f5a448e9c74800e2b3f2f"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-monitor-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-monitor.log": {
+    "bytes": 1296,
+    "sha256": "9b06b1c55558640a3870ce09ec34c0c1c771d23c5d0dcb595332805733ae4089"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-netfwd-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-netfwd.log": {
+    "bytes": 490,
+    "sha256": "bc064498485d593c62efc3db2707c848563dc6fb9f72a2fe534a2f3e0f6ca880"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-netproxy-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-netproxy.log": {
+    "bytes": 3337,
+    "sha256": "45bd0086b94eae19d25b2bafcc647efdd4914850d802d76b8d0fae176adae952"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-p2p-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-p2p.log": {
+    "bytes": 2198,
+    "sha256": "0dcffc90016e0edb070362b8bebe1d09aa08c06b662d16b67754ddb72b3d4ca5"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-paths-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-paths.log": {
+    "bytes": 650,
+    "sha256": "5c07554f1714e56da8c7437d5265596d723fb30263ddcfc12d7c75e4fdaf7e9f"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-proxyroute-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-proxyroute.log": {
+    "bytes": 256,
+    "sha256": "6ccb40607a32b617b7d0567a04c5dad279b26c918209da908c4bd3be018b4f90"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-proxysvc-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-proxysvc.log": {
+    "bytes": 924,
+    "sha256": "319ef0e1ad094d2482e2359c25702c6e689b1e66dec9371e0759f20f6931ae4d"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-service-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-service.log": {
+    "bytes": 918,
+    "sha256": "cf1af0045c494e6565ba70004ec8eb581624fc028ec0132e2b206699574b160d"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-systemd-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-systemd.log": {
+    "bytes": 442,
+    "sha256": "7d7decfc0363c779c8c199ba9be438f93305568cabf22c3bcfcfd184f7916d6a"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-terminal-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-terminal.log": {
+    "bytes": 1687,
+    "sha256": "c28b822d19d2421a3cd5d82150c22cbc88d09f683c337babc60141deda82c0f1"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-update-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-update.log": {
+    "bytes": 1910,
+    "sha256": "191d4543656097a70c31e995f1c7422afe5775fc15111a9bd23273e4ff232fa5"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-upgrade-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-upgrade.log": {
+    "bytes": 616,
+    "sha256": "9b16d942476c5a62d8ed99fb8dcfe413556604fc1df1ad1cfcadc9ae5bac2e79"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-wire-build.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/internal-wire.log": {
+    "bytes": 1276,
+    "sha256": "f753a8a0a7584d26a981ab242f5fabec6d98e7d67ed8db51207a2f3250ac996f"
+  },
+  "docs/performance/20261116-workbench-redesign/linux/summary.json": {
+    "bytes": 43,
+    "sha256": "892d6e1d5f73c9e6c2730f632a5c15d560b1d2e55ec0ee041ab229c054df7e31"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation/native.log": {
+    "bytes": 3432,
+    "sha256": "05b7848620cf7f509d8d772a5c62dfa5c35afe02f98527d1ac8b381bb4a31663"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation/source-hashes.json": {
+    "bytes": 160732,
+    "sha256": "45a38e1518e6d5568a511eaf9af58ed12bb238c7132017fa79347cdd767c6d03"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-git-dark.png": {
+    "bytes": 70127,
+    "sha256": "73fa6b2d1e646e6dd5ec5fc61992fea0b4a0168091f4439965e321736a70781d"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-git-light.png": {
+    "bytes": 68666,
+    "sha256": "c52da8221f3f47f78838491abae205d26824991ec592b231f3d6d0cefda0489c"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-home-dark.png": {
+    "bytes": 66219,
+    "sha256": "e9af71d41da6b15452852f2704b8b0d055c2eb639e9181cf51b98d59afb9e8ad"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-ports-dark.png": {
+    "bytes": 63553,
+    "sha256": "dc48bba0fd7816e3ef22542a65a15db9a209331391fa7df69b19a6288809bb43"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-ports-light.png": {
+    "bytes": 61836,
+    "sha256": "b606203179e3fba756807c8fd7ac67876d8d32ea854ecb59e68361f35c5531e2"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-proxy-dark.png": {
+    "bytes": 65908,
+    "sha256": "97707850bd84090ec64080ccb1b643f41b40e57d75822706a97d179b3aeeafee"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-proxy-light.png": {
+    "bytes": 64789,
+    "sha256": "f298464949d2979fc0ef0ed65cce27227b4a1488eff71bd313c13432682e4e6d"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-proxy-narrow.png": {
+    "bytes": 24386,
+    "sha256": "176c8976f8c53df0ced37f67be21c7be3ae2b1a6a83bfc3561294a8afc365117"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-proxy-zoom150.png": {
+    "bytes": 67029,
+    "sha256": "a6d0828488739748ec8df2ac370e290fc8aa8da7672ddc716c5a2b941a579dfc"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-search-dark.png": {
+    "bytes": 57044,
+    "sha256": "edea59d8e041e9a795f450f17642e064d587863c43f501fed5c89a5f86c3e6c4"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-search-light.png": {
+    "bytes": 55933,
+    "sha256": "245f893143fbf31782286245244e42ac74b5336f89924c849ae001b0a71525b5"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-search-narrow.png": {
+    "bytes": 16563,
+    "sha256": "b1a0e5b45dec501421f36099efb2fccbbc284d903ef784db502ab39bfc512238"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-services-dark.png": {
+    "bytes": 59912,
+    "sha256": "1d9ff882f36dd2326cf9719d062d1133d030887c361da1c26890b283cbf8e2b6"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/gui-tools-services-light.png": {
+    "bytes": 58676,
+    "sha256": "b03ca2c9421cd9c99ef91592593ead4bead9fcad28818fadaad05619c451be37"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/native.log": {
+    "bytes": 3694,
+    "sha256": "dc92eb9a294ceb4d7cf19660dc531679396a1858cb30956abd6ca45c1be4b208"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation2/source-hashes.json": {
+    "bytes": 160732,
+    "sha256": "5a12e94ebba1dd458235d881f1f7ac4d8baa60eb724b5461353205175b2a1afd"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-expanded.png": {
+    "bytes": 96330,
+    "sha256": "6d9b01b004b808a0a7ad847732476bdc6b129136db0910cf352145bab37dd448"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-frames.json": {
+    "bytes": 984,
+    "sha256": "e00e1d42b512b2ec496eef53c0572563a2722c8bb008c018996a37261c43bc98"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-loaded.png": {
+    "bytes": 136156,
+    "sha256": "3ccd0db38863f76f86491764b666c4a7757b891af2a0caf60f59dc0631247ae4"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-git-dark.png": {
+    "bytes": 69225,
+    "sha256": "de03ce462d0c75884c6720a72d5637fbf89ad478ce15cacfd4041eb481103552"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-git-light.png": {
+    "bytes": 67738,
+    "sha256": "e317e465d6adde1a180e185918bfdc2c182518baf4231ea3fdee26cdcef19615"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-git-narrow.png": {
+    "bytes": 25036,
+    "sha256": "3886a1e4be34e5c52037c2f903998319270e8ec219484c2d359c29a8345226da"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-home-dark.png": {
+    "bytes": 66219,
+    "sha256": "e9af71d41da6b15452852f2704b8b0d055c2eb639e9181cf51b98d59afb9e8ad"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-ports-dark.png": {
+    "bytes": 63553,
+    "sha256": "dc48bba0fd7816e3ef22542a65a15db9a209331391fa7df69b19a6288809bb43"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-ports-light.png": {
+    "bytes": 61836,
+    "sha256": "b606203179e3fba756807c8fd7ac67876d8d32ea854ecb59e68361f35c5531e2"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-proxy-dark.png": {
+    "bytes": 65908,
+    "sha256": "97707850bd84090ec64080ccb1b643f41b40e57d75822706a97d179b3aeeafee"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-proxy-light.png": {
+    "bytes": 64789,
+    "sha256": "f298464949d2979fc0ef0ed65cce27227b4a1488eff71bd313c13432682e4e6d"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-proxy-narrow.png": {
+    "bytes": 24386,
+    "sha256": "176c8976f8c53df0ced37f67be21c7be3ae2b1a6a83bfc3561294a8afc365117"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-proxy-zoom150.png": {
+    "bytes": 67029,
+    "sha256": "a6d0828488739748ec8df2ac370e290fc8aa8da7672ddc716c5a2b941a579dfc"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-search-dark.png": {
+    "bytes": 61016,
+    "sha256": "de927f78ff2019cefd2aa0352cf6b4affa2162b04af9e29808754062e037a7ae"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-search-light.png": {
+    "bytes": 59497,
+    "sha256": "a06c58cdada4ffd9b382e11d299a5d4f70d7043182cebcbe74c0bb34260083d5"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-search-narrow.png": {
+    "bytes": 20271,
+    "sha256": "d644b782644669fd989f8972eb5429c8f682db36273b0a993d537ad963ae459e"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-services-dark.png": {
+    "bytes": 59912,
+    "sha256": "1d9ff882f36dd2326cf9719d062d1133d030887c361da1c26890b283cbf8e2b6"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-tools-services-light.png": {
+    "bytes": 58676,
+    "sha256": "b03ca2c9421cd9c99ef91592593ead4bead9fcad28818fadaad05619c451be37"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-zoom-100.png": {
+    "bytes": 96177,
+    "sha256": "9e348799ce313a16993db05fa469e102bec96c26da420313faf111fe2f78f9de"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-zoom-125.png": {
+    "bytes": 93155,
+    "sha256": "0a588e7182e6b59f521ce46b4a6467063947522893becc707d0f601517b94a78"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-zoom-150.png": {
+    "bytes": 86575,
+    "sha256": "3759d7b759ce6d97d0b489aed5431c2f5640ba1a8f19c40cc285ea6665b30b46"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui-zoom-85.png": {
+    "bytes": 101702,
+    "sha256": "418ce536983857757671b620edbdeb74da782ded0f59cc0984bf41fcb74c9b1f"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/gui.json": {
+    "bytes": 1562,
+    "sha256": "77efdecaa323d321a83c3eba6503b40122c193108e95e2029b3a195e40a2a5ef"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/native.log": {
+    "bytes": 2194,
+    "sha256": "a3e0b956e9d01cf8ebf2b863d621fc06eec0e0b5a0dffbe06784ac4dba8d1902"
+  },
+  "docs/performance/20261116-workbench-redesign/native-foundation3/source-hashes.json": {
+    "bytes": 160732,
+    "sha256": "30ee0269e1adcce130722771b2f26cf43968bdc7bdb9b0c4c5ff13c254e1a6d5"
+  },
+  "docs/performance/20261116-workbench-redesign/native-interaction/gui.json": {
+    "bytes": 1360,
+    "sha256": "4baaa2df7b258145c7ed53ccd2aaf2e0594d3554053836a919784a288734762b"
+  },
+  "docs/performance/20261116-workbench-redesign/native-interaction/gui.png": {
+    "bytes": 30116,
+    "sha256": "19169336bf061a3278ec0b4966f6a6c09062bbc596f3f5581fc12d7d10e2c4a4"
+  },
+  "docs/performance/20261116-workbench-redesign/native-interaction/native.log": {
+    "bytes": 2291,
+    "sha256": "5e2cf7cb4fc30b27e4d3df9e51ff7f29c48bfc7fea8aa3ee89e118d69bb4dd00"
+  },
+  "docs/performance/20261116-workbench-redesign/native-interaction/source-hashes.json": {
+    "bytes": 160732,
+    "sha256": "45a38e1518e6d5568a511eaf9af58ed12bb238c7132017fa79347cdd767c6d03"
+  },
+  "docs/performance/20261116-workbench-redesign/package/ai-smoke.txt": {
+    "bytes": 104,
+    "sha256": "7343672bc43908962de00b81b45620e0ac5d9c0c2810500bf7f5be6f92ca49e5"
+  },
+  "docs/performance/20261116-workbench-redesign/package/artifact-files.json": {
+    "bytes": 110464,
+    "sha256": "4cee1b612446b3c7c5aeb6768e1a9a2e10d08563a5029b2e930dd2e44b530919"
+  },
+  "docs/performance/20261116-workbench-redesign/package/artifact-summary.json": {
+    "bytes": 1526,
+    "sha256": "c89ddea015982b5dcfd47061f07e0995238f2a88ce2c1f83074fd7a71f933eeb"
+  },
+  "docs/performance/20261116-workbench-redesign/package/artifact.txt": {
+    "bytes": 1675,
+    "sha256": "70a8d33291a6e068a17b1690c63035cef2dce26070bf1d8f1e9bc9ce7e974295"
+  },
+  "docs/performance/20261116-workbench-redesign/package/build-and-verify.ps1": {
+    "bytes": 660,
+    "sha256": "a41179d0467d9df1de17d9dce3282efe8e9e5f5b3ce9cd512fb4ef96f1edaedd"
+  },
+  "docs/performance/20261116-workbench-redesign/package/BUILD-INFO.json": {
+    "bytes": 808,
+    "sha256": "793759253e36b4fc6748cde2bf89119ec8211ec4f1ea55646f7994f285506990"
+  },
+  "docs/performance/20261116-workbench-redesign/package/build.log": {
+    "bytes": 1645,
+    "sha256": "3e126d692a8f5f8b4857df92d0334fddc696a6ea6061e1be34227552abf8f559"
+  },
+  "docs/performance/20261116-workbench-redesign/package/check-package.ps1": {
+    "bytes": 2181,
+    "sha256": "f851f74aa8e8e90c95696e2f91a6abea2a5b3629ed2b16baa2963bcaf017b6ab"
+  },
+  "docs/performance/20261116-workbench-redesign/package/contact-sheets.ps1": {
+    "bytes": 1834,
+    "sha256": "14f9f1761685102083f34136d851c7258280b643ce42feaff075b9f4177b7f35"
+  },
+  "docs/performance/20261116-workbench-redesign/package/ide-smoke.txt": {
+    "bytes": 2179,
+    "sha256": "95e593a1a7195dd61d610068c131aa5c48a4b992d688e53353a0fcfe0fc8de28"
+  },
+  "docs/performance/20261116-workbench-redesign/package/linux-version.txt": {
+    "bytes": 8,
+    "sha256": "e16cbbc9e0e7ab3b56bc452fa8db6c28677c8870b9f95ec0bdd94218f3b0332f"
+  },
+  "docs/performance/20261116-workbench-redesign/package/native-accessibility.ps1": {
+    "bytes": 2921,
+    "sha256": "936fbaa9ec625ff41d743afa26b6b34ca2548dc7d96d7c5c1b35d50a5bdc0302"
+  },
+  "docs/performance/20261116-workbench-redesign/package/release-native.txt": {
+    "bytes": 393,
+    "sha256": "532e18c43eaf78be8efca117ca75c780f633b2d26f11de504868510dff7385b3"
+  },
+  "docs/performance/20261116-workbench-redesign/package/release-startup-ui.txt": {
+    "bytes": 1701,
+    "sha256": "319c89f305c06631d18c1cf4790f991a4070b8c3e28a9181704cdf9e28b11c27"
+  },
+  "docs/performance/20261116-workbench-redesign/package/signatures.txt": {
+    "bytes": 203,
+    "sha256": "d1b1a074ab35fc98050fb37f393507e22ecf4cae5dd5e00e0534e6774a815a86"
+  },
+  "docs/performance/20261116-workbench-redesign/package/SOURCE-HASHES.json": {
+    "bytes": 275733,
+    "sha256": "c0cc4c344df1815cc40fe360e754f68713a7d0e4b7f0928a094e3d6f139c2221"
+  },
+  "docs/performance/20261116-workbench-redesign/package/verification.log": {
+    "bytes": 1144,
+    "sha256": "85a8c801e9240dcc9fde3011fb20335dbf26d2cfd07a13616603911e105024ea"
+  },
+  "docs/performance/20261116-workbench-redesign/package/verify-artifact.ps1": {
+    "bytes": 4287,
+    "sha256": "90465d85fcac71304f430e214bb9079b522eabcf635d911824ac05cd4ad90efe"
+  },
+  "docs/performance/20261116-workbench-redesign/package/verify-launcher.ps1": {
+    "bytes": 5669,
+    "sha256": "4cd74f0ae2f710ba9ece1f3d31edd1f11365c9df48380fee9a3bc2cd3f8d202c"
+  },
+  "docs/performance/20261116-workbench-redesign/package/verify-signatures.dart": {
+    "bytes": 1051,
+    "sha256": "0611f0ed2c3592f68b014854327c718f8e3e4b1bb4d2f865a92ca27d7fd3ead0"
+  },
+  "docs/performance/20261116-workbench-redesign/proxy-e2e/agent.log": {
+    "bytes": 313,
+    "sha256": "5ba634dab0ef6400d2e5d6b05b26323b90bca4f732a62dfd27130d8e0489e698"
+  },
+  "docs/performance/20261116-workbench-redesign/proxy-e2e/flutter.out": {
+    "bytes": 1400,
+    "sha256": "1b7d92a5bf0c133a0b2578a67d9f3cd55bd06fe8b007770239da00d779d769c3"
+  },
+  "docs/performance/20261116-workbench-redesign/proxy-e2e/node.log": {
+    "bytes": 123,
+    "sha256": "bbcb8043322fae1a35e32e4332448b9687a6b90342acf71fe8b2d28fb5472553"
+  },
+  "docs/performance/20261116-workbench-redesign/proxy-e2e/run.ps1": {
+    "bytes": 5961,
+    "sha256": "657d8086677e45bc6ea8e51fe0eefad5f49d45161958b4e2d63c2e584a47690c"
+  },
+  "docs/performance/20261116-workbench-redesign/runners/archive.ps1": {
+    "bytes": 3832,
+    "sha256": "d9c893936d6862d191152a7c61037c86d68553511b9a731a6cd5a3ad80c1fe26"
+  },
+  "docs/performance/20261116-workbench-redesign/runners/client-final4.ps1": {
+    "bytes": 1300,
+    "sha256": "56a6d29303a329325fb1ffa5969d063fb7c485461782dc22a55cedc2329a6d30"
+  },
+  "docs/performance/20261116-workbench-redesign/runners/native.ps1": {
+    "bytes": 801,
+    "sha256": "6f64c10192b8daa796e0e47579dc5e545fea7cbcd7b765179df2fa627b413dde"
+  },
+  "docs/performance/20261116-workbench-redesign/runners/packages-final.ps1": {
+    "bytes": 819,
+    "sha256": "9ab286c702cb1b8c1848b32981f3d3f731e5169b8a27588f97a8366a9bf0836d"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-git-dark.png": {
+    "bytes": 80082,
+    "sha256": "23f49007bd90400805210496c7bf78e50dea6f4d9329c7038ab530be5860e86f"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-git-light.png": {
+    "bytes": 79780,
+    "sha256": "4a560cb11dfd9b446a19f1dc8e01aa108656e8416f8ada1304f88b0c436b9c94"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-git-narrow.png": {
+    "bytes": 33677,
+    "sha256": "157f27c11b1cbd45ccd382f4b35ebf5fde312b1195a3084c377eb5805d8dd541"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-home-dark.png": {
+    "bytes": 62340,
+    "sha256": "41c1cc0f4a61db92dc29616d37f4c5e6fb0205da2ed44152f52082322d14beed"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-ports-dark.png": {
+    "bytes": 75354,
+    "sha256": "a6cb3e83aebdc1a716eb3e07fb185c76a04bf99ce97d8af34d18b7d06d43f222"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-ports-light.png": {
+    "bytes": 74697,
+    "sha256": "da1a06aac20e279152a25ddc0586fa2003dad4d916d2aa5aaf8283bcac8294e3"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-proxy-dark.png": {
+    "bytes": 76083,
+    "sha256": "25b217726432e94740836f3858bd9f390e3b62a2d1cf132116cbf987ab1c47f5"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-proxy-light.png": {
+    "bytes": 75275,
+    "sha256": "91fb626bb7459984a14279c41710677e5e6687e7158ab237c1f83d36250fbc98"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-proxy-narrow.png": {
+    "bytes": 28848,
+    "sha256": "34193fc4d2b02100e6628e9a841c063da5fbf8acc47ec5bf82979de2f6c3e202"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-proxy-zoom150.png": {
+    "bytes": 96915,
+    "sha256": "df3387b9207aae2f5d5a1ce35848289a0a32ecd66048eda04e7fa05835a13530"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-search-dark.png": {
+    "bytes": 68526,
+    "sha256": "0e3e6929b67cf2eb422a93d93ff7f5693383ca5ba2bf58c54756ef8d53bab90c"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-search-light.png": {
+    "bytes": 67839,
+    "sha256": "e16330e60b43cf87679925f2f42651a9810f96b4d944b628d34c7bfd24ae0719"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-search-narrow.png": {
+    "bytes": 22650,
+    "sha256": "5f34b81b6b08409db2913886dc9a476b7cd8473db70e6d85a22d9d9a8824e294"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-services-dark.png": {
+    "bytes": 69229,
+    "sha256": "165abe781c1e6cf34053a0af9d11c8083c134affcc30d059ed557b76adc694b9"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/tools-services-light.png": {
+    "bytes": 68475,
+    "sha256": "423a50e25489c66f097eb4e1ce2d026bd765f031ca29b243b8ce06e502380d89"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-ai-sidebar-light.png": {
+    "bytes": 127090,
+    "sha256": "9c365f5dd6fa89bcf2fe8a6588f31f37e5bd81fc2c7e040325511773b0e52439"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-bottom-terminal-light.png": {
+    "bytes": 92611,
+    "sha256": "42975c4a000c9235479e4dd078c9bcc64b287bf38120450e51fedffc1c0da860"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-bottom-terminal.png": {
+    "bytes": 95872,
+    "sha256": "4c8bcfdc0c6dee39c536cf51a8dce4e9d371e2298a2282a2102c2709f77f131d"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-dark.png": {
+    "bytes": 83125,
+    "sha256": "5c5316554a6c5712b6721688c7f4e6015aaaf70cb7cadcdc2fc420ae7462ea79"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-documents-ai-terminal-light.png": {
+    "bytes": 153855,
+    "sha256": "0d4a781d13fc71d65f0fa1d1bac6885628eb2a050b0ff46ac9e48a3093c017ec"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-documents-ai-terminal.png": {
+    "bytes": 157004,
+    "sha256": "05e2eb733623cdbb829424006e5951cc7454c94e89241f3860fb90cbaa53d59e"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-drag-split-preview.png": {
+    "bytes": 134581,
+    "sha256": "02f92aaf2f742287668d5d7a43c665338096a3e1c1ba109913805cfc0b209b43"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-history-inline.png": {
+    "bytes": 140253,
+    "sha256": "62fc2a91e9a920ff6fab71e09546ce3d2f9f10a310ae63e87376859fdc9f110a"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-layout-menu.png": {
+    "bytes": 120255,
+    "sha256": "0f241c0d758ad96e3a10052ea80f8e6584fd7862cd8c6eae899f087cee4401ea"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-light.png": {
+    "bytes": 80757,
+    "sha256": "870b944e6b070328560239dbb44a95e35ccfabd82dd2a7af26066d513e58bf3d"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-phone-ai.png": {
+    "bytes": 43602,
+    "sha256": "473338ef54df322338ecfafe5abfa0dc874b570a61f9267d1d1aea4fbb285d0b"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-phone-terminal.png": {
+    "bytes": 13084,
+    "sha256": "d711bea6c8beb9a7f95ca88b717c46caf0a3b7f9b7aaeac76e59a1d9a67fa11f"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-phone.png": {
+    "bytes": 48048,
+    "sha256": "3145696523b97cf926120b6f2ff307cf9fcfe7222128b1eccf14b9c5872b8af4"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-right-tabs-terminal.png": {
+    "bytes": 133064,
+    "sha256": "799f5737e7f9964d11d741f4f044777904336e356f3e8370fd16b8ebac39576d"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-settings.png": {
+    "bytes": 82461,
+    "sha256": "afa7abe61e1ddf0a01ac2a9fdaa44414449009bfe74a71bab0c8dc8ad88afd33"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-split-ai.png": {
+    "bytes": 129630,
+    "sha256": "ae2cb44bd860f783f3220279d56514a7773d46fab0d43a6cbd2d5dbb05ac4d2d"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-terminal-maximized.png": {
+    "bytes": 85279,
+    "sha256": "9100abd48c150e946dcc13524b829694a4eb098de319288c76308c81c6673fd9"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-typography.png": {
+    "bytes": 83229,
+    "sha256": "4c41a033483a8b2b9ed7c1fa3831aa37913b41ae5645ea54703d8bf77e2be3df"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/workbench-vertical.png": {
+    "bytes": 127244,
+    "sha256": "92155ad704d993e0f1cb868e707573a0f58245f75c99fdc349956ba98a25a9f6"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-01-welcome.png": {
+    "bytes": 108124,
+    "sha256": "a5ba664e3dd602576a0bf74b22ea1584366656c055805204630c459682f5f9a6"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-02-editor.png": {
+    "bytes": 97362,
+    "sha256": "39dd7d2278367432580e49925438a34b5f23a8f328419e5180f9bfaefe85f93c"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-03-palette.png": {
+    "bytes": 110490,
+    "sha256": "eb1b039e54f9dea6ee74268a1dfdc265eb2eff66fe981b6a52fc61d977764d2e"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-04-servers.png": {
+    "bytes": 100652,
+    "sha256": "b528972487376f0f791c27eebfabe0fb9b7bbb939f62097942557fac8923f04b"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-10-ai.png": {
+    "bytes": 185819,
+    "sha256": "a758c5493bd4efe3b9ccf98cfe33bc25fd638c0594783f7cc27278c540f8721d"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-10-git.png": {
+    "bytes": 143174,
+    "sha256": "7ccd518a9f238c0b608243891c34efd925aac71e926deae4ab96312dd41fcaaf"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-10-net.png": {
+    "bytes": 172314,
+    "sha256": "9657b612b6e745424625c56ee8365a97c3820c49be0c2111d982cb0c4943a302"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-10-proxy.png": {
+    "bytes": 163733,
+    "sha256": "4cc25131ef3a066ae2f9c13ae7126a1e4617a3ab031cad5162d14ac7c54120d2"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-10-search.png": {
+    "bytes": 108480,
+    "sha256": "407e75d8b6dbe0ebb18278e914f4c63ff471fa70dd434d567e9d9d964fc3f685"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-10-systemd.png": {
+    "bytes": 165300,
+    "sha256": "cc8e3959e054db460709efbefc346cefcf3fdea8dc966e3358466d4625681838"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-10-terminal.png": {
+    "bytes": 106124,
+    "sha256": "6b8798e1af56f9df9bc781b9acbda19d7de51c23c3e0df199b72a5ed1f14b5b0"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-15-ai-studio.png": {
+    "bytes": 193640,
+    "sha256": "0ef66d8d8dadaf658980a4c0982f54b3b782873f871043072f53c9d36bf3c4bb"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-20-monitor.png": {
+    "bytes": 209237,
+    "sha256": "609e4e375be12580a82d7255504cb21ecae1950e15136f81a7a0d488d472bc1a"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-21-monitor-later.png": {
+    "bytes": 210407,
+    "sha256": "b17bd51dccd75680dc2ca880bb767c294e838e8085071beabc8ac7958468abd6"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-22-overview.png": {
+    "bytes": 184701,
+    "sha256": "31b0b5e8d21c834c5524d102498a74cc17fe0bc52e0679e90d5ee36b9fe7c670"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-23-settings.png": {
+    "bytes": 198766,
+    "sha256": "9f8631099353184b3b225579123835b15997a7e530e8a3928ca32d9f0200cb79"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-30-medium.png": {
+    "bytes": 83123,
+    "sha256": "1d97e249d0ca81167b3b4c0997b6c43d1316426b6f77c286c3a468002e96ea74"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-31-medium-drawer.png": {
+    "bytes": 80164,
+    "sha256": "6dd0543b30a12be4f46cead956dbc3b1db2957c11a25bb3a12fd94307c4c6639"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-40-phone.png": {
+    "bytes": 25073,
+    "sha256": "58079ee876a2755020ccde7859fc228bf715d4c1dc7ce7d39295be2ed9c42e78"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-50-empty.png": {
+    "bytes": 53098,
+    "sha256": "2243493bd077485ce7d67e068bf4710ea1d2df18a1cbf92c8ac2de76b943f85c"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/dark-51-add-server.png": {
+    "bytes": 71232,
+    "sha256": "bb5d089ab71b0833b1e7049a8283e0a8dae93a26e5af8f7aed8fec20402baf71"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-01-welcome.png": {
+    "bytes": 107184,
+    "sha256": "6069d2f73af35a7a39f7e9af8541568a114f728c50ada412c774506600c91a71"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-02-editor.png": {
+    "bytes": 96233,
+    "sha256": "7c34cb120da97d2423dd803844dc897a3aef3eb8480cc9267371a119523e3dfd"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-03-palette.png": {
+    "bytes": 111636,
+    "sha256": "07edb87a4cdab3c08d6e13014990faaa924edbde4621fb314a04beecf7d5952d"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-04-servers.png": {
+    "bytes": 100144,
+    "sha256": "2c759416f90e44ffd59f6a0b912b35608bc29700f5a0324f1f13ac1ed395a6be"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-10-ai.png": {
+    "bytes": 184983,
+    "sha256": "c12b5c5968b35b579bb7f27bd49288d92b4cea334a1f6c6c40386da96e3c4f76"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-10-git.png": {
+    "bytes": 141660,
+    "sha256": "3013671e3ffc6c15c8574f5752f61bd9079a1d2ed4f1321e616bf7b0cd96486f"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-10-net.png": {
+    "bytes": 170869,
+    "sha256": "0891f3b5fcfbe5ddf7bb48509145f28455c9650f2181d23fdd744082457fd62c"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-10-proxy.png": {
+    "bytes": 163057,
+    "sha256": "065815d9644b21cc46f260b0ca409a9d9aa3827a7bad8f06b4ed24529a3d761b"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-10-search.png": {
+    "bytes": 108210,
+    "sha256": "ee6bc4856dffadf726450a3b33a4d011f779503b54ee024d2ca4ad4916e15503"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-10-systemd.png": {
+    "bytes": 164422,
+    "sha256": "f2a8a3f72b040da8a1a7588afb28c1333a89a78e2d1eb7de9843d8dcf8de3e5d"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-10-terminal.png": {
+    "bytes": 105589,
+    "sha256": "e369a310b866c6cdd1bb1711102ea52ed3f011adbbf6954c48274cc60adb779f"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-15-ai-studio.png": {
+    "bytes": 193284,
+    "sha256": "a67be9c1018f8f8c14cc98c6fa418f519112b722fa935ee3b8751b18f7abf305"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-20-monitor.png": {
+    "bytes": 206323,
+    "sha256": "46f086db1227865eaf42c007245983e2dc81260c0768e246417c8f744a419746"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-21-monitor-later.png": {
+    "bytes": 208160,
+    "sha256": "393d3245eeade63ce7366ea72c9f1b0b26840be0f1c365da7d68575ff383cdef"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-22-overview.png": {
+    "bytes": 183051,
+    "sha256": "4e205ff66c46b82846ee90d5bfcc1e74c774182640295d8235cad643b07e2c73"
+  },
+  "docs/performance/20261116-workbench-redesign/screenshots/extra/light-23-settings.png": {
+    "bytes": 197163,
+    "sha256": "d281818ced084285f6f1754c97409e827cd278e30b21a3735a6ff76d639646dc"
+  },
+  "docs/reference/compatibility.md": {
+    "bytes": 4873,
+    "sha256": "42735e35804a7403e1a7b19ecc69eb0bdda3073a2f5fb4ae4f9d61167c481d7a"
+  },
+  "docs/releases/3.22.0-ide-preview1.md": {
+    "bytes": 2144,
+    "sha256": "9ffe976effcd9c33e38f390504ac247b5fc8de76073e4ede1b919562bcd73f42"
+  },
+  "docs/releases/3.22.0.md": {
+    "bytes": 4089,
+    "sha256": "a29697b6fe8e29ad2aa0215aa211baf695393060ab50fb1cc2e7f7a18a0e69cf"
+  },
+  "docs/releases/3.23.0-ai-preview1.md": {
+    "bytes": 1636,
+    "sha256": "4205cac40fcc84889f0dfe0942249047bf6bc7160eec6eccb9e3eb7cb1441bf3"
+  },
+  "docs/releases/3.23.0-ai-preview2.md": {
+    "bytes": 1656,
+    "sha256": "55c42f1c02be63f97a82c7bf46fd04d6b16a5b51e9957e857da5eb8c20e9c2a4"
+  },
+  "docs/releases/3.24.0-workbench-preview1.md": {
+    "bytes": 2480,
+    "sha256": "e0677a091bdb4193c8af42a9f7c09beeecd592e4ba2e653c8a9fb704f7f009df"
+  },
+  "docs/releases/3.24.0.md": {
+    "bytes": 4462,
+    "sha256": "02f5bbd7d9abbc708f28314dd30921d53d0c08b1666699901e8580c61f8aa3d2"
+  },
+  "docs/standards/documentation.md": {
+    "bytes": 4452,
+    "sha256": "1c18d13231fcebc4978ac3352eb89e41a1cdef011e2842aa006f90a54f396d04"
+  },
+  "docs/templates/decision.md": {
+    "bytes": 514,
+    "sha256": "7335e98f1a29b817e87617dfc354acac40f91500e9341334682b70a1af8fd4d0"
+  },
+  "docs/templates/guide.md": {
+    "bytes": 747,
+    "sha256": "67170024a6181ba95d0fafa6c19a233b779a9a4af0901e17d863ac289b338aba"
+  },
+  "docs/templates/validation.md": {
+    "bytes": 1092,
+    "sha256": "1e1883fe168032cff7635c93dc9de481abf24d7b1f91fda7e4d5c3741457237e"
+  },
+  "docs/validation/2026-11-16-ai-control.md": {
+    "bytes": 5063,
+    "sha256": "211c441df725139bf2e36b4f47b80012ff86484c4fb030ffcbbc36b7309820f6"
+  },
+  "docs/validation/2026-11-16-ai-redesign.md": {
+    "bytes": 7372,
+    "sha256": "8078c8b2e0103f6dfa229270ea644b7372b05551145f3d117270a846174a986e"
+  },
+  "docs/validation/2026-11-16-audit.md": {
+    "bytes": 20562,
+    "sha256": "68ab176cdd075994ff7299d0f8406bde9a6bcaed51d1e0683ee809f67ba5d574"
+  },
+  "docs/validation/2026-11-16-implementation-log.md": {
+    "bytes": 18328,
+    "sha256": "08482e2cd515a8d413699a12411cbf2d31ef37edca0c52f5f30fddc8cd21199d"
+  },
+  "docs/validation/2026-11-16-implementation.md": {
+    "bytes": 13459,
+    "sha256": "de816ed4dee6e3bfbedc06bf5c232b43e09ce017fdb499251e3cf09e99ff5edc"
+  },
+  "docs/validation/2026-11-16-package-ide-preview1.md": {
+    "bytes": 7945,
+    "sha256": "68848c6832d048620d324322cd685e75959d0eabaa4c7055c99e37e77f52e699"
+  },
+  "docs/validation/2026-11-16-release-3.22.0.md": {
+    "bytes": 6136,
+    "sha256": "7a1f2f09760a3ede73c407a09c46a7f7430b42594be7a56ffab4521cf3e0a67e"
+  },
+  "docs/validation/2026-11-16-workbench-redesign.md": {
+    "bytes": 6572,
+    "sha256": "325d22b29267cefeae029116d08787960230594e7db7ebe99c797f339492613c"
+  },
+  "local-agent/windows-amd64/aurora3-local-agent-3.24.0-windows-amd64.exe": {
+    "bytes": 14711296,
+    "sha256": "b16bf48b6a062bf2b8423026c52c45212d3a3ecc9ffb82bb818b28caec30be7c"
+  },
+  "local-agent/windows-amd64/manifest.json": {
+    "bytes": 278,
+    "sha256": "252e66df1268c6c75bba85201ad21f4ca7fa706cf295ced7a80e016ef27b3fbb"
+  },
+  "local-agent/windows-amd64/manifest.sig": {
+    "bytes": 89,
+    "sha256": "6e0cef78cb5284e2e6ae28b5f1e680769baeb5ba12da723363e3dfccf5b25f84"
+  }
+}

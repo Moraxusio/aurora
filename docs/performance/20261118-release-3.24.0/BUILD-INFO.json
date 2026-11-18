@@ -1,0 +1,15 @@
+{
+  "version": "3.24.0",
+  "channel": "stable",
+  "built_at_utc": "2026-11-18T15:55:11.9945196Z",
+  "source_head": "2710caa4dba39f98e410cee908bd057da487d888",
+  "source_working_tree": "clean",
+  "source_files_checked_before_and_after_build": 2101,
+  "source_deleted_files": [],
+  "client_aot_sha256": "f8c1a9970c5d07a2870b2ad1eae373614b05b73f5526ef07bf868475861ba695",
+  "agent_version": "3.24.0",
+  "linux_agent_sha256": "e81a201d41f8c35f52164e82ca87c2879912ac9c8ed7058d3f6c7aed0bee3a02",
+  "local_agent_sha256": "b16bf48b6a062bf2b8423026c52c45212d3a3ecc9ffb82bb818b28caec30be7c",
+  "signing_key_id": "87828dfb18459372",
+  "document_entry": "docs/README.md"
+}

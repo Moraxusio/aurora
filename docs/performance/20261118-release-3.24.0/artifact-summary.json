@@ -1,0 +1,44 @@
+{
+  "version": "3.24.0",
+  "channel": "stable",
+  "source_head": "2710caa4dba39f98e410cee908bd057da487d888",
+  "source_working_tree": "clean",
+  "source_files_checked": 2101,
+  "zip": "C:\\dev\\VPS\\release4\\Aurora-3.24.0.zip",
+  "zip_bytes": 55761441,
+  "zip_sha256": "41cbb857b862eac64945e978874e28fd8662c422af09a2117119c48a4b57247d",
+  "sidecar_bytes": 85,
+  "sidecar_sha256": "aeb3483cbb07161f5925483221107d5bee4181a6fe69ae99f54e9214c6b5a476",
+  "sums_bytes": 177,
+  "sums_sha256": "4db89f994a794e7f6d2443b09448c3e9f5363764011022dc09b4df747ae837d0",
+  "zip_files_matching_directory": 625,
+  "client_version": "3.24.0+32400",
+  "client_aot_sha256": "f8c1a9970c5d07a2870b2ad1eae373614b05b73f5526ef07bf868475861ba695",
+  "agents": [
+    {
+      "product": "aurora3-agent",
+      "channel": "stable",
+      "version": "3.24.0",
+      "file": "aurora3-agent-3.24.0-linux-amd64",
+      "size": 15601826,
+      "sha256": "e81a201d41f8c35f52164e82ca87c2879912ac9c8ed7058d3f6c7aed0bee3a02",
+      "created": "2026-11-18T15:54:37Z",
+      "key_id": "87828dfb18459372"
+    },
+    {
+      "product": "aurora3-local-agent",
+      "channel": "stable",
+      "version": "3.24.0",
+      "file": "aurora3-local-agent-3.24.0-windows-amd64.exe",
+      "size": 14711296,
+      "sha256": "b16bf48b6a062bf2b8423026c52c45212d3a3ecc9ffb82bb818b28caec30be7c",
+      "created": "2026-11-18T15:54:37Z",
+      "key_id": "87828dfb18459372"
+    }
+  ],
+  "licenses_verified": [
+    "re_editor",
+    "xterm",
+    "OpenCode"
+  ]
+}

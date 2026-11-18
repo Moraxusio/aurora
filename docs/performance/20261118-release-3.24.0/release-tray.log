@@ -1,0 +1,12 @@
+PASS  first instance shows its window
+PASS  WM_CLOSE hides the window
+PASS  process stays alive after close
+PASS  second launch restores the original window
+PASS  second launch exits by itself
+PASS  second launch exit code is 0
+PASS  primary still alive after second launch
+PASS  hide again
+PASS  exit request completes or asks to end local tasks
+PASS  local-task exit confirmation invoked
+PASS  tray exit command ends the process
+ALL PASS

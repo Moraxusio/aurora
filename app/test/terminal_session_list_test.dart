@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:aurora/features/terminal/terminal_feature.dart';
 import 'package:aurora/kernel/editor_tab.dart';
 import 'package:aurora/kernel/input_mode.dart';
+import 'package:aurora/kernel/shell.dart';
 import 'package:aurora/kernel/workspace.dart';
+import 'package:aurora/main.dart';
 import 'package:aurora/theme/ide_theme.dart';
+import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -82,7 +85,9 @@ void main() {
   }
 
   Future<void> ask(WidgetTester t) async {
-    await t.tap(find.byTooltip('结束会话'));
+    await t.tap(find.byTooltip('会话操作 · main'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('结束会话…'));
     await t.pumpAndSettle();
   }
 
@@ -97,6 +102,40 @@ void main() {
     expect(link.kills, 1);
     expect(ws.tab(tab.id), same(tab));
     await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('closing a local console asks before ending its process', (
+    t,
+  ) async {
+    final local = WorkspaceApp(
+      wire: link,
+      profile: Profile(
+        selected: 'server',
+        servers: [ServerEntry(id: 'server', name: 'fixture', kind: 'local')],
+      ),
+    );
+    await t.pumpWidget(AuroraApp(app: local));
+    await t.pumpAndSettle();
+    final live =
+        (t.state(find.byType(Shell)) as dynamic).debugWorkspace as Workspace;
+    // Opening a retained view is enough to test the workspace close guard;
+    // no real terminal or subprocess is opened by this synthetic link.
+    openSession(live, 'main');
+    await t.pumpAndSettle();
+    final before = link.kills;
+    await t.tap(find.byKey(const ValueKey('terminal-panel-actions')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('结束本地终端…'));
+    await t.pumpAndSettle();
+    expect(find.text('结束本地终端 main？'), findsOneWidget);
+    expect(link.kills, before);
+    await t.tap(find.text('取消'));
+    await t.pumpAndSettle();
+    expect(live.tab('term:main'), isNotNull);
+    expect(link.kills, before);
+    await live.flushViews();
+    await t.pumpWidget(const SizedBox());
+    local.dispose();
   });
 
   testWidgets(

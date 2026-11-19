@@ -8,14 +8,12 @@ import 'ai_work.dart';
 
 class AiWorkbench extends StatefulWidget {
   final String? sessionId;
-  final VoidCallback? onSettings;
   final ValueChanged<String>? onStopSession;
   final Widget Function(AiWorkController work, String? sessionId, bool primary)
   conversationBuilder;
   const AiWorkbench({
     super.key,
     this.sessionId,
-    this.onSettings,
     this.onStopSession,
     required this.conversationBuilder,
   });
@@ -57,48 +55,106 @@ class _AiWorkbenchState extends State<AiWorkbench> {
       final root = work.sessions[work.rootId];
       return Column(
         children: [
-          Container(
-            key: const ValueKey('ai-work-navigation'),
-            decoration: BoxDecoration(
-              color: ide.panel,
-              border: Border(bottom: BorderSide(color: ide.border)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            child: Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _WorkTab(
-                  key: const ValueKey('ai-work-main'),
-                  icon: Icons.chat_bubble_outline,
-                  label: '对话',
-                  selected: work.selected == 'main',
-                  onTap: () => work.select('main'),
-                  waiting: root?.waiting == true,
-                  running: root?.running == true,
-                ),
-                _WorkTab(
-                  key: const ValueKey('ai-work-list'),
-                  icon: Icons.checklist_outlined,
-                  label: work.runningCount > 0
-                      ? '任务 · ${work.runningCount}'
-                      : '任务',
-                  selected: work.selected != 'main',
-                  waiting: work.sessions.values.any((s) => s.waiting),
-                  onTap: () => work.select('tasks'),
-                ),
-                if (widget.onSettings != null)
-                  TextButton.icon(
-                    key: const ValueKey('ai-settings-open'),
-                    onPressed: widget.onSettings,
-                    icon: const Icon(Icons.tune_rounded, size: 16),
-                    label: const Text('设置'),
+          if (work.showNavigation)
+            Container(
+              key: const ValueKey('ai-work-navigation'),
+              decoration: BoxDecoration(
+                color: ide.panel,
+                border: Border(bottom: BorderSide(color: ide.border)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: ide.editor,
+                          borderRadius: AiVisuals.radius,
+                          border: Border.all(color: ide.border),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _WorkTab(
+                              key: const ValueKey('ai-work-main'),
+                              icon: Icons.chat_bubble_outline_rounded,
+                              label: '对话',
+                              selected: work.selected == 'main',
+                              onTap: () => work.select('main'),
+                              waiting: root?.waiting == true,
+                              running: root?.running == true,
+                            ),
+                            const SizedBox(width: 2),
+                            _WorkTab(
+                              key: const ValueKey('ai-work-list'),
+                              icon: Icons.checklist_rounded,
+                              label: work.runningCount > 0
+                                  ? '任务 · ${work.runningCount}'
+                                  : '任务',
+                              selected: work.selected == 'tasks',
+                              waiting: work.sessions.values.any(
+                                (s) => s.waiting,
+                              ),
+                              onTap: () => work.select('tasks'),
+                            ),
+                            for (final target in work.opened)
+                              if (target.startsWith('work:') ||
+                                  target.startsWith('session:')) ...[
+                                const SizedBox(width: 2),
+                                Builder(
+                                  builder: (_) {
+                                    final isWork = target.startsWith('work:');
+                                    final id = isWork
+                                        ? target.substring(5)
+                                        : target.substring(8);
+                                    final item = isWork ? work.items[id] : null;
+                                    final sess = !isWork
+                                        ? work.sessions[id]
+                                        : null;
+                                    final label =
+                                        item?.title ?? sess?.title ?? '子视图';
+                                    final waiting =
+                                        sess?.waiting == true ||
+                                        (item != null &&
+                                            item.childId.isNotEmpty &&
+                                            work
+                                                    .sessions[item.childId]
+                                                    ?.waiting ==
+                                                true);
+                                    final running =
+                                        item?.status == AiWorkStatus.running ||
+                                        sess?.running == true;
+                                    return _WorkTab(
+                                      key: ValueKey('ai-work-tab-$id'),
+                                      icon: isWork
+                                          ? Icons.terminal_rounded
+                                          : Icons.account_tree_outlined,
+                                      label: label,
+                                      selected: work.selected == target,
+                                      waiting: waiting,
+                                      running: running,
+                                      onTap: () => work.select(target),
+                                      onClose: () {
+                                        _views.remove(target);
+                                        work.closeTarget(target);
+                                      },
+                                    );
+                                  },
+                                ),
+                              ],
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
           Expanded(
+            key: const ValueKey('ai-work-pages'),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -122,12 +178,14 @@ class _WorkTab extends StatelessWidget {
   final String label;
   final bool selected, waiting, running;
   final VoidCallback onTap;
+  final VoidCallback? onClose;
   const _WorkTab({
     super.key,
     required this.icon,
     required this.label,
     required this.selected,
     required this.onTap,
+    this.onClose,
     this.waiting = false,
     this.running = false,
   });
@@ -150,11 +208,17 @@ class _WorkTab extends StatelessWidget {
             onTap: onTap,
             borderRadius: AiVisuals.radius,
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 240, minHeight: 32),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: selected
-                  ? AiVisuals.surface(ide, selected: true)
-                  : null,
+              constraints: const BoxConstraints(maxWidth: 200, minHeight: 26),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: selected ? ide.accentSoft : Colors.transparent,
+                borderRadius: BorderRadius.circular(Radii.s + 2),
+                border: Border.all(
+                  color: selected
+                      ? ide.accent.withValues(alpha: 0.35)
+                      : Colors.transparent,
+                ),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -184,6 +248,21 @@ class _WorkTab extends StatelessWidget {
                   ] else if (running) ...[
                     const SizedBox(width: 5),
                     const AiStatusMark(AiWorkStatus.running, label: false),
+                  ],
+                  if (onClose != null) ...[
+                    const SizedBox(width: 4),
+                    InkWell(
+                      onTap: onClose,
+                      borderRadius: BorderRadius.circular(Radii.s),
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 12,
+                          color: ide.textFaint,
+                        ),
+                      ),
+                    ),
                   ],
                 ],
               ),

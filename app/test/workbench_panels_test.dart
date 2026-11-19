@@ -5,6 +5,7 @@ import 'package:aurora/kernel/tab_layout.dart';
 import 'package:aurora/kernel/workbench_view.dart';
 import 'package:aurora/kernel/workspace.dart';
 import 'package:aurora/theme/ide_theme.dart';
+import 'package:aurora/ui/aurora_ui.dart' show AppNavigation;
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart' as w;
 import 'package:flutter/material.dart';
@@ -126,6 +127,7 @@ void main() {
     addTearDown(t.view.resetDevicePixelRatio);
     await t.pumpWidget(
       MaterialApp(
+        navigatorKey: AppNavigation.key,
         theme: buildTheme(Brightness.dark),
         home: InputMode.scope(
           mode: input,
@@ -386,8 +388,12 @@ void main() {
       expect(link.streams, hasLength(1));
       expect(stream.closes, 0);
       expect(link.killed, isEmpty);
-      await ws.closeTab('term:main');
+      final closing = ws.closeTab('term:main');
       await t.pumpAndSettle();
+      expect(link.killed, isEmpty, reason: 'a local process cannot end before confirmation');
+      await t.tap(find.text('结束终端'));
+      await t.pumpAndSettle();
+      expect(await closing, isTrue);
       expect(stream.closes, 1);
       expect(link.killed, ['main']);
       expect(ws.visibleTabs.single.id, 'a');

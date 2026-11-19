@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -50,6 +51,11 @@ func TruncateOutput(text string, spillDir string, direction string) TruncateResu
 				sz++
 			}
 			if bytesCount+sz > MaxOutputBytes {
+				if len(kept) == 0 && len(lines[i]) > MaxOutputBytes {
+					suffix := truncateUTF8Suffix(lines[i], MaxOutputBytes)
+					kept = append(kept, suffix)
+					bytesCount = len(suffix)
+				}
 				hitBytes = true
 				break
 			}
@@ -63,8 +69,9 @@ func TruncateOutput(text string, spillDir string, direction string) TruncateResu
 		for i := 0; i < len(lines) && len(kept) < MaxOutputLines; i++ {
 			line := lines[i]
 			if i == 0 && len(line) > MaxOutputBytes {
-				kept = append(kept, line[:MaxOutputBytes])
-				bytesCount = MaxOutputBytes
+				prefix := truncateUTF8Prefix(line, MaxOutputBytes)
+				kept = append(kept, prefix)
+				bytesCount = len(prefix)
 				hitBytes = true
 				break
 			}
@@ -110,4 +117,26 @@ func TruncateOutput(text string, spillDir string, direction string) TruncateResu
 		Truncated: true,
 		SavedPath: savedPath,
 	}
+}
+
+func truncateUTF8Prefix(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	end := maxBytes
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end]
+}
+
+func truncateUTF8Suffix(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	start := len(s) - maxBytes
+	for start < len(s) && !utf8.RuneStart(s[start]) {
+		start++
+	}
+	return s[start:]
 }

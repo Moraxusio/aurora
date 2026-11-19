@@ -18,6 +18,9 @@ class CodeEditorStyle {
     this.cursorWidth,
     this.cursorLineColor,
     this.chunkIndicatorColor,
+    this.indentGuideColor,
+    this.bracketMatchColor,
+    this.wordHighlightColor,
     this.codeTheme,
   }) : assert(fontSize == null || fontSize > 0),
     assert(fontHeight == null || fontHeight >= 1.0),
@@ -144,6 +147,15 @@ class CodeEditorStyle {
 
   /// The color of the chunked indicator at the end of the line.
   final Color? chunkIndicatorColor;
+
+  /// The color of vertical indentation guide lines.
+  final Color? indentGuideColor;
+
+  /// The color used to outline/fill matching bracket pairs at the cursor.
+  final Color? bracketMatchColor;
+
+  /// The color used to highlight occurrences of the current word/selection.
+  final Color? wordHighlightColor;
 
   /// The code syntax highlighting rules and styles.
   final CodeHighlightTheme? codeTheme;
@@ -525,6 +537,9 @@ class _CodeEditorState extends State<CodeEditor> {
       cursorColor:  widget.style?.cursorColor ?? selectionTheme.cursorColor ?? theme.colorScheme.primary,
       cursorLineColor: widget.style?.cursorLineColor,
       chunkIndicatorColor: widget.style?.chunkIndicatorColor,
+      indentGuideColor: widget.style?.indentGuideColor,
+      bracketMatchColor: widget.style?.bracketMatchColor,
+      wordHighlightColor: widget.style?.wordHighlightColor,
       cursorWidth: widget.style?.cursorWidth ?? _kDefaultCaretWidth,
       showCursorWhenReadOnly: widget.showCursorWhenReadOnly ?? true,
       leadingDivider: widget.leadingDivider,

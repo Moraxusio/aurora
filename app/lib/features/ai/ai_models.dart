@@ -501,6 +501,8 @@ class AiPermissionQuestion {
   /// What "allow for this session" would remember ("git *" or "*"); empty from
   /// older agents, which is then derived with [alwaysScope].
   final String scope;
+  final String agent;
+  final bool isSubagent;
   final Map<String, dynamic> metadata;
 
   const AiPermissionQuestion({
@@ -514,6 +516,8 @@ class AiPermissionQuestion {
     this.reason = '',
     this.reasonCode = '',
     this.scope = '',
+    this.agent = '',
+    this.isSubagent = false,
     this.metadata = const {},
   });
 
@@ -529,6 +533,8 @@ class AiPermissionQuestion {
         reason: j['reason'] as String? ?? '',
         reasonCode: j['reason_code'] as String? ?? '',
         scope: j['always_scope'] as String? ?? '',
+        agent: j['agent'] as String? ?? '',
+        isSubagent: j['is_subagent'] == true,
         metadata: j['metadata'] is Map
             ? (j['metadata'] as Map).cast<String, dynamic>()
             : const {},
@@ -544,6 +550,7 @@ class AiPermissionQuestion {
       'shell_command' => '这一步会执行一条命令',
       'high_risk_shell' => '这条命令影响很大，即使在自动模式下也需要你确认',
       'sensitive_file' => '这个文件可能含有密钥或环境凭据',
+      'network_access' => '这一步会访问外部网络或检索在线资料',
       'plan_shell' => '规划模式下，会改动系统的命令需要确认',
       'repeated_call' => 'AI 连续三次发出了完全相同的调用，可能陷入循环',
       'plan_read_only' => '规划模式只读，不能修改文件',
@@ -559,6 +566,7 @@ class AiPermissionQuestion {
       return 'shell_command';
     if (text.startsWith('High-impact shell command')) return 'high_risk_shell';
     if (text.startsWith('Accessing potential secret')) return 'sensitive_file';
+    if (text.startsWith('External network access')) return 'network_access';
     if (text.startsWith('Plan mode requires confirmation')) return 'plan_shell';
     if (text.startsWith('Repeated identical tool call') ||
         text.startsWith('Agent invoked the exact same tool'))
@@ -579,9 +587,15 @@ class AiPermissionQuestion {
     if ((action == 'edit' || action == 'write') && s != '*') {
       return '本会话始终允许修改此文件';
     }
+    if (action == 'webfetch' && s != '*') {
+      return '本会话始终允许访问 $s';
+    }
     return switch (action) {
       'edit' || 'write' => '本会话始终允许修改文件',
       'shell' => '本会话始终允许执行命令',
+      'webfetch' => '本会话始终允许读取网页',
+      'websearch' => '本会话始终允许联网搜索',
+      'mcp' => '本会话始终允许调用 MCP 工具',
       _ => '本会话始终允许',
     };
   }
@@ -591,6 +605,12 @@ class AiPermissionQuestion {
     if (action == 'shell') {
       final words = resource.trim().split(RegExp(r'\s+'));
       if (words.isNotEmpty && words.first.isNotEmpty) return '${words.first} *';
+    }
+    if (action == 'webfetch') {
+      final uri = Uri.tryParse(resource.trim());
+      if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
+        return '${uri.scheme}://${uri.host}/*';
+      }
     }
     // Older agents do not send always_scope. Keep their generic wording; new
     // agents send the precise directory or file scope explicitly.

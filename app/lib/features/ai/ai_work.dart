@@ -160,6 +160,9 @@ class AiWorkController extends ChangeNotifier {
   Timer? _timer;
   bool _disposed = false;
   AiWorkController(this.rootId);
+  bool get showNavigation =>
+      items.isNotEmpty || opened.any((key) => key != 'main' && key != 'tasks') ||
+      selected != 'main' || sessions.length > 1;
   int revisionFor(String id) => _revisions[id] ?? 0;
 
   int get runningCount =>
@@ -170,6 +173,15 @@ class AiWorkController extends ChangeNotifier {
       return;
     opened.add(target);
     selected = target;
+    notifyListeners();
+  }
+
+  void closeTarget(String target) {
+    if (target == 'main' || target == 'tasks') return;
+    opened.remove(target);
+    if (selected == target) {
+      selected = 'main';
+    }
     notifyListeners();
   }
 
@@ -315,6 +327,9 @@ class AiWorkController extends ChangeNotifier {
             : AiWorkStatus.completed;
         _discoverChild(item);
         _dirty.add(item);
+        if (type == 'tool.done' && item.childId.isNotEmpty) {
+          sessions[item.childId]?.waiting = false;
+        }
       }
     } else if (type == 'session.status' || type == 'session.error') {
       final info = sessions.putIfAbsent(

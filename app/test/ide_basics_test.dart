@@ -129,7 +129,7 @@ void main() {
       final gate = Completer<Object?>();
       link.hold['fs.find'] = gate;
       link.onFind = (_) => {'files': ['/project/new.txt']};
-      await show(t, QuickOpen(ws: ws, folders: const [SearchFolder('home', '/project', 'project')]));
+      await show(t, WorkbenchSearchPicker(ws: ws, folders: const [SearchFolder('home', '/project', 'project')]));
       await t.enterText(find.byType(TextField), 'new');
       gate.complete({'files': ['/project/old.txt']});
       await t.pump(const Duration(milliseconds: 20));

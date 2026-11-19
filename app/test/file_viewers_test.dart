@@ -93,7 +93,7 @@ void main() {
     final editorState = t.state(find.byType(CodeEditor)); // must survive the round trip
     await t.tap(find.byType(CodeEditor)); await t.pump();
     final editorFocus = FocusManager.instance.primaryFocus!;
-    await t.tap(find.text('预览'));
+    await t.tap(find.byTooltip('预览渲染结果'));
     await t.pump();
     expect(find.byType(MarkdownPreview), findsOneWidget);
     expect(t.getSize(find.byType(MarkdownPreview)).height, greaterThan(500), reason: 'the hidden editor must not consume half the viewport');
@@ -103,7 +103,7 @@ void main() {
     expect(key.currentState!.dirty, isTrue);
     expect(editorFocus.canRequestFocus, isFalse, reason: 'the hidden source editor must not receive traversal or typing');
 
-    await t.tap(find.text('编辑'));
+    await t.tap(find.byTooltip('切回源码编辑'));
     await t.pump();
     expect(find.byType(MarkdownPreview), findsNothing);
     expect(key.currentState!.text, '# Changed\n\nunsaved\n'); // nothing lost by looking
@@ -121,7 +121,7 @@ void main() {
   testWidgets('csv opens as a table with row and column counts', (t) async {
     link.content = 'name,qty\napple,3\npear,5\n';
     await show(t, FileEditor(ws: ws, root: 'home', path: '/project/data.csv'));
-    await t.tap(find.text('表格'));
+    await t.tap(find.byTooltip('表格预览'));
     await t.pump();
     expect(find.byType(CsvPreview), findsOneWidget);
     expect(find.text('2 行 · 2 列'), findsOneWidget);
@@ -133,8 +133,8 @@ void main() {
   testWidgets('a plain text file has no preview switch', (t) async {
     link.content = 'just text\n';
     await show(t, FileEditor(ws: ws, root: 'home', path: '/etc/hosts'));
-    expect(find.text('预览'), findsNothing);
-    expect(find.text('表格'), findsNothing);
+    expect(find.byTooltip('预览渲染结果'), findsNothing);
+    expect(find.byTooltip('表格预览'), findsNothing);
   });
 
   testWidgets('an image is downloaded, decoded and shown with its size', (t) async {

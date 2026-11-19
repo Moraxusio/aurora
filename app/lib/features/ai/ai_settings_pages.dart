@@ -1,11 +1,10 @@
 part of 'ai_settings_dialog.dart';
 
 const _sections = [
-  ('overview', '配置总览', Icons.dashboard_outlined, '配置范围、生效顺序与常用入口'),
-  ('connection', '连接', Icons.cable_outlined, '登录、接口与网络'),
-  ('models', '模型', Icons.memory_outlined, '逐模型设置能力和思考参数'),
-  ('execution', '工具与权限', Icons.shield_outlined, '全局工具默认值与执行权限'),
-  ('defaults', '对话与显示', Icons.tune_rounded, '新会话默认值、输入与阅读体验'),
+  ('personas', '智能体人设', Icons.badge_outlined, '将模型、思考参数与权限组合为可复用 Persona'),
+  ('connection', '连接与模型', Icons.cable_outlined, '登录、接口、模型列表获取与快速生成 Persona'),
+  ('execution', '权限与工具', Icons.shield_outlined, '执行权限模式、规则与全局工具默认值'),
+  ('defaults', '对话与编排', Icons.tune_rounded, '新会话默认值、编排角色与阅读体验'),
 ];
 
 extension _SettingsPages on _AiSettingsDialogState {
@@ -116,17 +115,19 @@ extension _SettingsPages on _AiSettingsDialogState {
                             children: [
                               if (wide)
                                 Container(
-                                  width: 186,
+                                  width: 196,
                                   padding: const EdgeInsets.fromLTRB(
-                                    10,
+                                    12,
                                     18,
-                                    10,
-                                    10,
+                                    12,
+                                    12,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: ide.editor.withValues(alpha: .5),
+                                    color: ide.sideBar,
                                     border: Border(
-                                      right: BorderSide(color: ide.border),
+                                      right: BorderSide(
+                                        color: ide.border.withValues(alpha: 0.75),
+                                      ),
                                     ),
                                   ),
                                   child: ListView(
@@ -174,25 +175,20 @@ extension _SettingsPages on _AiSettingsDialogState {
                                         ),
                                       ),
                                       const SizedBox(height: 20),
-                                      if (_section == 'connection' ||
-                                          _section == 'models') ...[
+                                      if (_section == 'connection') ...[
                                         _providerHeader(ide),
                                         const SizedBox(height: 18),
                                       ],
                                       switch (_section) {
-                                        'overview' => _overviewPage(ide),
+                                        'personas' => _personasPage(ide),
                                         'connection' => _connectionPage(ide),
-                                        'models' =>
-                                          _current == null
-                                              ? _emptyConnections(ide)
-                                              : _modelsPage(ide),
                                         'execution' => Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.stretch,
                                           children: [
                                             _notice(
                                               ide,
-                                              '这里设置所有模型的工具默认值。单个模型可在“模型”页覆盖；开启工具后仍按下方权限规则执行。',
+                                              '这里设置全局工具默认开关；单个 Persona 可在「智能体人设」页独立覆盖，并按下方全局权限规则与人设权限模式执行。',
                                             ),
                                             AiCapabilityEditor(
                                               values: _ai.toolDefaults,
@@ -419,9 +415,45 @@ extension _SettingsPages on _AiSettingsDialogState {
   Widget _connectionPage(Ide ide) {
     final p = _current;
     if (p == null) return _emptyConnections(ide);
+    final statusLabel = p.isSubscription
+        ? (p.oauth != null ? 'OAuth 已登录' : '待设备码登录')
+        : (p.apiKey.isNotEmpty ? '已配置密钥' : '无密钥（本地网关可用）');
+    final statusColor = p.isSubscription
+        ? (p.oauth != null ? ide.ok : ide.warn)
+        : (p.apiKey.isNotEmpty ? ide.ok : ide.textDim);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(Radii.s + 2),
+                border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+              ),
+              child: Text(
+                statusLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: statusColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                p.model.isEmpty ? '默认模型：未选择' : '默认模型：${p.model}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, color: ide.textDim),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
         _field(_name, '连接名称', key: 'ai-provider-name'),
         const SizedBox(height: 16),
         DropdownButtonFormField<String>(
@@ -562,17 +594,16 @@ extension _SettingsPages on _AiSettingsDialogState {
                 icon: const Icon(Icons.network_check, size: 16),
                 label: Text(_checking ? '检查中…' : '检查目录接口'),
               ),
-            TextButton.icon(
-              onPressed: () => _change(() {
-                _section = 'models';
-                _note = null;
-              }),
-              icon: const Icon(Icons.arrow_forward, size: 16),
-              label: const Text('选择与管理模型'),
-            ),
           ],
         ),
         const SizedBox(height: 20),
+        const AiSectionHeading(
+          icon: Icons.memory_outlined,
+          title: '模型列表与快速人设',
+          subtitle: '拉取或加载模型目录，设置默认模型，或一键生成 Persona。',
+        ),
+        _modelsPage(ide),
+        const SizedBox(height: 16),
         ExpansionTile(
           key: const ValueKey('ai-network-options'),
           tilePadding: EdgeInsets.zero,
@@ -609,34 +640,33 @@ extension _SettingsPages on _AiSettingsDialogState {
 
   Widget _modelsPage(Ide ide) {
     final p = _current!;
-    final models =
-        <String>{...p.models, if (p.model.isNotEmpty) p.model}
-            .where(
-              (m) =>
-                  m.toLowerCase().contains(_search.text.trim().toLowerCase()),
-            )
-            .toList()
-          ..sort();
+    final models = <String>{...p.models}
+        .where(
+          (m) => m.toLowerCase().contains(_search.text.trim().toLowerCase()),
+        )
+        .toList()
+      ..sort();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _field(
-          _model,
-          '此连接的默认模型 ID',
-          key: 'ai-model-id',
-          hint: '手动输入，或从下面的目录选择',
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 6,
+        Row(
           children: [
+            Expanded(
+              child: _field(
+                _model,
+                '手动添加模型 ID',
+                key: 'ai-model-id',
+                hint: '输入模型 ID 后添加到清单',
+              ),
+            ),
+            const SizedBox(width: 8),
             TextButton.icon(
               key: const ValueKey('ai-add-model'),
               onPressed: _addModel,
               icon: const Icon(Icons.add, size: 16),
-              label: const Text('添加当前模型'),
+              label: const Text('添加'),
             ),
+            const SizedBox(width: 4),
             OutlinedButton.icon(
               key: const ValueKey('ai-fetch-models'),
               onPressed: _fetching || _checking ? null : _discover,
@@ -645,8 +675,8 @@ extension _SettingsPages on _AiSettingsDialogState {
                 _fetching
                     ? '拉取中…'
                     : p.isSubscription
-                    ? '加载订阅建议'
-                    : '拉取模型',
+                    ? '加载订阅模型列表'
+                    : '拉取模型列表',
               ),
             ),
           ],
@@ -657,7 +687,7 @@ extension _SettingsPages on _AiSettingsDialogState {
           decoration: const InputDecoration(
             isDense: true,
             prefixIcon: Icon(Icons.search, size: 18),
-            hintText: '搜索已保存的模型',
+            hintText: '搜索模型清单…',
           ),
         ),
         const SizedBox(height: 8),
@@ -672,7 +702,7 @@ extension _SettingsPages on _AiSettingsDialogState {
               ? Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    '暂无模型。拉取目录或手动添加模型 ID。',
+                    '暂无模型。点击「${p.isSubscription ? '加载订阅模型列表' : '拉取模型列表'}」或手动添加模型 ID。',
                     style: TextStyle(fontSize: 12, color: ide.textDim),
                   ),
                 )
@@ -680,167 +710,702 @@ extension _SettingsPages on _AiSettingsDialogState {
                   shrinkWrap: true,
                   itemCount: models.length,
                   itemBuilder: (_, index) {
-                    final id = models[index],
-                        selected = id == (_inspectedModel ?? p.model);
+                    final id = models[index];
                     final limit = p.modelContextWindows[id];
-                    final image =
-                        p.effectiveCapabilities(
-                          id,
-                          _ai.toolDefaults,
-                        )['image_input'] !=
-                        false;
                     return ListTile(
                       dense: true,
-                      selected: selected,
-                      selectedTileColor: ide.accent.withValues(alpha: .07),
-                      leading: IconButton(
-                        tooltip: id == p.model ? '默认模型' : '设为默认模型',
-                        onPressed: () => _model.text = id,
-                        icon: Icon(
-                          id == p.model
-                              ? Icons.star_rounded
-                              : Icons.star_border_rounded,
-                          size: 17,
-                          color: id == p.model ? ide.accent : ide.textFaint,
-                        ),
-                      ),
                       title: Text(
                         id,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 12, color: ide.text),
                       ),
-                      subtitle: Text(
-                        '图片${image ? '开启' : '关闭'}${limit == null ? '' : ' · ${(limit / 1000).round()}k 上下文'}',
-                        style: TextStyle(fontSize: 10.5, color: ide.textFaint),
+                      subtitle: limit == null
+                          ? null
+                          : Text(
+                              '目录上下文 ${(limit / 1000).round()}k',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: ide.textFaint,
+                              ),
+                            ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () => _createPersonaFromModel(p, id),
+                            icon: const Icon(
+                              Icons.person_add_alt_1_outlined,
+                              size: 15,
+                            ),
+                            label: const Text('生成 Persona'),
+                          ),
+                          IconButton(
+                            tooltip: '移除 $id',
+                            icon: const Icon(Icons.close, size: 15),
+                            onPressed: () => _removeModel(id),
+                          ),
+                        ],
                       ),
-                      trailing: IconButton(
-                        tooltip: '移除 $id',
-                        icon: const Icon(Icons.close, size: 15),
-                        onPressed: () => _removeModel(id),
-                      ),
-                      onTap: () => _change(() => _inspectedModel = id),
                     );
                   },
                 ),
-        ),
-        const SizedBox(height: 20),
-        if ((_inspectedModel ?? p.model).isNotEmpty)
-          AiModelOptionsEditor(
-            key: ValueKey(
-              'ai-model-options-${p.id}-${_inspectedModel ?? p.model}',
-            ),
-            provider: p,
-            model: _inspectedModel ?? p.model,
-            defaults: _ai.toolDefaults,
-            onChanged: (v) =>
-                _change(() => p.modelOptions[_inspectedModel ?? p.model] = v),
-          ),
-        const SizedBox(height: 16),
-        ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          title: const Text('连接级预设', style: TextStyle(fontSize: 13)),
-          children: [
-            _field(_context, '统一上下文上限', numeric: true, hint: '留空使用模型目录值 / 估计值'),
-            if (!p.isSubscription) ...[
-              const SizedBox(height: 12),
-              _field(
-                _maxTokens,
-                '单次最大输出 tokens',
-                numeric: true,
-                hint: '留空由 agent 默认（运行中预留 8192）',
-              ),
-            ],
-            const SizedBox(height: 12),
-            AiReasoningField(
-              key: ValueKey('ai-connection-effort-${p.id}'),
-              value: p.reasoningEffort,
-              label: '所有模型的默认思考强度',
-              onChanged: (v) => _change(() => p.reasoningEffort = v),
-            ),
-          ],
         ),
       ],
     );
   }
 
-  Widget _overviewPage(Ide ide) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _notice(
-        ide,
-        '配置按用途管理：连接负责访问模型，模型覆盖负责能力与参数，项目配置负责运行预算、快照、指令、技能和 MCP。保存后用于后续请求；正在执行的运行沿用已接收的配置。',
-      ),
-      const SizedBox(height: 16),
-      for (final s in _sections.where((s) => s.$1 != 'overview'))
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(s.$3, color: ide.accent),
-          title: Text(s.$2),
-          subtitle: Text(
-            s.$1 == 'connection'
-                ? '${_ai.providers.length} 个连接 · 默认 ${_ai.activeProvider?.name ?? '未设置'}'
-                : s.$1 == 'models'
-                ? '默认模型 ${_ai.activeProvider?.model ?? '未设置'} · 上下文、输出、思考与能力覆盖'
-                : s.$4,
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _change(() => _section = s.$1),
+  Widget _personasPage(Ide ide) {
+    final selected =
+        _ai.personaById(_editingPersonaId) ?? _ai.personas.firstOrNull;
+    if (selected != null && _editingPersonaId != selected.id) {
+      _editingPersonaId = selected.id;
+    }
+    String permBadge(String mode) => switch (mode) {
+      'full_access' => '完全权限',
+      'auto' => '自动执行',
+      'ask' => '先询问',
+      _ => '继承权限',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _notice(
+          ide,
+          'Persona 将「连接 + 模型 + 思考参数 + 权限与工具」封装为独立对象。可在对话中一键切换，或在编排（Orchestrator）模式下分别为「指挥」与「乐手」指派不同 Persona。',
         ),
-      const Divider(),
-      ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(Icons.folder_special_outlined, color: ide.accent),
-        title: const Text('项目预算、快照与扩展'),
-        subtitle: const Text('保存在工作目录 .aurora/ai.json；表单编辑，独立保存。'),
-        trailing: const Icon(Icons.open_in_new),
-        onTap: widget.ws?.link?.server.caps.contains('ai.extensions') != true
-            ? null
-            : () async {
-                final folder = await selectWorkspaceFolder(context, widget.ws!);
-                if (!mounted || folder == null) return;
-                await _close();
-                if (mounted && _closing) {
-                  await openAiExtensions(
-                    context,
-                    widget.ws!,
-                    root: folder.root,
-                    workdir: folder.path,
-                  );
-                }
-              },
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            FilledButton.icon(
+              key: const ValueKey('ai-add-persona'),
+              onPressed: _addPersona,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('新建 Persona'),
+            ),
+            if (_ai.activeProvider != null)
+              OutlinedButton.icon(
+                key: const ValueKey('ai-persona-from-active'),
+                onPressed: () => _createPersonaFromModel(
+                  _ai.activeProvider!,
+                  _ai.activeProvider!.model,
+                ),
+                icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
+                label: const Text('从当前默认模型生成'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (_ai.personas.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: ide.editor.withValues(alpha: .45),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: ide.border),
+            ),
+            child: Text(
+              '还没有 Persona。点击「新建 Persona」或前往「模型」页点击「生成 Persona」即可创建。',
+              style: TextStyle(fontSize: 12.5, color: ide.textDim),
+            ),
+          )
+        else ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final persona in _ai.personas)
+                _personaCard(ide, persona, selected?.id == persona.id, permBadge),
+            ],
+          ),
+          if (selected != null) ...[
+            const SizedBox(height: 18),
+            _personaEditor(ide, selected),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _personaCard(
+    Ide ide,
+    AiPersona persona,
+    bool isSelected,
+    String Function(String) permBadge,
+  ) {
+    final prov = _ai.providers
+        .where((p) => p.id == persona.providerId)
+        .firstOrNull;
+    final isActive = _ai.activePersonaId == persona.id;
+    final isConductor = _ai.orchestratorConductorPersonaId == persona.id;
+    final isMusician = _ai.orchestratorMusicianPersonaId == persona.id;
+    return InkWell(
+      key: ValueKey('ai-persona-card-${persona.id}'),
+      onTap: () => _change(() => _editingPersonaId = persona.id),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 220,
+        padding: const EdgeInsets.all(11),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? ide.accent.withValues(alpha: .10)
+              : ide.editor.withValues(alpha: .5),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? ide.accent : ide.border,
+            width: isSelected ? 1.4 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.badge_outlined,
+                  size: 15,
+                  color: isSelected ? ide.accent : ide.textDim,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    persona.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: ide.text,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(
+              '${prov?.name ?? '未绑定连接'} · ${persona.model.isEmpty ? '默认模型' : persona.model}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, color: ide.textDim),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                _tag(ide, permBadge(persona.permissionMode), ide.textDim),
+                if (isActive) _tag(ide, '默认', ide.accent),
+                if (isConductor) _tag(ide, '指挥', ide.warn),
+                if (isMusician) _tag(ide, '乐手', ide.ok),
+              ],
+            ),
+          ],
+        ),
       ),
-      const SizedBox(height: 16),
-      _notice(
-        ide,
-        '参数优先级：会话思考选择 → 模型覆盖 → 连接预设／模型目录 → agent 默认。\n工具能力：模型覆盖 → 全局工具默认；权限规则单独判断。\n会话预算不等于上下文窗口，也不等于整个会话累计用量。',
-      ),
-    ],
+    );
+  }
+
+  Widget _tag(Ide ide, String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+    ),
   );
+
+  Widget _personaEditor(Ide ide, AiPersona persona) {
+    final prov = _ai.providers
+        .where((p) => p.id == persona.providerId)
+        .firstOrNull;
+    final catalog = prov == null
+        ? const <String>[]
+        : (<String>{
+            ...prov.models,
+            if (prov.model.isNotEmpty) prov.model,
+            if (persona.model.isNotEmpty) persona.model,
+          }.toList()..sort());
+    return Material(
+      key: ValueKey('ai-persona-editor-${persona.id}'),
+      color: ide.editor.withValues(alpha: .35),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: ide.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              ActionChip(
+                avatar: Icon(
+                  _ai.activePersonaId == persona.id
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded,
+                  size: 15,
+                ),
+                label: Text(
+                  _ai.activePersonaId == persona.id ? '已是默认人设' : '设为默认人设',
+                ),
+                onPressed: () => _change(
+                  () => _ai.activePersonaId =
+                      _ai.activePersonaId == persona.id ? null : persona.id,
+                ),
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.campaign_outlined, size: 15),
+                label: Text(
+                  _ai.orchestratorConductorPersonaId == persona.id
+                      ? '已是编排指挥'
+                      : '设为编排指挥',
+                ),
+                onPressed: () => _change(
+                  () => _ai.orchestratorConductorPersonaId =
+                      _ai.orchestratorConductorPersonaId == persona.id
+                      ? null
+                      : persona.id,
+                ),
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.music_note_outlined, size: 15),
+                label: Text(
+                  _ai.orchestratorMusicianPersonaId == persona.id
+                      ? '已是编排乐手'
+                      : '设为编排乐手',
+                ),
+                onPressed: () => _change(
+                  () => _ai.orchestratorMusicianPersonaId =
+                      _ai.orchestratorMusicianPersonaId == persona.id
+                      ? null
+                      : persona.id,
+                ),
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.copy_outlined, size: 15),
+                label: const Text('复制'),
+                onPressed: () => _duplicatePersona(persona),
+              ),
+              ActionChip(
+                avatar: Icon(Icons.delete_outline, size: 15, color: ide.error),
+                label: Text('删除', style: TextStyle(color: ide.error)),
+                onPressed: () => _deletePersona(persona),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  key: ValueKey('ai-persona-name-${persona.id}'),
+                  initialValue: persona.name,
+                  decoration: const InputDecoration(labelText: 'Persona 名称'),
+                  onChanged: (v) => _change(() => persona.name = v.trim()),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  key: ValueKey('ai-persona-desc-${persona.id}'),
+                  initialValue: persona.description,
+                  decoration: const InputDecoration(labelText: '用途说明（可选）'),
+                  onChanged: (v) =>
+                      _change(() => persona.description = v.trim()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey(
+                    'ai-persona-provider-${persona.id}-${persona.providerId}',
+                  ),
+                  initialValue: prov?.id ?? '',
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: '绑定连接'),
+                  items: [
+                    const DropdownMenuItem(value: '', child: Text('跟随当前连接')),
+                    for (final p in _ai.providers)
+                      DropdownMenuItem(
+                        value: p.id,
+                        child: Text(p.name, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => _change(() {
+                    persona.providerId = v ?? '';
+                    final nextProv = _ai.providers
+                        .where((x) => x.id == persona.providerId)
+                        .firstOrNull;
+                    if (nextProv != null && persona.model.isEmpty) {
+                      persona.model = nextProv.model;
+                    }
+                  }),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: catalog.isNotEmpty
+                    ? DropdownButtonFormField<String>(
+                        key: ValueKey(
+                          'ai-persona-model-${persona.id}-${persona.model}',
+                        ),
+                        initialValue: catalog.contains(persona.model)
+                            ? persona.model
+                            : '',
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: '绑定模型'),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('跟随连接默认模型'),
+                          ),
+                          for (final m in catalog)
+                            DropdownMenuItem(
+                              value: m,
+                              child: Text(m, overflow: TextOverflow.ellipsis),
+                            ),
+                        ],
+                        onChanged: (v) =>
+                            _change(() => persona.model = v ?? ''),
+                      )
+                    : TextFormField(
+                        key: ValueKey('ai-persona-model-input-${persona.id}'),
+                        initialValue: persona.model,
+                        decoration: const InputDecoration(labelText: '模型 ID'),
+                        onChanged: (v) =>
+                            _change(() => persona.model = v.trim()),
+                      ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  key: ValueKey('ai-persona-ctx-${persona.id}'),
+                  initialValue: persona.contextWindow > 0
+                      ? '${persona.contextWindow}'
+                      : '',
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: '上下文窗口（tokens，留空继承）',
+                  ),
+                  onChanged: (v) => _change(
+                    () => persona.contextWindow = int.tryParse(v) ?? 0,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  key: ValueKey('ai-persona-out-${persona.id}'),
+                  initialValue: persona.maxTokens > 0
+                      ? '${persona.maxTokens}'
+                      : '',
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: '单次最大输出（tokens，留空继承）',
+                  ),
+                  onChanged: (v) => _change(
+                    () => persona.maxTokens = int.tryParse(v) ?? 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey(
+                    'ai-persona-perm-${persona.id}-${persona.permissionMode}',
+                  ),
+                  initialValue: persona.permissionMode,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Persona 权限模式'),
+                  items: const [
+                    DropdownMenuItem(value: '', child: Text('继承会话权限')),
+                    DropdownMenuItem(value: 'ask', child: Text('先询问 (Ask)')),
+                    DropdownMenuItem(value: 'auto', child: Text('自动执行 (Auto)')),
+                    DropdownMenuItem(
+                      value: 'full_access',
+                      child: Text('完全权限 (Full Access)'),
+                    ),
+                  ],
+                  onChanged: (v) =>
+                      _change(() => persona.permissionMode = v ?? ''),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey(
+                    'ai-persona-think-${persona.id}-${persona.reasoningMode}',
+                  ),
+                  initialValue: persona.reasoningMode,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: '思考参数格式'),
+                  items: const [
+                    DropdownMenuItem(value: '', child: Text('跟随连接协议')),
+                    DropdownMenuItem(value: 'protocol', child: Text('标准协议参数')),
+                    DropdownMenuItem(value: 'disabled', child: Text('不发送思考参数')),
+                    DropdownMenuItem(
+                      value: 'anthropic-adaptive',
+                      child: Text('Anthropic · 自适应 effort'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'anthropic-budget',
+                      child: Text('Anthropic · Token 预算'),
+                    ),
+                  ],
+                  onChanged: (v) =>
+                      _change(() => persona.reasoningMode = v ?? ''),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          AiReasoningField(
+            key: ValueKey('ai-persona-effort-${persona.id}'),
+            value: persona.reasoningEffort ?? '',
+            label: '思考强度（留空不发送，可填 low / medium / high / max）',
+            onChanged: (v) => _change(
+              () => persona.reasoningEffort = v.trim().isEmpty ? null : v.trim(),
+            ),
+          ),
+          if (persona.reasoningMode == 'anthropic-budget') ...[
+            const SizedBox(height: 12),
+            TextFormField(
+              key: ValueKey('ai-persona-budget-${persona.id}'),
+              initialValue: persona.thinkingBudget > 0
+                  ? '${persona.thinkingBudget}'
+                  : '',
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: '思考 Token 预算（至少 1024）',
+              ),
+              onChanged: (v) => _change(
+                () => persona.thinkingBudget = int.tryParse(v) ?? 0,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              FilterChip(
+                label: const Text('允许联网'),
+                selected:
+                    persona.capabilities['webfetch'] != false &&
+                    persona.capabilities['websearch'] != false,
+                onSelected: (on) => _change(() {
+                  persona.capabilities['webfetch'] = on;
+                  persona.capabilities['websearch'] = on;
+                }),
+              ),
+              FilterChip(
+                label: const Text('允许执行命令'),
+                selected: persona.capabilities['shell'] != false,
+                onSelected: (on) =>
+                    _change(() => persona.capabilities['shell'] = on),
+              ),
+              FilterChip(
+                label: const Text('允许修改文件'),
+                selected:
+                    persona.capabilities['write'] != false &&
+                    persona.capabilities['edit'] != false &&
+                    persona.capabilities['apply_patch'] != false,
+                onSelected: (on) => _change(() {
+                  persona.capabilities['write'] = on;
+                  persona.capabilities['edit'] = on;
+                  persona.capabilities['apply_patch'] = on;
+                }),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text(
+              'Persona 专属权限规则（${persona.permissionRules.length}）',
+              style: const TextStyle(fontSize: 13),
+            ),
+            children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  ActionChip(
+                    label: const Text('+ 禁止写文件'),
+                    onPressed: () => _change(
+                      () => persona.permissionRules.add(
+                        AiPermissionRule(
+                          action: 'write_files',
+                          resource: '*',
+                          effect: 'deny',
+                        ),
+                      ),
+                    ),
+                  ),
+                  ActionChip(
+                    label: const Text('+ 禁止执行命令'),
+                    onPressed: () => _change(
+                      () => persona.permissionRules.add(
+                        AiPermissionRule(
+                          action: 'shell',
+                          resource: '*',
+                          effect: 'deny',
+                        ),
+                      ),
+                    ),
+                  ),
+                  ActionChip(
+                    label: const Text('+ 禁止联网'),
+                    onPressed: () => _change(
+                      () => persona.permissionRules.add(
+                        AiPermissionRule(
+                          action: 'network',
+                          resource: '*',
+                          effect: 'deny',
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              for (var i = 0; i < persona.permissionRules.length; i++)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '${persona.permissionRules[i].effect.toUpperCase()} · ${persona.permissionRules[i].action} (${persona.permissionRules[i].resource})',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 16),
+                    onPressed: () =>
+                        _change(() => persona.permissionRules.removeAt(i)),
+                  ),
+                ),
+            ],
+          ),
+          AiCapabilityEditor(
+            model: true,
+            values: persona.capabilities,
+            inherited: {
+              ...aiCapabilityDefaults,
+              ..._ai.toolDefaults,
+              if (prov != null)
+                ...?prov.modelOptions[persona.model.isEmpty
+                        ? prov.model
+                        : persona.model]
+                    ?.capabilities,
+            },
+            onChanged: (v) => _change(() => persona.capabilities = v),
+          ),
+        ],
+        ),
+      ),
+    );
+  }
 
   Widget _defaultsPage(Ide ide) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      if (_ai.providers.isNotEmpty)
+      if (_ai.personas.isEmpty)
+        _notice(ide, '尚未创建 Persona，请先在「连接与模型」拉取模型清单并生成 Persona，或在「智能体人设」新建。')
+      else ...[
         DropdownButtonFormField<String>(
-          key: ValueKey('ai-default-provider-${_ai.activeProvider?.id}'),
-          initialValue: _ai.activeProvider?.id,
+          key: ValueKey('ai-default-persona-${_ai.activePersonaId ?? ''}'),
+          initialValue:
+              _ai.personaById(_ai.activePersonaId)?.id ??
+              _ai.personas.first.id,
           isExpanded: true,
-          decoration: const InputDecoration(labelText: '新会话的默认连接'),
+          decoration: const InputDecoration(labelText: '新会话默认 Persona'),
           items: [
-            for (final p in _ai.providers)
+            for (final persona in _ai.personas)
               DropdownMenuItem(
-                value: p.id,
+                value: persona.id,
                 child: Text(
-                  '${p.name} / ${p.model.isEmpty ? '未选模型' : p.model}',
+                  '${persona.name}${persona.model.isEmpty ? '' : ' · ${persona.model}'}',
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
           ],
-          onChanged: (v) => _change(() => _ai.selectedProviderId = v),
-        )
-      else
-        _notice(ide, '尚未连接提供商，请先在“连接”页添加。'),
-      const SizedBox(height: 18),
+          onChanged: (v) =>
+              _change(() => _ai.activePersonaId = v == null || v.isEmpty ? null : v),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: ValueKey(
+                  'ai-conductor-persona-${_ai.orchestratorConductorPersonaId ?? ''}',
+                ),
+                initialValue:
+                    _ai.personaById(_ai.orchestratorConductorPersonaId)?.id ??
+                    '',
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '编排 · 指挥官 (主代理)'),
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('跟随默认 Persona')),
+                  for (final persona in _ai.personas)
+                    DropdownMenuItem(
+                      value: persona.id,
+                      child: Text(persona.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) => _change(
+                  () => _ai.orchestratorConductorPersonaId =
+                      v == null || v.isEmpty ? null : v,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: ValueKey(
+                  'ai-musician-persona-${_ai.orchestratorMusicianPersonaId ?? ''}',
+                ),
+                initialValue:
+                    _ai.personaById(_ai.orchestratorMusicianPersonaId)?.id ??
+                    '',
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '编排 · 乐手 (子代理)'),
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('跟随指挥官')),
+                  for (final persona in _ai.personas)
+                    DropdownMenuItem(
+                      value: persona.id,
+                      child: Text(persona.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) => _change(
+                  () => _ai.orchestratorMusicianPersonaId =
+                      v == null || v.isEmpty ? null : v,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+      const SizedBox(height: 16),
       DropdownButtonFormField<String>(
         initialValue: _ai.defaultAgent,
         isExpanded: true,
@@ -848,10 +1413,14 @@ extension _SettingsPages on _AiSettingsDialogState {
         items: const [
           DropdownMenuItem(value: 'build', child: Text('构建 · 可以调用工具修改文件')),
           DropdownMenuItem(value: 'plan', child: Text('规划 · 只读分析与方案')),
+          DropdownMenuItem(
+            value: 'orchestrator',
+            child: Text('编排 · 指挥官拆解任务并调度乐手子代理'),
+          ),
         ],
         onChanged: (v) => _change(() => _ai.defaultAgent = v!),
       ),
-      const SizedBox(height: 18),
+      const SizedBox(height: 16),
       DropdownButtonFormField<String>(
         initialValue: _ai.followUp,
         isExpanded: true,
@@ -862,8 +1431,35 @@ extension _SettingsPages on _AiSettingsDialogState {
         ],
         onChanged: (v) => _change(() => _ai.followUp = v!),
       ),
-      const SizedBox(height: 20),
-      _notice(ide, '在对话输入区切换模型、思考强度或工作模式，只影响该会话的后续输入。正在执行的步骤会显示其实际使用的模型。'),
+      const SizedBox(height: 18),
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              '默认对话策略（新对话继承，可在各对话内独立调整）',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: ide.text,
+              ),
+            ),
+          ),
+          TextButton(
+            key: const ValueKey('ai-reset-default-policy'),
+            onPressed: () => _change(() {
+              _ai.defaultPolicy = AiSessionPolicy();
+              _policyEpoch++;
+            }),
+            child: const Text('恢复出厂默认'),
+          ),
+        ],
+      ),
+      AiSessionPolicyEditor(
+        policy: _ai.defaultPolicy,
+        epoch: _policyEpoch,
+        onChanged: () => _change(() {}),
+      ),
+      const SizedBox(height: 16),
       const AiSectionHeading(icon: Icons.keyboard_outlined, title: '输入与阅读'),
       DropdownButtonFormField<String>(
         key: const ValueKey('ai-send-key'),
@@ -972,270 +1568,505 @@ extension _SettingsPages on _AiSettingsDialogState {
     );
   }
 
-  Widget _permissionsPage(Ide ide) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      DropdownButtonFormField<String>(
-        key: const ValueKey('ai-default-permission'),
-        initialValue: _ai.permissionMode,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: '新会话默认权限'),
-        items: const [
-          DropdownMenuItem(
-            value: 'ask',
-            child: Text('先询问 · 修改文件与执行命令需确认', overflow: TextOverflow.ellipsis),
+  static const _actionLabels = <String, String>{
+    '*': '* · 全部工具',
+    'files': 'files · 所有文件操作',
+    'write_files': 'write_files · 写入与编辑',
+    'read': 'read · 读取文件',
+    'edit': 'edit · 精确编辑',
+    'write': 'write · 写入文件',
+    'shell': 'shell · 执行命令',
+    'network': 'network · 网页与搜索',
+    'webfetch': 'webfetch · 读取网页',
+    'websearch': 'websearch · 联网搜索',
+    'subagent': 'subagent · 启动子代理',
+    'mcp': 'mcp · MCP 工具',
+  };
+
+  static const _agentLabels = <String, String>{
+    '': '全部代理（主代理 + 子代理）',
+    'primary': '仅主代理（Build / Plan / Orchestrator）',
+    'subagent': '仅子代理（Explore / General）',
+    'build': 'Build 主代理',
+    'plan': 'Plan 规划代理',
+    'orchestrator': 'Orchestrator 指挥代理',
+    'explore': 'Explore 只读子代理',
+    'general': 'General 执行子代理',
+  };
+
+  String _ruleHint(String action) => switch (action) {
+    'shell' => '例如 git status *、npm test * 或 rm -rf *',
+    'network' || 'webfetch' => '例如 https://docs.example.com/* 或 *',
+    'websearch' => '搜索词通配符，通常填 *',
+    'subagent' => '例如 general 或 explore 或 *',
+    'mcp' => '例如 server_id/* 或 *',
+    _ => '例如 src/*、*.env* 或 *',
+  };
+
+  String _ruleExpiryLabel(AiPermissionRule r) {
+    if (r.expiresAt <= 0) return '永久';
+    final left = r.expiresAt - DateTime.now().millisecondsSinceEpoch;
+    if (left <= 0) return '已过期';
+    final mins = (left / 60000).ceil();
+    if (mins < 60) return '$mins 分钟后过期';
+    final hours = (mins / 60).ceil();
+    if (hours < 48) return '$hours 小时后过期';
+    return '${(hours / 24).ceil()} 天后过期';
+  }
+
+  Widget _permissionsPage(Ide ide) {
+    final expiredCount = _ai.permissionRules.where((r) => r.isExpired).length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          key: const ValueKey('ai-default-permission'),
+          initialValue: _ai.permissionMode,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: '新会话默认权限'),
+          items: const [
+            DropdownMenuItem(
+              value: 'ask',
+              child: Text('先询问 · 修改文件、命令与外网访问需确认', overflow: TextOverflow.ellipsis),
+            ),
+            DropdownMenuItem(value: 'auto', child: Text('自动执行 · 高风险操作仍需确认')),
+            DropdownMenuItem(
+              value: 'full_access',
+              child: Text('完全权限 (Full Access) · 免确认自动放行（显式拒绝仍生效）'),
+            ),
+          ],
+          onChanged: (v) => _change(() => _ai.permissionMode = v!),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          '一键权限方案',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: ide.text,
           ),
-          DropdownMenuItem(value: 'auto', child: Text('自动执行 · 高风险操作仍需确认')),
-        ],
-        onChanged: (v) => _change(() => _ai.permissionMode = v!),
-      ),
-      const SizedBox(height: 16),
-      _notice(
-        ide,
-        '规则从上到下匹配，最后命中的规则生效。项目规则仅在绑定的服务器和项目目录内应用。\n“本会话允许”是运行时授权；不会写成全局规则。',
-      ),
-      const SizedBox(height: 16),
-      Container(
-        key: const ValueKey('ai-permission-rules'),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
           children: [
-            for (var i = 0; i < _ai.permissionRules.length; i++)
-              _ruleTile(ide, i),
-            if (_ai.permissionRules.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  '暂无自定义规则，使用默认权限。',
-                  style: TextStyle(color: ide.textDim, fontSize: 12),
+            ActionChip(
+              key: const ValueKey('ai-preset-readonly'),
+              avatar: const Icon(Icons.visibility_outlined, size: 15),
+              label: const Text('只读探索'),
+              onPressed: () => _applyPermissionPreset('readonly'),
+            ),
+            ActionChip(
+              key: const ValueKey('ai-preset-balanced'),
+              avatar: const Icon(Icons.balance_outlined, size: 15),
+              label: const Text('标准开发'),
+              onPressed: () => _applyPermissionPreset('balanced'),
+            ),
+            ActionChip(
+              key: const ValueKey('ai-preset-isolated-subagent'),
+              avatar: const Icon(Icons.security_outlined, size: 15),
+              label: const Text('子代理严格隔离'),
+              onPressed: () => _applyPermissionPreset('isolated_subagent'),
+            ),
+            ActionChip(
+              key: const ValueKey('ai-preset-auto'),
+              avatar: const Icon(Icons.bolt_outlined, size: 15),
+              label: const Text('自动受控'),
+              onPressed: () => _applyPermissionPreset('auto_guarded'),
+            ),
+            ActionChip(
+              key: const ValueKey('ai-preset-full-access'),
+              avatar: const Icon(Icons.lock_open_rounded, size: 15),
+              label: const Text('完全权限'),
+              onPressed: () => _applyPermissionPreset('full_access'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _notice(
+          ide,
+          '规则从上到下匹配，最后命中的启用规则生效；显式拒绝优先于规划/探索模式。可分别约束主代理、子代理、网络、文件、命令及规则有效期。\n“本会话允许”是运行时授权，可在对话菜单「本会话授权…」中查看或撤销。',
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '权限规则（${_ai.permissionRules.length}）',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: ide.text,
                 ),
+              ),
+            ),
+            if (expiredCount > 0)
+              TextButton.icon(
+                onPressed: _pruneExpiredRules,
+                icon: const Icon(Icons.cleaning_services_outlined, size: 15),
+                label: Text('清理 $expiredCount 条已过期'),
               ),
           ],
         ),
-      ),
-      const SizedBox(height: 18),
-      Text(
-        _editingRule == null ? '添加规则' : '编辑第 ${_editingRule! + 1} 条规则',
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: ide.text,
-        ),
-      ),
-      const SizedBox(height: 12),
-      Row(
-        children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              key: ValueKey('ai-rule-effect-$_ruleEffect'),
-              initialValue: _ruleEffect,
-              decoration: const InputDecoration(labelText: '处理方式'),
-              items: const [
-                DropdownMenuItem(value: 'allow', child: Text('允许')),
-                DropdownMenuItem(value: 'ask', child: Text('询问')),
-                DropdownMenuItem(value: 'deny', child: Text('拒绝')),
-              ],
-              onChanged: (v) => _change(() => _ruleEffect = v!),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              key: ValueKey('ai-rule-action-$_ruleAction'),
-              initialValue: _ruleAction,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '工具动作'),
-              items: [
-                for (final a in {
-                  '*',
-                  'shell',
-                  'read',
-                  'edit',
-                  'write',
-                  'websearch',
-                  'webfetch',
-                  'subagent',
-                  _ruleAction,
-                })
-                  DropdownMenuItem(
-                    value: a,
-                    child: Text(a, overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 8),
+        Container(
+          key: const ValueKey('ai-permission-rules'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < _ai.permissionRules.length; i++)
+                _ruleTile(ide, i),
+              if (_ai.permissionRules.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    '暂无自定义规则，使用默认权限。',
+                    style: TextStyle(color: ide.textDim, fontSize: 12),
                   ),
-              ],
-              onChanged: (v) => _change(() => _ruleAction = v!),
-            ),
+                ),
+            ],
           ),
-        ],
-      ),
-      const SizedBox(height: 14),
-      _field(
-        _resource,
-        '资源模式',
-        key: 'ai-rule-resource',
-        hint: '例如 git status * 或 *.env',
-      ),
-      const SizedBox(height: 14),
-      DropdownButtonFormField<String>(
-        key: ValueKey('ai-rule-scope-$_ruleScope'),
-        initialValue: _ruleScope,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: '作用范围'),
-        items: [
-          const DropdownMenuItem(value: 'global', child: Text('全局 · 所有工作区')),
-          DropdownMenuItem(
-            value: 'project',
-            enabled: widget.ws?.project != null,
-            child: Text(
-              widget.ws?.project == null
-                  ? '项目 · 请先打开项目工作区'
-                  : '当前项目 · ${widget.ws!.project!.name}',
-              overflow: TextOverflow.ellipsis,
-            ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          _editingRule == null ? '添加规则' : '编辑第 ${_editingRule! + 1} 条规则',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: ide.text,
           ),
-        ],
-        onChanged: (v) => _change(() => _ruleScope = v!),
-      ),
-      const SizedBox(height: 12),
-      Text(
-        '填写中的规则也会随「保存设置」一起保存。',
-        style: TextStyle(fontSize: 11, color: ide.textFaint),
-      ),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        children: [
-          FilledButton.icon(
-            key: const ValueKey('ai-save-rule'),
-            onPressed: _saveRule,
-            icon: const Icon(Icons.add, size: 16),
-            label: Text(_editingRule == null ? '添加规则' : '更新规则'),
-          ),
-          if (_editingRule != null || _ruleDirty)
-            TextButton(
-              onPressed: () => _change(_resetRule),
-              child: const Text('清空编辑'),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            ActionChip(
+              label: const Text('+ 允许测试命令'),
+              onPressed: () => _fillRuleTemplate(
+                effect: 'allow',
+                action: 'shell',
+                resource: 'npm test *',
+              ),
             ),
-        ],
-      ),
-    ],
-  );
+            ActionChip(
+              label: const Text('+ 禁止子代理联网'),
+              onPressed: () => _fillRuleTemplate(
+                effect: 'deny',
+                action: 'network',
+                resource: '*',
+                agent: 'subagent',
+              ),
+            ),
+            ActionChip(
+              label: const Text('+ 禁止子代理执行命令'),
+              onPressed: () => _fillRuleTemplate(
+                effect: 'deny',
+                action: 'shell',
+                resource: '*',
+                agent: 'subagent',
+              ),
+            ),
+            ActionChip(
+              label: const Text('+ 允许文档站'),
+              onPressed: () => _fillRuleTemplate(
+                effect: 'allow',
+                action: 'webfetch',
+                resource: 'https://docs.*/*',
+              ),
+            ),
+            ActionChip(
+              label: const Text('+ 保护 .env 凭据'),
+              onPressed: () => _fillRuleTemplate(
+                effect: 'deny',
+                action: 'read',
+                resource: '*.env*',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: ValueKey('ai-rule-effect-$_ruleEffect'),
+                initialValue: _ruleEffect,
+                decoration: const InputDecoration(labelText: '处理方式'),
+                items: const [
+                  DropdownMenuItem(value: 'allow', child: Text('允许')),
+                  DropdownMenuItem(value: 'ask', child: Text('询问')),
+                  DropdownMenuItem(value: 'deny', child: Text('拒绝')),
+                ],
+                onChanged: (v) => _change(() => _ruleEffect = v!),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: ValueKey('ai-rule-action-$_ruleAction'),
+                initialValue: _ruleAction,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '工具动作'),
+                items: [
+                  for (final a in {
+                    ..._actionLabels.keys,
+                    _ruleAction,
+                  })
+                    DropdownMenuItem(
+                      value: a,
+                      child: Text(
+                        _actionLabels[a] ?? a,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) => _change(() => _ruleAction = v!),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: ValueKey('ai-rule-agent-$_ruleAgent'),
+                initialValue: _agentLabels.containsKey(_ruleAgent)
+                    ? _ruleAgent
+                    : '',
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '适用代理角色'),
+                items: [
+                  for (final entry in _agentLabels.entries)
+                    DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) => _change(() => _ruleAgent = v!),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<int>(
+                key: ValueKey('ai-rule-ttl-$_ruleTtlHours'),
+                initialValue: _ruleTtlHours,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '规则生命周期'),
+                items: [
+                  if (_ruleTtlHours < 0)
+                    const DropdownMenuItem(value: -1, child: Text('保持原过期时间')),
+                  const DropdownMenuItem(value: 0, child: Text('永久有效')),
+                  const DropdownMenuItem(value: 1, child: Text('1 小时后过期')),
+                  const DropdownMenuItem(value: 24, child: Text('24 小时后过期')),
+                  const DropdownMenuItem(value: 168, child: Text('7 天后过期')),
+                ],
+                onChanged: (v) => _change(() => _ruleTtlHours = v!),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _field(
+          _resource,
+          '资源模式',
+          key: 'ai-rule-resource',
+          hint: _ruleHint(_ruleAction),
+        ),
+        const SizedBox(height: 14),
+        DropdownButtonFormField<String>(
+          key: ValueKey('ai-rule-scope-$_ruleScope'),
+          initialValue: _ruleScope,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: '作用范围'),
+          items: [
+            const DropdownMenuItem(value: 'global', child: Text('全局 · 所有工作区')),
+            DropdownMenuItem(
+              value: 'project',
+              enabled: widget.ws?.project != null,
+              child: Text(
+                widget.ws?.project == null
+                    ? '项目 · 请先打开项目工作区'
+                    : '当前项目 · ${widget.ws!.project!.name}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+          onChanged: (v) => _change(() => _ruleScope = v!),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '填写中的规则也会随「保存设置」一起保存。',
+          style: TextStyle(fontSize: 11, color: ide.textFaint),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [
+            FilledButton.icon(
+              key: const ValueKey('ai-save-rule'),
+              onPressed: _saveRule,
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(_editingRule == null ? '添加规则' : '更新规则'),
+            ),
+            if (_editingRule != null || _ruleDirty)
+              TextButton(
+                onPressed: () => _change(_resetRule),
+                child: const Text('清空编辑'),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
 
   Widget _ruleTile(Ide ide, int i) {
     final r = _ai.permissionRules[i];
     final here = r.appliesTo(widget.ws?.serverId ?? '', widget.ws?.project?.id);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: ide.editor,
-        border: Border.all(color: ide.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Text(
-                '${i + 1}  ${r.effect == 'allow'
-                    ? '允许'
-                    : r.effect == 'deny'
-                    ? '拒绝'
-                    : '询问'}',
-                style: TextStyle(
-                  color: r.effect == 'deny'
-                      ? ide.error
-                      : r.effect == 'allow'
-                      ? ide.ok
-                      : ide.warn,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  r.action,
+    final expired = r.isExpired;
+    final inactive = r.disabled || expired;
+    final roleLabel = _agentLabels[r.agent] ?? r.agent;
+    final expiryLabel = _ruleExpiryLabel(r);
+    return Opacity(
+      opacity: inactive ? 0.55 : 1,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: ide.editor,
+          border: Border.all(color: expired ? ide.warn : ide.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '${i + 1}  ${r.effect == 'allow'
+                      ? '允许'
+                      : r.effect == 'deny'
+                      ? '拒绝'
+                      : '询问'}',
                   style: TextStyle(
-                    fontFamily: Ide.mono,
-                    fontSize: 11,
-                    color: ide.textDim,
+                    color: r.effect == 'deny'
+                        ? ide.error
+                        : r.effect == 'allow'
+                        ? ide.ok
+                        : ide.warn,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
                   ),
                 ),
-              ),
-              Text(
-                r.scope == 'global'
-                    ? '全局'
-                    : here
-                    ? '当前项目'
-                    : '其他项目',
-                style: TextStyle(fontSize: 10.5, color: ide.textFaint),
-              ),
-            ],
-          ),
-          const SizedBox(height: 5),
-          SelectableText(
-            r.resource,
-            style: TextStyle(
-              fontFamily: Ide.mono,
-              fontSize: 12,
-              color: ide.text,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    r.action,
+                    style: TextStyle(
+                      fontFamily: Ide.mono,
+                      fontSize: 11,
+                      color: ide.textDim,
+                    ),
+                  ),
+                ),
+                if (r.agent.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text(
+                      roleLabel,
+                      style: TextStyle(fontSize: 10.5, color: ide.accent),
+                    ),
+                  ),
+                Text(
+                  '$expiryLabel · ${r.scope == 'global'
+                      ? '全局'
+                      : here
+                      ? '当前项目'
+                      : '其他项目'}',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: expired ? ide.warn : ide.textFaint,
+                  ),
+                ),
+              ],
             ),
-          ),
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 4,
-            children: [
-              IconBtn(
-                Icons.arrow_upward,
-                '上移规则',
-                i == 0
-                    ? null
-                    : () => _change(() {
-                        _ai.permissionRules.removeAt(i);
-                        _ai.permissionRules.insert(i - 1, r);
-                        if (_editingRule == i) {
-                          _editingRule = i - 1;
-                        } else if (_editingRule == i - 1) {
-                          _editingRule = i;
-                        }
-                      }),
+            const SizedBox(height: 5),
+            SelectableText(
+              r.resource,
+              style: TextStyle(
+                fontFamily: Ide.mono,
+                fontSize: 12,
+                color: ide.text,
               ),
-              IconBtn(
-                Icons.arrow_downward,
-                '下移规则',
-                i == _ai.permissionRules.length - 1
-                    ? null
-                    : () => _change(() {
-                        _ai.permissionRules.removeAt(i);
-                        _ai.permissionRules.insert(i + 1, r);
-                        if (_editingRule == i) {
-                          _editingRule = i + 1;
-                        } else if (_editingRule == i + 1) {
-                          _editingRule = i;
-                        }
-                      }),
-              ),
-              IconBtn(
-                Icons.edit_outlined,
-                '编辑规则',
-                r.scope != 'global' && !here ? null : () => _editRule(i),
-              ),
-              IconBtn(
-                Icons.delete_outline,
-                '删除规则',
-                () => _change(() {
-                  _ai.permissionRules.removeAt(i);
-                  if (_editingRule == i) {
-                    _resetRule();
-                  } else if (_editingRule != null && _editingRule! > i) {
-                    _editingRule = _editingRule! - 1;
-                  }
-                }),
-              ),
-            ],
-          ),
-        ],
+            ),
+            Row(
+              children: [
+                Transform.scale(
+                  scale: 0.78,
+                  alignment: Alignment.centerLeft,
+                  child: Switch(
+                    value: !r.disabled,
+                    onChanged: (on) => _change(() => r.disabled = !on),
+                  ),
+                ),
+                Text(
+                  r.disabled ? '已停用' : '启用中',
+                  style: TextStyle(fontSize: 11, color: ide.textDim),
+                ),
+                const Spacer(),
+                IconBtn(
+                  Icons.arrow_upward,
+                  '上移规则',
+                  i == 0
+                      ? null
+                      : () => _change(() {
+                          _ai.permissionRules.removeAt(i);
+                          _ai.permissionRules.insert(i - 1, r);
+                          if (_editingRule == i) {
+                            _editingRule = i - 1;
+                          } else if (_editingRule == i - 1) {
+                            _editingRule = i;
+                          }
+                        }),
+                ),
+                IconBtn(
+                  Icons.arrow_downward,
+                  '下移规则',
+                  i == _ai.permissionRules.length - 1
+                      ? null
+                      : () => _change(() {
+                          _ai.permissionRules.removeAt(i);
+                          _ai.permissionRules.insert(i + 1, r);
+                          if (_editingRule == i) {
+                            _editingRule = i + 1;
+                          } else if (_editingRule == i + 1) {
+                            _editingRule = i;
+                          }
+                        }),
+                ),
+                IconBtn(
+                  Icons.edit_outlined,
+                  '编辑规则',
+                  r.scope != 'global' && !here ? null : () => _editRule(i),
+                ),
+                IconBtn(
+                  Icons.delete_outline,
+                  '删除规则',
+                  () => _change(() {
+                    _ai.permissionRules.removeAt(i);
+                    if (_editingRule == i) {
+                      _resetRule();
+                    } else if (_editingRule != null && _editingRule! > i) {
+                      _editingRule = _editingRule! - 1;
+                    }
+                  }),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

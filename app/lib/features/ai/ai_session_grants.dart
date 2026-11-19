@@ -33,7 +33,7 @@ class _GrantsState extends State<_Grants> {
     _load();
   }
 
-  Future<void> _load([Map? revoke]) async {
+  Future<void> _load([Map? revoke, bool revokeAll = false]) async {
     setState(() {
       _busy = true;
       _error = null;
@@ -41,7 +41,11 @@ class _GrantsState extends State<_Grants> {
     try {
       final result = await widget.link.call('ai.permissions', {
         'session_id': widget.sessionId,
-        if (revoke != null) ...{
+        if (revokeAll) ...{
+          'revoke': true,
+          'action': '*',
+          'resource': '*',
+        } else if (revoke != null) ...{
           'revoke': true,
           'action': revoke['action'],
           'resource': revoke['resource'],
@@ -59,6 +63,15 @@ class _GrantsState extends State<_Grants> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  String _grantExpiry(Map grant) {
+    final exp = (grant['expires_at'] as num?)?.toInt() ?? 0;
+    if (exp <= 0) return '本会话有效';
+    final left = exp - DateTime.now().millisecondsSinceEpoch;
+    if (left <= 0) return '即将过期';
+    final mins = (left / 60000).ceil();
+    return mins >= 60 ? '约 ${(mins / 60).ceil()} 小时后过期' : '约 $mins 分钟后过期';
   }
 
   @override
@@ -89,7 +102,7 @@ class _GrantsState extends State<_Grants> {
               for (final grant in _grants)
                 ListTile(
                   title: Text(
-                    '${grant['action']}',
+                    '${grant['action']}  ·  ${_grantExpiry(grant)}',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -117,6 +130,11 @@ class _GrantsState extends State<_Grants> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              if (_grants.isNotEmpty)
+                TextButton(
+                  onPressed: _busy ? null : () => _load(null, true),
+                  child: Text('全部撤销', style: TextStyle(color: ide.error)),
+                ),
               if (_error != null)
                 TextButton(
                   onPressed: _busy ? null : _load,

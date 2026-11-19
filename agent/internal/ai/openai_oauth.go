@@ -281,7 +281,15 @@ func subscriptionHTTPError(status int, body []byte) error {
 // OpenCode uses a catalog, not OpenAI's API-key /v1/models endpoint, for
 // subscription sign-ins. These are suggestions, NOT an account entitlement check.
 func subscriptionModelSuggestions(cfg ProviderConfig) []ModelInfo {
-	ids := []string{"gpt-6.1-sol", "gpt-5.2-codex", "gpt-5.1-codex", "gpt-5-codex"}
+	ids := []string{
+		"gpt-6.1-sol",
+		"gpt-5.3-codex",
+		"gpt-5.2-codex",
+		"gpt-5.1-codex",
+		"gpt-5-codex",
+		"o3",
+		"o4-mini",
+	}
 	if cfg.Model != "" {
 		ids = append([]string{cfg.Model}, ids...)
 	}

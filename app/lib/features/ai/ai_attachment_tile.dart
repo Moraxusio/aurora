@@ -7,6 +7,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/ide_theme.dart';
+import '../files/file_icons.dart';
 import 'ai_models.dart';
 import 'ai_attachments.dart';
 
@@ -158,14 +159,9 @@ class _AiAttachmentTileState extends State<AiAttachmentTile> {
                   padding: const EdgeInsets.all(10),
                   child: Row(
                     children: [
-                      Icon(
-                        isImage
-                            ? Icons.image_outlined
-                            : widget.part.mime == 'application/pdf'
-                            ? Icons.picture_as_pdf_outlined
-                            : Icons.description_outlined,
+                      FileIcon(
+                        name: widget.part.filename,
                         size: 18,
-                        color: ide.accent,
                       ),
                       const SizedBox(width: 8),
                       Expanded(

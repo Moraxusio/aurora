@@ -62,7 +62,8 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      await t.tap(find.byTooltip('Terminal fixture'));
+      const terminalTip = '切换终端面板（Ctrl+J）';
+      await t.tap(find.byTooltip(terminalTip));
       await t.pumpAndSettle();
       await t.tap(find.byTooltip('Files fixture'));
       await t.pumpAndSettle();
@@ -75,7 +76,7 @@ void main() {
         ws.activate(i.isEven ? 'one' : 'two');
         await t.pumpAndSettle();
         await t.tap(
-          find.byTooltip(i.isEven ? 'Terminal fixture' : 'Files fixture'),
+          find.byTooltip(i.isEven ? terminalTip : 'Files fixture'),
         );
         await t.pumpAndSettle();
       }
@@ -122,7 +123,6 @@ void main() {
     final preferred = ws.tabLayout.sideWidth;
     t.view.physicalSize = const Size(620, 800); await t.pumpAndSettle();
     expect(t.takeException(), isNull);
-    await t.tap(find.byTooltip('显示或隐藏侧栏（Ctrl+B）')); await t.pumpAndSettle();
     expect(find.byKey(const ValueKey('sidebar-resize')), findsOneWidget);
     expect(t.getRect(find.byKey(const ValueKey('main-sidebar'))).overlaps(t.getRect(find.byKey(const ValueKey('editor-slot')))), isFalse);
     await t.drag(find.byKey(const ValueKey('sidebar-resize')), const Offset(-30, 0)); await t.pumpAndSettle();

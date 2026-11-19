@@ -179,7 +179,8 @@ func (s svc) opPropose(ctx context.Context, st net.Conn, raw json.RawMessage) er
 		}
 	}
 	var result proposalResult
-	decoder := json.NewDecoder(strings.NewReader(strings.TrimSpace(answer.String())))
+	cleaned := stripJSONCodeFence(answer.String())
+	decoder := json.NewDecoder(strings.NewReader(cleaned))
 	decoder.DisallowUnknownFields()
 	if err = decoder.Decode(&result); err == nil {
 		err = validateProposal(in, result)
@@ -196,4 +197,20 @@ func (s svc) opPropose(ctx context.Context, st net.Conn, raw json.RawMessage) er
 	return wire.WriteJSON(st, wire.OKResponse(map[string]any{
 		"id": id, "proposal": result, "usage": resp.Usage, "elapsedMs": time.Since(started).Milliseconds(),
 	}))
+}
+
+func stripJSONCodeFence(raw string) string {
+	s := strings.TrimSpace(raw)
+	if !strings.HasPrefix(s, "```") {
+		return s
+	}
+	nl := strings.IndexByte(s, '\n')
+	if nl < 0 {
+		return s
+	}
+	rest := s[nl+1:]
+	if end := strings.LastIndex(rest, "```"); end >= 0 && strings.TrimSpace(rest[end+3:]) == "" {
+		return strings.TrimSpace(rest[:end])
+	}
+	return s
 }

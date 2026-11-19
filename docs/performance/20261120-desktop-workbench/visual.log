@@ -1,0 +1,6 @@
+00:00 +0: loading C:/build/aurora/app/test/workbench_visual_test.dart
+00:00 +0: (setUpAll)
+00:00 +0: production tools in both themes, zoom and narrow windows
+00:17 +1: real workbench stays quiet, responsive and stateful in both themes
+00:43 +2: (tearDownAll)
+00:43 +2: All tests passed!

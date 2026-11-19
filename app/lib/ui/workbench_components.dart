@@ -235,7 +235,10 @@ class TreeRow extends StatelessWidget {
       child: Row(
         children: [
           if (leading != null) ...[
-            SizedBox(width: 18, child: Center(child: leading)),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 18),
+              child: Center(child: leading),
+            ),
             const SizedBox(width: 6),
           ],
           Expanded(
@@ -494,6 +497,7 @@ Future<T?> showPicker<T>(
   required WidgetBuilder builder,
   double maxWidth = 620,
   double maxHeight = 460,
+  double? topInset,
 }) {
   final dark = Ide.of(context).isDark;
   return showWorkbenchDialog<T>(
@@ -501,9 +505,9 @@ Future<T?> showPicker<T>(
     barrierColor: Colors.black.withValues(alpha: dark ? 0.38 : 0.14),
     builder: (c) {
       return Align(
-        alignment: const Alignment(0, -0.62),
+        alignment: topInset == null ? const Alignment(0, -0.62) : Alignment.topCenter,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.xl),
+          padding: EdgeInsets.fromLTRB(Space.xl, topInset ?? 0, Space.xl, Space.s),
           child: FloatingSurface(
             constraints: BoxConstraints(
               maxWidth: maxWidth,
@@ -521,6 +525,7 @@ Future<T?> showPicker<T>(
 class PickerField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode? focusNode;
+  final Key? inputKey;
   final String hint;
   final IconData icon;
   final ValueChanged<String>? onSubmitted;
@@ -530,6 +535,7 @@ class PickerField extends StatelessWidget {
     required this.hint,
     required this.icon,
     this.focusNode,
+    this.inputKey,
     this.onSubmitted,
   });
 
@@ -546,6 +552,7 @@ class PickerField extends StatelessWidget {
           const SizedBox(width: Space.l),
           Expanded(
             child: TextField(
+              key: inputKey,
               controller: controller,
               focusNode: focusNode,
               autofocus: true,

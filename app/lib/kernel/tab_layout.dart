@@ -36,6 +36,8 @@ class TabLayout {
   static const maxGroups = 4;
   final List<TabGroup> groups = [TabGroup('g1')];
   final Set<String> pinned = {};
+  /// Transient open state, never serialized. Each group has at most one.
+  final Set<String> previews = {};
   TabNode root = const TabLeaf('g1');
   String focused = 'g1';
   TabPlacement placement = TabPlacement.top;
@@ -64,6 +66,7 @@ class TabLayout {
     final before = ordered;
     final allowed = valid.toSet(), seen = <String>{};
     pinned.removeWhere((id) => !allowed.contains(id));
+    previews.removeWhere((id) => !allowed.contains(id));
     for (final g in groups) {
       g.tabs.removeWhere((id) => !allowed.contains(id) || !seen.add(id));
       if (!g.tabs.contains(g.active)) g.active = g.tabs.firstOrNull;
@@ -112,6 +115,7 @@ class TabLayout {
     final from = owner(tab), to = group(destination);
     if (from == null || to == null) return false;
     final same = identical(from, to);
+    if (!same) previews.remove(tab);
     final oldIndex = from.tabs.indexOf(tab);
     var at = index ?? to.tabs.length;
     if (same && at > oldIndex) at--;
@@ -151,6 +155,7 @@ class TabLayout {
     final horizontal = edge == TabDropEdge.left || edge == TabDropEdge.right;
     final before = edge == TabDropEdge.left || edge == TabDropEdge.top;
     if (source.tabs.length == 1 && !identical(source, target)) {
+      previews.remove(tab);
       root = _without(root, source.id)!;
       final branch = TabSplit(
         's${++_serial}',
@@ -192,6 +197,7 @@ class TabLayout {
     g.tabs.remove(tab);
     revision++;
     pinned.remove(tab);
+    previews.remove(tab);
     if (g.active == tab) {
       g.active = g.tabs.isEmpty ? null : g.tabs[i.clamp(0, g.tabs.length - 1)];
     }
@@ -222,6 +228,7 @@ class TabLayout {
     root = _replace(root, groupId, branch);
     // A deliberate split can leave an empty group ready for the next document.
     if (tab != null) {
+      previews.remove(tab);
       final from = owner(tab);
       if (from != null) {
         final i = from.tabs.indexOf(tab);
@@ -264,6 +271,7 @@ class TabLayout {
     final i = groups.indexOf(g);
     revision++;
     final to = groups[i == 0 ? 1 : i - 1];
+    if (to.tabs.any(previews.contains)) previews.removeAll(g.tabs);
     to.tabs.addAll(g.tabs);
     if (focused == id) {
       focused = to.id;
@@ -291,6 +299,7 @@ class TabLayout {
       final target = groups[count - 1];
       final removed = groups.skip(count).toList();
       for (final group in removed) {
+        if (target.tabs.any(previews.contains)) previews.removeAll(group.tabs);
         target.tabs.addAll(group.tabs);
         if (group.id == focused) {
           focused = target.id;

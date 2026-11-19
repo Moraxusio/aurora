@@ -4,6 +4,30 @@ import 'package:aurora/kernel/workbench_geometry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('empty editor yields its width to the assistant or terminal', () {
+    WorkbenchGeometry geometry({bool empty = true, bool terminal = false}) =>
+        WorkbenchGeometry(
+          size: const Size(1060, 760),
+          panelVisible: terminal,
+          panelFocused: false,
+          panelMaximized: false,
+          preferredHeight: 260,
+          assistantVisible: true,
+          assistantWidth: 340,
+          collapseEmptyEditor: empty,
+        );
+    expect(geometry().editor, isNull);
+    expect(geometry().assistant!.left, 0);
+    expect(geometry().assistantDivider, isNull);
+    final opened = geometry(empty: false);
+    expect(opened.editor!.width, 715);
+    expect(opened.assistant!.width, 340);
+    final twoTools = geometry(terminal: true);
+    expect(twoTools.editor, isNull);
+    expect(twoTools.terminal!.height, 760);
+    expect(twoTools.terminal!.right, twoTools.assistantDivider!.left);
+  });
+
   test('normal desktop with AI keeps terminal below a 420-600px editor column', () {
     for (final width in [880.0, 950.0, 1007.0]) {
       final g = WorkbenchGeometry(size: Size(width, 750), panelVisible: true,

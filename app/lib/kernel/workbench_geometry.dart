@@ -26,22 +26,29 @@ class WorkbenchGeometry {
     bool assistantFocused = false,
     bool assistantMaximized = false,
     double assistantWidth = 420,
-    bool besideAssistant = false,
+    bool keepVerticalSplit = false,
+    bool collapseEmptyEditor = false,
   }) {
     final width = size.width.isFinite ? math.max(0.0, size.width) : 0.0;
     final height = size.height.isFinite ? math.max(0.0, size.height) : 0.0;
     final bounds = Rect.fromLTWH(0, 0, width, height);
-    // A desktop editor column beside AI is not a phone. The assistant already
-    // reserves >=420px for it, enough for vertically stacked editor/terminal.
-    final compact = (!besideAssistant && width < 600) || height < 360;
+    if (collapseEmptyEditor &&
+        assistantVisible &&
+        (!panelVisible ||
+            assistantMaximized ||
+            (width < 600 && !panelFocused))) {
+      return WorkbenchGeometry._(null, null, null, width < 600, bounds);
+    }
+    // A desktop editor column beside AI is not a phone.
+    final compact = (!keepVerticalSplit && width < 600) || height < 360;
     if (assistantVisible) {
-      if (assistantMaximized || width < 880) {
+      if (assistantMaximized || width < 600) {
         if (assistantFocused || assistantMaximized) {
           return WorkbenchGeometry._(null, null, null, true, bounds);
         }
       } else {
         final dock = (assistantWidth.isFinite ? assistantWidth : 420.0)
-            .clamp(320.0, math.min(800.0, width - 420.0 - dividerSize))
+            .clamp(260.0, math.min(900.0, width - 240.0 - dividerSize))
             .toDouble();
         final rest = WorkbenchGeometry(
           size: Size(width - dock - dividerSize, height),
@@ -49,7 +56,8 @@ class WorkbenchGeometry {
           panelFocused: panelFocused,
           panelMaximized: panelMaximized,
           preferredHeight: preferredHeight,
-          besideAssistant: true,
+          keepVerticalSplit: true,
+          collapseEmptyEditor: collapseEmptyEditor,
         );
         return WorkbenchGeometry._(
           rest.editor,
@@ -62,6 +70,8 @@ class WorkbenchGeometry {
       }
     }
     if (!panelVisible) return WorkbenchGeometry._(bounds, null, null, compact);
+    if (collapseEmptyEditor)
+      return WorkbenchGeometry._(null, bounds, null, compact);
     if (compact) {
       return panelFocused
           ? WorkbenchGeometry._(null, bounds, null, true)

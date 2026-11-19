@@ -173,9 +173,11 @@ func (s svc) opPermissions(_ context.Context, raw json.RawMessage) (any, error) 
 
 func (s svc) opUpdate(_ context.Context, raw json.RawMessage) (any, error) {
 	var in struct {
-		ID     string  `json:"id"`
-		Title  *string `json:"title"`
-		Pinned *bool   `json:"pinned"`
+		ID              string            `json:"id"`
+		Title           *string           `json:"title"`
+		Pinned          *bool             `json:"pinned"`
+		PermissionMode  *string           `json:"permission_mode"`
+		PermissionRules *[]PermissionRule `json:"permission_rules"`
 	}
 	if err := decodeArgs(raw, &in); err != nil {
 		return nil, err
@@ -183,11 +185,22 @@ func (s svc) opUpdate(_ context.Context, raw json.RawMessage) (any, error) {
 	if strings.TrimSpace(in.ID) == "" {
 		return nil, wire.Errf(wire.CodeBadRequest, "缺少会话 ID")
 	}
-	sum, err := s.UpdateSessionMeta(in.ID, in.Title, in.Pinned)
-	if err != nil {
-		return nil, wire.Errf(wire.CodeNotFound, "%v", err)
+	resolved := []string{}
+	if in.PermissionMode != nil || in.PermissionRules != nil {
+		ids, err := s.UpdateSessionPermission(in.ID, in.PermissionMode, in.PermissionRules)
+		if err != nil {
+			return nil, wire.Errf(wire.CodeBadRequest, "%v", err)
+		}
+		resolved = ids
 	}
-	return map[string]any{"session": sum}, nil
+	if in.Title != nil || in.Pinned != nil {
+		sum, err := s.UpdateSessionMeta(in.ID, in.Title, in.Pinned)
+		if err != nil {
+			return nil, wire.Errf(wire.CodeNotFound, "%v", err)
+		}
+		return map[string]any{"session": sum, "resolved": len(resolved), "resolved_ids": resolved}, nil
+	}
+	return map[string]any{"updated": true, "resolved": len(resolved), "resolved_ids": resolved}, nil
 }
 
 func (s svc) opSearch(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -317,10 +330,11 @@ func (s svc) opStop(_ context.Context, raw json.RawMessage) (any, error) {
 
 func (s svc) opApprove(_ context.Context, raw json.RawMessage) (any, error) {
 	var in struct {
-		ID     string `json:"id"`
-		Allow  bool   `json:"allow"`
-		Always bool   `json:"always"`
-		Reason string `json:"reason"`
+		ID         string `json:"id"`
+		Allow      bool   `json:"allow"`
+		Always     bool   `json:"always"`
+		TTLSeconds int64  `json:"ttl_seconds"`
+		Reason     string `json:"reason"`
 	}
 	if err := decodeArgs(raw, &in); err != nil {
 		return nil, err
@@ -329,9 +343,10 @@ func (s svc) opApprove(_ context.Context, raw json.RawMessage) (any, error) {
 		return nil, wire.Errf(wire.CodeBadRequest, "缺少权限请求 ID")
 	}
 	ok := s.perms.Resolve(in.ID, PermissionDecision{
-		Allow:  in.Allow,
-		Always: in.Always,
-		Reason: in.Reason,
+		Allow:      in.Allow,
+		Always:     in.Always,
+		TTLSeconds: in.TTLSeconds,
+		Reason:     in.Reason,
 	})
 	return map[string]any{"resolved": ok}, nil
 }

@@ -7,10 +7,12 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../theme/ide_theme.dart';
 import 'csv_parse.dart';
+import 'file_kind.dart';
 
 class MarkdownPreview extends StatelessWidget {
   final String text;
-  const MarkdownPreview({super.key, required this.text});
+  final void Function(WorkspaceFileLink target)? onOpenFile;
+  const MarkdownPreview({super.key, required this.text, this.onOpenFile});
 
   @override
   Widget build(BuildContext context) {
@@ -37,9 +39,14 @@ class MarkdownPreview extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Text('[图片未加载${alt == null || alt.isEmpty ? '' : '：$alt'}]', style: TextStyle(color: ide.textDim, fontStyle: FontStyle.italic)),
         ),
-        // Links are not followed; the address is copied so the user decides.
+        // External URLs are not followed; workspace file links open in editor.
         onTapLink: (text, href, title) {
           if (href == null) return;
+          final target = parseWorkspaceFileHref(href);
+          if (target != null && onOpenFile != null) {
+            onOpenFile!(target);
+            return;
+          }
           Clipboard.setData(ClipboardData(text: href));
           Toast.show('链接已复制（不会自动打开）');
         },

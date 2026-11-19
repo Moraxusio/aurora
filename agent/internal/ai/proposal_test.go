@@ -140,3 +140,14 @@ func TestProposalResetCancelsUpstreamAndReleasesBudget(t *testing.T) {
 		t.Fatal("budget leaked")
 	}
 }
+
+func TestStripJSONCodeFence(t *testing.T) {
+	fenced := "```json\n{\"changes\":[{\"path\":\"/a\",\"old\":\"x\",\"new\":\"y\"}]}\n```"
+	if got := stripJSONCodeFence(fenced); !strings.HasPrefix(got, `{"changes":`) {
+		t.Fatalf("failed to strip json fence: %q", got)
+	}
+	plain := `{"completion":"ok"}`
+	if got := stripJSONCodeFence(plain); got != plain {
+		t.Fatalf("plain json modified: %q", got)
+	}
+}

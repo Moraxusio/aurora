@@ -49,7 +49,7 @@ TerminalTheme _build(Ide ide) {
     cursor: ide.accent,
     selection: ide.accent.withValues(alpha: 0.35),
     foreground: ide.text,
-    background: ide.panel,
+    background: Color.lerp(ide.panel, ide.frame, 0.5)!,
     black: a.black,
     red: a.red,
     green: a.green,

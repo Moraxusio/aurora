@@ -277,6 +277,13 @@ Available subagents:
 	case "general":
 		out := append([]ToolDef{readTool, writeTool, editTool, patchToolDef, globTool, grepTool, shellTool}, web...)
 		return append(out, todoTool)
+	case "orchestrator":
+		out := append([]ToolDef{readTool, writeTool, editTool, patchToolDef, globTool, grepTool, shellTool}, web...)
+		out = append(out, todoTool)
+		if depth == 0 {
+			out = append(out, subagentTool)
+		}
+		return out
 	default: // "build"
 		out := append([]ToolDef{readTool, writeTool, editTool, patchToolDef, globTool, grepTool, shellTool}, web...)
 		out = append(out, todoTool)
@@ -390,21 +397,24 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 	}
 
 	checkPerm := func(action, resource string, meta map[string]any) error {
-		eff, reason := tc.env.perms.EvaluateWithRules(tc.session.ID, tc.session.Agent, tc.session.PermissionMode, action, resource, tc.session.PermissionRules)
+		isSubagent := tc.session.ParentID != "" || tc.depth > 0
+		eff, reason := tc.env.perms.EvaluateWithContext(tc.session.ID, tc.session.Agent, isSubagent, tc.session.PermissionMode, action, resource, tc.session.PermissionRules)
 		if eff == "deny" {
 			return errors.New(reason)
 		}
 		if eff == "ask" {
 			q := PermissionQuestion{
-				ID:        NewID("perm"),
-				SessionID: tc.session.ID,
-				MessageID: tc.messageID,
-				CallID:    tc.callID,
-				Tool:      name,
-				Action:    action,
-				Resource:  resource,
-				Reason:    reason,
-				Metadata:  meta,
+				ID:         NewID("perm"),
+				SessionID:  tc.session.ID,
+				MessageID:  tc.messageID,
+				CallID:     tc.callID,
+				Tool:       name,
+				Action:     action,
+				Resource:   resource,
+				Agent:      tc.session.Agent,
+				IsSubagent: isSubagent,
+				Reason:     reason,
+				Metadata:   meta,
 			}
 			return tc.env.perms.Ask(ctx, q, func(pq PermissionQuestion) {
 				tc.env.broadcast(StreamEvent{

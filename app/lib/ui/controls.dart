@@ -136,6 +136,7 @@ abstract class _Button extends StatelessWidget {
       minimumSize: WidgetStatePropertyAll(Size(48, height)),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.standard,
+      animationDuration: UiMotion.hover,
       side: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.focused)) {
           return BorderSide(
@@ -146,7 +147,11 @@ abstract class _Button extends StatelessWidget {
           );
         }
         if (kind == _ButtonKind.secondary) {
-          return BorderSide(color: colors.outline);
+          return BorderSide(
+            color: states.contains(WidgetState.hovered)
+                ? colors.outline
+                : colors.outline.withValues(alpha: 0.7),
+          );
         }
         return const BorderSide(color: Colors.transparent);
       }),

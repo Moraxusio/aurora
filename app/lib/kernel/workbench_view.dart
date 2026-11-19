@@ -19,6 +19,7 @@ class WorkbenchView extends StatefulWidget {
   final TerminalSessionsBuilder? terminalSessionsBuilder;
   final VoidCallback? onNewAssistant;
   final Widget Function(VoidCallback onOpened)? assistantHistoryBuilder;
+  final bool collapseEmptyEditor;
   const WorkbenchView({
     super.key,
     required this.ws,
@@ -27,6 +28,7 @@ class WorkbenchView extends StatefulWidget {
     this.terminalSessionsBuilder,
     this.onNewAssistant,
     this.assistantHistoryBuilder,
+    this.collapseEmptyEditor = false,
   });
   @override
   State<WorkbenchView> createState() => _WorkbenchViewState();
@@ -85,6 +87,9 @@ class _WorkbenchViewState extends State<WorkbenchView> {
         assistantFocused: ws.assistantFocused,
         assistantMaximized: ws.assistantPanel.maximized,
         assistantWidth: ws.assistantPanel.width,
+        keepVerticalSplit: MediaQuery.sizeOf(context).width >= 600,
+        collapseEmptyEditor:
+            widget.collapseEmptyEditor && ws.visibleTabs.isEmpty,
       );
       final bounds = Offset.zero & box.biggest;
       if (geometry.assistant != null) {

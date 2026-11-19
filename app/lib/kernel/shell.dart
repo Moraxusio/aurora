@@ -8,9 +8,10 @@ import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../features/search/quick_open.dart';
+import '../features/search/search_feature.dart' show desktopSearchMinWidth;
 import '../features/files/file_editor.dart' show fileEditorTab;
 import '../features/ai/ai_feature.dart' show openNewAiSession, AiSessionSidebar;
-import '../features/terminal/terminal_feature.dart' show createSession, openSession, SessionList;
+import '../features/terminal/terminal_feature.dart' show createSession, SessionList;
 import '../state/app_state.dart';
 import '../theme/ide_theme.dart';
 import '../ui/add_server.dart';
@@ -21,7 +22,6 @@ import 'desktop_lifecycle.dart';
 import 'feature.dart';
 import 'input_mode.dart';
 import 'overview.dart';
-import 'palette.dart';
 import 'registry.dart';
 import 'window_frame.dart';
 import 'workspace.dart';
@@ -34,7 +34,7 @@ import 'retained_pane.dart';
 import 'workbench_shortcuts.dart';
 import 'ui_diagnostics.dart';
 
-const double _wide = 900, _narrow = 600;
+const double _wide = 900, _narrow = desktopSearchMinWidth;
 const double _railWidth = 68;
 
 class Shell extends StatefulWidget {
@@ -56,6 +56,7 @@ class _ShellState extends State<Shell> {
   }
   bool _sideOpen = true;
   bool _serversOpen = false;
+  bool _searchPickerOpen = false;
   int? _mode;
   late final Future<bool> Function() _exitGuard = _beforeExit;
 
@@ -74,9 +75,9 @@ class _ShellState extends State<Shell> {
     super.didChangeDependencies();
     final w = MediaQuery.sizeOf(context).width;
     final mode = w >= _wide ? 2 : (w >= _narrow ? 1 : 0);
-    // Medium windows start with more room for content. Reopening the sidebar
-    // divides the space directly, without a floating drawer or dimming layer.
-    if (mode == 1 && _mode != 1) _sideOpen = false;
+    // Only the initial default depends on size. Dragging or zooming through a
+    // breakpoint must not silently change the user's sidebar visibility.
+    if (mode == 1 && _mode == null) _sideOpen = false;
     _mode = mode;
   }
 
@@ -166,8 +167,10 @@ class _ShellState extends State<Shell> {
         if (mounted && app.status(id).state == ConnState.idle) unawaited(app.connect(id));
       });
       final ws = Workspace(app, id);
-      // Ctrl+Shift+F or the palette: bring the search view to the front; it
-      // takes the focus itself once it is built.
+      ws.openQuickSearch = () => _find(ws);
+      ws.openContentSearch = () => _findContents(ws);
+      // A committed content query shows its results, not another desktop
+      // search field. The phone results pane retains its own tactile input.
       ws.focusSearch.addListener(() {
         final f = widget.features.byId('search');
         if (mounted && f != null && app.selected == id) _pick(ws, f, open: true);
@@ -251,8 +254,39 @@ class _ShellState extends State<Shell> {
     return f != null && ws.stateOf(f) == FeatureState.available;
   }
 
-  /// Quick open when the server offers search, else the command palette.
-  void _find(Workspace ws) => _usable(ws, 'search') ? showQuickOpen(ws, context: context) : showPalette(context, _commands(ws));
+  void _find(Workspace ws) => _search(ws, WorkbenchSearchMode.files);
+
+  void _findContents(Workspace ws) {
+    if (!_usable(ws, 'search')) return;
+    if (MediaQuery.sizeOf(context).width < _narrow) {
+      ws.focusSearch.value++;
+    } else {
+      _search(ws, WorkbenchSearchMode.contents);
+    }
+  }
+
+  Future<void> _search(Workspace? ws, WorkbenchSearchMode mode) async {
+    if (_searchPickerOpen) return;
+    final searchable = ws != null && _usable(ws, 'search');
+    _searchPickerOpen = true;
+    await showWorkbenchSearch(
+        context,
+        workspace: ws,
+        fileSearch: searchable,
+        commands: _commands(ws),
+        initialMode: mode,
+        onPickerClosed: () => _searchPickerOpen = false,
+        onContents: !searchable ? null : (query) {
+          if (!mounted || !identical(_ws, ws) || !_usable(ws, 'search')) return;
+          if (query != ws.searchQuery.text) ws.searchQuery.text = query;
+          ws.focusSearch.value++;
+          // Refresh the same query, as well as a changed one, on Enter.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && identical(_ws, ws)) ws.submitSearch.value++;
+          });
+        },
+    );
+  }
 
   /// Shows [f]'s side bar. [open]: never close it when it is already in
   /// front (a shortcut such as Ctrl+Shift+F only ever opens).
@@ -267,7 +301,13 @@ class _ShellState extends State<Shell> {
       return;
     }
     if (f.sideBar(context, ws) == null) {
-      f.open(ws);
+      // In a one-pane layout, the bottom navigation is only visible while
+      // the console is offstage. Treat it as navigation, not as a hide toggle.
+      if (f.id == 'terminal' && MediaQuery.sizeOf(context).width < _narrow) {
+        ws.showTerminalPanel();
+      } else {
+        f.open(ws);
+      }
       return;
     }
     setState(() {
@@ -295,7 +335,7 @@ class _ShellState extends State<Shell> {
         const SingleActivator(LogicalKeyboardKey.minus, control: true): () => _zoom(-.1),
         const SingleActivator(LogicalKeyboardKey.digit0, control: true): () => app.appearance.set('uiScale', 1.0),
         if (ws != null) const SingleActivator(LogicalKeyboardKey.comma, control: true): () => ws.openTab(settingsTab(app)),
-        const SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true): () => showPalette(context, _commands(ws)),
+        const SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true): () => _search(ws, WorkbenchSearchMode.commands),
         const SingleActivator(LogicalKeyboardKey.keyB, control: true): _toggleSide,
         if (ws != null)
           const SingleActivator(LogicalKeyboardKey.keyW, control: true): () {
@@ -324,11 +364,11 @@ class _ShellState extends State<Shell> {
         if (ws != null)
           const SingleActivator(LogicalKeyboardKey.keyP, control: true): () => _find(ws),
         if (ws != null)
-          const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () { if (_usable(ws, 'search')) ws.focusSearch.value++; },
+          const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _findContents(ws),
         if (ws != null) const SingleActivator(LogicalKeyboardKey.tab, control: true): () => ws.next(1),
         if (ws != null) const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true): () => ws.next(-1),
       },
-      child: Focus(
+      child: FocusScope(
         autofocus: true,
         child: Scaffold(
           backgroundColor: ide.frame,
@@ -364,10 +404,26 @@ class _ShellState extends State<Shell> {
         TickerMode(key: ObjectKey(space), enabled: identical(space, ws),
           child: ExcludeFocus(excluding: !identical(space, ws), child: _editorViews.putIfAbsent(space, () => ListenableBuilder(listenable: space,
              builder: (_, _) => _EditorArea(ws: space, features: widget.features, onAdd: _addServer,
-               onPalette: () => showPalette(context, _commands(space)), onFind: () => _find(space)))))),
+                onPalette: () => _search(space, WorkbenchSearchMode.commands), onFind: () => _find(space)))))),
     ]);
     void servers() => setState(() => _serversOpen = !_serversOpen);
-    final status = _StatusBar(ws: ws, app: app, onTapConn: () => app.connect(ws.serverId));
+    final status = _StatusBar(
+      ws: ws,
+      app: app,
+      onTapConn: () => ws.status.state == ConnState.connected
+          ? ws.openTab(overviewTab(ws, widget.features))
+          : app.connect(ws.serverId),
+      onToggleAssistant: () {
+        if (ws.assistantTabs.isEmpty) {
+          openNewAiSession(ws);
+        } else if (MediaQuery.sizeOf(context).width >= 600 &&
+            ws.assistantPanel.visible) {
+          ws.hideAssistantPanel();
+        } else {
+          ws.toggleAssistantPanel();
+        }
+      },
+    );
     final showEditor = !narrow || (ws.compactEditor && (ws.visibleTabs.isNotEmpty || ws.terminalPanel.visible || ws.assistantPanel.visible));
 
     final body = Column(
@@ -376,12 +432,14 @@ class _ShellState extends State<Shell> {
           _PhoneTop(ws: ws, showEditor: showEditor, onBack: () => setState(() => ws.compactEditor = false), onServers: servers)
         else
           _TitleBar(
+            key: ObjectKey(ws),
             ws: ws,
             searchable: _usable(ws, 'search'),
+            searching: _sideOpen && _featureId == 'search' && _usable(ws, 'search'),
             sideOpen: _sideOpen,
             onServers: servers,
-            onFind: () => _find(ws),
-            onPalette: () => showPalette(context, _commands(ws)),
+            onSearch: () => _search(ws, _sideOpen && _featureId == 'search'
+              ? WorkbenchSearchMode.contents : WorkbenchSearchMode.files),
             onToggleSide: _toggleSide,
           ),
         // Below the title bar: the window buttons cover the top-right 40 px.
@@ -397,14 +455,14 @@ class _ShellState extends State<Shell> {
                   vertical: true,
                   onPick: (f) => _pick(ws, f),
                   onServers: servers,
-                   onPalette: () => showPalette(context, _commands(ws)),
+                   onPalette: () => _search(ws, WorkbenchSearchMode.commands),
                   onOverview: () => ws.openTab(overviewTab(ws, widget.features)),
                 ),
           ),
         ),
         if (narrow && !showEditor) _ActivityBar(ws: ws, features: widget.features, current: _featureId, vertical: false,
           onPick: (f) => _pick(ws, f), onServers: servers,
-          onPalette: () => showPalette(context, _commands(ws)), onOverview: () => ws.openTab(overviewTab(ws, widget.features))),
+           onPalette: () => _search(ws, WorkbenchSearchMode.commands), onOverview: () => ws.openTab(overviewTab(ws, widget.features))),
         status,
       ],
     );
@@ -456,7 +514,7 @@ class _ShellBodyState extends State<_ShellBody> {
       final sideVisible = docked || (narrow && !widget.showEditor);
       // A desktop-scale window keeps enough room for editor + terminal. The
       // labelled rail must not push a 150% layout into the phone-only region.
-      final minimumWorkspace = widget.mode == 2 ? 600.0 : 260.0;
+      final minimumWorkspace = widget.mode == 2 ? 480.0 : 240.0;
       final width = narrow ? box.maxWidth : ws.tabLayout.sideWidth.clamp(180.0,
         (box.maxWidth - rail - 5 - minimumWorkspace).clamp(180.0, 640.0));
       final sideRect = Rect.fromLTWH(rail, 0, width, box.maxHeight);
@@ -484,15 +542,16 @@ class _ShellBodyState extends State<_ShellBody> {
 /// the middle, layout buttons on the right.
 class _TitleBar extends StatelessWidget {
   final Workspace ws;
-  final bool searchable, sideOpen;
-  final VoidCallback onServers, onFind, onPalette, onToggleSide;
+  final bool searchable, searching, sideOpen;
+  final VoidCallback onServers, onSearch, onToggleSide;
   const _TitleBar({
+    super.key,
     required this.ws,
     required this.searchable,
+    required this.searching,
     required this.sideOpen,
     required this.onServers,
-    required this.onFind,
-    required this.onPalette,
+    required this.onSearch,
     required this.onToggleSide,
   });
 
@@ -512,19 +571,12 @@ class _TitleBar extends StatelessWidget {
           child: WorkbenchMenuButton<String>(tooltip: '工作台菜单', padding: EdgeInsets.zero,
             icon: Image.asset('assets/branding/aurora3-256.png', width: 18, height: 18, semanticLabel: 'Aurora 3'),
             onSelected: (action) {
-              if (action == 'find') onFind();
-              if (action == 'commands') onPalette();
               if (action == 'folder') openLocalFolder(ws.app);
               if (action == 'settings') ws.openTab(settingsTab(ws.app));
-              if (action == 'terminal') ws.showTerminalPanel();
               if (action == 'ai') openNewAiSession(ws);
             },
             itemBuilder: (_) => [
               if (Platform.isWindows) const PopupMenuItem(value: 'folder', child: MenuLabel('打开本机文件夹…', icon: Icons.folder_open_outlined)),
-              const PopupMenuItem(value: 'find', child: MenuLabel('快速打开文件…', icon: Icons.search, shortcut: 'Ctrl+P')),
-              const PopupMenuItem(value: 'commands', child: MenuLabel('命令面板…', icon: Icons.keyboard_command_key, shortcut: 'Ctrl+Shift+P')),
-              const PopupMenuDivider(),
-              const PopupMenuItem(value: 'terminal', child: MenuLabel('终端', icon: Icons.terminal)),
               const PopupMenuItem(value: 'ai', child: MenuLabel('新建 AI 对话', icon: Icons.chat_bubble_outline)),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'settings', child: MenuLabel('设置…', icon: Icons.settings_outlined, shortcut: 'Ctrl+,')),
@@ -555,12 +607,39 @@ class _TitleBar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: Space.l),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 460),
-                child: _FindBox(searchable: searchable, onTap: onFind),
+                 child: _WorkspaceSearchEntry(
+                   ws: ws,
+                   searchable: searchable,
+                   searching: searching,
+                    onSearch: onSearch,
+                 ),
               ),
             ),
           ),
         ),
-         IconBtn(sideOpen ? Icons.view_sidebar : Icons.view_sidebar_outlined, '显示或隐藏侧栏（Ctrl+B）', onToggleSide),
+         IconBtn(
+           sideOpen ? Icons.view_sidebar : Icons.view_sidebar_outlined,
+           '显示或隐藏侧栏（Ctrl+B）',
+           onToggleSide,
+           color: sideOpen ? ide.accent : null,
+         ),
+         IconBtn(
+           ws.assistantPanel.visible
+               ? Icons.auto_awesome
+               : Icons.auto_awesome_outlined,
+           '切换 AI 侧栏（Ctrl+Alt+I）',
+           () {
+             if (ws.assistantTabs.isEmpty) {
+               openNewAiSession(ws);
+             } else if (MediaQuery.sizeOf(context).width >= 600 &&
+                 ws.assistantPanel.visible) {
+               ws.hideAssistantPanel();
+             } else {
+               ws.toggleAssistantPanel();
+             }
+           },
+           color: ws.assistantPanel.visible ? ide.accent : null,
+         ),
          SizedBox(width: 28, height: 28, child: TabLayoutMenu(ws: ws)),
         const SizedBox(width: Space.s),
         const WindowButtonsGap(),
@@ -570,47 +649,69 @@ class _TitleBar extends StatelessWidget {
   }
 }
 
-/// The box in the middle of the title bar: a button that looks like a search
-/// field and opens quick open (or the palette).
-class _FindBox extends StatefulWidget {
-  final bool searchable;
-  final VoidCallback onTap;
-  const _FindBox({required this.searchable, required this.onTap});
-  @override
-  State<_FindBox> createState() => _FindBoxState();
-}
+/// One title-bar entry for file names, file contents and commands.
+class _WorkspaceSearchEntry extends StatelessWidget {
+  final Workspace ws;
+  final bool searchable, searching;
+  final VoidCallback onSearch;
+  const _WorkspaceSearchEntry({
+    required this.ws,
+    required this.searchable,
+    required this.searching,
+    required this.onSearch,
+  });
 
-class _FindBoxState extends State<_FindBox> {
-  bool _hover = false;
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: InkWell(
-        onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(Radii.m),
-        focusColor: ide.selection,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: 28,
-          padding: const EdgeInsets.only(left: Space.m + 2, right: Space.s),
-          decoration: BoxDecoration(
-            color: _hover ? ide.hover : ide.editor,
-            borderRadius: BorderRadius.circular(Radii.m),
-             border: Border.all(color: _hover ? ide.borderStrong : ide.border.withValues(alpha: .65)),
-          ),
-          child: Row(children: [
-            Icon(Icons.search_rounded, size: 15, color: ide.textFaint),
-            const SizedBox(width: Space.m),
-            Expanded(
-               child: Text(widget.searchable ? '快速打开' : '搜索命令',
-                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: ide.textFaint)),
+    return LayoutBuilder(
+      builder: (context, box) => Tooltip(
+        message: searchable ? '搜索文件名、内容或命令' : '搜索命令',
+        child: Semantics(
+          button: true,
+          child: Material(
+            color: ide.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: UiMetrics.controlCorners,
+              side: BorderSide(color: searching ? ide.accent.withValues(alpha: .48) : ide.borderStrong),
             ),
-             if (MediaQuery.sizeOf(context).width >= 1100) Text(widget.searchable ? 'Ctrl+P' : 'Ctrl+Shift+P', style: TextStyle(fontSize: 11, color: ide.textFaint)),
-          ]),
+            child: InkWell(
+              key: const ValueKey('workbench-quick-open'),
+              onTap: onSearch,
+              borderRadius: UiMetrics.controlCorners,
+              child: SizedBox(
+                height: 28,
+                child: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: ws.searchQuery,
+                  builder: (_, value, _) => Padding(
+                    padding: EdgeInsets.symmetric(horizontal: box.maxWidth >= 85 ? Space.m : 0),
+                    child: Row(
+                      mainAxisAlignment: box.maxWidth < 85 ? MainAxisAlignment.center : MainAxisAlignment.start,
+                      children: [
+                        if (box.maxWidth >= 18)
+                          Icon(Icons.search_rounded, size: 17,
+                            color: searching ? ide.accent : ide.textDim),
+                        if (box.maxWidth >= 85) ...[
+                          const SizedBox(width: Space.m),
+                          Expanded(child: Text(
+                            searching ? (value.text.isEmpty ? '搜索文件内容…' : '内容搜索：${value.text}')
+                              : searchable ? '搜索文件、内容或命令…' : '搜索命令…',
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: ide.textDim),
+                          )),
+                        ],
+                        if (box.maxWidth >= 270) ...[
+                          const SizedBox(width: Space.m),
+                          Text(searching ? 'Ctrl+Shift+F' : searchable ? 'Ctrl+P' : 'Ctrl+Shift+P',
+                            style: TextStyle(fontSize: 10.5, color: ide.textFaint)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -662,11 +763,13 @@ class _ActivityBar extends StatelessWidget {
     final secondary = visibleFeatures.where((f) => !primary.contains(f)).toList();
     final feats = [
       for (final f in primary)
+        if (!vertical || f.id != 'search')
         Builder(
           builder: (_) {
             final st = ws.link == null ? FeatureState.available : ws.stateOf(f);
             final usable = st == FeatureState.available || st == FeatureState.loading;
-            final tip = usable ? f.title : '${f.title}（${_stateText(st)}）';
+            final tip = !usable ? '${f.title}（${_stateText(st)}）'
+                : f.id == 'terminal' && vertical ? '切换终端面板（Ctrl+J）' : f.title;
             return item(f.icon, label(f), tip, on: current == f.id || (f.id == 'terminal' && ws.terminalPanel.visible) || (f.id == 'ai' && ws.assistantPanel.visible), dim: !usable, tap: () => onPick(f));
           },
         ),
@@ -825,7 +928,9 @@ class _SideBarState extends State<_SideBar> {
       color: ide.sideBar,
       child: Column(
         children: [
-          if (feature.id != 'files') UiPanelHeader(title: title, icon: feature.icon,
+           if (feature.id != 'files' && !(feature.id == 'search' &&
+               MediaQuery.sizeOf(context).width >= desktopSearchMinWidth &&
+               ws.stateOf(feature) == FeatureState.available)) UiPanelHeader(title: title, icon: feature.icon,
             subtitle: ws.project?.name ?? ws.name, actions: actions),
           Expanded(
             child: RetainedPages(
@@ -892,9 +997,10 @@ class _EditorAreaState extends State<_EditorArea> {
     final ws = widget.ws, features = widget.features;
     final terminal = features.byId('terminal');
     return WorkbenchView(ws: ws,
+      collapseEmptyEditor: MediaQuery.sizeOf(context).width >= _narrow,
       empty: _Welcome(ws: ws, features: features, onPalette: widget.onPalette, onFind: widget.onFind),
       onNewAssistant: () => openNewAiSession(ws),
-      assistantHistoryBuilder: (onOpened) => LinkGate(ws: ws, builder: (_, _) => AiSessionSidebar(ws: ws, onOpened: onOpened, showNewButton: false)),
+      assistantHistoryBuilder: (onOpened) => AiSessionSidebar(ws: ws, onOpened: onOpened, showNewButton: false),
       onNewTerminal: ws.link != null && terminal != null && ws.stateOf(terminal) == FeatureState.available
         ? () => createSession(ws, context: context) : null,
       terminalSessionsBuilder: (onOpened) => LinkGate(ws: ws, builder: (_, _) {
@@ -923,25 +1029,11 @@ class _Welcome extends StatelessWidget {
   final VoidCallback onPalette, onFind;
   const _Welcome({required this.ws, required this.features, required this.onPalette, required this.onFind});
 
-  /// The first session if there is one, else a new one.
-  Future<void> _openTerminal(BuildContext context) async {
-    final link = ws.link;
-    if (link == null) return;
-    try {
-      final r = await link.call('session.list') as Map;
-      if (!identical(link, ws.link)) return;
-      final list = r['sessions'] as List;
-      if (list.isNotEmpty) return openSession(ws, (list.first as Map)['name'] as String);
-    } on Object {
-      // fall through to creating one
-    }
-    if (context.mounted && identical(link, ws.link)) await createSession(ws, context: context);
-  }
-
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final connected = ws.link != null;
+    final desktop = MediaQuery.sizeOf(context).width >= _narrow;
     bool usable(String id) {
       final f = features.byId(id);
       return f != null && ws.stateOf(f) == FeatureState.available;
@@ -960,19 +1052,15 @@ class _Welcome extends StatelessWidget {
           };
     final actions = <_Action>[
       if (ws.entry?.isLocal == true) _Action(Icons.folder_open, '打开本机文件夹', '无需服务器，直接开发本机项目', () => openLocalFolder(ws.app)),
-      if (connected) ...[
-        if (usable('terminal')) _Action(Icons.terminal_rounded, '打开终端', '继续上次的会话，或新建一个', () => _openTerminal(context)),
+      if (connected && !desktop) ...[
         if (usable('search')) _Action(Icons.search_rounded, '快速打开文件', '按文件名模糊查找', onFind, keys: 'Ctrl+P'),
-        if (usable('search')) _Action(Icons.manage_search, '搜索项目内容', '在当前工作区搜索、预览并替换', () => ws.focusSearch.value++, keys: 'Ctrl+Shift+F'),
-      ] else
+      ] else if (!connected)
         _Action(Icons.sync_rounded, ws.entry?.isLocal == true ? '启动本地 agent' : '连接', ws.entry?.isLocal == true ? '随客户端运行，不需要管理员权限' : '连接到这台服务器', () => ws.app.connect(ws.serverId)),
-      _Action(Icons.keyboard_command_key, '命令面板', '查找命令、切换布局与管理工作台', onPalette, keys: 'Ctrl+Shift+P'),
-      _Action(Icons.tune_rounded, '工作区概览', '连接信息、服务开关与 agent 管理', () => ws.openTab(overviewTab(ws, features))),
+      if (!desktop)
+        _Action(Icons.keyboard_command_key, '命令面板', '查找命令、切换布局与管理工作台', onPalette, keys: 'Ctrl+Shift+P'),
+      if (!desktop || (connected && !usable('search')))
+        _Action(Icons.tune_rounded, '工作区概览', '连接信息、服务开关与 agent 管理', () => ws.openTab(overviewTab(ws, features))),
     ];
-    Widget label(String s) => Padding(
-      padding: const EdgeInsets.only(bottom: Space.m + 2, left: 2),
-      child: Text(s, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ide.textFaint, letterSpacing: 0.3)),
-    );
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(Space.xxl),
@@ -1002,31 +1090,16 @@ class _Welcome extends StatelessWidget {
                   ]),
                 ),
               ]),
-              const SizedBox(height: Space.l),
-              Text(ws.project == null ? '选择一个工具，开始本次工作。' : '当前工作区 · ${ws.project!.folders.length} 个文件夹',
-                style: TextStyle(color: ide.textDim, height: 1.5)),
-              const SizedBox(height: Space.xl),
-              label('常用操作'),
-              LayoutBuilder(builder: (_, box) => Wrap(spacing: Space.m, runSpacing: Space.m, children: [
-                for (final a in actions) SizedBox(width: box.maxWidth >= 560 ? (box.maxWidth - Space.m) / 2 : box.maxWidth,
-                  child: _ActionCard(a)),
-              ])),
-              if (!InputMode.isTouch(context)) ...[
-                const SizedBox(height: Space.xxl + 4),
-                label('常用快捷键'),
-                for (final (what, keys) in const [
-                  ('切换侧栏', 'Ctrl+B'),
-                  ('向右分屏', 'Ctrl+\\'),
-                  ('下一个标签', 'Ctrl+Tab'),
-                  ('关闭标签', 'Ctrl+W'),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
-                    child: Row(children: [
-                      Expanded(child: Text(what, style: TextStyle(color: ide.textDim, fontSize: 12.5))),
-                      KeyCaps(keys),
-                    ]),
-                  ),
+              if (actions.isEmpty) ...[
+                const SizedBox(height: Space.l),
+                Text('从顶部搜索开始，或在文件树中打开文件。',
+                  style: TextStyle(fontSize: 12, color: ide.textDim)),
+              ] else ...[
+                const SizedBox(height: Space.l),
+                LayoutBuilder(builder: (_, box) => Wrap(spacing: Space.m, runSpacing: Space.m, children: [
+                  for (final a in actions) SizedBox(width: box.maxWidth >= 560 ? (box.maxWidth - Space.m) / 2 : box.maxWidth,
+                    child: _ActionCard(a)),
+                ])),
               ],
             ],
           ),
@@ -1095,8 +1168,13 @@ class _ActionCardState extends State<_ActionCard> {
 class _StatusBar extends StatelessWidget {
   final Workspace ws;
   final AppState app;
-  final VoidCallback onTapConn;
-  const _StatusBar({required this.ws, required this.app, required this.onTapConn});
+  final VoidCallback onTapConn, onToggleAssistant;
+  const _StatusBar({
+    required this.ws,
+    required this.app,
+    required this.onTapConn,
+    required this.onToggleAssistant,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1111,6 +1189,40 @@ class _StatusBar extends StatelessWidget {
       ConnState.idle => '未连接',
     };
     final style = TextStyle(color: ide.statusText, fontSize: 12);
+    Widget quickItem(
+      IconData icon,
+      String label,
+      String tip,
+      bool active,
+      VoidCallback onTap,
+    ) => Tooltip(
+      message: tip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Radii.s),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 13,
+                color: active ? ide.accent : ide.statusText.withValues(alpha: 0.78),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: style.copyWith(
+                  color: active ? ide.text : ide.statusText,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
     return Container(
       height: InputMode.isTouch(context) ? 32 : 23,
       decoration: BoxDecoration(color: ide.statusBar, border: Border(top: BorderSide(color: ide.border))),
@@ -1118,7 +1230,7 @@ class _StatusBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(flex: 2, child: Tooltip(
-            message: '${ws.name}${st.addr == null ? '' : '\n${st.addr}'}${ws.link == null ? '' : '\nagent ${ws.link!.server.version}'}${warning == null ? '' : '\n$warning'}\n点击${st.state == ConnState.connected ? '重新' : ''}连接',
+            message: '${ws.name}${st.addr == null ? '' : '\n${st.addr}'}${ws.link == null ? '' : '\nagent ${ws.link!.server.version}'}${warning == null ? '' : '\n$warning'}\n${st.state == ConnState.connected ? '点击打开服务器概览' : '点击重新连接'}',
             child: InkWell(
               onTap: onTapConn,
               borderRadius: BorderRadius.circular(Radii.s),
@@ -1140,12 +1252,35 @@ class _StatusBar extends StatelessWidget {
           if (ws.active != null)
             Flexible(child: ValueListenableBuilder<String>(
               valueListenable: ws.active!.status,
-              builder: (_, v, _) => v.isEmpty
-                  ? const SizedBox.shrink()
-                  : Padding(padding: const EdgeInsets.symmetric(horizontal: Space.s), child: Text(v, style: style, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              builder: (_, v, _) {
+                if (v.isEmpty) return const SizedBox.shrink();
+                final tap = ws.active?.onStatusTap;
+                final label = Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Space.s, vertical: 2),
+                  child: Text(v, style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
+                );
+                if (tap == null) return label;
+                return Tooltip(
+                  message: '点击跳转到行（Ctrl+G）',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(Radii.s),
+                    onTap: tap,
+                    child: label,
+                  ),
+                );
+              },
             )),
+          if (!InputMode.isTouch(context)) ...[
+            quickItem(
+              Icons.auto_awesome_outlined,
+              'AI',
+              'AI 侧栏（Ctrl+Alt+I）',
+              ws.assistantPanel.visible,
+              onToggleAssistant,
+            ),
+          ],
           ListenableBuilder(listenable: app.appearance, builder: (_, _) => Tooltip(message: '界面缩放 · 点击打开设置（Ctrl+,）',
-            child: InkWell(onTap: () => ws.openTab(settingsTab(app)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: InkWell(borderRadius: BorderRadius.circular(Radii.s), onTap: () => ws.openTab(settingsTab(app)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: Text('${(app.appearance.value.uiScale * 100).round()}%', style: style))))),
         ],
       ),
@@ -1165,6 +1300,7 @@ class _PhoneTop extends StatelessWidget {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     final t = ws.active;
+    final terminal = showEditor && ws.terminalFocused && ws.terminalPanel.visible;
     return Container(
       height: 52,
       color: ide.frame,
@@ -1174,7 +1310,10 @@ class _PhoneTop extends StatelessWidget {
         children: [
           if (showEditor) IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded)) else const SizedBox(width: Space.l),
           Expanded(
-            child: showEditor && t != null
+            child: terminal
+                ? Text(ws.project?.name ?? ws.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: ide.textDim))
+                : showEditor && t != null
                 ? Text(t.title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ide.text), maxLines: 1, overflow: TextOverflow.ellipsis)
                 : InkWell(
                     onTap: onServers,
@@ -1192,7 +1331,7 @@ class _PhoneTop extends StatelessWidget {
                     ),
                   ),
           ),
-          if (showEditor && ws.visibleTabs.length > 1)
+          if (showEditor && !terminal && ws.visibleTabs.length > 1)
             WorkbenchMenuButton<String>(
               tooltip: '切换标签',
               icon: Badge(label: Text('${ws.visibleTabs.length}'), child: const Icon(Icons.layers_outlined)),
@@ -1211,7 +1350,7 @@ class _PhoneTop extends StatelessWidget {
                   ),
               ],
             ),
-          if (showEditor && t != null) IconButton(onPressed: () => ws.closeTab(t.id), icon: const Icon(Icons.close_rounded)),
+          if (showEditor && !terminal && t != null) IconButton(onPressed: () => ws.closeTab(t.id), icon: const Icon(Icons.close_rounded)),
           const WindowButtonsGap(),
         ],
       ),

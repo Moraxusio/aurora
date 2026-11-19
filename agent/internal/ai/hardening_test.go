@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestRetryAfterHeaderIsHonoured(t *testing.T) {
@@ -273,5 +274,155 @@ func TestDefaultContextWindowMarkedAsGuess(t *testing.T) {
 	_, src = contextLimit(ProviderConfig{Model: "gpt-6.1-sol", ContextWindow: 123456})
 	if src != "configured" {
 		t.Errorf("configured window reported as %q", src)
+	}
+}
+
+func TestTruncateOutputUTF8AndSingleLongLineTail(t *testing.T) {
+	// Single-line CJK string longer than MaxOutputBytes: head must keep valid UTF-8.
+	longHead := strings.Repeat("中", MaxOutputBytes)
+	head := TruncateOutput(longHead, "", "head")
+	if !head.Truncated || !utf8.ValidString(head.Content) {
+		t.Fatalf("head truncation produced invalid UTF-8 or missed truncation: valid=%v", utf8.ValidString(head.Content))
+	}
+
+	// Single-line string longer than MaxOutputBytes: tail must keep suffix, not empty preview.
+	longTail := strings.Repeat("你", MaxOutputBytes) + "END_MARKER"
+	tail := TruncateOutput(longTail, "", "tail")
+	if !tail.Truncated || !utf8.ValidString(tail.Content) || !strings.Contains(tail.Content, "END_MARKER") {
+		t.Fatalf("tail single-line truncation lost suffix or broke UTF-8: %q", tail.Content[:min(len(tail.Content), 120)])
+	}
+}
+
+func TestStreamCancelPreservesPartialContentAcrossProtocols(t *testing.T) {
+	for _, proto := range []string{"openai-chat", "openai-responses", "anthropic-messages"} {
+		t.Run(proto, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				fl, _ := w.(http.Flusher)
+				switch proto {
+				case "openai-chat":
+					fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"think\",\"content\":\"hello \"}}]}\n\n")
+				case "openai-responses":
+					fmt.Fprint(w, "data: {\"type\":\"response.reasoning_summary_text.delta\",\"output_index\":0,\"item_id\":\"rs_1\",\"delta\":\"think\"}\n\n")
+					fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"output_index\":1,\"item_id\":\"msg_1\",\"delta\":\"hello \"}\n\n")
+				default:
+					fmt.Fprint(w, "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"think\"}}\n\n")
+					fmt.Fprint(w, "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"hello \"}}\n\n")
+				}
+				if fl != nil {
+					fl.Flush()
+				}
+				<-r.Context().Done()
+			}))
+			defer srv.Close()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			sawText := make(chan struct{}, 1)
+			resp, err := StreamLLM(ctx, LLMRequest{
+				Provider: ProviderConfig{Protocol: proto, BaseURL: srv.URL, Model: "fixture"},
+				Messages: []Message{{Role: "user", Parts: []Part{{Type: "text", Text: "hi"}}}},
+			}, nil, func(d LLMDelta) {
+				if d.Type == "text" {
+					select {
+					case sawText <- struct{}{}:
+					default:
+					}
+					cancel()
+				}
+			})
+			select {
+			case <-sawText:
+			case <-time.After(3 * time.Second):
+				t.Fatal("did not observe streamed text")
+			}
+			if err == nil || resp.Finish != "aborted" {
+				t.Fatalf("expected aborted partial response, got finish=%q err=%v", resp.Finish, err)
+			}
+			var gotText, gotReason bool
+			for _, p := range resp.Parts {
+				if p.Type == "text" && strings.Contains(p.Text, "hello ") {
+					gotText = true
+				}
+				if p.Type == "reasoning" && strings.Contains(p.Text, "think") {
+					gotReason = true
+				}
+			}
+			if !gotText || !gotReason {
+				t.Fatalf("lost partial parts on cancel: %+v", resp.Parts)
+			}
+		})
+	}
+}
+
+func TestManualCompactionFallsBackToOverflowMode(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := calls.Add(1)
+		if n == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":{"message":"maximum context length exceeded"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"## Objective\\n- done\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	work := t.TempDir()
+	e := &Env{StateDir: t.TempDir(), Roots: []Root{{ID: "work", Path: work}}}
+	e.init()
+	e.sessions["ses_compact"] = &Session{
+		ID:      "ses_compact",
+		Root:    "work",
+		Workdir: "/",
+		Agent:   "build",
+		Messages: []Message{
+			{ID: "u1", Role: "user", Parts: []Part{{Type: "text", Text: "summarize this"}}},
+			{ID: "a1", Role: "assistant", Parts: []Part{{Type: "text", Text: "working on it"}}},
+		},
+	}
+	msg, err := e.CompactSession(context.Background(), "ses_compact", ProviderConfig{
+		Protocol: "openai-chat",
+		BaseURL:  srv.URL,
+		Model:    "gpt-4o",
+	})
+	if err != nil {
+		t.Fatalf("expected overflow fallback to succeed, got: %v", err)
+	}
+	if calls.Load() != 2 || len(msg.Parts) == 0 || !strings.Contains(msg.Parts[0].Text, "## Objective") {
+		t.Fatalf("unexpected compaction calls=%d msg=%+v", calls.Load(), msg)
+	}
+}
+
+func TestRevertSessionRestoresTodosAndStripsOrphanedReminder(t *testing.T) {
+	work := t.TempDir()
+	e := &Env{StateDir: t.TempDir(), Roots: []Root{{ID: "work", Path: work}}}
+	e.init()
+	e.sessions["ses_rev"] = &Session{
+		ID:      "ses_rev",
+		Root:    "work",
+		Workdir: "/",
+		Agent:   "plan",
+		Todos:   []TodoItem{{ID: "2", Content: "future", Status: "in_progress"}},
+		Messages: []Message{
+			{ID: "u1", Role: "user", Agent: "build", Parts: []Part{{Type: "text", Text: "step 1"}}},
+			{ID: "a1", Role: "assistant", Agent: "build", Parts: []Part{{Type: "tool-result", ToolName: "todowrite", Metadata: map[string]any{"todos": []TodoItem{{ID: "1", Content: "kept", Status: "completed"}}}}}},
+			{ID: "rem", Role: "user", Parts: []Part{{Type: "text", Text: "<system-reminder>\nYou are in Plan mode.\n</system-reminder>"}}},
+			{ID: "u2", Role: "user", Agent: "plan", Parts: []Part{{Type: "text", Text: "step 2"}}},
+		},
+	}
+	reverted, _, err := e.RevertSession(context.Background(), "ses_rev", "u2", false)
+	if err != nil {
+		t.Fatalf("RevertSession failed: %v", err)
+	}
+	if len(reverted.Messages) != 2 {
+		t.Fatalf("expected orphaned reminder stripped, got %d messages", len(reverted.Messages))
+	}
+	if reverted.Agent != "build" {
+		t.Fatalf("expected agent restored to build, got %q", reverted.Agent)
+	}
+	if len(reverted.Todos) != 1 || reverted.Todos[0].ID != "1" {
+		t.Fatalf("expected todos restored to step 1, got %+v", reverted.Todos)
 	}
 }

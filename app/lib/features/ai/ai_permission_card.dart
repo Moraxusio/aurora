@@ -102,13 +102,40 @@ class AiPermissionCard extends StatelessWidget {
               Icon(Icons.shield_outlined, size: 18, color: ide.warn),
               const SizedBox(width: Space.s + 2),
               Expanded(
-                child: Text(
-                  '需要批准 · ${permissionTitle(q)}',
-                  style: TextStyle(
-                    fontSize: compact ? 12 : 13,
-                    fontWeight: FontWeight.w600,
-                    color: ide.text,
-                  ),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '需要批准 · ${permissionTitle(q)}',
+                        style: TextStyle(
+                          fontSize: compact ? 12 : 13,
+                          fontWeight: FontWeight.w600,
+                          color: ide.text,
+                        ),
+                      ),
+                    ),
+                    if (q.isSubagent) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: ide.accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '子代理${q.agent.isEmpty ? '' : ' · ${q.agent}'}',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: ide.accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               if (patch != null)
@@ -252,7 +279,7 @@ class AiPermissionCard extends StatelessWidget {
               child: Tooltip(
                 message: '${q.resource}\n${q.reasonText}',
                 child: Text(
-                  '${permissionTitle(q)} · ${q.resource}',
+                  '${q.isSubagent ? '[子代理] ' : ''}${permissionTitle(q)} · ${q.resource}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

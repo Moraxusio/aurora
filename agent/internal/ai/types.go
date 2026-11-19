@@ -60,10 +60,13 @@ type ProviderConfig struct {
 // sent per run so a client can keep project policy local without persisting
 // credentials or changing the wire-compatible provider payload.
 type PermissionRule struct {
-	Action   string `json:"action"`
-	Resource string `json:"resource"`
-	Effect   string `json:"effect"` // allow | ask | deny
-	Scope    string `json:"scope,omitempty"`
+	Action    string `json:"action"`
+	Resource  string `json:"resource"`
+	Effect    string `json:"effect"` // allow | ask | deny
+	Scope     string `json:"scope,omitempty"`
+	Agent     string `json:"agent,omitempty"`      // "" | "*" | "primary" | "subagent" | "build" | "plan" | "explore" | "general"
+	ExpiresAt int64  `json:"expires_at,omitempty"` // unix millis; 0 = no expiry
+	Disabled  bool   `json:"disabled,omitempty"`
 }
 
 // Usage follows OpenCode's inclusive + breakdown token contract.
@@ -179,10 +182,13 @@ type InboxItem struct {
 	Runtime         *RuntimeInfo        `json:"runtime,omitempty"`
 	Held            bool                `json:"held,omitempty"` // derived for clients; requires explicit resend
 	// Credentials live only in memory for this admitted request.
-	Provider       ProviderConfig   `json:"-"`
-	Options        *RunOptions      `json:"options,omitempty"`
-	AdmittedConfig *ExtensionConfig `json:"-"`
-	ConfigSource   string           `json:"-"`
+	Provider                ProviderConfig   `json:"-"`
+	SubagentProvider        *ProviderConfig  `json:"-"`
+	SubagentPermissionMode  string           `json:"subagent_permission_mode,omitempty"`
+	SubagentPermissionRules []PermissionRule `json:"subagent_permission_rules,omitempty"`
+	Options                 *RunOptions      `json:"options,omitempty"`
+	AdmittedConfig          *ExtensionConfig `json:"-"`
+	ConfigSource            string           `json:"-"`
 }
 
 type Session struct {
@@ -281,13 +287,15 @@ type ContextInfo struct {
 }
 
 type PermissionQuestion struct {
-	ID        string `json:"id"`
-	SessionID string `json:"session_id"`
-	MessageID string `json:"message_id"`
-	CallID    string `json:"call_id"`
-	Tool      string `json:"tool"`
-	Action    string `json:"action"`
-	Resource  string `json:"resource"`
+	ID         string `json:"id"`
+	SessionID  string `json:"session_id"`
+	MessageID  string `json:"message_id"`
+	CallID     string `json:"call_id"`
+	Tool       string `json:"tool"`
+	Action     string `json:"action"`
+	Resource   string `json:"resource"`
+	Agent      string `json:"agent,omitempty"`
+	IsSubagent bool   `json:"is_subagent,omitempty"`
 	// Reason is English prose kept for older clients. ReasonCode is the stable
 	// name of the same reason so a client can show it in its own language.
 	Reason     string `json:"reason,omitempty"`

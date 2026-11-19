@@ -22,6 +22,10 @@ class _CodeField extends SingleChildRenderObjectWidget {
   final Color floatingCursorColor;
   final Color? cursorLineColor;
   final Color? chunkIndicatorColor;
+  final Color? indentGuideColor;
+  final Color? bracketMatchColor;
+  final Color? wordHighlightColor;
+  final int indentSize;
   final double cursorWidth;
   final double floatingCursorWidth;
   final EdgeInsetsGeometry padding;
@@ -52,6 +56,10 @@ class _CodeField extends SingleChildRenderObjectWidget {
     floatingCursorColor,
     this.cursorLineColor,
     this.chunkIndicatorColor,
+    this.indentGuideColor,
+    this.bracketMatchColor,
+    this.wordHighlightColor,
+    this.indentSize = 4,
     required this.cursorWidth,
     floatingCursorWidth,
     required this.padding,
@@ -85,6 +93,10 @@ class _CodeField extends SingleChildRenderObjectWidget {
     floatingCursorColor: floatingCursorColor,
     cursorLineColor: cursorLineColor,
     chunkIndicatorColor: chunkIndicatorColor,
+    indentGuideColor: indentGuideColor,
+    bracketMatchColor: bracketMatchColor,
+    wordHighlightColor: wordHighlightColor,
+    indentSize: indentSize,
     cursorWidth: cursorWidth,
     floatingCursorWidth: floatingCursorWidth,
     padding: padding,
@@ -117,6 +129,10 @@ class _CodeField extends SingleChildRenderObjectWidget {
       ..floatingCursorColor = floatingCursorColor
       ..cursorLineColor = cursorLineColor
       ..chunkIndicatorColor = chunkIndicatorColor
+      ..indentGuideColor = indentGuideColor
+      ..bracketMatchColor = bracketMatchColor
+      ..wordHighlightColor = wordHighlightColor
+      ..indentSize = indentSize
       ..cursorWidth = cursorWidth
       ..floatingCursorWidth = floatingCursorWidth
       ..padding = padding
@@ -180,6 +196,10 @@ class _CodeFieldRender extends RenderBox implements MouseTrackerAnnotation {
     required Color floatingCursorColor,
     Color? cursorLineColor,
     Color? chunkIndicatorColor,
+    Color? indentGuideColor,
+    Color? bracketMatchColor,
+    Color? wordHighlightColor,
+    int indentSize = 4,
     required double cursorWidth,
     required double floatingCursorWidth,
     required EdgeInsetsGeometry padding,
@@ -212,6 +232,9 @@ class _CodeFieldRender extends RenderBox implements MouseTrackerAnnotation {
     _backgroundRender = _CodeFieldExtraRender(
       painters: [
         _CodeCursorLinePainter(cursorLineColor, _selection),
+        _CodeIndentGuidePainter(indentGuideColor, indentSize),
+        _CodeOccurrencePainter(wordHighlightColor, _selection, highlightSelections ?? const []),
+        _CodeBracketMatchPainter(bracketMatchColor, _selection),
         _CodeFieldSelectionPainter(selectionColor, _selection),
         _CodeFieldHighlightPainter(highlightColor, highlightSelections ?? const [])
       ]
@@ -296,6 +319,8 @@ class _CodeFieldRender extends RenderBox implements MouseTrackerAnnotation {
     }
     _selection = value;
     _backgroundRender.find<_CodeCursorLinePainter>().selection = value;
+    _backgroundRender.find<_CodeOccurrencePainter>().selection = value;
+    _backgroundRender.find<_CodeBracketMatchPainter>().selection = value;
     _backgroundRender.find<_CodeFieldSelectionPainter>().selection = value;
     _foregroundRender.find<_CodeFieldCursorPainter>().position = value.extent;
     if (kIsAndroid || kIsIOS) {
@@ -305,7 +330,9 @@ class _CodeFieldRender extends RenderBox implements MouseTrackerAnnotation {
   }
 
   set highlightSelections(List<CodeLineSelection>? value) {
-    _backgroundRender.find<_CodeFieldHighlightPainter>().selections = value ?? const [];
+    final list = value ?? const [];
+    _backgroundRender.find<_CodeFieldHighlightPainter>().selections = list;
+    _backgroundRender.find<_CodeOccurrencePainter>().hasFindHighlights = list.isNotEmpty;
   }
 
   set textStyle(TextStyle value) {
@@ -401,6 +428,22 @@ class _CodeFieldRender extends RenderBox implements MouseTrackerAnnotation {
 
   set cursorLineColor(Color? value) {
     _backgroundRender.find<_CodeCursorLinePainter>().color = value;
+  }
+
+  set indentGuideColor(Color? value) {
+    _backgroundRender.find<_CodeIndentGuidePainter>().color = value;
+  }
+
+  set bracketMatchColor(Color? value) {
+    _backgroundRender.find<_CodeBracketMatchPainter>().color = value;
+  }
+
+  set wordHighlightColor(Color? value) {
+    _backgroundRender.find<_CodeOccurrencePainter>().color = value;
+  }
+
+  set indentSize(int value) {
+    _backgroundRender.find<_CodeIndentGuidePainter>().indentSize = value;
   }
 
   set chunkIndicatorColor(Color? value) {
@@ -1468,12 +1511,349 @@ class _CodeCursorLinePainter extends _CodeFieldExtraPainter {
     if (offset.dy + paragraph.preferredLineHeight < 0 || offset.dy >= size.height) {
       return;
     }
-    _paint.color = _color!;
+    final rect = Rect.fromLTWH(0, offset.dy, size.width, paragraph.preferredLineHeight);
+    _paint
+      ..style = PaintingStyle.fill
+      ..color = _color!.withValues(alpha: (_color!.a * 0.45).clamp(0.0, 1.0));
+    canvas.drawRect(rect, _paint);
+    _paint
+      ..style = PaintingStyle.stroke
+      ..color = _color!;
     canvas.drawLine(Offset(0, offset.dy), Offset(size.width, offset.dy), _paint);
     canvas.drawLine(Offset(0, offset.dy + paragraph.preferredLineHeight),
       Offset(size.width, offset.dy + paragraph.preferredLineHeight), _paint);
   }
 
+}
+
+class _CodeIndentGuidePainter extends _CodeFieldExtraPainter {
+  final Paint _paint;
+  Color? _color;
+  int _indentSize;
+  TextStyle? _cachedStyle;
+  double _spaceWidth = 0;
+
+  _CodeIndentGuidePainter(this._color, this._indentSize)
+      : _paint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1;
+
+  set color(Color? value) {
+    if (_color == value) return;
+    _color = value;
+    notifyListeners();
+  }
+
+  set indentSize(int value) {
+    final safe = value <= 0 ? 4 : value;
+    if (_indentSize == safe) return;
+    _indentSize = safe;
+    notifyListeners();
+  }
+
+  double _charWidth(TextStyle style) {
+    if (_cachedStyle == style && _spaceWidth > 0) return _spaceWidth;
+    _cachedStyle = style;
+    final tp = TextPainter(
+      text: TextSpan(text: ' ', style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    _spaceWidth = tp.width;
+    tp.dispose();
+    return _spaceWidth;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size, _CodeFieldRender render) {
+    if (_color == null || _color == Colors.transparent || _color!.alpha == 0) {
+      return;
+    }
+    final paragraphs = render.displayParagraphs;
+    if (paragraphs.isEmpty) return;
+    final step = _indentSize <= 0 ? 4 : _indentSize;
+    final spaceWidth = _charWidth(render.textStyle);
+    if (spaceWidth <= 0) return;
+    _paint.color = _color!;
+    for (final p in paragraphs) {
+      if (p.index < 0 || p.index >= render._codes.length) continue;
+      final line = render._codes[p.index].text;
+      if (line.isEmpty) continue;
+      var spaces = 0;
+      var hasNonSpace = false;
+      for (var i = 0; i < line.length; i++) {
+        final cu = line.codeUnitAt(i);
+        if (cu == 0x20) {
+          spaces++;
+        } else if (cu == 0x09) {
+          spaces += step;
+        } else {
+          hasNonSpace = true;
+          break;
+        }
+      }
+      if (!hasNonSpace || spaces < step) continue;
+      final baseX = p.offset.dx - render.paintOffset.dx;
+      final topY = p.offset.dy - render.paintOffset.dy;
+      final botY = topY + p.height;
+      for (var col = step; col < spaces; col += step) {
+        final x = (baseX + col * spaceWidth).roundToDouble() + 0.5;
+        if (x > 0 && x < size.width) {
+          canvas.drawLine(Offset(x, topY), Offset(x, botY), _paint);
+        }
+      }
+    }
+  }
+}
+
+class _CodeBracketMatchPainter extends _CodeFieldExtraPainter {
+  static const _openToClose = {'(': ')', '[': ']', '{': '}'};
+  static const _closeToOpen = {')': '(', ']': '[', '}': '{'};
+
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+  final Paint _strokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1;
+  Color? _color;
+  CodeLineSelection _selection;
+
+  _CodeBracketMatchPainter(this._color, this._selection);
+
+  set color(Color? value) {
+    if (_color == value) return;
+    _color = value;
+    notifyListeners();
+  }
+
+  set selection(CodeLineSelection value) {
+    if (_selection == value) return;
+    _selection = value;
+    notifyListeners();
+  }
+
+  _BracketPos? _bracketAt(CodeLines codes, CodeLinePosition pos) {
+    if (pos.index < 0 || pos.index >= codes.length) return null;
+    final text = codes[pos.index].text;
+    if (pos.offset > 0 && pos.offset <= text.length) {
+      final prev = text[pos.offset - 1];
+      if (_openToClose.containsKey(prev) || _closeToOpen.containsKey(prev)) {
+        return _BracketPos(pos.index, pos.offset - 1, prev);
+      }
+    }
+    if (pos.offset >= 0 && pos.offset < text.length) {
+      final cur = text[pos.offset];
+      if (_openToClose.containsKey(cur) || _closeToOpen.containsKey(cur)) {
+        return _BracketPos(pos.index, pos.offset, cur);
+      }
+    }
+    return null;
+  }
+
+  _BracketPos? _findMatch(CodeLines codes, int startLine, int startOffset, String ch) {
+    final forward = _openToClose.containsKey(ch);
+    final target = forward ? _openToClose[ch]! : _closeToOpen[ch]!;
+    var depth = 0;
+    const maxLineSpan = 1500;
+    if (forward) {
+      final endLine = min(codes.length - 1, startLine + maxLineSpan);
+      for (var l = startLine; l <= endLine; l++) {
+        final text = codes[l].text;
+        final from = l == startLine ? startOffset : 0;
+        for (var i = from; i < text.length; i++) {
+          final c = text[i];
+          if (c == ch) {
+            depth++;
+          } else if (c == target) {
+            depth--;
+            if (depth == 0) return _BracketPos(l, i, target);
+          }
+        }
+      }
+    } else {
+      final minLine = max(0, startLine - maxLineSpan);
+      for (var l = startLine; l >= minLine; l--) {
+        final text = codes[l].text;
+        final from = l == startLine ? startOffset : text.length - 1;
+        for (var i = from; i >= 0; i--) {
+          final c = text[i];
+          if (c == ch) {
+            depth++;
+          } else if (c == target) {
+            depth--;
+            if (depth == 0) return _BracketPos(l, i, target);
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size, _CodeFieldRender render) {
+    if (_color == null || _color == Colors.transparent || _color!.alpha == 0) {
+      return;
+    }
+    if (!_selection.isCollapsed) return;
+    final hit = _bracketAt(render._codes, _selection.extent);
+    if (hit == null) return;
+    final match = _findMatch(render._codes, hit.line, hit.offset, hit.ch);
+    if (match == null) return;
+
+    _fillPaint.color = _color!.withValues(alpha: (_color!.a * 0.25).clamp(0.0, 1.0));
+    _strokePaint.color = _color!;
+    for (final pos in [hit, match]) {
+      final p = render.findDisplayParagraphByLineIndex(pos.line);
+      if (p == null) continue;
+      final rects = p.getRangeRects(TextRange(start: pos.offset, end: pos.offset + 1));
+      for (final r in rects) {
+        final shifted = r.shift(p.offset - render.paintOffset);
+        canvas.drawRect(shifted, _fillPaint);
+        canvas.drawRect(shifted, _strokePaint);
+      }
+    }
+  }
+}
+
+class _BracketPos {
+  final int line;
+  final int offset;
+  final String ch;
+  const _BracketPos(this.line, this.offset, this.ch);
+}
+
+class _OccurrenceTarget {
+  final String word;
+  final int line;
+  final int start;
+  final int end;
+  final bool wholeWord;
+  const _OccurrenceTarget(this.word, this.line, this.start, this.end, this.wholeWord);
+}
+
+class _CodeOccurrencePainter extends _CodeFieldExtraPainter {
+  final Paint _paint = Paint()..style = PaintingStyle.fill;
+  final Paint _borderPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 0.8;
+  Color? _color;
+  CodeLineSelection _selection;
+  bool _hasFindHighlights;
+
+  _CodeOccurrencePainter(this._color, this._selection, List<CodeLineSelection> finds)
+      : _hasFindHighlights = finds.isNotEmpty;
+
+  set color(Color? value) {
+    if (_color == value) return;
+    _color = value;
+    notifyListeners();
+  }
+
+  set selection(CodeLineSelection value) {
+    if (_selection == value) return;
+    _selection = value;
+    notifyListeners();
+  }
+
+  set hasFindHighlights(bool value) {
+    if (_hasFindHighlights == value) return;
+    _hasFindHighlights = value;
+    notifyListeners();
+  }
+
+  static bool _isWordChar(int cu) =>
+      (cu >= 48 && cu <= 57) ||
+      (cu >= 65 && cu <= 90) ||
+      (cu >= 97 && cu <= 122) ||
+      cu == 95;
+
+  _OccurrenceTarget? _targetWord(CodeLines codes) {
+    if (!_selection.isSameLine) return null;
+    final lineIdx = _selection.extentIndex;
+    if (lineIdx < 0 || lineIdx >= codes.length) return null;
+    final text = codes[lineIdx].text;
+    if (text.isEmpty) return null;
+    if (!_selection.isCollapsed) {
+      final start = _selection.startOffset.clamp(0, text.length).toInt();
+      final end = _selection.endOffset.clamp(0, text.length).toInt();
+      if (end - start < 2 || end - start > 64) return null;
+      final sub = text.substring(start, end);
+      if (sub.trim() != sub || sub.contains(RegExp(r'\s'))) return null;
+      var isIdent = true;
+      for (var i = 0; i < sub.length; i++) {
+        if (!_isWordChar(sub.codeUnitAt(i))) {
+          isIdent = false;
+          break;
+        }
+      }
+      return _OccurrenceTarget(sub, lineIdx, start, end, isIdent);
+    }
+    var pos = _selection.extentOffset.clamp(0, text.length).toInt();
+    if (pos == text.length && pos > 0) pos--;
+    if (pos < 0 || pos >= text.length || !_isWordChar(text.codeUnitAt(pos))) {
+      if (_selection.extentOffset > 0 &&
+          _selection.extentOffset <= text.length &&
+          _isWordChar(text.codeUnitAt(_selection.extentOffset - 1))) {
+        pos = _selection.extentOffset - 1;
+      } else {
+        return null;
+      }
+    }
+    var start = pos;
+    while (start > 0 && _isWordChar(text.codeUnitAt(start - 1))) {
+      start--;
+    }
+    var end = pos + 1;
+    while (end < text.length && _isWordChar(text.codeUnitAt(end))) {
+      end++;
+    }
+    if (end - start < 2 || end - start > 64) return null;
+    return _OccurrenceTarget(
+      text.substring(start, end),
+      lineIdx,
+      start,
+      end,
+      true,
+    );
+  }
+
+  @override
+  void paint(Canvas canvas, Size size, _CodeFieldRender render) {
+    if (_hasFindHighlights || _color == null || _color == Colors.transparent || _color!.alpha == 0) {
+      return;
+    }
+    final target = _targetWord(render._codes);
+    if (target == null) return;
+    final paragraphs = render.displayParagraphs;
+    if (paragraphs.isEmpty) return;
+
+    _paint.color = _color!.withValues(alpha: (_color!.a * 0.35).clamp(0.0, 1.0));
+    _borderPaint.color = _color!.withValues(alpha: (_color!.a * 0.75).clamp(0.0, 1.0));
+
+    for (final p in paragraphs) {
+      if (p.index < 0 || p.index >= render._codes.length) continue;
+      final text = render._codes[p.index].text;
+      if (text.length < target.word.length) continue;
+      var from = 0;
+      while (true) {
+        final idx = text.indexOf(target.word, from);
+        if (idx < 0) break;
+        final end = idx + target.word.length;
+        from = idx + 1;
+        if (target.wholeWord) {
+          if (idx > 0 && _isWordChar(text.codeUnitAt(idx - 1))) continue;
+          if (end < text.length && _isWordChar(text.codeUnitAt(end))) continue;
+        }
+        if (!_selection.isCollapsed && p.index == target.line && idx == target.start && end == target.end) {
+          continue;
+        }
+        final rects = p.getRangeRects(TextRange(start: idx, end: end));
+        for (final r in rects) {
+          final shifted = r.shift(p.offset - render.paintOffset);
+          canvas.drawRect(shifted, _paint);
+          canvas.drawRect(shifted, _borderPaint);
+        }
+      }
+    }
+  }
 }
 
 abstract class _CodeFieldSelectionsPainter extends _CodeFieldExtraPainter {

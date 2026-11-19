@@ -144,6 +144,16 @@ class _SettingsPageState extends State<SettingsPage> {
                         fontSize: p.terminalFont,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'AI 助手：已准备好协助分析与修改代码。',
+                      style: TextStyle(
+                        color: ide.text,
+                        fontFamily: Ide.ui,
+                        fontFamilyFallback: Ide.uiFallback,
+                        fontSize: p.chatFont,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -167,16 +177,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 id: 'terminalFont',
                 value: p.terminalFont,
                 onChanged: (v) => preferences.set('terminalFont', v),
-                onEnd: preferences.flush,
-              ),
-            ),
-            _setting(
-              'AI 对话字号',
-              '对话正文与输入框同步变化，保持当前阅读位置。',
-              NumberSetting(
-                id: 'chatFont',
-                value: p.chatFont,
-                onChanged: (v) => preferences.set('chatFont', v),
                 onEnd: preferences.flush,
               ),
             ),

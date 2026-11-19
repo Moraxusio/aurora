@@ -466,10 +466,16 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 		}
 		return nil
 	})
+	streamAborted := false
+	var streamErr error
 	if err != nil && !errors.Is(err, errSSEStreamDone) {
-		return LLMResponse{}, err
+		if ctx.Err() == nil {
+			return LLMResponse{}, err
+		}
+		streamAborted = true
+		streamErr = err
 	}
-	if subscription && !completed {
+	if subscription && !completed && !streamAborted {
 		return LLMResponse{}, errors.New("ChatGPT 响应流提前断开，请重新发送；登录到期时请先刷新登录")
 	}
 
@@ -508,6 +514,9 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 				})
 			}
 		case "function_call":
+			if streamAborted {
+				continue
+			}
 			rawArgs := strings.TrimSpace(it.args.String())
 			if rawArgs == "" || !json.Valid([]byte(rawArgs)) {
 				rawArgs = "{}"
@@ -537,6 +546,13 @@ func streamOpenAIResponses(ctx context.Context, req LLMRequest, proxyEnv func() 
 				})
 			}
 		}
+	}
+	if streamAborted {
+		return LLMResponse{
+			Parts:  parts,
+			Finish: "aborted",
+			Usage:  usage,
+		}, streamErr
 	}
 	if hasToolCalls {
 		finishReason = "tool-calls"

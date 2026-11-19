@@ -157,6 +157,15 @@ func BuildSystemPrompts(agentName string, cfg ProviderConfig, absWorkdir string,
 
 	parts := []string{mainPrompt}
 
+	if agentName == "orchestrator" {
+		parts = append(parts, `<orchestrator-mode>
+You are running in Orchestrator mode (Conductor).
+- Break complex tasks into clear, independent workstreams and delegate focused exploration (`+"`explore`"+`) or implementation (`+"`general`"+`) tasks to subagents (`+"`subagent`"+` tool) whenever parallel or specialized execution improves speed and reliability.
+- Subagents may run with a dedicated Musician model/persona and permission policy configured by the user. Provide clear scope, file paths, and verification criteria in every subagent prompt.
+- Synthesize subagent reports, perform final integration or verification directly, and present a concise final outcome.
+</orchestrator-mode>`)
+	}
+
 	// IdentityPlugin (# Your Model)
 	providerID := cfg.ID
 	if providerID == "" {

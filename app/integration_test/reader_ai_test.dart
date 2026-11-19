@@ -222,7 +222,7 @@ void main() {
       await settle();
       await shot('light-main');
       final context = panel.currentContext!;
-      showAiModelPicker(context, ws);
+      showAiPersonaPicker(context, ws);
       await shot('light-models');
       await t.tap(find.byTooltip('关闭'));
       await settle();

@@ -2,19 +2,212 @@ import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../theme/ide_theme.dart';
 
-/// Shared visual vocabulary for conversations, work, history and model settings.
+/// Shared visual vocabulary for conversations, work, history and AI settings.
 abstract final class AiVisuals {
   static const radius = UiMetrics.surfaceCorners;
-  static BoxDecoration surface(Ide ide, {bool selected = false, Color? edge}) =>
+  static const controlRadius = UiMetrics.controlCorners;
+
+  static BoxDecoration surface(
+    Ide ide, {
+    bool selected = false,
+    bool elevated = false,
+    Color? edge,
+    Color? fill,
+  }) => BoxDecoration(
+    color: fill ?? (selected ? ide.accentSoft : ide.surface),
+    borderRadius: radius,
+    border: Border.all(
+      color:
+          edge ??
+          (selected
+              ? ide.accent.withValues(alpha: 0.45)
+              : ide.border.withValues(alpha: 0.85)),
+    ),
+    boxShadow: elevated ? ide.float : null,
+  );
+
+  static BoxDecoration badge(Ide ide, Color color, {double alpha = 0.12}) =>
       BoxDecoration(
-        color: selected ? ide.accentSoft : ide.sideBar,
-        borderRadius: radius,
-        border: Border.all(
-          color:
-              edge ??
-              (selected ? ide.accent.withValues(alpha: .45) : ide.border),
-        ),
+        color: color.withValues(alpha: alpha),
+        borderRadius: BorderRadius.circular(UiMetrics.controlRadius),
+        border: Border.all(color: color.withValues(alpha: alpha * 1.8)),
       );
+}
+
+/// Tactile PC desktop pill button with smooth hover & focus transitions.
+class AiPillButton extends StatefulWidget {
+  final IconData? icon;
+  final String label;
+  final String? tooltip;
+  final VoidCallback? onTap;
+  final bool highlighted;
+  final Color? accent;
+  final bool compact;
+  final Widget? trailing;
+
+  const AiPillButton({
+    super.key,
+    this.icon,
+    required this.label,
+    this.tooltip,
+    this.onTap,
+    this.highlighted = false,
+    this.accent,
+    this.compact = false,
+    this.trailing,
+  });
+
+  @override
+  State<AiPillButton> createState() => _AiPillButtonState();
+}
+
+class _AiPillButtonState extends State<AiPillButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    final tone = widget.accent ?? ide.accent;
+    final bg = widget.highlighted
+        ? tone.withValues(alpha: _hovered ? 0.18 : 0.12)
+        : _hovered
+        ? ide.hover
+        : ide.input.withValues(alpha: 0.65);
+    final fg = widget.highlighted ? tone : ide.textDim;
+    final border = widget.highlighted
+        ? tone.withValues(alpha: _hovered ? 0.55 : 0.35)
+        : (_hovered ? ide.borderStrong : ide.border.withValues(alpha: 0.75));
+
+    final child = MouseRegion(
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(UiMetrics.controlRadius),
+        child: AnimatedContainer(
+          duration: UiMotion.hover,
+          curve: UiMotion.enterCurve,
+          height: widget.compact ? 24 : 26,
+          padding: EdgeInsets.symmetric(
+            horizontal: widget.compact ? 7 : 9,
+          ),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(UiMetrics.controlRadius),
+            border: Border.all(color: border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.icon != null) ...[
+                Icon(widget.icon, size: 13.5, color: fg),
+                const SizedBox(width: 5),
+              ],
+              Flexible(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: widget.highlighted
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                    color: widget.highlighted ? tone : ide.text,
+                  ),
+                ),
+              ),
+              if (widget.trailing != null) ...[
+                const SizedBox(width: 4),
+                widget.trailing!,
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+    return widget.tooltip == null
+        ? child
+        : Tooltip(message: widget.tooltip!, child: child);
+  }
+}
+
+/// Crisp segmented selector for PC desktop toolbars and settings.
+class AiSegmentedTabs<T> extends StatelessWidget {
+  final T value;
+  final Map<T, String> items;
+  final ValueChanged<T> onChanged;
+
+  const AiSegmentedTabs({
+    super.key,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ide = Ide.of(context);
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: ide.input.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(UiMetrics.controlRadius + 2),
+        border: Border.all(color: ide.border.withValues(alpha: 0.8)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final entry in items.entries)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(entry.key),
+                child: AnimatedContainer(
+                  duration: UiMotion.hover,
+                  curve: UiMotion.enterCurve,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: entry.key == value ? ide.surface : Colors.transparent,
+                    borderRadius: BorderRadius.circular(UiMetrics.controlRadius),
+                    border: entry.key == value
+                        ? Border.all(color: ide.borderStrong.withValues(alpha: 0.6))
+                        : null,
+                    boxShadow: entry.key == value
+                        ? [
+                            BoxShadow(
+                              color: ide.shadow.withValues(alpha: 0.12),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Text(
+                    entry.value,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: entry.key == value
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: entry.key == value ? ide.text : ide.textDim,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// One page selector instead of a wall of icons/chips. Narrow dialogs keep the
@@ -77,14 +270,14 @@ class AiSectionHeading extends StatelessWidget {
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.only(top: 12, bottom: 8),
       child: Row(
         children: [
           Container(
-            width: 30,
-            height: 30,
-            decoration: AiVisuals.surface(ide),
-            child: Icon(icon, size: 16, color: ide.accent),
+            width: 28,
+            height: 28,
+            decoration: AiVisuals.badge(ide, ide.accent, alpha: 0.12),
+            child: Icon(icon, size: 15, color: ide.accent),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -141,27 +334,40 @@ class AiStatusMark extends StatelessWidget {
       AiWorkStatus.completed => ide.ok,
       AiWorkStatus.stopped => ide.textDim,
       AiWorkStatus.error => ide.error,
-      AiWorkStatus.interrupted => ide.textDim,
+      AiWorkStatus.interrupted => ide.warn,
     };
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          switch (status) {
-            AiWorkStatus.running => Icons.pending_outlined,
-            AiWorkStatus.completed => Icons.check_circle_outline,
-            AiWorkStatus.stopped => Icons.stop_circle_outlined,
-            AiWorkStatus.error => Icons.error_outline,
-            AiWorkStatus.interrupted => Icons.pause_circle_outline,
-          },
-          size: 14,
-          color: color,
-        ),
-        if (label) ...[
-          const SizedBox(width: 4),
-          Text(text(status), style: TextStyle(fontSize: 11, color: color)),
+    return Container(
+      padding: label
+          ? const EdgeInsets.symmetric(horizontal: 7, vertical: 2)
+          : EdgeInsets.zero,
+      decoration: label ? AiVisuals.badge(ide, color, alpha: 0.10) : null,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            switch (status) {
+              AiWorkStatus.running => Icons.bolt_rounded,
+              AiWorkStatus.completed => Icons.check_circle_outline_rounded,
+              AiWorkStatus.stopped => Icons.stop_circle_outlined,
+              AiWorkStatus.error => Icons.error_outline_rounded,
+              AiWorkStatus.interrupted => Icons.pause_circle_outline_rounded,
+            },
+            size: 13,
+            color: color,
+          ),
+          if (label) ...[
+            const SizedBox(width: 4),
+            Text(
+              text(status),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

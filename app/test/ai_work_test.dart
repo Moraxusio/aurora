@@ -127,4 +127,36 @@ void main() {
       expect(work.items['root:same']!.output, isEmpty);
     },
   );
+
+  test('tool.done clears child waiting state and closeTarget returns to main', () {
+    final work = AiWorkController('root');
+    addTearDown(work.dispose);
+    work.event({
+      'type': 'tool.running',
+      'session_id': 'root',
+      'tool_call_id': 'sub_1',
+      'tool_name': 'subagent',
+      'input': {'description': 'inspect'},
+      'metadata': {'child_session_id': 'child_1'},
+    });
+    work.event({
+      'type': 'permission.ask',
+      'session_id': 'child_1',
+      'session_title': 'inspect',
+    });
+    expect(work.sessions['child_1']?.waiting, isTrue);
+
+    work.event({
+      'type': 'tool.done',
+      'session_id': 'root',
+      'tool_call_id': 'sub_1',
+    });
+    expect(work.sessions['child_1']?.waiting, isFalse);
+
+    work.openSession('child_1', 'inspect');
+    expect(work.selected, 'session:child_1');
+    work.closeTarget('session:child_1');
+    expect(work.selected, 'main');
+    expect(work.opened.contains('session:child_1'), isFalse);
+  });
 }

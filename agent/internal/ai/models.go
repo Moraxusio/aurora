@@ -420,7 +420,7 @@ func StreamLLM(ctx context.Context, req LLMRequest, proxyEnv func() map[string]s
 		lastErr = err
 		// Only retry if no partial deltas were streamed yet and error is transient
 		if emittedAny || !IsRetryableProviderError(err) || attempt == len(backoffs)-1 {
-			return LLMResponse{}, err
+			return resp, err
 		}
 	}
 	return LLMResponse{}, lastErr

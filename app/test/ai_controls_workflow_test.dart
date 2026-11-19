@@ -19,6 +19,7 @@ class _ControlsLink extends RuntimeLink {
   final permissions = <Map<String, dynamic>>[];
   bool failRun = false;
   bool supportsControls = true;
+  List<String>? resolvedPermissionIds;
   _ControlsLink() {
     pendingPermission = null;
   }
@@ -55,6 +56,9 @@ class _ControlsLink extends RuntimeLink {
     if (op == 'ai.run' && failRun)
       throw OpError(codeConflict, 'synthetic admission failed');
     final result = await super.call(op, args, timeout);
+    if (op == 'ai.update' && resolvedPermissionIds != null) {
+      return {'updated': true, 'resolved_ids': resolvedPermissionIds};
+    }
     if (op == 'ai.get') {
       (result as Map)['pending_permissions'] = List.of(permissions);
       result['running'] = permissions.isNotEmpty;
@@ -122,6 +126,7 @@ void main() {
     double height = 800,
     double scale = 1,
     Brightness brightness = Brightness.dark,
+    String? sessionId = 'ses_1',
   }) async {
     t.view.physicalSize = Size(width, height);
     t.view.devicePixelRatio = 1;
@@ -141,7 +146,7 @@ void main() {
           home: InputMode.scope(
             mode: input,
             child: Scaffold(
-              body: AiStudioView(ws: ws, initialSessionId: 'ses_1'),
+              body: AiStudioView(ws: ws, initialSessionId: sessionId),
             ),
           ),
         ),
@@ -181,6 +186,81 @@ void main() {
   }
 
   testWidgets(
+    'empty chat suggestions extend the draft and never send a request',
+    (t) async {
+      await pump(t, sessionId: null);
+      expect(find.byKey(const ValueKey('ai-work-navigation')), findsNothing);
+      final input = find.byKey(const ValueKey('ai-prompt-input'));
+      await t.enterText(input, 'keep my notes');
+      await t.tap(find.text('梳理项目结构'));
+      await frames(t);
+      expect(
+        t.widget<TextField>(input).controller!.text,
+        startsWith('keep my notes\n\n请快速浏览'),
+      );
+      expect(link.rpcCalls.where((call) => call.$1 == 'ai.run'), isEmpty);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'saved permission rules update a live conversation without clearing unrelated approvals',
+    (t) async {
+      for (final (id, resource) in [
+        ('first', 'notes.md'),
+        ('second', 'draft.md'),
+      ]) {
+        link.permissions.add({
+          'id': id,
+          'session_id': 'ses_1',
+          'tool': 'write',
+          'action': 'write',
+          'resource': resource,
+        });
+      }
+      await pump(t);
+      final card = find.byKey(const ValueKey('ai-permission-card'));
+      expect(card, findsOneWidget);
+      expect(find.textContaining('notes.md'), findsWidgets);
+
+      link.resolvedPermissionIds = ['first'];
+      await app.update((profile) {
+        profile.ai.permissionRules = [
+          AiPermissionRule(
+            action: 'write',
+            resource: 'notes.md',
+            effect: 'allow',
+          ),
+        ];
+      });
+      await frames(t);
+      final update = link.rpcCalls
+          .where((call) => call.$1 == 'ai.update')
+          .single
+          .$2;
+      expect(update, {
+        'id': 'ses_1',
+        'permission_rules': [
+          {'action': 'write', 'resource': 'notes.md', 'effect': 'allow'},
+        ],
+      });
+      expect(card, findsOneWidget);
+      expect(find.textContaining('notes.md'), findsNothing);
+      expect(find.textContaining('draft.md'), findsWidgets);
+
+      link.resolvedPermissionIds = [];
+      await app.update((profile) => profile.ai.permissionRules.clear());
+      await frames(t);
+      expect(link.rpcCalls.where((call) => call.$1 == 'ai.update').last.$2, {
+        'id': 'ses_1',
+        'permission_rules': [],
+      });
+      expect(card, findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'message controls survive failure, apply once and queue independently',
     (t) async {
       await pump(t);
@@ -189,8 +269,16 @@ void main() {
         'inspect project',
       );
       await options(t);
-      await choose(t, 'ai-send-budget-0', '关闭 · 不限制本次运行');
-      await choose(t, 'ai-send-parallel-0', '4 个');
+      final budgetSwitch = find.byKey(
+        const ValueKey('ai-policy-budget-enabled-0'),
+      );
+      await t.ensureVisible(budgetSwitch);
+      await t.tap(budgetSwitch);
+      await frames(t);
+      final parallel = find.byKey(const ValueKey('ai-policy-maxParallel-0'));
+      await t.ensureVisible(parallel);
+      await t.enterText(parallel, '4');
+      await frames(t);
       await apply(t);
       link.supportsControls = false;
       await t.tap(find.byKey(const ValueKey('ai-send-btn')));
@@ -213,17 +301,13 @@ void main() {
       await t.tap(find.byKey(const ValueKey('ai-send-btn')));
       await frames(t);
       final sent = link.rpcCalls.lastWhere((c) => c.$1 == 'ai.run').$2;
-      expect(sent['options'], {'budgetMode': 'off', 'maxParallel': 4});
-      expect(find.textContaining('预算关'), findsNothing);
+      expect((sent['options'] as Map)['budgetMode'], 'off');
+      expect((sent['options'] as Map)['maxParallel'], 4);
+      expect(find.textContaining('预算关'), findsOneWidget);
       link.events.emit({'type': 'session.status', 'status': 'running'});
       await frames(t);
       await options(t);
-      final budget = t.widget<DropdownButtonFormField<String>>(
-        find.byKey(const ValueKey('ai-send-budget-0')),
-      );
-      expect(budget.onChanged, isNull);
       await choose(t, 'ai-send-delivery-0', '排队发送 · 当前任务结束后');
-      await choose(t, 'ai-send-budget-0', '关闭 · 不限制本次运行');
       await apply(t);
       await t.enterText(
         find.byKey(const ValueKey('ai-prompt-input')),
@@ -233,7 +317,7 @@ void main() {
       await frames(t);
       final queued = link.rpcCalls.lastWhere((c) => c.$1 == 'ai.run').$2;
       expect(queued['delivery'], 'queue');
-      expect(queued['options'], {'budgetMode': 'off'});
+      expect((queued['options'] as Map)['budgetMode'], 'off');
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
     },
@@ -324,7 +408,11 @@ void main() {
         );
         await options(t);
         await shot(t, 'send-options-${width.toInt()}-${brightness.name}');
-        await choose(t, 'ai-send-budget-0', '关闭 · 不限制本次运行');
+        final budgetSwitch = find.byKey(
+          const ValueKey('ai-policy-budget-enabled-0'),
+        );
+        await t.ensureVisible(budgetSwitch);
+        await t.tap(budgetSwitch);
         await t.tap(find.text('取消').last);
         await frames(t);
         expect(find.textContaining('预算关'), findsNothing);

@@ -115,7 +115,7 @@ void main() {
       expect(question(action: 'write').alwaysLabel, '本会话始终允许修改文件');
       expect(
         question(action: 'webfetch', resource: 'https://x.test').alwaysLabel,
-        '本会话始终允许',
+        '本会话始终允许访问 https://x.test/*',
       );
       expect(
         question(action: 'shell', resource: '').alwaysLabel,

@@ -234,9 +234,12 @@ class DocumentModel extends ChangeNotifier {
         fileMode = (result['modeBits'] as int?) ?? fileMode;
         _install(value, saved: value, tag: result['etag'] as String?);
         _diskMissing = false;
+        // Opening an ordinary clean file does not need a journal write.
+        // Forced reloads or recovered entries still clear the old checkpoint.
+        final clearRecovery = force || recovered;
         recovered = false;
         outside = null;
-        _queueRecovery();
+        if (clearRecovery) _queueRecovery();
       }
     } on Object catch (e) {
       if (_closed ||
@@ -591,6 +594,11 @@ class DocumentModel extends ChangeNotifier {
     } else {
       if (!await flushRecovery()) return;
     }
+    _retire();
+  }
+
+  void _retire() {
+    _recoveryTimer?.cancel();
     _closed = true;
     snippet?.close();
     _readOperation?.cancel();
@@ -705,6 +713,22 @@ class DocumentRegistry extends ChangeNotifier {
     await model.close(discard: true);
     _documents.remove(key);
     notifyListeners();
+  }
+
+  /// A replaced preview is not an explicit discard. Do not touch its journal;
+  /// a recovery read may still be in flight when the preview is replaced.
+  bool releaseCleanPreview(String root, String path) {
+    final key = DocumentKey(server, root, path);
+    final model = _documents[key];
+    if (model == null) return true;
+    if (model.dirty || model.saving || model._pendingRecovery ||
+        model._flushing != null || model._views > 1) {
+      return false;
+    }
+    _documents.remove(key);
+    model._retire();
+    notifyListeners();
+    return true;
   }
 
   @override

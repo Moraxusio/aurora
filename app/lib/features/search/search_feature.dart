@@ -13,10 +13,13 @@ import '../../kernel/feature.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import '../files/file_editor.dart';
+import '../files/file_icons.dart';
 import '../development/language_actions.dart';
 import 'quick_open.dart';
 import 'search_model.dart';
 import 'search_scope.dart';
+
+const desktopSearchMinWidth = 600.0;
 
 class SearchFeature extends Feature {
   const SearchFeature();
@@ -35,7 +38,7 @@ class SearchFeature extends Feature {
   @override
   SideBarView? sideBar(BuildContext context, Workspace ws) => SideBarView(
     title: '搜索',
-    body: SearchPanel(ws: ws),
+    body: SearchPanel(ws: ws, useWorkbenchSearch: true),
   );
 
   @override
@@ -54,7 +57,13 @@ class SearchFeature extends Feature {
       group: '搜索',
       icon: Icons.search,
       shortcut: 'Ctrl+Shift+F',
-      run: () => ws.focusSearch.value++,
+      run: () {
+        if (ws.openContentSearch case final open?) {
+          open();
+        } else {
+          ws.focusSearch.value++;
+        }
+      },
     ),
   ];
 }
@@ -62,14 +71,15 @@ class SearchFeature extends Feature {
 class SearchPanel extends StatefulWidget {
   final Workspace ws;
   final SearchModel? model; // tests
-  const SearchPanel({super.key, required this.ws, this.model});
+  final bool useWorkbenchSearch;
+  const SearchPanel({super.key, required this.ws, this.model, this.useWorkbenchSearch = false});
   @override
   State<SearchPanel> createState() => _SearchPanelState();
 }
 
 class _SearchPanelState extends State<SearchPanel> {
   late final SearchModel _m = widget.model ?? SearchModel(widget.ws);
-  final _query = TextEditingController();
+  late final _query = widget.useWorkbenchSearch ? widget.ws.searchQuery : TextEditingController();
   final _include = TextEditingController();
   final _exclude = TextEditingController();
   final _replacement = TextEditingController();
@@ -81,6 +91,9 @@ class _SearchPanelState extends State<SearchPanel> {
       _replace = false;
   final Set<SearchFile> _collapsed = {};
   Timer? _debounce;
+  late var _scope = (widget.ws.link, widget.ws.projectGeneration);
+  bool get _queryInTitleBar => widget.useWorkbenchSearch &&
+      MediaQuery.sizeOf(context).width >= desktopSearchMinWidth;
 
   @override
   void initState() {
@@ -90,11 +103,20 @@ class _SearchPanelState extends State<SearchPanel> {
       c.addListener(_changed);
     }
     widget.ws.focusSearch.addListener(_focusQuery);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _focusQuery());
+    // Initialize before registering: a link or project change must re-run the
+    // retained title-bar query against the new scope, never reuse old results.
+    _scope = (widget.ws.link, widget.ws.projectGeneration);
+    widget.ws.addListener(_scopeChanged);
+    if (widget.useWorkbenchSearch) widget.ws.submitSearch.addListener(_run);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_query.text.isNotEmpty) _changed();
+      _focusQuery();
+    });
   }
 
   void _focusQuery() {
-    if (!mounted) return;
+    if (!mounted || _queryInTitleBar) return;
     _focus.requestFocus();
     _query.selection = TextSelection(
       baseOffset: 0,
@@ -102,13 +124,25 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
+  void _scopeChanged() {
+    final next = (widget.ws.link, widget.ws.projectGeneration);
+    if (next == _scope) return;
+    _scope = next;
+    _debounce?.cancel();
+    _last = '';
+    if (widget.ws.link != null && _query.text.isNotEmpty) _changed();
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
     widget.ws.focusSearch.removeListener(_focusQuery);
+    widget.ws.removeListener(_scopeChanged);
+    if (widget.useWorkbenchSearch) widget.ws.submitSearch.removeListener(_run);
     _m.removeListener(_tick);
     if (widget.model == null) _m.dispose();
-    _query.dispose();
+    _query.removeListener(_changed);
+    if (!widget.useWorkbenchSearch) _query.dispose();
     _include.dispose();
     _exclude.dispose();
     _replacement.dispose();
@@ -121,12 +155,13 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   String _last = '';
+  String get _queryKey =>
+      '${_query.text}\u0000${_include.text}\u0000${_exclude.text}\u0000$_regex$_case$_word';
 
   // Searching as you type, after a pause: a server search reads files, so not
   // on every key press.
   void _changed() {
-    final key =
-        '${_query.text}\u0000${_include.text}\u0000${_exclude.text}\u0000$_regex$_case$_word';
+    final key = _queryKey;
     if (key == _last) return;
     _last = key;
     _debounce?.cancel();
@@ -136,6 +171,7 @@ class _SearchPanelState extends State<SearchPanel> {
 
   void _run() {
     _debounce?.cancel();
+    _last = _queryKey;
     _collapsed.clear();
     _m.search(
       SearchOptions(
@@ -225,7 +261,7 @@ class _SearchPanelState extends State<SearchPanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(padding: const EdgeInsets.only(bottom: Space.m),
+               if (!_queryInTitleBar) Padding(padding: const EdgeInsets.only(bottom: Space.m),
                 child: Text('范围：${widget.ws.project?.name ?? '全部文件根'}',
                   style: TextStyle(color: ide.textDim, fontSize: 11.5))),
               if (_m.running || _m.replacing)
@@ -240,13 +276,21 @@ class _SearchPanelState extends State<SearchPanel> {
                     label: Text(_m.replacing ? '停止替换预览' : '停止搜索'),
                   ),
                 ),
-              field(
+               if (!_queryInTitleBar) field(
                 _query,
                 '搜索',
                 focus: _focus,
-                tail: [IconBtn(Icons.search, '立即搜索 / 重新搜索', _m.running ? null : _run)],
+                tail: [
+                  if (_query.text.isNotEmpty)
+                    IconBtn(Icons.close, '清除', () {
+                      _query.clear();
+                      _m.clear();
+                      setState(() {});
+                    }),
+                  IconBtn(Icons.search, '立即搜索 / 重新搜索', _m.running ? null : _run),
+                ],
               ),
-              Wrap(spacing: Space.xs, children: [
+               Wrap(spacing: Space.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
                   toggle(
                     'Aa',
                     '区分大小写',
@@ -263,10 +307,25 @@ class _SearchPanelState extends State<SearchPanel> {
                     '.*',
                     '正则表达式',
                     _regex,
-                    () => _toggle(() => _regex = !_regex),
-                  ),
-              ]),
-              Wrap(
+                     () => _toggle(() => _regex = !_regex),
+                   ),
+                   if (_queryInTitleBar)
+                     WorkbenchMenuButton<String>(
+                       key: const ValueKey('content-search-options'),
+                       tooltip: '搜索选项',
+                       icon: Icon(Icons.tune_rounded, size: 16,
+                         color: _replace || _globs ? ide.accent : ide.textDim),
+                       onSelected: (value) {
+                         if (value == 'replace') setState(() => _replace = !_replace);
+                         if (value == 'globs') setState(() => _globs = !_globs);
+                       },
+                       itemBuilder: (_) => [
+                         CheckedPopupMenuItem(value: 'replace', checked: _replace, child: const Text('跨文件替换')),
+                         CheckedPopupMenuItem(value: 'globs', checked: _globs, child: const Text('文件筛选')),
+                       ],
+                     ),
+               ]),
+               if (!_queryInTitleBar) Wrap(
                 alignment: WrapAlignment.end,
                 children: [
                   TextButton(
@@ -323,7 +382,7 @@ class _SearchPanelState extends State<SearchPanel> {
     } else if (_m.running && files == 0) {
       text = '正在搜索…';
     } else if (_query.text.isEmpty) {
-      text = '输入关键词搜索文件内容';
+      text = _queryInTitleBar ? '在顶部输入关键词' : '输入关键词搜索文件内容';
     } else if (files == 0) {
       text = '没有结果';
     } else {
@@ -340,12 +399,33 @@ class _SearchPanelState extends State<SearchPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (text.isNotEmpty)
-            Text(
-              text,
-              style: TextStyle(
-                fontSize: 12,
-                color: _m.error != null ? ide.error : ide.textDim,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _m.error != null ? ide.error : ide.textDim,
+                    ),
+                  ),
+                ),
+                if (_m.results.length > 1)
+                  IconBtn(
+                    _collapsed.length == _m.results.length
+                        ? Icons.unfold_more
+                        : Icons.unfold_less,
+                    _collapsed.length == _m.results.length ? '全部展开' : '全部折叠',
+                    () => setState(() {
+                      if (_collapsed.length == _m.results.length) {
+                        _collapsed.clear();
+                      } else {
+                        _collapsed.addAll(_m.results);
+                      }
+                    }),
+                    size: 15,
+                  ),
+              ],
             ),
           for (final n in _m.notes)
             Text(n, style: TextStyle(fontSize: 11, color: ide.warn)),
@@ -367,16 +447,18 @@ class _SearchPanelState extends State<SearchPanel> {
       itemBuilder: (_, index) {
         final (f, l) = rows[index];
         if (l != null) {
+          void open({required bool preview}) => openFileAt(
+            widget.ws,
+            root: f.folder.root,
+            path: f.path,
+            line: l.line,
+            col: l.col,
+            preview: preview,
+          );
           return _LineRow(
-            file: f,
             line: l,
-            onTap: () => openFileAt(
-              widget.ws,
-              root: f.folder.root,
-              path: f.path,
-              line: l.line,
-              col: l.col,
-            ),
+            onTap: () => open(preview: true),
+            onDoubleTap: () => open(preview: false),
           );
         }
         final open = !_collapsed.contains(f);
@@ -386,10 +468,17 @@ class _SearchPanelState extends State<SearchPanel> {
           f.path.substring(0, f.path.length - name.length),
         );
         return TreeRow(
-          leading: Icon(
-            open ? Icons.expand_more : Icons.chevron_right,
-            size: 16,
-            color: ide.textDim,
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                open ? Icons.expand_more : Icons.chevron_right,
+                size: 16,
+                color: ide.textDim,
+              ),
+              const SizedBox(width: 2),
+              FileIcon(name: name, size: 15),
+            ],
           ),
           label: name,
           detail: dir,
@@ -418,10 +507,9 @@ class _SearchPanelState extends State<SearchPanel> {
 }
 
 class _LineRow extends StatelessWidget {
-  final SearchFile file;
   final SearchLine line;
-  final VoidCallback onTap;
-  const _LineRow({required this.file, required this.line, required this.onTap});
+  final VoidCallback onTap, onDoubleTap;
+  const _LineRow({required this.line, required this.onTap, required this.onDoubleTap});
 
   @override
   Widget build(BuildContext context) {
@@ -447,6 +535,7 @@ class _LineRow extends StatelessWidget {
     if (at < t.length) spans.add(TextSpan(text: t.substring(at)));
     return InkWell(
       onTap: onTap,
+      onDoubleTap: onDoubleTap,
       hoverColor: ide.hover,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(30, 3, 8, 3),

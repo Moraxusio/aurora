@@ -18,14 +18,17 @@ import (
 )
 
 type activeRun struct {
-	cancel        context.CancelFunc
-	stopRequested bool // guarded by Env.mu; cleanup cancellation is not a user stop
-	turnCtx       context.Context
-	turnCancel    context.CancelFunc
-	inbox         []InboxItem
-	queued        []InboxItem
-	provider      ProviderConfig
-	meter         *runMeter
+	cancel            context.CancelFunc
+	stopRequested     bool // guarded by Env.mu; cleanup cancellation is not a user stop
+	turnCtx           context.Context
+	turnCancel        context.CancelFunc
+	inbox             []InboxItem
+	queued            []InboxItem
+	provider          ProviderConfig
+	subagentProvider  *ProviderConfig
+	subagentPermMode  string
+	subagentPermRules []PermissionRule
+	meter             *runMeter
 }
 
 // Env is the state and dependencies of the "ai" service on the agent.
@@ -312,6 +315,46 @@ func (e *Env) UpdateSessionMeta(id string, title *string, pinned *bool) (Session
 	e.mu.Unlock()
 	e.broadcast(StreamEvent{Type: "session.title", SessionID: id, Title: sum.Title})
 	return sum, nil
+}
+
+// UpdateSessionPermission updates a session's permission mode and/or rules in
+// place and immediately resolves pending prompts that are now allowed or denied.
+func (e *Env) UpdateSessionPermission(id string, permMode *string, rules *[]PermissionRule) ([]string, error) {
+	e.init()
+	var mode string
+	if permMode != nil {
+		mode = strings.ToLower(strings.TrimSpace(*permMode))
+		if mode != "ask" && mode != "auto" && mode != "full_access" {
+			return nil, errors.New("permission_mode must be ask, auto, or full_access")
+		}
+	}
+	e.mu.Lock()
+	s := e.sessionLocked(id)
+	if s == nil {
+		e.mu.Unlock()
+		return nil, e.sessionStorageError(id)
+	}
+	beforeMode := s.PermissionMode
+	beforeRules := s.PermissionRules
+	if permMode != nil {
+		s.PermissionMode = mode
+	}
+	if rules != nil {
+		s.PermissionRules = append([]PermissionRule(nil), (*rules)...)
+	}
+	if err := e.persistSessionLocked(s); err != nil {
+		s.PermissionMode = beforeMode
+		s.PermissionRules = beforeRules
+		e.mu.Unlock()
+		return nil, err
+	}
+	agentMode := s.Agent
+	isSubagent := s.ParentID != ""
+	effMode := s.PermissionMode
+	effRules := append([]PermissionRule(nil), s.PermissionRules...)
+	e.mu.Unlock()
+	resolved := e.perms.ResolveSessionPending(id, agentMode, isSubagent, effMode, effRules)
+	return resolved, nil
 }
 
 // SearchHit is one session found by SearchSessions.
@@ -656,18 +699,21 @@ func formatUserContent(text string, attachments []ContextAttachment) string {
 
 // RunInput is the payload for ai.run.
 type RunInput struct {
-	SessionID       string              `json:"session_id,omitempty"`
-	InboxID         string              `json:"inbox_id,omitempty"`
-	Root            string              `json:"root,omitempty"`
-	Workdir         string              `json:"workdir,omitempty"`
-	Agent           string              `json:"agent,omitempty"`           // "build" | "plan"
-	PermissionMode  string              `json:"permission_mode,omitempty"` // "ask" | "auto"
-	PermissionRules []PermissionRule    `json:"permission_rules,omitempty"`
-	Text            string              `json:"text"`
-	Attachments     []ContextAttachment `json:"attachments,omitempty"`
-	Delivery        string              `json:"delivery,omitempty"` // "steer" | "queue"
-	Provider        ProviderConfig      `json:"provider"`
-	Options         *RunOptions         `json:"options,omitempty"`
+	SessionID               string              `json:"session_id,omitempty"`
+	InboxID                 string              `json:"inbox_id,omitempty"`
+	Root                    string              `json:"root,omitempty"`
+	Workdir                 string              `json:"workdir,omitempty"`
+	Agent                   string              `json:"agent,omitempty"`           // "build" | "plan" | "orchestrator"
+	PermissionMode          string              `json:"permission_mode,omitempty"` // "ask" | "auto" | "full_access"
+	PermissionRules         []PermissionRule    `json:"permission_rules,omitempty"`
+	Text                    string              `json:"text"`
+	Attachments             []ContextAttachment `json:"attachments,omitempty"`
+	Delivery                string              `json:"delivery,omitempty"` // "steer" | "queue"
+	Provider                ProviderConfig      `json:"provider"`
+	SubagentProvider        *ProviderConfig     `json:"subagent_provider,omitempty"`
+	SubagentPermissionMode  string              `json:"subagent_permission_mode,omitempty"`
+	SubagentPermissionRules []PermissionRule    `json:"subagent_permission_rules,omitempty"`
+	Options                 *RunOptions         `json:"options,omitempty"`
 }
 
 // StartRun creates or resumes a session, enqueues the user prompt (supporting live steering
@@ -697,6 +743,18 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	if prepErr != nil {
 		return SessionSummary{}, prepErr
 	}
+	if in.SubagentProvider != nil {
+		subProv := *in.SubagentProvider
+		subProv, prepErr = prepareSubscription(subProv)
+		if prepErr != nil {
+			return SessionSummary{}, prepErr
+		}
+		subProv, prepErr = prepareModelOptions(subProv)
+		if prepErr != nil {
+			return SessionSummary{}, prepErr
+		}
+		in.SubagentProvider = &subProv
+	}
 	if strings.TrimSpace(in.Text) == "" && len(in.Attachments) == 0 && in.InboxID == "" {
 		return SessionSummary{}, errors.New("prompt text must not be empty")
 	}
@@ -705,12 +763,16 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	}
 
 	agentMode := strings.ToLower(strings.TrimSpace(in.Agent))
-	if agentMode != "plan" && agentMode != "build" {
+	if agentMode != "plan" && agentMode != "build" && agentMode != "orchestrator" {
 		agentMode = "build"
 	}
 	permMode := strings.ToLower(strings.TrimSpace(in.PermissionMode))
-	if permMode != "auto" && permMode != "ask" {
+	if permMode != "auto" && permMode != "ask" && permMode != "full_access" {
 		permMode = "ask"
+	}
+	subPermMode := strings.ToLower(strings.TrimSpace(in.SubagentPermissionMode))
+	if subPermMode != "auto" && subPermMode != "ask" && subPermMode != "full_access" {
+		subPermMode = ""
 	}
 
 	e.mu.Lock()
@@ -852,19 +914,22 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	// If already running, push into activeRun.inbox for OpenCode-style live steering!
 	if ar, busy := e.running[s.ID]; busy {
 		item := InboxItem{
-			ID:              NewID("inb"),
-			Text:            in.Text,
-			Agent:           agentMode,
-			Delivery:        in.Delivery,
-			Attachments:     in.Attachments,
-			CreatedAt:       time.Now().UnixMilli(),
-			PermissionMode:  permMode,
-			PermissionRules: append([]PermissionRule(nil), in.PermissionRules...),
-			Provider:        in.Provider,
-			Runtime:         runtimeInfo(in.Provider),
-			Options:         in.Options,
-			AdmittedConfig:  &budgetConfig,
-			ConfigSource:    budgetSource,
+			ID:                      NewID("inb"),
+			Text:                    in.Text,
+			Agent:                   agentMode,
+			Delivery:                in.Delivery,
+			Attachments:             in.Attachments,
+			CreatedAt:               time.Now().UnixMilli(),
+			PermissionMode:          permMode,
+			PermissionRules:         append([]PermissionRule(nil), in.PermissionRules...),
+			Provider:                in.Provider,
+			SubagentProvider:        in.SubagentProvider,
+			SubagentPermissionMode:  subPermMode,
+			SubagentPermissionRules: append([]PermissionRule(nil), in.SubagentPermissionRules...),
+			Runtime:                 runtimeInfo(in.Provider),
+			Options:                 in.Options,
+			AdmittedConfig:          &budgetConfig,
+			ConfigSource:            budgetSource,
 		}
 		if item.Delivery != "queue" {
 			item.Delivery = "steer"
@@ -965,11 +1030,14 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	runCtx, cancel := context.WithCancel(context.Background())
 	turnCtx, turnCancel := meter.context(runCtx)
 	ar := &activeRun{
-		cancel:     cancel,
-		turnCtx:    turnCtx,
-		turnCancel: turnCancel,
-		provider:   in.Provider,
-		meter:      meter,
+		cancel:            cancel,
+		turnCtx:           turnCtx,
+		turnCancel:        turnCancel,
+		provider:          in.Provider,
+		subagentProvider:  in.SubagentProvider,
+		subagentPermMode:  subPermMode,
+		subagentPermRules: append([]PermissionRule(nil), in.SubagentPermissionRules...),
+		meter:             meter,
 	}
 	e.running[s.ID] = ar
 
@@ -1211,18 +1279,22 @@ func (e *Env) runLoop(baseCtx context.Context, sessionID string, depth int) {
 			lastCalls = nil
 			for _, item := range ar.inbox {
 				previousAgent := s.Agent
-				if item.Agent != "" && (item.Agent == "build" || item.Agent == "plan") {
+				if item.Agent != "" && (item.Agent == "build" || item.Agent == "plan" || item.Agent == "orchestrator") {
 					s.Agent = item.Agent
 				}
 				if s.Agent != previousAgent {
-					reminder := PlanLeaveReminder
 					if s.Agent == "plan" {
-						reminder = PlanEnterReminder(filepath.Join(e.StateDir, "ai", "plans"))
+						s.Messages = append(s.Messages, Message{ID: NewID("msg"), SessionID: s.ID, Role: "user",
+							Parts: []Part{{Type: "text", ID: NewID("prt"), Text: PlanEnterReminder(filepath.Join(e.StateDir, "ai", "plans"))}}, CreatedAt: time.Now().UnixMilli()})
+					} else if previousAgent == "plan" {
+						s.Messages = append(s.Messages, Message{ID: NewID("msg"), SessionID: s.ID, Role: "user",
+							Parts: []Part{{Type: "text", ID: NewID("prt"), Text: PlanLeaveReminder}}, CreatedAt: time.Now().UnixMilli()})
 					}
-					s.Messages = append(s.Messages, Message{ID: NewID("msg"), SessionID: s.ID, Role: "user",
-						Parts: []Part{{Type: "text", ID: NewID("prt"), Text: reminder}}, CreatedAt: time.Now().UnixMilli()})
 				}
 				ar.provider = item.Provider
+				ar.subagentProvider = item.SubagentProvider
+				ar.subagentPermMode = item.SubagentPermissionMode
+				ar.subagentPermRules = append([]PermissionRule(nil), item.SubagentPermissionRules...)
 				s.Model, s.Protocol = item.Provider.Model, item.Provider.Protocol
 				s.PermissionMode = item.PermissionMode
 				s.PermissionRules = append([]PermissionRule(nil), item.PermissionRules...)
@@ -1368,7 +1440,10 @@ func (e *Env) runLoop(baseCtx context.Context, sessionID string, depth int) {
 		}, owned.meter)
 
 		if llmErr != nil {
-			if ctx.Err() != nil && owned.meter.timeError() == nil && len(llmResp.Parts) == 0 {
+			if ctx.Err() != nil && owned.meter.timeError() == nil {
+				if len(llmResp.Parts) > 0 {
+					e.recordAbortedPartial(sessionID, asstMsgID, sessSnap.Agent, prov, sysPrompts, tools, llmResp)
+				}
 				return
 			}
 			// Context overflow recovery: run overflow compaction once and retry step!
@@ -1545,6 +1620,63 @@ func (e *Env) runLoop(baseCtx context.Context, sessionID string, depth int) {
 	}
 }
 
+func (e *Env) recordAbortedPartial(sessionID, messageID, agentMode string, prov ProviderConfig, sysPrompts []string, tools []ToolDef, response LLMResponse) {
+	if messageID == "" {
+		messageID = NewID("msg")
+	}
+	usageCopy := response.Usage
+	rt := runtimeInfo(prov)
+	msg := Message{
+		ID:        messageID,
+		SessionID: sessionID,
+		Role:      "assistant",
+		Agent:     agentMode,
+		Model:     prov.Model,
+		Runtime:   rt,
+		Parts:     response.Parts,
+		Finish:    "aborted",
+		CreatedAt: time.Now().UnixMilli(),
+	}
+	if usageCopy.TotalTokens > 0 || usageCopy.InputTokens > 0 || usageCopy.OutputTokens > 0 {
+		msg.Usage = &usageCopy
+	}
+	var contextState *ContextInfo
+	var totalUsage Usage
+	var budget *RunBudgetState
+	e.mu.Lock()
+	if s := e.sessionLocked(sessionID); s != nil {
+		if ar := e.running[sessionID]; ar != nil {
+			budget = ar.meter.snapshot()
+			msg.Budget = budget
+			s.Budget = budget
+		}
+		putStepMessage(s, msg)
+		s.TotalUsage.Add(usageCopy)
+		if usageCopy.InputTokens > 0 {
+			s.LastInputToks = usageCopy.InputTokens
+		}
+		s.Runtime = rt
+		s.UpdatedAt = msg.CreatedAt
+		contextState = activeContext(s, prov, contextOverhead(sysPrompts, tools))
+		s.Context = contextState
+		totalUsage = s.TotalUsage
+		_ = e.persistSessionLocked(s)
+	}
+	e.mu.Unlock()
+	msgCopy := msg
+	e.broadcast(StreamEvent{
+		Type:       "step.finish",
+		SessionID:  sessionID,
+		MessageID:  msg.ID,
+		Message:    &msgCopy,
+		Usage:      &usageCopy,
+		TotalUsage: &totalUsage,
+		Runtime:    rt,
+		Context:    contextState,
+		Budget:     budget,
+	})
+}
+
 func (e *Env) recordError(sessionID, model, errMsg string) {
 	e.recordRunError(sessionID, model, "", errors.New(errMsg), LLMResponse{})
 }
@@ -1625,6 +1757,39 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 	}
 	defer release()
 	now := time.Now().UnixMilli()
+	childProv := prov
+	if run.subagentProvider != nil && strings.TrimSpace(run.subagentProvider.Model) != "" {
+		childProv = *run.subagentProvider
+	}
+	childPermMode := parent.PermissionMode
+	if run.subagentPermMode == "ask" || run.subagentPermMode == "auto" || run.subagentPermMode == "full_access" {
+		childPermMode = run.subagentPermMode
+	}
+	switch policy.PermissionMode {
+	case "ask", "auto", "full_access":
+		childPermMode = policy.PermissionMode
+	case "readOnly":
+		agentType = "explore"
+		childPermMode = "ask"
+	}
+	childRules := append([]PermissionRule(nil), parent.PermissionRules...)
+	childRules = append(childRules, run.subagentPermRules...)
+	if policy.AllowNetwork != nil && !*policy.AllowNetwork {
+		childRules = append(childRules, PermissionRule{
+			Action:   "network",
+			Resource: "*",
+			Effect:   "deny",
+			Agent:    "subagent",
+		})
+	}
+	if policy.AllowShell != nil && !*policy.AllowShell {
+		childRules = append(childRules, PermissionRule{
+			Action:   "shell",
+			Resource: "*",
+			Effect:   "deny",
+			Agent:    "subagent",
+		})
+	}
 	child := &Session{
 		ID:              NewID("ses"),
 		ParentID:        parent.ID,
@@ -1632,10 +1797,10 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 		Root:            parent.Root,
 		Workdir:         parent.Workdir,
 		Agent:           agentType,
-		PermissionMode:  parent.PermissionMode,
-		PermissionRules: append([]PermissionRule(nil), parent.PermissionRules...),
-		Model:           prov.Model,
-		Protocol:        prov.Protocol,
+		PermissionMode:  childPermMode,
+		PermissionRules: childRules,
+		Model:           childProv.Model,
+		Protocol:        childProv.Protocol,
 		Messages: []Message{
 			{
 				ID:        NewID("msg"),
@@ -1669,7 +1834,7 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 	child.Budget = meter.snapshot()
 	childRun := &activeRun{
 		cancel:   cancel,
-		provider: prov,
+		provider: childProv,
 		meter:    meter,
 	}
 	e.running[child.ID] = childRun
@@ -1799,6 +1964,15 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 			Delta:     delta,
 		})
 	}, meter)
+	if err != nil && !overflow && IsContextOverflowError(err) && ctx.Err() == nil {
+		compMsg, err = RunCompaction(ctx, &snap, prov, absWorkdir, true, e.proxyFor(prov), e.loadAttachment, func(delta string) {
+			e.broadcast(StreamEvent{
+				Type:      "compaction.delta",
+				SessionID: sessionID,
+				Delta:     delta,
+			})
+		}, meter)
+	}
 	if err != nil {
 		e.broadcast(StreamEvent{
 			Type:      "compaction.error",
@@ -1941,6 +2115,21 @@ func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, re
 	if idx <= len(s.Messages) {
 		s.Messages = append([]Message(nil), s.Messages[:idx]...)
 	}
+	for len(s.Messages) > 0 {
+		last := s.Messages[len(s.Messages)-1]
+		if last.Role == "user" && len(last.Parts) == 1 && strings.HasPrefix(last.Parts[0].Text, "<system-reminder>") {
+			s.Messages = s.Messages[:len(s.Messages)-1]
+			continue
+		}
+		break
+	}
+	s.Todos = revertTodosFromMessages(s.Messages)
+	for i := len(s.Messages) - 1; i >= 0; i-- {
+		if s.Messages[i].Agent != "" {
+			s.Agent = s.Messages[i].Agent
+			break
+		}
+	}
 	s.LastInputToks = EstimateMessagesTokens(BuildActiveHistory(s.Messages))
 	if s.Context != nil {
 		cp := *s.Context
@@ -1979,6 +2168,26 @@ func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, re
 		MessageID: messageID,
 	})
 	return out, restoredCount, nil
+}
+
+func revertTodosFromMessages(msgs []Message) []TodoItem {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		for j := len(msgs[i].Parts) - 1; j >= 0; j-- {
+			p := msgs[i].Parts[j]
+			if p.Type == "tool-result" && p.ToolName == "todowrite" && !p.IsError {
+				if raw, ok := p.Metadata["todos"]; ok {
+					b, err := json.Marshal(raw)
+					if err == nil {
+						var items []TodoItem
+						if json.Unmarshal(b, &items) == nil {
+							return items
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func truncateShort(s string, max int) string {

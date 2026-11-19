@@ -10,13 +10,13 @@ import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../kernel/feature.dart';
+import '../../kernel/input_mode.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import 'ai_models.dart';
 import 'ai_settings_dialog.dart';
 import 'ai_studio_view.dart';
 import 'ai_visuals.dart';
-import 'ai_extensions.dart';
 
 class AiFeature extends Feature {
   const AiFeature();
@@ -54,16 +54,6 @@ class AiFeature extends Feature {
   @override
   List<Command> commands(Workspace ws) => [
     Command(
-      id: 'ai.extensions',
-      title: 'AI 项目指令、技能、MCP 与运行预算…',
-      group: 'AI 助手',
-      enabled: () => ws.link?.server.caps.contains('ai.extensions') == true,
-      run: () async {
-        final context = AppNavigation.context;
-        if (context != null) await openAiExtensions(context, ws);
-      },
-    ),
-    Command(
       id: 'ai.new',
       title: '新建 AI 智能体会话',
       group: 'AI 助手',
@@ -72,7 +62,7 @@ class AiFeature extends Feature {
     ),
     Command(
       id: 'ai.settings',
-      title: '配置 AI 模型与密钥…',
+      title: '配置 AI 人设、连接与默认策略…',
       group: 'AI 助手',
       icon: Icons.key_rounded,
       run: () {
@@ -395,12 +385,12 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
     ),
   ];
 
-  Widget _searchBox(Ide ide) {
+  Widget _searchBox(Ide ide, {required bool searching}) {
+    const filters = {'all': '全部', 'running': '进行中', 'pinned': '置顶'};
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.s, Space.xs, Space.s, Space.xs),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 32),
-        child: TextField(
+      child: Row(children: [
+        Expanded(child: TextField(
           key: const ValueKey('ai-history-search'),
           controller: _searchCtl,
           onChanged: _onSearchChanged,
@@ -438,8 +428,30 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
                           },
                         )),
           ),
-        ),
-      ),
+        )),
+        if (!searching) ...[
+          const SizedBox(width: Space.xs),
+          SizedBox(
+            width: InputMode.row(context),
+            child: WorkbenchMenuButton<String>(
+              key: const ValueKey('ai-history-filter'),
+              tooltip: '筛选对话 · ${filters[_historyFilter]}',
+              padding: EdgeInsets.zero,
+              icon: Icon(Icons.filter_list_rounded, size: 16,
+                color: _historyFilter == 'all' ? ide.textDim : ide.accent),
+              onSelected: (filter) => setState(() => _historyFilter = filter),
+              itemBuilder: (_) => [
+                for (final filter in filters.entries)
+                  CheckedPopupMenuItem(
+                    value: filter.key,
+                    checked: _historyFilter == filter.key,
+                    child: Text(filter.value),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ]),
     );
   }
 
@@ -718,7 +730,7 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
         if (_sessions.isEmpty) {
           return EmptyHint(
             icon: Icons.auto_awesome_outlined,
-            text: '还没有对话。\n选择工作目录和模型，开始第一项任务。',
+            text: '还没有对话。',
             actionLabel: widget.showNewButton ? '新建 AI 会话' : null,
             onAction: widget.showNewButton ? _new : null,
           );
@@ -727,24 +739,7 @@ class _AiSessionSidebarState extends State<AiSessionSidebar> {
         return Column(
           children: [
             if (widget.showNewButton) newButton,
-            _searchBox(ide),
-            if (!searching)
-              UiToolbar(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                children: [
-                  for (final filter in {
-                    'all': '全部',
-                    'running': '进行中',
-                    'pinned': '置顶',
-                  }.entries)
-                    ChoiceChip(
-                      label: Text(filter.value),
-                      selected: _historyFilter == filter.key,
-                      onSelected: (_) =>
-                          setState(() => _historyFilter = filter.key),
-                    ),
-                ],
-              ),
+            _searchBox(ide, searching: searching),
             Expanded(
               child: searching
                   ? (_hits!.isEmpty

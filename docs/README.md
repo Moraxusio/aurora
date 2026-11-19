@@ -1,6 +1,6 @@
 # Aurora 文档
 
-> 类型：文档索引 | 状态：生效 | 维护：项目维护者 | 更新：2026-11-18
+> 类型：文档索引 | 状态：生效 | 维护：项目维护者 | 更新：2026-11-20
 > 适用：3.24.0 正式版及后续维护
 
 ## 按任务阅读
@@ -20,6 +20,13 @@
 
 ## 版本与证据
 
+- [3.25.0-gui-preview14：统一搜索与终端验收](releases/3.25.0-gui-preview14.md)
+- [3.25.0-gui-preview13：统一搜索与终端重做](releases/3.25.0-gui-preview13.md)
+- [统一搜索与终端验收](validation/2026-11-20-search-terminal.md)
+- [3.25.0-gui-preview11：桌面工作台精简](releases/3.25.0-gui-preview11.md)
+- [3.25.0-gui-preview12：即时权限与桌面验收](releases/3.25.0-gui-preview12.md)
+- [桌面工作台精简回归记录](validation/2026-11-20-desktop-workbench.md)
+- [桌面工作台精简回归证据](performance/20261120-desktop-workbench/README.md)
 - [3.24.0 正式版本说明](releases/3.24.0.md)
 - [3.24.0 正式发布与公开下载复核](validation/2026-11-18-release-3.24.0.md)
 - [3.24.0 正式发布原始证据](performance/20261118-release-3.24.0/README.md)

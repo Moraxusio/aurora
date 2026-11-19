@@ -10,10 +10,13 @@ import (
 )
 
 type SubagentOptions struct {
-	Enabled     *bool `json:"enabled,omitempty"`
-	MaxParallel int   `json:"maxParallel"`
-	MaxTotal    int   `json:"maxTotal"`
-	ReadOnly    bool  `json:"readOnly"`
+	Enabled        *bool  `json:"enabled,omitempty"`
+	MaxParallel    int    `json:"maxParallel"`
+	MaxTotal       int    `json:"maxTotal"`
+	ReadOnly       bool   `json:"readOnly"`
+	PermissionMode string `json:"permissionMode,omitempty"` // "" | "inherit" | "ask" | "readOnly" | "auto"
+	AllowNetwork   *bool  `json:"allowNetwork,omitempty"`
+	AllowShell     *bool  `json:"allowShell,omitempty"`
 }
 
 func defaultSubagentOptions() SubagentOptions {
@@ -65,20 +68,33 @@ func (o *ToolOptions) resolved() ToolOptions {
 	return *o
 }
 
-// Options are a one-message override. Steering is part of the current turn;
+// Options are a conversation/message policy override. Steering is part of the current turn;
 // queued messages start their own budget with the configuration admitted here.
 type RunOptions struct {
-	BudgetMode  string     `json:"budgetMode,omitempty"` // inherit | on | off | custom
-	Budget      *RunBudget `json:"budget,omitempty"`
-	Subagents   *bool      `json:"subagents,omitempty"`
-	MaxParallel int        `json:"maxParallel,omitempty"`
-	AutoCompact *bool      `json:"autoCompact,omitempty"`
-	Snapshots   *bool      `json:"snapshots,omitempty"`
+	BudgetMode              string       `json:"budgetMode,omitempty"` // inherit | on | off | custom
+	Budget                  *RunBudget   `json:"budget,omitempty"`
+	Subagents               *bool        `json:"subagents,omitempty"`
+	MaxParallel             int          `json:"maxParallel,omitempty"`
+	MaxTotal                *int         `json:"maxTotal,omitempty"`
+	SubagentsReadOnly       *bool        `json:"subagentsReadOnly,omitempty"`
+	SubagentsPermissionMode string       `json:"subagentsPermissionMode,omitempty"`
+	SubagentsAllowNetwork   *bool        `json:"subagentsAllowNetwork,omitempty"`
+	SubagentsAllowShell     *bool        `json:"subagentsAllowShell,omitempty"`
+	Tools                   *ToolOptions `json:"tools,omitempty"`
+	AutoTitle               *bool        `json:"autoTitle,omitempty"`
+	AutoCompact             *bool        `json:"autoCompact,omitempty"`
+	Snapshots               *bool        `json:"snapshots,omitempty"`
+	Instructions            []string     `json:"instructions,omitempty"`
 }
 
 func (o *RunOptions) changed() bool {
 	return o != nil && (o.BudgetMode != "" && o.BudgetMode != "inherit" ||
-		o.Budget != nil || o.Subagents != nil || o.MaxParallel != 0 || o.AutoCompact != nil || o.Snapshots != nil)
+		o.Budget != nil || o.Subagents != nil || o.MaxParallel != 0 ||
+		o.MaxTotal != nil || o.SubagentsReadOnly != nil ||
+		o.SubagentsPermissionMode != "" || o.SubagentsAllowNetwork != nil ||
+		o.SubagentsAllowShell != nil || o.Tools != nil ||
+		o.AutoTitle != nil || o.AutoCompact != nil || o.Snapshots != nil ||
+		len(o.Instructions) > 0)
 }
 func applyRunOptions(cfg ExtensionConfig, o *RunOptions) (ExtensionConfig, error) {
 	if o == nil {
@@ -116,9 +132,11 @@ func applyRunOptions(cfg ExtensionConfig, o *RunOptions) (ExtensionConfig, error
 		return cfg, errors.New("未知预算模式")
 	}
 	if o.MaxParallel < 0 || o.MaxParallel > 16 {
-		return cfg, errors.New("子代理并发数须为 1–16；0 继承项目")
+		return cfg, errors.New("子代理并发数须为 1–16；0 继承默认")
 	}
-	if o.Subagents != nil || o.MaxParallel != 0 {
+	if o.Subagents != nil || o.MaxParallel != 0 || o.MaxTotal != nil ||
+		o.SubagentsReadOnly != nil || o.SubagentsPermissionMode != "" ||
+		o.SubagentsAllowNetwork != nil || o.SubagentsAllowShell != nil {
 		children := cfg.Subagents.resolved()
 		if o.Subagents != nil {
 			children.Enabled = o.Subagents
@@ -126,13 +144,42 @@ func applyRunOptions(cfg ExtensionConfig, o *RunOptions) (ExtensionConfig, error
 		if o.MaxParallel != 0 {
 			children.MaxParallel = o.MaxParallel
 		}
+		if o.MaxTotal != nil {
+			children.MaxTotal = *o.MaxTotal
+		}
+		if o.SubagentsReadOnly != nil {
+			children.ReadOnly = *o.SubagentsReadOnly
+		}
+		if o.SubagentsPermissionMode != "" {
+			if o.SubagentsPermissionMode == "inherit" {
+				children.PermissionMode = ""
+			} else {
+				children.PermissionMode = o.SubagentsPermissionMode
+			}
+		}
+		if o.SubagentsAllowNetwork != nil {
+			children.AllowNetwork = o.SubagentsAllowNetwork
+		}
+		if o.SubagentsAllowShell != nil {
+			children.AllowShell = o.SubagentsAllowShell
+		}
 		cfg.Subagents = &children
+	}
+	if o.Tools != nil {
+		t := o.Tools.resolved()
+		cfg.Tools = &t
+	}
+	if o.AutoTitle != nil {
+		cfg.AutoTitle = o.AutoTitle
 	}
 	if o.AutoCompact != nil {
 		cfg.AutoCompact = o.AutoCompact
 	}
 	if o.Snapshots != nil {
 		cfg.Snapshots = o.Snapshots
+	}
+	if len(o.Instructions) > 0 {
+		cfg.Instructions = append(cfg.Instructions, o.Instructions...)
 	}
 	return cfg, validateExtensionConfig(cfg)
 }

@@ -13,6 +13,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show kPrimaryMouseButton;
+
 import 'package:aurora_install/aurora_install.dart' show compareVersions, parseVersion;
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora_profile/aurora_profile.dart';
@@ -25,6 +27,8 @@ import '../../kernel/input_mode.dart';
 import '../../kernel/workspace.dart';
 import '../../kernel/retained_pages.dart';
 import '../../theme/ide_theme.dart';
+import '../terminal/terminal_feature.dart' show openSession;
+import '../search/quick_open.dart' show showQuickOpen;
 import 'file_editor.dart';
 import 'file_info_dialog.dart';
 import 'file_ops.dart';
@@ -175,6 +179,11 @@ class _FileTreePageState extends State<_FileTreePage> {
   bool _foldersFirst = true;
   String? _activeFile;
   Link? _link;
+  bool _filterOpen = false;
+  String _filterQuery = '';
+  final _filterCtl = TextEditingController();
+  final _filterFocus = FocusNode(debugLabel: 'file-filter');
+  String? _dragOverKey;
 
   Workspace get ws => widget.ws;
 
@@ -185,6 +194,10 @@ class _FileTreePageState extends State<_FileTreePage> {
     ws.filesRevision.addListener(_onFilesChanged);
     ws.fileClipboard.addListener(_tick);
     ws.addListener(_onWorkspace);
+    _filterCtl.addListener(() {
+      final q = _filterCtl.text.trim();
+      if (q != _filterQuery && mounted) setState(() => _filterQuery = q);
+    });
     _link = ws.link;
     final view = ws.viewForProject(widget.projectId);
     _expanded = view.expanded.toSet();
@@ -200,6 +213,8 @@ class _FileTreePageState extends State<_FileTreePage> {
     ws.filesRevision.removeListener(_onFilesChanged);
     ws.fileClipboard.removeListener(_tick);
     ws.removeListener(_onWorkspace);
+    _filterCtl.dispose();
+    _filterFocus.dispose();
     _scroll.dispose();
     _focus.dispose();
     super.dispose();
@@ -547,7 +562,7 @@ class _FileTreePageState extends State<_FileTreePage> {
     }
   }
 
-  void _tap(_Node n) {
+  void _tap(_Node n, {bool keep = false}) {
     _focus.requestFocus();
     final kb = HardwareKeyboard.instance;
     final ctrl = kb.isControlPressed || kb.isMetaPressed;
@@ -575,7 +590,7 @@ class _FileTreePageState extends State<_FileTreePage> {
       });
       return;
     }
-    _open(n);
+    _open(n, preview: !keep);
   }
 
   // ---- operations ----
@@ -707,12 +722,12 @@ class _FileTreePageState extends State<_FileTreePage> {
   Future<void> _download(_Node n) =>
       downloadRemoteFile(ws, root: n.root, path: n.path, size: (n.entry?['size'] as num?)?.toInt() ?? 0);
 
-  void _open(_Node n) {
+  void _open(_Node n, {bool preview = false}) {
     setState(() => _selectOnly(n));
     if (n.isDir) {
       _expand(n, !n.expanded);
     } else {
-      ws.openTab(fileEditorTab(ws, root: n.root, path: n.path));
+      ws.openTab(fileEditorTab(ws, root: n.root, path: n.path), preview: preview);
     }
   }
 
@@ -911,6 +926,63 @@ class _FileTreePageState extends State<_FileTreePage> {
     ];
   }
 
+  Future<void> _openInTerminal(_Node dir) async {
+    final link = ws.link;
+    if (link == null) return;
+    var taken = <String>{};
+    try {
+      final r = await link.call('session.list') as Map;
+      taken = {for (final s in r['sessions'] as List) (s as Map)['name'] as String};
+    } on OpError {
+      // Server checks duplicates on create.
+    }
+    var base = dir.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    if (base.isEmpty) base = 'term';
+    if (base.length > 24) base = base.substring(0, 24);
+    var name = base;
+    for (var i = 2; taken.contains(name); i++) {
+      name = '$base-$i';
+    }
+    final res = await ws.guard(() => link.call('session.create', {
+      'name': name,
+      'root': dir.root,
+      'path': dir.path,
+    }));
+    if (res != null && identical(link, ws.link)) {
+      openSession(ws, name);
+    }
+  }
+
+  String _relativePath(_Node n) {
+    final matches = _roots
+        .where((r) => r.root == n.root && isSameOrInside(n.path, r.path))
+        .toList()
+      ..sort((a, b) => b.path.length.compareTo(a.path.length));
+    if (matches.isEmpty) return n.path;
+    final base = matches.first.path;
+    if (n.path == base) return '.';
+    final prefix = base == '/' ? '/' : '$base/';
+    return n.path.startsWith(prefix) ? n.path.substring(prefix.length) : n.path;
+  }
+
+  void _toggleFilter({bool? open}) {
+    final next = open ?? !_filterOpen;
+    setState(() {
+      _filterOpen = next;
+      if (!next) {
+        _filterCtl.clear();
+        _filterQuery = '';
+      }
+    });
+    if (next) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _filterFocus.requestFocus();
+      });
+    } else {
+      _focus.requestFocus();
+    }
+  }
+
   List<MenuItem> _menu(_Node n) {
     if (_picked.length > 1 && _picked.contains(n.key) && _selectedItems().length > 1) return _multiMenu();
     final dir = n.isDir;
@@ -919,6 +991,7 @@ class _FileTreePageState extends State<_FileTreePage> {
     return [
       if (dir) MenuItem('新建文件…', () => _newFile(n), icon: Icons.note_add_outlined),
       if (dir) MenuItem('新建文件夹…', () => _mkdir(n), icon: Icons.create_new_folder_outlined),
+      if (dir && ws.hasOp('session.create')) MenuItem('在终端中打开', () => _openInTerminal(n), icon: Icons.terminal),
       if (dir) MenuItem('上传到这里…', () => _upload(n), icon: Icons.upload_file),
       if (dir) MenuItem('以此文件夹创建工作区…', () => createProjectWorkspace(context, ws, initial: WorkspacePath(root: n.root, path: n.path)), icon: Icons.workspaces_outline),
       if (dir && ws.project != null) MenuItem('添加到当前工作区', () => ws.addFolder(WorkspacePath(root: n.root, path: n.path)), icon: Icons.create_new_folder_outlined),
@@ -932,6 +1005,7 @@ class _FileTreePageState extends State<_FileTreePage> {
       if (!isRoot) MenuItem('创建副本', () => _duplicate(n), icon: Icons.file_copy_outlined),
       const MenuItem.separator(),
       MenuItem('复制路径', () => copyText(ws.entry?.isLocal == true ? ws.app.localAgent.nativePath(n.root, n.path) : n.path, what: '已复制路径'), icon: Icons.copy),
+      if (!isRoot) MenuItem('复制相对路径', () => copyText(_relativePath(n), what: '已复制相对路径'), icon: Icons.content_copy),
       if (dir) MenuItem('刷新', () => _load(n), icon: Icons.refresh),
       if (dir && _canMeasure) MenuItem(n.du == null ? '计算大小' : '重新计算大小', n.duBusy ? null : () => _measure([n]), icon: Icons.data_usage_rounded),
       if (isRoot && widget.projectId.isNotEmpty) MenuItem('从工作区移除文件夹', () => ws.removeFolder(WorkspacePath(root: n.root, path: n.path)), icon: Icons.folder_off_outlined),
@@ -944,10 +1018,53 @@ class _FileTreePageState extends State<_FileTreePage> {
     ];
   }
 
+  void _scrollToNode(_Node target) {
+    final rows = [for (final r in _roots) ..._rows(r, 0)];
+    final index = rows.indexWhere((r) => identical(r.node, target) && r.note == null);
+    if (index < 0 || !_scroll.hasClients) return;
+    final height = InputMode.row(context) + 2;
+    final top = index * height;
+    final bottom = top + height;
+    final vp = _scroll.position.viewportDimension;
+    final cur = _scroll.offset;
+    if (top < cur) {
+      _scroll.jumpTo(top.clamp(0.0, _scroll.position.maxScrollExtent));
+    } else if (bottom > cur + vp) {
+      _scroll.jumpTo((bottom - vp).clamp(0.0, _scroll.position.maxScrollExtent));
+    }
+  }
+
+  void _moveSelection(int delta, {bool extend = false}) {
+    final visible = [
+      for (final r in _roots)
+        for (final row in _rows(r, 0))
+          if (row.note == null) row.node,
+    ];
+    if (visible.isEmpty) return;
+    final curIdx = _selected == null ? -1 : visible.indexWhere((n) => identical(n, _selected));
+    final nextIdx = curIdx < 0
+        ? (delta > 0 ? 0 : visible.length - 1)
+        : (curIdx + delta).clamp(0, visible.length - 1);
+    final next = visible[nextIdx];
+    setState(() {
+      if (extend && _anchor != null) {
+        final a = visible.indexWhere((n) => identical(n, _anchor));
+        if (a >= 0) {
+          _picked = {for (var i = math.min(a, nextIdx); i <= math.max(a, nextIdx); i++) visible[i].key};
+          _selected = next;
+          return;
+        }
+      }
+      _selectOnly(next);
+    });
+    _scrollToNode(next);
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     if (e is! KeyDownEvent || _busy != null) return KeyEventResult.ignored;
     final kb = HardwareKeyboard.instance;
     final ctrl = kb.isControlPressed || kb.isMetaPressed;
+    final shift = kb.isShiftPressed;
     final k = e.logicalKey;
     if (ctrl && k == LogicalKeyboardKey.keyC) {
       _copy();
@@ -955,13 +1072,52 @@ class _FileTreePageState extends State<_FileTreePage> {
       _copy(cut: true);
     } else if (ctrl && k == LogicalKeyboardKey.keyV) {
       _paste();
+    } else if (ctrl && k == LogicalKeyboardKey.keyF) {
+      _toggleFilter(open: true);
+    } else if (k == LogicalKeyboardKey.f5) {
+      _refreshAll();
     } else if (k == LogicalKeyboardKey.f2) {
       final items = _selectedItems();
       if (items.length == 1) _rename(items.first);
     } else if (k == LogicalKeyboardKey.delete) {
       _deleteItems(_selectedItems());
+    } else if (k == LogicalKeyboardKey.arrowDown) {
+      _moveSelection(1, extend: shift);
+    } else if (k == LogicalKeyboardKey.arrowUp) {
+      _moveSelection(-1, extend: shift);
+    } else if (k == LogicalKeyboardKey.home) {
+      _moveSelection(-1000000);
+    } else if (k == LogicalKeyboardKey.end) {
+      _moveSelection(1000000);
+    } else if (k == LogicalKeyboardKey.arrowRight) {
+      final s = _selected;
+      if (s != null && s.isDir) {
+        if (!s.expanded) {
+          _expand(s, true);
+        } else if (s.children != null && s.children!.isNotEmpty) {
+          _moveSelection(1);
+        }
+      }
+    } else if (k == LogicalKeyboardKey.arrowLeft) {
+      final s = _selected;
+      if (s != null) {
+        if (s.isDir && s.expanded) {
+          _expand(s, false);
+        } else {
+          final parent = _findParent(s);
+          if (parent != null) {
+            setState(() => _selectOnly(parent));
+            _scrollToNode(parent);
+          }
+        }
+      }
+    } else if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
+      final s = _selected;
+      if (s != null) _open(s);
     } else if (k == LogicalKeyboardKey.escape) {
-      if (ws.fileClipboard.value != null) {
+      if (_filterOpen) {
+        _toggleFilter(open: false);
+      } else if (ws.fileClipboard.value != null) {
         ws.fileClipboard.value = null;
       } else {
         setState(() => _picked = _selected == null ? {} : {_selected!.key});
@@ -974,7 +1130,24 @@ class _FileTreePageState extends State<_FileTreePage> {
 
   // ---- build ----
 
+  bool _matchesFilter(_Node n, String q) {
+    if (n.name.toLowerCase().contains(q)) return true;
+    for (final c in n.children ?? const <_Node>[]) {
+      if (_matchesFilter(c, q)) return true;
+    }
+    return false;
+  }
+
   Iterable<({_Node node, int depth, String? note})> _rows(_Node n, int depth) sync* {
+    final q = _filterQuery.toLowerCase();
+    if (q.isNotEmpty) {
+      if (!_matchesFilter(n, q)) return;
+      yield (node: n, depth: depth, note: null);
+      for (final c in n.children ?? const <_Node>[]) {
+        yield* _rows(c, depth + 1);
+      }
+      return;
+    }
     yield (node: n, depth: depth, note: null);
     if (n.expanded) {
       if (n.error != null) {
@@ -1074,15 +1247,21 @@ class _FileTreePageState extends State<_FileTreePage> {
       ValueListenableBuilder<String?>(valueListenable: ws.watch.status, builder: (_, status, _) =>
         status == null ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.all(8),
           child: Text(status, style: TextStyle(color: ide.warn, fontSize: 11)))),
-      ProjectWorkspaceBar(ws: ws, actions: [
-          IconBtn(Icons.note_add_outlined, '新建文件', target == null ? null : () => _newFile(target)),
-          IconBtn(Icons.refresh, '刷新', _refreshAll),
+      if (!_filterOpen) ProjectWorkspaceBar(ws: ws, actions: [
+           IconBtn(Icons.note_add_outlined, '新建文件', target == null ? null : () => _newFile(target)),
+           IconBtn(Icons.create_new_folder_outlined, '新建文件夹', target == null ? null : () => _mkdir(target)),
+          IconBtn(
+            Icons.filter_list_rounded,
+            '过滤文件（Ctrl+F）',
+            () => _toggleFilter(),
+            color: _filterOpen || _filterQuery.isNotEmpty ? ide.accent : null,
+          ),
           IconBtn(Icons.my_location_outlined, '定位当前文件', ws.active?.file == null ? null : _revealActive),
           Builder(builder: (ctx) => SizedBox(width: InputMode.isTouch(context) ? 44 : 28, child: WorkbenchMenuButton<String>(
             tooltip: '文件选项', padding: EdgeInsets.zero,
             icon: Icon(Icons.more_horiz, size: 17, color: _hidden || _sort != 'name' || _desc ? ide.accent : ide.textDim),
             onSelected: (value) {
-              if (value == 'folder' && target != null) _mkdir(target);
+              if (value == 'refresh') _refreshAll();
               if (value == 'paste') _paste();
               if (value == 'upload' && target != null) _upload(target);
               if (value == 'hidden') { setState(() => _hidden = !_hidden); _refreshAll(); }
@@ -1091,7 +1270,7 @@ class _FileTreePageState extends State<_FileTreePage> {
               if (value == 'collapse') _collapseAll();
             },
             itemBuilder: (_) => [
-              PopupMenuItem(value: 'folder', enabled: target != null, child: const MenuLabel('新建文件夹…', icon: Icons.create_new_folder_outlined)),
+              const PopupMenuItem(value: 'refresh', child: MenuLabel('刷新文件树', icon: Icons.refresh, shortcut: 'F5')),
               if (clip != null) PopupMenuItem(value: 'paste', enabled: _busy == null, child: const MenuLabel('粘贴到选中的文件夹', icon: Icons.content_paste, shortcut: 'Ctrl+V')),
               PopupMenuItem(value: 'upload', enabled: target != null, child: const MenuLabel('上传文件…', icon: Icons.upload_file_outlined)),
               const PopupMenuDivider(),
@@ -1104,7 +1283,71 @@ class _FileTreePageState extends State<_FileTreePage> {
               ],
             ],
           ))),
-        ]),
+        ])
+      else
+        Container(
+          key: const ValueKey('file-filter-bar'),
+          padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
+          decoration: BoxDecoration(
+            color: ide.sideBar,
+            border: Border(bottom: BorderSide(color: ide.border)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 28,
+                  child: Focus(
+                    onKeyEvent: (_, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.escape) {
+                        _toggleFilter(open: false);
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: _filterCtl,
+                      focusNode: _filterFocus,
+                      style: const TextStyle(fontSize: 12.5),
+                      decoration: InputDecoration(
+                        hintText: '过滤已展开文件名…',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.filter_alt_outlined,
+                          size: 14,
+                          color: ide.textDim,
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 26,
+                          minHeight: 24,
+                        ),
+                        suffixIcon: _filterQuery.isEmpty
+                            ? null
+                            : IconBtn(
+                                Icons.close,
+                                '清除过滤',
+                                () => _filterCtl.clear(),
+                                size: 14,
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              IconBtn(
+                Icons.close,
+                '关闭过滤（Esc）',
+                () => _toggleFilter(open: false),
+                size: 15,
+              ),
+            ],
+          ),
+        ),
       Expanded(
         child: _error != null ? EmptyHint(icon: Icons.error_outline, text: _error!, actionLabel: '重试', onAction: _loadRoots)
           : _loadingRoots ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
@@ -1112,33 +1355,115 @@ class _FileTreePageState extends State<_FileTreePage> {
           ? EmptyHint(icon: Icons.folder_open_outlined, text: widget.projectId.isEmpty ? '服务器没有可用的根目录' : '工作区里还没有文件夹',
               actionLabel: widget.projectId.isEmpty ? '刷新' : '添加远程文件夹',
               onAction: widget.projectId.isEmpty ? _loadRoots : () => addProjectFolder(context, ws))
-          : Focus(
-              focusNode: _focus,
-              onKeyEvent: _onKey,
-              child: ListView.builder(controller: _scroll, itemExtent: InputMode.row(context) + 2, itemCount: rows.length, itemBuilder: (context, i) {
-                final row = rows[i], n = rows[i].node;
-                if (row.note != null) { return Tooltip(message: row.note!, child: Padding(padding: EdgeInsets.only(left: 30 + math.min(row.depth * 14.0, 60), right: 8),
-                  child: Align(alignment: Alignment.centerLeft, child: Text(row.note!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: n.error == null ? ide.textDim : ide.error))))); }
-                return FileTreeRow(key: ObjectKey(n), name: n.name, path: n.path, depth: row.depth,
-                  folder: n.isDir, expanded: n.expanded, loading: n.loading, selected: _picked.contains(n.key),
-                  root: n.entry == null, location: n.location, link: n.entry?['type'] == 'link',
-                  active: ws.active?.file == WorkspacePath(root: n.root, path: n.path),
-                  modified: n.mtime > 0 ? formatShortTime(n.mtime) : null, preferModified: _sort == 'mtime',
-                  onExpand: n.isDir ? () => _expand(n, !n.expanded) : null,
-                  dimmed: clip != null && clip.cut && clip.contains(n.root, n.path),
-                  tooltip: _tooltip(n), detail: _detail(n), onTap: () => _tap(n),
-                  menu: () {
-                    // right-click on a row inside a multi-selection keeps it; elsewhere it selects just that row
-                    _focus.requestFocus();
-                    if (!(_picked.length > 1 && _picked.contains(n.key))) setState(() => _selectOnly(n));
-                    return _menu(n);
-                  });
-              }),
+          : _filterQuery.isNotEmpty && rows.isEmpty
+          ? EmptyHint(
+              icon: Icons.search_off_rounded,
+              text: '当前展开树中没有匹配「$_filterQuery」的文件',
+              actionLabel: ws.hasOp('fs.find') ? '全项目查找（Ctrl+P）' : '清除过滤',
+              onAction: ws.hasOp('fs.find')
+                  ? () => showQuickOpen(ws, context: context)
+                  : () => _filterCtl.clear(),
+            )
+          : ContextArea(
+              items: () => _roots.isEmpty ? const [] : _menu(_roots.first),
+              child: Focus(
+                focusNode: _focus,
+                onKeyEvent: _onKey,
+                child: ListView.builder(controller: _scroll, itemExtent: InputMode.row(context) + 2, itemCount: rows.length, itemBuilder: (context, i) {
+                  final row = rows[i], n = rows[i].node;
+                  if (row.note != null) { return Tooltip(message: row.note!, child: Padding(padding: EdgeInsets.only(left: 30 + math.min(row.depth * 14.0, 60), right: 8),
+                    child: Align(alignment: Alignment.centerLeft, child: Text(row.note!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: n.error == null ? ide.textDim : ide.error))))); }
+                  Widget treeRow = FileTreeRow(key: ObjectKey(n), name: n.name, path: n.path, depth: row.depth,
+                    folder: n.isDir, expanded: _filterQuery.isNotEmpty ? true : n.expanded, loading: n.loading, selected: _picked.contains(n.key),
+                    root: n.entry == null, location: n.location, link: n.entry?['type'] == 'link',
+                    active: ws.active?.file == WorkspacePath(root: n.root, path: n.path),
+                    modified: n.mtime > 0 ? formatShortTime(n.mtime) : null, preferModified: _sort == 'mtime',
+                    dragOver: _dragOverKey == n.key,
+                    onExpand: n.isDir ? () => _expand(n, !n.expanded) : null,
+                    dimmed: clip != null && clip.cut && clip.contains(n.root, n.path),
+                     tooltip: _tooltip(n), detail: _detail(n), onTap: () => _tap(n),
+                     onDoubleTap: n.isDir || InputMode.isTouch(context) ? null : () => _tap(n, keep: true),
+                    menu: () {
+                      // right-click on a row inside a multi-selection keeps it; elsewhere it selects just that row
+                      _focus.requestFocus();
+                      if (!(_picked.length > 1 && _picked.contains(n.key))) setState(() => _selectOnly(n));
+                      return _menu(n);
+                    });
+                  if (n.isDir) {
+                    final inner = treeRow;
+                    treeRow = DragTarget<_TreeDragData>(
+                      onWillAcceptWithDetails: (d) {
+                        if (_busy != null) return false;
+                        final ok = d.data.canDropInto(n);
+                        if (ok && _dragOverKey != n.key) setState(() => _dragOverKey = n.key);
+                        return ok;
+                      },
+                      onLeave: (_) {
+                        if (_dragOverKey == n.key) setState(() => _dragOverKey = null);
+                      },
+                      onAcceptWithDetails: (d) {
+                        if (_dragOverKey == n.key) setState(() => _dragOverKey = null);
+                        unawaited(_runPaste(d.data.items, true, n));
+                      },
+                      builder: (_, _, _) => inner,
+                    );
+                  }
+                  if (n.entry != null && !InputMode.isTouch(context)) {
+                    final dragNodes = _picked.length > 1 && _picked.contains(n.key) ? _selectedItems() : [n];
+                    final dragData = _TreeDragData([for (final x in dragNodes) ClipItem(x.root, x.path, x.isDir)]);
+                    treeRow = Draggable<_TreeDragData>(
+                      data: dragData,
+                      allowedButtonsFilter: (buttons) => buttons == kPrimaryMouseButton,
+                      maxSimultaneousDrags: 1,
+                      feedback: Material(
+                        elevation: 4,
+                        color: ide.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(Radii.m),
+                          side: BorderSide(color: ide.accent),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FileIcon(name: n.name, folder: n.isDir, size: 15),
+                              const SizedBox(width: 6),
+                              Text(
+                                dragNodes.length > 1 ? '${n.name} 等 ${dragNodes.length} 项' : n.name,
+                                style: TextStyle(fontSize: 12, color: ide.text),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      child: treeRow,
+                    );
+                  }
+                  return treeRow;
+                }),
+              ),
             ),
       ),
       _footer(ide),
       if (widget.transfers.list.isNotEmpty) _TransferList(transfers: widget.transfers),
     ]);
+  }
+}
+
+class _TreeDragData {
+  final List<ClipItem> items;
+  const _TreeDragData(this.items);
+
+  bool canDropInto(_Node dest) {
+    if (!dest.isDir || items.isEmpty) return false;
+    for (final it in items) {
+      if (it.root == dest.root) {
+        if (parentPath(it.path) == dest.path) return false;
+        if (it.isDir && isSameOrInside(dest.path, it.path)) return false;
+      }
+    }
+    return true;
   }
 }
 

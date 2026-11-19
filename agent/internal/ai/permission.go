@@ -3,18 +3,21 @@ package ai
 import (
 	"context"
 	"errors"
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // PermissionDecision is returned by the user when approving or denying a tool call.
 type PermissionDecision struct {
-	Allow  bool   `json:"allow"`
-	Always bool   `json:"always,omitempty"` // remember for the remainder of the session
-	Reason string `json:"reason,omitempty"`
+	Allow      bool   `json:"allow"`
+	Always     bool   `json:"always,omitempty"`      // remember for the remainder of the session (or TTLSeconds)
+	TTLSeconds int64  `json:"ttl_seconds,omitempty"` // optional expiry in seconds when Always is true
+	Reason     string `json:"reason,omitempty"`
 }
 
 // SessionGrants exposes only the actual remembered scopes, never pending input.
@@ -22,17 +25,35 @@ func (g *PermissionGate) SessionGrants(sessionID, action, resource string, revok
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	prefix := sessionID + "\x00"
+	now := time.Now().UnixMilli()
 	if revoke {
-		delete(g.allowedKeys, prefix+action+"\x00"+resource)
+		if action == "*" && resource == "*" {
+			for key := range g.allowedKeys {
+				if strings.HasPrefix(key, prefix) {
+					delete(g.allowedKeys, key)
+				}
+			}
+		} else {
+			delete(g.allowedKeys, prefix+action+"\x00"+resource)
+		}
 	}
 	result := []PermissionRule{}
-	for key := range g.allowedKeys {
+	for key, expiresAt := range g.allowedKeys {
 		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		if expiresAt > 0 && now >= expiresAt {
+			delete(g.allowedKeys, key)
 			continue
 		}
 		parts := strings.SplitN(strings.TrimPrefix(key, prefix), "\x00", 2)
 		if len(parts) == 2 {
-			result = append(result, PermissionRule{Action: parts[0], Resource: parts[1], Effect: "allow"})
+			result = append(result, PermissionRule{
+				Action:    parts[0],
+				Resource:  parts[1],
+				Effect:    "allow",
+				ExpiresAt: expiresAt,
+			})
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -46,7 +67,7 @@ func (g *PermissionGate) SessionGrants(sessionID, action, resource string, revok
 // scanning, and OpenCode's 3-strike doom-loop detector.
 type PermissionGate struct {
 	mu          sync.Mutex
-	allowedKeys map[string]bool // sessionID + "\x00" + action + "\x00" + pattern
+	allowedKeys map[string]int64 // sessionID + "\x00" + action + "\x00" + pattern -> expiresAt millis (0 = session)
 	pending     map[string]*pendingPermission
 }
 
@@ -57,7 +78,7 @@ type pendingPermission struct {
 
 func NewPermissionGate() *PermissionGate {
 	return &PermissionGate{
-		allowedKeys: map[string]bool{},
+		allowedKeys: map[string]int64{},
 		pending:     map[string]*pendingPermission{},
 	}
 }
@@ -81,7 +102,11 @@ func (g *PermissionGate) Resolve(id string, dec PermissionDecision) bool {
 		delete(g.pending, id)
 		if dec.Allow && dec.Always {
 			key := p.question.SessionID + "\x00" + p.question.Action + "\x00" + rememberPattern(p.question.Action, p.question.Resource)
-			g.allowedKeys[key] = true
+			var expiresAt int64
+			if dec.TTLSeconds > 0 {
+				expiresAt = time.Now().UnixMilli() + dec.TTLSeconds*1000
+			}
+			g.allowedKeys[key] = expiresAt
 		}
 	}
 	g.mu.Unlock()
@@ -93,6 +118,25 @@ func (g *PermissionGate) Resolve(id string, dec PermissionDecision) bool {
 	default:
 	}
 	return true
+}
+
+func (g *PermissionGate) ResolveSessionPending(sessionID, agentMode string, isSubagent bool, permMode string, rules []PermissionRule) []string {
+	g.mu.Lock()
+	var candidates []*pendingPermission
+	for _, p := range g.pending {
+		if p.question.SessionID == sessionID {
+			candidates = append(candidates, p)
+		}
+	}
+	g.mu.Unlock()
+	resolved := []string{}
+	for _, p := range candidates {
+		eff, reason := g.EvaluateWithContext(sessionID, agentMode, isSubagent, permMode, p.question.Action, p.question.Resource, rules)
+		if eff != "ask" && g.Resolve(p.question.ID, PermissionDecision{Allow: eff == "allow", Reason: reason}) {
+			resolved = append(resolved, p.question.ID)
+		}
+	}
+	return resolved
 }
 
 func (g *PermissionGate) CancelSession(sessionID string) {
@@ -127,6 +171,11 @@ func savePattern(action, resource string) string {
 		}
 		return strings.TrimSuffix(dir, "/") + "/*"
 	}
+	if action == "webfetch" {
+		if u, err := url.Parse(strings.TrimSpace(resource)); err == nil && u.Scheme != "" && u.Host != "" {
+			return u.Scheme + "://" + u.Host + "/*"
+		}
+	}
 	return "*"
 }
 
@@ -157,6 +206,7 @@ const (
 	reasonHighRiskShell    = "High-impact shell command requires confirmation"
 	reasonFileModification = "File modification requires approval"
 	reasonShellCommand     = "Shell command execution requires approval"
+	reasonNetworkAccess    = "External network access requires approval"
 )
 
 var reasonCodes = map[string]string{
@@ -169,6 +219,7 @@ var reasonCodes = map[string]string{
 	reasonHighRiskShell:    "high_risk_shell",
 	reasonFileModification: "file_modification",
 	reasonShellCommand:     "shell_command",
+	reasonNetworkAccess:    "network_access",
 }
 
 // PermissionReasonCode names a reason from Evaluate; "" for text it does not know
@@ -192,7 +243,13 @@ func (g *PermissionGate) Evaluate(sessionID, agentMode, permMode, action, resour
 // Auto defaults. The last matching rule wins, while plan/explore restrictions,
 // doom-loop protection and broad sensitive/high-risk grants remain hard guards.
 func (g *PermissionGate) EvaluateWithRules(sessionID, agentMode, permMode, action, resource string, rules []PermissionRule) (string, string) {
-	ruleEffect, ruleMatched, ruleExact := matchingPermissionRule(rules, action, resource)
+	return g.EvaluateWithContext(sessionID, agentMode, false, permMode, action, resource, rules)
+}
+
+// EvaluateWithContext evaluates permission rules with explicit primary vs subagent
+// role context so rules can target "primary", "subagent", or specific modes.
+func (g *PermissionGate) EvaluateWithContext(sessionID, agentMode string, isSubagent bool, permMode, action, resource string, rules []PermissionRule) (string, string) {
+	ruleEffect, ruleMatched, ruleExact := matchingPermissionRule(rules, agentMode, isSubagent, action, resource)
 	if ruleMatched && ruleEffect == "deny" {
 		return "deny", "操作被权限规则拒绝"
 	}
@@ -214,6 +271,17 @@ func (g *PermissionGate) EvaluateWithRules(sessionID, agentMode, permMode, actio
 		}
 	}
 
+	if action == "doom_loop" {
+		return "ask", reasonRepeatedCall
+	}
+
+	// Full Access mode bypasses all interactive confirmation prompts (including
+	// sensitive files, high-risk shell, network, and MCP) while still honoring
+	// explicit deny rules, plan/explore read-only guards, and doom-loop checks.
+	if permMode == "full_access" {
+		return "allow", ""
+	}
+
 	// Sensitive credential files (.env, private keys)
 	if action == "read" || action == "edit" || action == "write" {
 		if isSensitiveFile(resource) {
@@ -228,9 +296,6 @@ func (g *PermissionGate) EvaluateWithRules(sessionID, agentMode, permMode, actio
 		}
 	}
 
-	if action == "doom_loop" {
-		return "ask", reasonRepeatedCall
-	}
 	if ruleMatched {
 		switch ruleEffect {
 		case "deny":
@@ -275,6 +340,11 @@ func (g *PermissionGate) EvaluateWithRules(sessionID, agentMode, permMode, actio
 			return "allow", ""
 		}
 		return "ask", reasonShellCommand
+	case "webfetch", "websearch":
+		if g.isRemembered(sessionID, action, resource) {
+			return "allow", ""
+		}
+		return "ask", reasonNetworkAccess
 	case "mcp":
 		if g.isRemembered(sessionID, action, resource) {
 			return "allow", ""
@@ -291,18 +361,59 @@ func ruleReason(action string) string {
 		return reasonFileModification
 	case "shell":
 		return reasonShellCommand
+	case "webfetch", "websearch":
+		return reasonNetworkAccess
 	default:
 		return "该操作需要按权限规则确认"
 	}
 }
 
-func matchingPermissionRule(rules []PermissionRule, action, resource string) (effect string, matched bool, exact bool) {
+func permissionAgentMatch(ruleAgent, agentMode string, isSubagent bool) bool {
+	a := strings.ToLower(strings.TrimSpace(ruleAgent))
+	switch a {
+	case "", "*":
+		return true
+	case "primary":
+		return !isSubagent
+	case "subagent":
+		return isSubagent
+	default:
+		return a == strings.ToLower(strings.TrimSpace(agentMode))
+	}
+}
+
+func permissionActionMatch(ruleAction, action string) bool {
+	switch ruleAction {
+	case "*":
+		return true
+	case "network":
+		return action == "webfetch" || action == "websearch"
+	case "files", "fs":
+		return action == "read" || action == "write" || action == "edit" || action == "glob" || action == "grep"
+	case "write_files":
+		return action == "write" || action == "edit"
+	default:
+		return ruleAction == action
+	}
+}
+
+func matchingPermissionRule(rules []PermissionRule, agentMode string, isSubagent bool, action, resource string) (effect string, matched bool, exact bool) {
+	now := time.Now().UnixMilli()
 	for i := len(rules) - 1; i >= 0; i-- {
 		r := rules[i]
+		if r.Disabled {
+			continue
+		}
+		if r.ExpiresAt > 0 && now >= r.ExpiresAt {
+			continue
+		}
 		if r.Effect != "allow" && r.Effect != "ask" && r.Effect != "deny" {
 			continue
 		}
-		if r.Action != "*" && r.Action != action {
+		if !permissionAgentMatch(r.Agent, agentMode, isSubagent) {
+			continue
+		}
+		if !permissionActionMatch(r.Action, action) {
 			continue
 		}
 		if !permissionGlobMatch(r.Resource, resource) {
@@ -346,11 +457,24 @@ func permissionGlobMatch(pattern, value string) bool {
 	return pi == len(pattern)
 }
 
+func (g *PermissionGate) isGrantActiveLocked(key string, now int64) bool {
+	expiresAt, ok := g.allowedKeys[key]
+	if !ok {
+		return false
+	}
+	if expiresAt > 0 && now >= expiresAt {
+		delete(g.allowedKeys, key)
+		return false
+	}
+	return true
+}
+
 func (g *PermissionGate) isRemembered(sessionID, action, resource string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	now := time.Now().UnixMilli()
 	if isSensitiveFile(resource) || (action == "shell" && shellTouchesSensitive(resource)) || (action == "shell" && isHighRiskShellCommand(resource)) {
-		return g.allowedKeys[sessionID+"\x00"+action+"\x00"+resource]
+		return g.isGrantActiveLocked(sessionID+"\x00"+action+"\x00"+resource, now)
 	}
 	if action == "edit" || action == "write" {
 		dir := filepath.ToSlash(filepath.Dir(strings.TrimSpace(resource)))
@@ -359,7 +483,7 @@ func (g *PermissionGate) isRemembered(sessionID, action, resource string) bool {
 			if dir == "." || dir == "" {
 				pattern = "./*"
 			}
-			if g.allowedKeys[sessionID+"\x00"+action+"\x00"+pattern] {
+			if g.isGrantActiveLocked(sessionID+"\x00"+action+"\x00"+pattern, now) {
 				return true
 			}
 			parent := filepath.ToSlash(filepath.Dir(dir))
@@ -370,11 +494,11 @@ func (g *PermissionGate) isRemembered(sessionID, action, resource string) bool {
 		}
 		return false
 	}
-	if g.allowedKeys[sessionID+"\x00"+action+"\x00*"] {
+	if g.isGrantActiveLocked(sessionID+"\x00"+action+"\x00*", now) {
 		return true
 	}
 	pat := savePattern(action, resource)
-	return g.allowedKeys[sessionID+"\x00"+action+"\x00"+pat]
+	return g.isGrantActiveLocked(sessionID+"\x00"+action+"\x00"+pat, now)
 }
 
 // Ask registers a pending permission question, emits it via emitFn, and blocks until resolved or ctx cancelled.
@@ -436,10 +560,8 @@ var readOnlyCmds = map[string]bool{
 }
 
 func isReadOnlyShellCommand(cmd string) bool {
-	// PowerShell aliases/functions and expression syntax differ from POSIX.
-	// Do not incorrectly auto-approve a Windows command using the Unix allowlist.
 	if runtime.GOOS == "windows" {
-		return false
+		return isReadOnlyWindowsShellCommand(cmd)
 	}
 	trimmed := strings.TrimSpace(cmd)
 	if trimmed == "" {
@@ -504,6 +626,72 @@ func isReadOnlyShellCommand(cmd string) bool {
 		}
 	}
 	return readOnlyCmds[prog]
+}
+
+var windowsReadOnlyCmds = map[string]bool{
+	"pwd": true, "get-location": true,
+	"ls": true, "dir": true, "get-childitem": true,
+	"cat": true, "type": true, "get-content": true,
+	"select-string": true, "get-date": true, "whoami": true, "hostname": true,
+}
+
+func isReadOnlyWindowsShellCommand(cmd string) bool {
+	trimmed := strings.TrimSpace(cmd)
+	if trimmed == "" {
+		return true
+	}
+	// Reject redirections, pipelines, subexpressions, script blocks, variables, and compound operators.
+	if strings.ContainsAny(trimmed, ">;<|`$&(){}\n\r") {
+		return false
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 {
+		return true
+	}
+	if shellTouchesSensitive(trimmed) {
+		return false
+	}
+	prog := strings.ToLower(strings.TrimSuffix(filepath.Base(fields[0]), ".exe"))
+	if prog == "git" && len(fields) >= 2 {
+		for _, f := range fields[2:] {
+			low := strings.ToLower(f)
+			if strings.HasPrefix(low, "--output=") || low == "--output" || low == "-o" {
+				return false
+			}
+		}
+		switch strings.ToLower(fields[1]) {
+		case "status", "diff", "log", "show", "rev-parse", "ls-files":
+			return true
+		case "branch":
+			if len(fields) == 2 {
+				return true
+			}
+			f2 := strings.ToLower(fields[2])
+			return f2 == "-a" || f2 == "-r" || f2 == "--show-current" || f2 == "-v"
+		case "remote":
+			return len(fields) == 2
+		}
+		return false
+	}
+	if prog == "rg" {
+		for _, f := range fields[1:] {
+			low := strings.ToLower(f)
+			if low == "--pre" || strings.HasPrefix(low, "--pre=") || low == "--passthru" {
+				return false
+			}
+		}
+		return true
+	}
+	if !windowsReadOnlyCmds[prog] {
+		return false
+	}
+	for _, f := range fields[1:] {
+		low := strings.ToLower(f)
+		if strings.HasPrefix(low, "-out") || low == "-append" || strings.HasPrefix(low, "-set") {
+			return false
+		}
+	}
+	return true
 }
 
 func shellTouchesSensitive(cmd string) bool {

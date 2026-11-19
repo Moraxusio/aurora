@@ -26,6 +26,7 @@ import '../test/support/monitor_workflow.dart';
 import '../test/support/workspace_fixture.dart';
 import '../test/support/workbench_tools_workflow.dart';
 import '../test/ai_runtime_test.dart' show EventStream;
+import '../test/workbench_visual_test.dart' show VisualWorkbenchLink;
 import 'native_window.dart';
 import 'native_cpu_trace.dart';
 
@@ -67,6 +68,131 @@ class _ConcurrentLink extends MonitorWorkbenchLink {
   }
 }
 
+class _MarkdownLink extends VisualWorkbenchLink {
+  _MarkdownLink(super.features);
+
+  @override
+  Future<Object?> call(
+    String op, [
+    Object? args,
+    Duration timeout = const Duration(seconds: 60),
+  ]) {
+    if (op == 'fs.read' && (args as Map)['path'] == '/project/README.md') {
+      const line =
+          'Aurora keeps your notes, dashboard and assistant together while you resize the workbench. ';
+      return Future.value({
+        'content':
+            '# Aurora desktop\n\n${List.filled(45, line * 3).join('\n\n')}',
+        'etag': 'native-markdown',
+      });
+    }
+    return super.call(op, args, timeout);
+  }
+}
+
+Future<void> _exerciseDesktopMarkdown(
+  WidgetTester t,
+  GlobalKey frame,
+  Future<void> Function(String) screenshot,
+) async {
+  final features = Features();
+  final app = WorkspaceApp(wire: _MarkdownLink(features));
+  await t.pumpWidget(
+    RepaintBoundary(
+      key: frame,
+      child: AuroraApp(app: app),
+    ),
+  );
+  await t.pumpAndSettle();
+  final window = NativeTestWindow();
+  final ws =
+      (t.state(find.byType(Shell)) as dynamic).debugWorkspace as Workspace;
+  const fileId = 'file:home:/project/README.md';
+  final sidebar = find.byKey(const ValueKey('main-sidebar'));
+  final assistant = find.byKey(const ValueKey('workbench-assistant'));
+  final editor = find.byType(CodeEditor);
+  final draft = find.byKey(const ValueKey('ai-prompt-input'));
+  final divider = find.byKey(const ValueKey('assistant-panel-resize'));
+  void openFile() =>
+      ws.openTab(fileEditorTab(ws, root: 'home', path: '/project/README.md'));
+  try {
+    window.resize(const Size(1500, 1000));
+    await t.pump(const Duration(milliseconds: 500));
+    ws.openTab(
+      EditorTab(
+        id: 'ai:native-markdown',
+        title: '桌面验收',
+        icon: Icons.auto_awesome_outlined,
+        builder: (_) => AiStudioView(ws: ws, initialSessionId: 'ses_1'),
+      ),
+    );
+    await t.pumpAndSettle();
+    expect(editor, findsNothing);
+    expect(
+      t.getTopLeft(assistant).dx - t.getTopRight(sidebar).dx,
+      closeTo(5, .1),
+    );
+    await t.enterText(draft, '保留这条未发送的草稿');
+    final input = t.widget<TextField>(draft).controller!;
+    await t.pumpAndSettle();
+    await screenshot('desktop-no-document');
+
+    openFile();
+    await t.pumpAndSettle();
+    final code = t.widget<CodeEditor>(editor);
+    final scroll = find.descendant(
+      of: editor,
+      matching: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+      ),
+    );
+    final initialWidth = t.getSize(editor).width;
+    final initialExtent = t
+        .state<ScrollableState>(scroll)
+        .position
+        .maxScrollExtent;
+    await screenshot('desktop-markdown');
+    await t.drag(divider, const Offset(-90, 0), kind: PointerDeviceKind.mouse);
+    await t.pumpAndSettle();
+    expect(t.getSize(editor).width, lessThan(initialWidth - 50));
+    expect(
+      t.state<ScrollableState>(scroll).position.maxScrollExtent,
+      greaterThan(initialExtent),
+    );
+    expect(t.widget<CodeEditor>(editor).controller, same(code.controller));
+    expect(code.wordWrap, isTrue);
+    expect(t.widget<TextField>(draft).controller, same(input));
+    final resizedWidth = t.getSize(assistant).width;
+    await screenshot('desktop-markdown-resized');
+
+    expect(await ws.closeTab(fileId), isTrue);
+    await t.pumpAndSettle();
+    expect(editor, findsNothing);
+    expect(t.getSize(assistant).width, greaterThan(resizedWidth));
+    openFile();
+    await t.pumpAndSettle();
+    expect(t.getSize(assistant).width, closeTo(resizedWidth, .1));
+
+    window.resize(const Size(1400, 850));
+    app.appearance.set('uiScale', 1.1);
+    app.appearance.set('theme', 'light');
+    await t.pump(const Duration(milliseconds: 500));
+    await t.pumpAndSettle();
+    expect(editor, findsOneWidget);
+    expect(t.widget<TextField>(draft).controller, same(input));
+    expect(input.text, '保留这条未发送的草稿');
+    expect(t.takeException(), isNull);
+    await screenshot('desktop-markdown-light-110');
+  } finally {
+    window.restore();
+    await app.appearance.flush();
+    await ws.flushViews();
+    await t.pumpWidget(const SizedBox());
+    app.dispose();
+    features.dispose();
+  }
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
@@ -94,13 +220,20 @@ void main() {
 
       NativeTestWindow? toolsWindow;
       try {
-        await exerciseWorkbenchTools(t, frame: frame, capture: screenshot,
+        await exerciseWorkbenchTools(
+          t,
+          frame: frame,
+          capture: screenshot,
           resize: (size) async {
             // The Windows runner shows its window after the first Flutter frame.
             (toolsWindow ??= NativeTestWindow()).resize(size);
             await t.pump(const Duration(milliseconds: 500));
-          });
-      } finally { toolsWindow?.restore(); }
+          },
+        );
+      } finally {
+        toolsWindow?.restore();
+      }
+      await _exerciseDesktopMarkdown(t, frame, screenshot);
       await exerciseMonitor(t, frame: frame, capture: screenshot);
 
       final features = Features();

@@ -22,6 +22,7 @@ Future<void> guiKeys(WidgetTester t, LogicalKeyboardKey key, {bool shift = false
   // Profile strips debug key names, which Flutter's inference relies on.
   final physical = {
     LogicalKeyboardKey.keyC: PhysicalKeyboardKey.keyC,
+    LogicalKeyboardKey.keyF: PhysicalKeyboardKey.keyF,
     LogicalKeyboardKey.keyV: PhysicalKeyboardKey.keyV,
     LogicalKeyboardKey.keyJ: PhysicalKeyboardKey.keyJ,
     LogicalKeyboardKey.keyP: PhysicalKeyboardKey.keyP,
@@ -90,12 +91,13 @@ void main() {
     await guiCommand(t, '新建终端会话…');
     expect(find.byType(NewSessionDialog), findsOneWidget);
     await t.tap(find.text('取消')); await t.pumpAndSettle();
-    await guiCommand(t, '配置 AI 模型与密钥…');
+    await guiCommand(t, '配置 AI 人设、连接与默认策略…');
     expect(find.text('AI 设置'), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.escape, physicalKey: PhysicalKeyboardKey.escape); await t.pumpAndSettle();
     expect(find.text('AI 设置'), findsNothing);
     await guiCommand(t, '按文件名打开…');
-    expect(find.byType(QuickOpen), findsOneWidget);
+    expect(find.byType(WorkbenchSearchPicker), findsOneWidget);
+    expect(find.text('输入文件名，可加 :行号'), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.escape, physicalKey: PhysicalKeyboardKey.escape); await t.pumpAndSettle();
     expect(t.takeException(), isNull);
     await close(t);
@@ -157,6 +159,37 @@ void main() {
     expect(ws.terminalFocused, isFalse);
     expect(link.terminalStreams, hasLength(1));
     expect(t.takeException(), isNull);
+    await close(t);
+  });
+
+  testWidgets('terminal keeps reading position and offers one way back to live output', (t) async {
+    await pump(t, 1);
+    openSession(ws, 'main');
+    await t.pumpAndSettle();
+    final stream = link.terminalStreams.single;
+    stream.output(List.generate(240, (n) => 'terminal output $n\r\n').join());
+    await t.pumpAndSettle();
+    final terminal = find.byType(TerminalView);
+    final view = t.widget<TerminalView>(terminal);
+    final scroll = view.scrollController!;
+    final tail = find.byKey(const ValueKey('terminal-jump-to-tail'));
+    expect(tail, findsNothing);
+    scroll.jumpTo(0);
+    await t.pumpAndSettle();
+    expect(tail, findsOneWidget);
+    stream.output('one more line\r\n');
+    await t.pumpAndSettle();
+    expect(scroll.offset, 0);
+    await t.tap(tail);
+    await t.pumpAndSettle();
+    expect(scroll.offset, closeTo(scroll.position.maxScrollExtent, 1));
+    expect(tail, findsNothing);
+    await t.tap(find.byKey(const ValueKey('terminal-hide')));
+    await t.pumpAndSettle();
+    expect(terminal, findsNothing);
+    await guiKeys(t, LogicalKeyboardKey.keyJ);
+    expect(t.widget<TerminalView>(terminal).terminal, same(view.terminal));
+    expect(link.terminalStreams, hasLength(1));
     await close(t);
   });
 

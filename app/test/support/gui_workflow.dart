@@ -47,7 +47,12 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
     await click(find.text('Alpha').last);
     expect(ws.projectKey, 'a', reason: 'pointer selection must switch the active project');
     await click(row('src'));
-    await click(row('main.dart'));
+    final main = row('main.dart');
+    await t.tap(main, kind: PointerDeviceKind.mouse);
+    await t.pump(const Duration(milliseconds: 60));
+    await t.tap(main, kind: PointerDeviceKind.mouse);
+    await frames();
+    expect(ws.tabLayout.previews, isNot(contains('file:home:/project/src/main.dart')));
     await click(row('workbench.dart'));
     await click(find.byKey(const ValueKey('tab-file:home:/project/src/main.dart')));
     final doc = t.state<FileEditorState>(find.byType(FileEditor));
@@ -95,7 +100,7 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
       await click(find.text('隐藏侧栏 · 保留对话'));
 
       if (ws.terminalTabs.isEmpty) {
-        await click(find.byTooltip('终端'));
+        await click(find.byTooltip('切换终端面板（Ctrl+J）'));
         await click(find.descendant(of: find.byType(SessionList), matching: find.byWidgetPredicate((w) => w is TreeRow && w.label == 'main')));
       } else {
         await guiKeys(t, LogicalKeyboardKey.backquote);
@@ -144,6 +149,32 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
     expect(doc.dirty, isTrue);
     steps.add('scaled docking and cancelled unsaved close');
 
+    final search = find.byKey(const ValueKey('workbench-search-query'));
+    await guiKeys(t, LogicalKeyboardKey.keyP, shift: true);
+    final fieldState = t.state(search);
+    await guiKeys(t, LogicalKeyboardKey.keyF, shift: true);
+    expect(t.state(search), same(fieldState));
+    await t.enterText(search, 'Aurora');
+    await frames();
+    await t.testTextInput.receiveAction(TextInputAction.done);
+    await frames();
+    expect(search, findsNothing);
+    expect(find.text('内容搜索：Aurora'), findsOneWidget);
+    await click(find.byTooltip('文件'));
+    steps.add('file contents and commands switch in one field with keyboard');
+
+    await guiKeys(t, LogicalKeyboardKey.keyJ);
+    final terminal = t.widget<TerminalView>(find.byType(TerminalView)).terminal;
+    await click(find.byKey(const ValueKey('terminal-selector')));
+    await click(find.text('管理全部会话'));
+    expect(find.byType(SessionList), findsOneWidget);
+    await click(find.byKey(const ValueKey('terminal-selector')));
+    await click(find.text('返回输出'));
+    expect(t.widget<TerminalView>(find.byType(TerminalView)).terminal, same(terminal));
+    expect(find.byType(SessionList), findsNothing);
+    await click(find.byKey(const ValueKey('terminal-hide')));
+    steps.add('on-demand session manager and retained terminal output');
+
     await click(find.byTooltip('视图操作').first);
     await click(find.text('标签栏与布局…'));
     await click(find.text('标签宽度'));
@@ -157,7 +188,7 @@ Future<Map<String, Object>> exerciseGui(WidgetTester t, {GlobalKey? frame, Futur
     await guiCommand(t, '新建终端会话…'); await frames();
     expect(find.byType(NewSessionDialog), findsOneWidget);
     await click(find.text('取消'));
-    await guiCommand(t, '配置 AI 模型与密钥…'); await frames();
+    await guiCommand(t, '配置 AI 人设、连接与默认策略…'); await frames();
     expect(find.text('AI 设置'), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.escape, physicalKey: PhysicalKeyboardKey.escape); await frames();
     Toast.show('GUI interaction audit complete'); await frames();

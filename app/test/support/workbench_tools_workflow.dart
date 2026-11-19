@@ -1,5 +1,4 @@
 import 'package:aurora/features/git/git_feature.dart';
-import 'package:aurora/features/search/search_feature.dart';
 import 'package:aurora/kernel/registry.dart';
 import 'package:aurora/kernel/shell.dart';
 import 'package:aurora/kernel/workspace.dart';
@@ -86,12 +85,18 @@ Future<void> exerciseWorkbenchTools(
       await frames();
       if (theme == 'dark') await capture('tools-home-$theme');
       for (final (tip, id) in const [('搜索', 'search'), ('源代码管理', 'git'), ('系统服务', 'services'), ('端口转发', 'ports'), ('代理', 'proxy')]) {
-        final navigation = find.byTooltip(tip);
-        await t.ensureVisible(navigation); await frames();
-        await t.tap(navigation); await frames();
         if (id == 'search') {
-          await t.enterText(find.descendant(of: find.byType(SearchPanel), matching: find.byType(TextField)).first, 'Aurora');
+          await t.tap(find.byKey(const ValueKey('workbench-quick-open'))); await frames();
+          await t.tap(find.text('文件内容')); await frames();
+          await t.enterText(find.byKey(const ValueKey('workbench-search-query')), 'Aurora');
           await frames();
+          if (theme == 'dark') await capture('unified-search-picker');
+          await t.testTextInput.receiveAction(TextInputAction.done);
+          await frames();
+        } else {
+          final navigation = find.byTooltip(tip);
+          await t.ensureVisible(navigation); await frames();
+          await t.tap(navigation); await frames();
         }
         if (id == 'git') {
           await t.enterText(find.descendant(of: find.byType(GitPanel), matching: find.byType(TextField)), '优化工作台导航与重连体验');

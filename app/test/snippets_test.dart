@@ -228,7 +228,9 @@ void main() {
       expect(find.text('选择字段值…'), findsNothing);
       doc.setSaveEncoding('gb18030');
       await t.pumpAndSettle();
-      expect(find.text('GB18030'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('editor-actions-menu')));
+      await t.pumpAndSettle();
+      expect(find.text('文本编码 · GB18030'), findsOneWidget);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       await ws.documents.flush();

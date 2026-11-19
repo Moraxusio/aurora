@@ -5,6 +5,7 @@ import 'package:aurora/ui/aurora_ui.dart';
 import '../../kernel/development/development_model.dart';
 import '../../kernel/feature.dart';
 import '../../kernel/workspace.dart';
+import '../../theme/ide_theme.dart';
 import '../files/file_editor.dart';
 import 'language_actions.dart';
 import 'development_scope.dart';
@@ -211,10 +212,27 @@ class _ProblemsPanel extends StatelessWidget {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Text(
-                    model.logs.isEmpty
-                        ? '在项目开发配置中添加语言服务器，再打开对应文件。'
-                        : model.logs.last,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        model.logs.isEmpty
+                            ? '在项目开发配置中添加语言服务器，再打开对应文件。'
+                            : model.logs.last,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Ide.of(context).textDim,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            editDevelopmentConfiguration(context, ws),
+                        icon: const Icon(Icons.settings_outlined, size: 15),
+                        label: const Text('配置语言服务…'),
+                      ),
+                    ],
                   ),
                 ),
               ),

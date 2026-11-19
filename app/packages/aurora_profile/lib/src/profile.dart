@@ -654,7 +654,7 @@ class EditorSettings {
     this.fontSize = 13.5,
     this.terminalFontSize = 14,
     this.uiScale = 1,
-    this.wordWrap = false,
+    this.wordWrap = true,
     this.tabSize = 4,
     this.fileSort = 'name',
     this.fileSortDesc = false,
@@ -680,7 +680,7 @@ class EditorSettings {
         maxFont,
       ),
       uiScale: _displayNumber(j['ui_scale'], 1, .8, 1.5),
-      wordWrap: j['word_wrap'] == true,
+      wordWrap: j['word_wrap_v2'] == true ? (j['word_wrap'] != false) : true,
       tabSize: const [2, 4, 8].contains(ts) ? ts : 4,
       fileSort: fileSorts.contains(fs) ? fs! : 'name',
       fileSortDesc: j['file_sort_desc'] == true,
@@ -694,6 +694,7 @@ class EditorSettings {
     if (terminalFontSize != 14) 'terminal_font_size': terminalFontSize,
     if (uiScale != 1) 'ui_scale': uiScale,
     'word_wrap': wordWrap,
+    if (!wordWrap) 'word_wrap_v2': true,
     'tab_size': tabSize,
     if (fileSort != 'name') 'file_sort': fileSort,
     if (fileSortDesc) 'file_sort_desc': true,
@@ -705,7 +706,7 @@ class EditorSettings {
       fontSize == 13.5 &&
       terminalFontSize == 14 &&
       uiScale == 1 &&
-      !wordWrap &&
+      wordWrap &&
       tabSize == 4 &&
       fileSort == 'name' &&
       !fileSortDesc &&
@@ -722,49 +723,294 @@ class EditorSettings {
   }
 }
 
-/// One ordered permission rule. Rules are evaluated in order and the last
-/// matching rule wins, following OpenCode's permission model. Project rules
-/// are bound to both the server and project; unbound legacy rules do not leak.
-class AiPermissionRule {
-  String action;
-  String resource;
-  String effect; // allow | ask | deny
-  String scope; // global | project
-  String serverId;
-  String projectId;
+/// Reusable object-oriented agent profile: binds a provider + model with
+/// custom thinking parameters, tool capabilities, and permission policy.
+class AiPersona {
+  final String id;
+  String name;
+  String description;
+  String providerId;
+  String model;
 
-  AiPermissionRule({
-    required this.action,
-    required this.resource,
-    required this.effect,
-    this.scope = 'global',
-    this.serverId = '',
-    this.projectId = '',
-  });
+  /// null inherits provider/model; empty omits reasoning effort.
+  String? reasoningEffort;
 
-  factory AiPermissionRule.fromJson(Map<String, dynamic> j) => AiPermissionRule(
-    action: j['action'] as String? ?? 'shell',
-    resource: j['resource'] as String? ?? '*',
-    effect: const ['allow', 'ask', 'deny'].contains(j['effect'])
-        ? j['effect'] as String
-        : 'ask',
-    scope: j['scope'] == 'project' ? 'project' : 'global',
-    serverId: j['server_id'] as String? ?? '',
-    projectId: j['project_id'] as String? ?? '',
+  /// '' (inherit) | 'protocol' | 'disabled' | 'anthropic-adaptive' | 'anthropic-budget'
+  String reasoningMode;
+  int thinkingBudget;
+  int contextWindow;
+  int maxTokens;
+  Map<String, bool> capabilities;
+
+  /// '' (inherit) | 'ask' | 'auto' | 'full_access'
+  String permissionMode;
+  List<AiPermissionRule> permissionRules;
+
+  AiPersona({
+    required this.id,
+    required this.name,
+    this.description = '',
+    this.providerId = '',
+    this.model = '',
+    this.reasoningEffort,
+    this.reasoningMode = '',
+    this.thinkingBudget = 0,
+    this.contextWindow = 0,
+    this.maxTokens = 0,
+    Map<String, bool>? capabilities,
+    this.permissionMode = '',
+    List<AiPermissionRule>? permissionRules,
+  }) : capabilities = capabilities ?? {},
+       permissionRules = permissionRules ?? [];
+
+  factory AiPersona.create({
+    required String name,
+    String description = '',
+    String providerId = '',
+    String model = '',
+    String? reasoningEffort,
+    String reasoningMode = '',
+    int thinkingBudget = 0,
+    int contextWindow = 0,
+    int maxTokens = 0,
+    Map<String, bool>? capabilities,
+    String permissionMode = '',
+    List<AiPermissionRule>? permissionRules,
+  }) => AiPersona(
+    id: newId(),
+    name: name,
+    description: description,
+    providerId: providerId,
+    model: model,
+    reasoningEffort: reasoningEffort,
+    reasoningMode: reasoningMode,
+    thinkingBudget: thinkingBudget,
+    contextWindow: contextWindow,
+    maxTokens: maxTokens,
+    capabilities: capabilities,
+    permissionMode: permissionMode,
+    permissionRules: permissionRules,
+  );
+
+  factory AiPersona.fromJson(Map<String, dynamic> j) => AiPersona(
+    id: j['id'] as String? ?? newId(),
+    name: j['name'] as String? ?? 'Persona',
+    description: j['description'] as String? ?? '',
+    providerId: j['provider_id'] as String? ?? '',
+    model: j['model'] as String? ?? '',
+    reasoningEffort: j['reasoning_effort'] as String?,
+    reasoningMode: const [
+      'protocol',
+      'disabled',
+      'anthropic-adaptive',
+      'anthropic-budget',
+    ].contains(j['reasoning_mode'])
+        ? j['reasoning_mode'] as String
+        : '',
+    thinkingBudget: (j['thinking_budget'] as num?)?.toInt() ?? 0,
+    contextWindow: (j['context_window'] as num?)?.toInt() ?? 0,
+    maxTokens: (j['max_tokens'] as num?)?.toInt() ?? 0,
+    capabilities: aiCapabilityMap(j['capabilities']),
+    permissionMode: const ['ask', 'auto', 'full_access']
+            .contains(j['permission_mode'])
+        ? j['permission_mode'] as String
+        : '',
+    permissionRules: [
+      for (final r in (j['permission_rules'] as List? ?? const []))
+        if (r is Map) AiPermissionRule.fromJson(r.cast<String, dynamic>()),
+    ],
   );
 
   Map<String, dynamic> toJson() => {
-    'action': action,
-    'resource': resource,
-    'effect': effect,
-    if (scope != 'global') 'scope': scope,
-    if (serverId.isNotEmpty) 'server_id': serverId,
-    if (projectId.isNotEmpty) 'project_id': projectId,
+    'id': id,
+    'name': name,
+    if (description.isNotEmpty) 'description': description,
+    if (providerId.isNotEmpty) 'provider_id': providerId,
+    if (model.isNotEmpty) 'model': model,
+    if (reasoningEffort != null) 'reasoning_effort': reasoningEffort,
+    if (reasoningMode.isNotEmpty) 'reasoning_mode': reasoningMode,
+    if (thinkingBudget > 0) 'thinking_budget': thinkingBudget,
+    if (contextWindow > 0) 'context_window': contextWindow,
+    if (maxTokens > 0) 'max_tokens': maxTokens,
+    if (capabilities.isNotEmpty) 'capabilities': capabilities,
+    if (permissionMode.isNotEmpty) 'permission_mode': permissionMode,
+    if (permissionRules.isNotEmpty)
+      'permission_rules': [for (final r in permissionRules) r.toJson()],
   };
 
-  bool appliesTo(String server, String? project) =>
-      scope == 'global' ||
-      (projectId.isNotEmpty && serverId == server && projectId == project);
+  AiPersona copy() => AiPersona.fromJson(toJson());
+}
+
+/// Conversation-level execution policy (budget, subagents, tool bounds,
+/// automation, and custom instructions). Settings stores a default policy
+/// inherited by new conversations; each conversation can customize its own.
+class AiSessionPolicy {
+  bool budgetEnabled;
+  int budgetSteps;
+  int budgetSeconds;
+  int budgetTokens;
+  int budgetOutputBytes;
+  double budgetCost;
+
+  bool subagentsEnabled;
+  int subagentsMaxParallel;
+  int subagentsMaxTotal;
+  bool subagentsReadOnly;
+  String subagentsPermissionMode; // '' | 'ask' | 'readOnly' | 'auto' | 'full_access'
+  bool subagentsAllowNetwork;
+  bool subagentsAllowShell;
+
+  int toolMaxCallsPerStep;
+  int toolRepeatLimit;
+  int shellDefaultSeconds;
+  int shellMaxSeconds;
+
+  bool autoTitle;
+  bool autoCompact;
+  bool snapshots;
+  List<String> instructions;
+
+  AiSessionPolicy({
+    this.budgetEnabled = true,
+    this.budgetSteps = 60,
+    this.budgetSeconds = 900,
+    this.budgetTokens = 500000,
+    this.budgetOutputBytes = 2097152,
+    this.budgetCost = 0,
+    this.subagentsEnabled = true,
+    this.subagentsMaxParallel = 1,
+    this.subagentsMaxTotal = 32,
+    this.subagentsReadOnly = false,
+    this.subagentsPermissionMode = '',
+    this.subagentsAllowNetwork = true,
+    this.subagentsAllowShell = true,
+    this.toolMaxCallsPerStep = 64,
+    this.toolRepeatLimit = 3,
+    this.shellDefaultSeconds = 120,
+    this.shellMaxSeconds = 600,
+    this.autoTitle = true,
+    this.autoCompact = true,
+    this.snapshots = true,
+    List<String>? instructions,
+  }) : instructions = instructions ?? [];
+
+  bool get isDefault =>
+      budgetEnabled &&
+      budgetSteps == 60 &&
+      budgetSeconds == 900 &&
+      budgetTokens == 500000 &&
+      budgetOutputBytes == 2097152 &&
+      budgetCost == 0 &&
+      subagentsEnabled &&
+      subagentsMaxParallel == 1 &&
+      subagentsMaxTotal == 32 &&
+      !subagentsReadOnly &&
+      subagentsPermissionMode.isEmpty &&
+      subagentsAllowNetwork &&
+      subagentsAllowShell &&
+      toolMaxCallsPerStep == 64 &&
+      toolRepeatLimit == 3 &&
+      shellDefaultSeconds == 120 &&
+      shellMaxSeconds == 600 &&
+      autoTitle &&
+      autoCompact &&
+      snapshots &&
+      instructions.isEmpty;
+
+  factory AiSessionPolicy.fromJson(Map<String, dynamic> j) => AiSessionPolicy(
+    budgetEnabled: j['budget_enabled'] != false,
+    budgetSteps: (j['budget_steps'] as num?)?.toInt() ?? 60,
+    budgetSeconds: (j['budget_seconds'] as num?)?.toInt() ?? 900,
+    budgetTokens: (j['budget_tokens'] as num?)?.toInt() ?? 500000,
+    budgetOutputBytes: (j['budget_output_bytes'] as num?)?.toInt() ?? 2097152,
+    budgetCost: (j['budget_cost'] as num?)?.toDouble() ?? 0,
+    subagentsEnabled: j['subagents_enabled'] != false,
+    subagentsMaxParallel: (j['subagents_max_parallel'] as num?)?.toInt() ?? 1,
+    subagentsMaxTotal: (j['subagents_max_total'] as num?)?.toInt() ?? 32,
+    subagentsReadOnly: j['subagents_read_only'] == true,
+    subagentsPermissionMode: const [
+      'ask',
+      'readOnly',
+      'auto',
+      'full_access',
+    ].contains(j['subagents_permission_mode'])
+        ? j['subagents_permission_mode'] as String
+        : '',
+    subagentsAllowNetwork: j['subagents_allow_network'] != false,
+    subagentsAllowShell: j['subagents_allow_shell'] != false,
+    toolMaxCallsPerStep: (j['tool_max_calls_per_step'] as num?)?.toInt() ?? 64,
+    toolRepeatLimit: (j['tool_repeat_limit'] as num?)?.toInt() ?? 3,
+    shellDefaultSeconds: (j['shell_default_seconds'] as num?)?.toInt() ?? 120,
+    shellMaxSeconds: (j['shell_max_seconds'] as num?)?.toInt() ?? 600,
+    autoTitle: j['auto_title'] != false,
+    autoCompact: j['auto_compact'] != false,
+    snapshots: j['snapshots'] != false,
+    instructions: [
+      for (final x in (j['instructions'] as List? ?? const []))
+        if (x is String && x.trim().isNotEmpty) x.trim(),
+    ],
+  );
+
+  Map<String, dynamic> toJson() => {
+    if (!budgetEnabled) 'budget_enabled': false,
+    if (budgetSteps != 60) 'budget_steps': budgetSteps,
+    if (budgetSeconds != 900) 'budget_seconds': budgetSeconds,
+    if (budgetTokens != 500000) 'budget_tokens': budgetTokens,
+    if (budgetOutputBytes != 2097152) 'budget_output_bytes': budgetOutputBytes,
+    if (budgetCost != 0) 'budget_cost': budgetCost,
+    if (!subagentsEnabled) 'subagents_enabled': false,
+    if (subagentsMaxParallel != 1)
+      'subagents_max_parallel': subagentsMaxParallel,
+    if (subagentsMaxTotal != 32) 'subagents_max_total': subagentsMaxTotal,
+    if (subagentsReadOnly) 'subagents_read_only': true,
+    if (subagentsPermissionMode.isNotEmpty)
+      'subagents_permission_mode': subagentsPermissionMode,
+    if (!subagentsAllowNetwork) 'subagents_allow_network': false,
+    if (!subagentsAllowShell) 'subagents_allow_shell': false,
+    if (toolMaxCallsPerStep != 64)
+      'tool_max_calls_per_step': toolMaxCallsPerStep,
+    if (toolRepeatLimit != 3) 'tool_repeat_limit': toolRepeatLimit,
+    if (shellDefaultSeconds != 120)
+      'shell_default_seconds': shellDefaultSeconds,
+    if (shellMaxSeconds != 600) 'shell_max_seconds': shellMaxSeconds,
+    if (!autoTitle) 'auto_title': false,
+    if (!autoCompact) 'auto_compact': false,
+    if (!snapshots) 'snapshots': false,
+    if (instructions.isNotEmpty) 'instructions': instructions,
+  };
+
+  /// Wire payload for `ai.run` `options` (matches Go `RunOptions`).
+  Map<String, dynamic> toRunOptionsJson() => {
+    'budgetMode': budgetEnabled ? 'custom' : 'off',
+    if (budgetEnabled)
+      'budget': {
+        'steps': budgetSteps,
+        'seconds': budgetSeconds,
+        'tokens': budgetTokens,
+        'outputBytes': budgetOutputBytes,
+        'cost': budgetCost,
+      },
+    'subagents': subagentsEnabled,
+    'maxParallel': subagentsMaxParallel.clamp(1, 16),
+    'maxTotal': subagentsMaxTotal,
+    'subagentsReadOnly': subagentsReadOnly,
+    if (subagentsPermissionMode.isNotEmpty)
+      'subagentsPermissionMode': subagentsPermissionMode,
+    'subagentsAllowNetwork': subagentsAllowNetwork,
+    'subagentsAllowShell': subagentsAllowShell,
+    'tools': {
+      'maxCallsPerStep': toolMaxCallsPerStep,
+      'repeatLimit': toolRepeatLimit,
+      'shellDefaultSeconds': shellDefaultSeconds,
+      'shellMaxSeconds': shellMaxSeconds,
+    },
+    'autoTitle': autoTitle,
+    'autoCompact': autoCompact,
+    'snapshots': snapshots,
+    if (instructions.isNotEmpty) 'instructions': instructions,
+  };
+
+  AiSessionPolicy copy() => AiSessionPolicy.fromJson(toJson());
 }
 
 /// Client-side LLM Agent settings (D-104). Sealed at rest inside profile.bin;
@@ -773,13 +1019,18 @@ class AiSettings {
   List<AiProvider> providers;
   String? selectedProviderId;
 
-  /// 'ask' | 'auto'
+  /// 'ask' | 'auto' | 'full_access'
   String permissionMode;
 
-  /// 'build' | 'plan'
+  /// 'build' | 'plan' | 'orchestrator'
   String defaultAgent;
   double chatFontSize;
   List<AiPermissionRule> permissionRules;
+  List<AiPersona> personas;
+  String? activePersonaId;
+  String? orchestratorConductorPersonaId;
+  String? orchestratorMusicianPersonaId;
+  AiSessionPolicy defaultPolicy;
   String followUp;
   Map<String, bool> toolDefaults;
   String sendKey;
@@ -792,6 +1043,11 @@ class AiSettings {
     this.defaultAgent = 'build',
     this.chatFontSize = 15,
     List<AiPermissionRule>? permissionRules,
+    List<AiPersona>? personas,
+    this.activePersonaId,
+    this.orchestratorConductorPersonaId,
+    this.orchestratorMusicianPersonaId,
+    AiSessionPolicy? defaultPolicy,
     this.followUp = 'steer',
     Map<String, bool>? toolDefaults,
     this.sendKey = 'enter',
@@ -801,10 +1057,12 @@ class AiSettings {
     this.showMessageNavigation = false,
   }) : providers = providers ?? [],
        toolDefaults = toolDefaults ?? {},
-       permissionRules = permissionRules ?? [];
+       permissionRules = permissionRules ?? [],
+       personas = personas ?? [],
+       defaultPolicy = defaultPolicy ?? AiSessionPolicy();
 
-  static const permissionModes = ['ask', 'auto'];
-  static const agentModes = ['build', 'plan'];
+  static const permissionModes = ['ask', 'auto', 'full_access'];
+  static const agentModes = ['build', 'plan', 'orchestrator'];
 
   AiProvider? get activeProvider {
     if (providers.isEmpty) return null;
@@ -813,6 +1071,18 @@ class AiSettings {
     }
     return providers.first;
   }
+
+  AiPersona? personaById(String? id) {
+    if (id == null || id.isEmpty) return null;
+    for (final p in personas) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  AiPersona? get activePersona => personaById(activePersonaId);
+  AiPersona? get conductorPersona => personaById(orchestratorConductorPersonaId);
+  AiPersona? get musicianPersona => personaById(orchestratorMusicianPersonaId);
 
   bool get isDefault =>
       providers.isEmpty &&
@@ -827,7 +1097,12 @@ class AiSettings {
       expandErrors &&
       showQuickPrompts &&
       !showMessageNavigation &&
-      permissionRules.isEmpty;
+      permissionRules.isEmpty &&
+      personas.isEmpty &&
+      activePersonaId == null &&
+      orchestratorConductorPersonaId == null &&
+      orchestratorMusicianPersonaId == null &&
+      defaultPolicy.isDefault;
 
   factory AiSettings.fromJson(Map<String, dynamic> j) {
     final pm = j['permission_mode'] as String?;
@@ -848,6 +1123,20 @@ class AiSettings {
         for (final r in (j['permission_rules'] as List? ?? const []))
           if (r is Map) AiPermissionRule.fromJson(r.cast<String, dynamic>()),
       ],
+      personas: [
+        for (final p in (j['personas'] as List? ?? const []))
+          if (p is Map) AiPersona.fromJson(p.cast<String, dynamic>()),
+      ],
+      activePersonaId: j['active_persona_id'] as String?,
+      orchestratorConductorPersonaId:
+          j['orchestrator_conductor_persona_id'] as String?,
+      orchestratorMusicianPersonaId:
+          j['orchestrator_musician_persona_id'] as String?,
+      defaultPolicy: j['default_policy'] is Map
+          ? AiSessionPolicy.fromJson(
+              (j['default_policy'] as Map).cast<String, dynamic>(),
+            )
+          : AiSessionPolicy(),
       followUp: j['follow_up'] == 'queue' ? 'queue' : 'steer',
       toolDefaults: aiCapabilityMap(j['tool_defaults']),
       sendKey: j['send_key'] == 'ctrl-enter' ? 'ctrl-enter' : 'enter',
@@ -874,6 +1163,12 @@ class AiSettings {
     if (showMessageNavigation) 'show_message_navigation': true,
     if (permissionRules.isNotEmpty)
       'permission_rules': [for (final r in permissionRules) r.toJson()],
+    if (personas.isNotEmpty)
+      'personas': [for (final p in personas) p.toJson()],
+    'active_persona_id': ?activePersonaId,
+    'orchestrator_conductor_persona_id': ?orchestratorConductorPersonaId,
+    'orchestrator_musician_persona_id': ?orchestratorMusicianPersonaId,
+    if (!defaultPolicy.isDefault) 'default_policy': defaultPolicy.toJson(),
   };
 }
 
@@ -1047,44 +1342,65 @@ class AiProvider {
     String? reasoningOverride,
     Map<String, bool>? capabilityDefaults,
     bool extensionCapabilities = false,
-  }) => {
-    'id': id,
-    'name': name,
-    'protocol': isSubscription ? 'openai-responses' : protocol,
-    'base_url': isSubscription
-        ? 'https://chatgpt.com/backend-api/codex'
-        : baseUrl,
-    if (isSubscription && oauth != null) 'api_key': oauth!.access,
-    if (!isSubscription && apiKey.isNotEmpty) 'api_key': apiKey,
-    if (isSubscription && oauth != null) 'expires_at': oauth!.expires,
-    if (isSubscription && oauth != null && oauth!.accountId.isNotEmpty)
-      'account_id': oauth!.accountId,
-    if (authMode.isNotEmpty) 'auth_mode': authMode,
-    'model': (modelOverride != null && modelOverride.isNotEmpty)
+    AiPersona? persona,
+  }) {
+    final selectedModel = (persona?.model.isNotEmpty == true)
+        ? persona!.model
+        : (modelOverride != null && modelOverride.isNotEmpty)
         ? modelOverride
-        : model,
-    if (wireReasoning(modelOverride, reasoningOverride).isNotEmpty)
-      'reasoning_effort': wireReasoning(modelOverride, reasoningOverride),
-    if (modelOptions[modelOverride ?? model]?.reasoningMode != null)
-      'reasoning_mode': modelOptions[modelOverride ?? model]!.reasoningMode,
-    if ((modelOptions[modelOverride ?? model]?.thinkingBudget ?? 0) > 0)
-      'thinking_budget': modelOptions[modelOverride ?? model]!.thinkingBudget,
-    'capabilities': {
-      for (final entry in effectiveCapabilities(
-        modelOverride,
-        capabilityDefaults,
-      ).entries)
-        if (extensionCapabilities || entry.key != 'skill' && entry.key != 'mcp')
-          entry.key: entry.value,
-    },
-    if (effectiveContextWindow(modelOverride) > 0)
-      'context_window': effectiveContextWindow(modelOverride),
-    if (!isSubscription && effectiveMaxTokens(modelOverride) > 0)
-      'max_tokens': effectiveMaxTokens(modelOverride),
-    'use_proxy': usesProxy,
-    if (proxyMode.isNotEmpty) 'proxy_mode': proxyMode,
-    if (!isSubscription && headers.isNotEmpty) 'headers': headers,
-  };
+        : model;
+    final effectiveMode = (persona != null && persona.reasoningMode.isNotEmpty)
+        ? persona.reasoningMode
+        : modelOptions[selectedModel]?.reasoningMode;
+    final effectiveBudget = (persona != null && persona.thinkingBudget > 0)
+        ? persona.thinkingBudget
+        : (modelOptions[selectedModel]?.thinkingBudget ?? 0);
+    final effortOverride = reasoningOverride ?? persona?.reasoningEffort;
+    final caps = {
+      ...effectiveCapabilities(selectedModel, capabilityDefaults),
+      if (persona != null) ...persona.capabilities,
+    };
+    final effectiveCtx = (persona != null && persona.contextWindow > 0)
+        ? persona.contextWindow
+        : effectiveContextWindow(selectedModel);
+    final effectiveOut = (persona != null && persona.maxTokens > 0)
+        ? persona.maxTokens
+        : effectiveMaxTokens(selectedModel);
+    final wireProto = isSubscription ? 'openai-responses' : protocol;
+    return {
+      'id': id,
+      'name': name,
+      'protocol': wireProto,
+      'base_url': isSubscription
+          ? 'https://chatgpt.com/backend-api/codex'
+          : baseUrl,
+      if (isSubscription && oauth != null) 'api_key': oauth!.access,
+      if (!isSubscription && apiKey.isNotEmpty) 'api_key': apiKey,
+      if (isSubscription && oauth != null) 'expires_at': oauth!.expires,
+      if (isSubscription && oauth != null && oauth!.accountId.isNotEmpty)
+        'account_id': oauth!.accountId,
+      if (authMode.isNotEmpty) 'auth_mode': authMode,
+      'model': selectedModel,
+      if (wireReasoning(selectedModel, effortOverride).isNotEmpty)
+        'reasoning_effort': wireReasoning(selectedModel, effortOverride),
+      if (effectiveMode != null &&
+          (wireProto == 'anthropic-messages' ||
+              !effectiveMode.startsWith('anthropic-')))
+        'reasoning_mode': effectiveMode,
+      if (effectiveBudget > 0 && wireProto == 'anthropic-messages')
+        'thinking_budget': effectiveBudget,
+      'capabilities': {
+        for (final entry in caps.entries)
+          if (extensionCapabilities || entry.key != 'skill' && entry.key != 'mcp')
+            entry.key: entry.value,
+      },
+      if (effectiveCtx > 0) 'context_window': effectiveCtx,
+      if (!isSubscription && effectiveOut > 0) 'max_tokens': effectiveOut,
+      'use_proxy': usesProxy,
+      if (proxyMode.isNotEmpty) 'proxy_mode': proxyMode,
+      if (!isSubscription && headers.isNotEmpty) 'headers': headers,
+    };
+  }
 
   int effectiveMaxTokens([String? selected]) =>
       (modelOptions[selected ?? model]?.maxTokens ?? 0) > 0

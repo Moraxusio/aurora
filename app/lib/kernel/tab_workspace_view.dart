@@ -11,6 +11,7 @@ import 'package:aurora/ui/aurora_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/ide_theme.dart';
+import '../features/files/file_icons.dart';
 import 'editor_tab.dart';
 import 'tab_drag.dart';
 import 'tab_layout_menu.dart';
@@ -793,12 +794,27 @@ class _TabListState extends State<_TabList> {
         tabs = ws.tabsInGroup(group.id),
         width = ws.tabLayout.tabWidth;
     final row = _rowOf(context);
+    final titleCounts = <String, int>{};
+    for (final t in tabs) {
+      titleCounts[t.title] = (titleCounts[t.title] ?? 0) + 1;
+    }
+    String? disambiguate(EditorTab t) {
+      if ((titleCounts[t.title] ?? 0) < 2 || t.file == null) return null;
+      final p = t.file!.path;
+      final slash = p.lastIndexOf('/');
+      if (slash <= 0) return t.file!.root;
+      final parent = p.substring(0, slash);
+      final seg = parent.split('/').last;
+      return seg.isEmpty ? t.file!.root : seg;
+    }
+
     Widget tab(int index) => _TabTile(
       key: ObjectKey(tabs[index]),
       ws: ws,
       tab: tabs[index],
       group: group,
       vertical: widget.vertical,
+      subtitle: disambiguate(tabs[index]),
       onDrag: widget.onDrag,
     );
     final end = SizedBox(
@@ -894,6 +910,7 @@ class _TabTile extends StatefulWidget {
   final EditorTab tab;
   final TabGroup group;
   final bool vertical;
+  final String? subtitle;
   final ValueChanged<TabDragData?> onDrag;
   const _TabTile({
     super.key,
@@ -901,6 +918,7 @@ class _TabTile extends StatefulWidget {
     required this.tab,
     required this.group,
     required this.vertical,
+    this.subtitle,
     required this.onDrag,
   });
   @override
@@ -915,8 +933,10 @@ class _TabTileState extends State<_TabTile> {
     final doubleClick =
         _lastTap != null && (_press - _lastTap!).inMilliseconds < 300;
     _lastTap = doubleClick ? null : _press;
+    final preview = widget.ws.tabLayout.previews.contains(widget.tab.id);
+    if (doubleClick && preview) widget.ws.keepPreview(widget.tab.id);
     widget.ws.activate(widget.tab.id);
-    if (doubleClick && widget.ws.split) widget.ws.toggleFocusMode();
+    if (doubleClick && !preview && widget.ws.split) widget.ws.toggleFocusMode();
   }
 
   void _endDrag() {
@@ -939,8 +959,11 @@ class _TabTileState extends State<_TabTile> {
             !ws.terminalFocused &&
             !ws.assistantFocused;
     final pin = layout.pinned.contains(tab.id);
+    final preview = layout.previews.contains(tab.id);
     final tile = ContextArea(
       items: () => [
+        if (preview)
+          MenuItem('保留此标签', () => ws.keepPreview(tab.id), icon: Icons.tab_outlined),
         MenuItem(
           pin ? '取消固定' : '固定标签',
           () => ws.pinTab(tab.id),
@@ -993,7 +1016,7 @@ class _TabTileState extends State<_TabTile> {
           onEnter: (_) => setState(() => _hover = true),
           onExit: (_) => setState(() => _hover = false),
           child: Tooltip(
-            message: tab.tooltip ?? tab.title,
+            message: preview ? '${tab.tooltip ?? tab.title}\n预览 · 双击保留' : tab.tooltip ?? tab.title,
             child: GestureDetector(
               onTap: _activate,
               child: Container(
@@ -1021,27 +1044,52 @@ class _TabTileState extends State<_TabTile> {
                             color: on && focused
                                 ? ide.accent
                                 : Colors.transparent,
+                            width: 2,
                           ),
                           right: BorderSide(color: ide.border),
                         ),
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      tab.icon,
-                      size: 15,
-                      color: tab.iconColor ?? ide.textDim,
-                    ),
+                    if (tab.file != null)
+                      FileIcon(name: tab.title, size: 15)
+                    else
+                      Icon(
+                        tab.icon,
+                        size: 15,
+                        color: tab.iconColor ?? ide.textDim,
+                      ),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text(
-                        tab.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: on ? ide.text : ide.textDim,
-                        ),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              tab.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                 fontSize: 12.5,
+                                 color: on ? ide.text : ide.textDim,
+                                 fontStyle: preview ? FontStyle.italic : FontStyle.normal,
+                              ),
+                            ),
+                          ),
+                          if (widget.subtitle != null) ...[
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                widget.subtitle!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: ide.textFaint,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     if (pin)
@@ -1067,8 +1115,8 @@ class _TabTileState extends State<_TabTile> {
                               child: dirty && !_hover
                                   ? Icon(
                                       Icons.circle,
-                                      size: 7,
-                                      color: ide.textDim,
+                                      size: 7.5,
+                                      color: ide.accent,
                                     )
                                   : Opacity(
                                       opacity:

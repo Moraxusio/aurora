@@ -344,6 +344,17 @@ void main() {
       expect(find.byType(TerminalView), findsOneWidget);
       expect(find.byKey(const ValueKey('tab-term:main')), findsNothing);
       await snapshot(t, 'workbench-bottom-terminal');
+      final selector = find.byKey(const ValueKey('terminal-selector'));
+      await t.tap(selector);
+      await t.pumpAndSettle();
+      await snapshot(t, 'terminal-session-menu');
+      await t.tap(find.text('管理全部会话'));
+      await t.pumpAndSettle();
+      await snapshot(t, 'terminal-session-manager');
+      await t.tap(selector);
+      await t.pumpAndSettle();
+      await t.tap(find.text('返回输出'));
+      await t.pumpAndSettle();
       await show(Brightness.light);
       await snapshot(t, 'workbench-bottom-terminal-light');
       await show(Brightness.dark);

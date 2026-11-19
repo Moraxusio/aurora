@@ -429,8 +429,12 @@ func streamOpenAIChat(ctx context.Context, req LLMRequest, proxyEnv func() map[s
 		}
 		return nil
 	})
+	streamAborted := false
 	if err != nil && !errors.Is(err, errSSEStreamDone) {
-		return LLMResponse{}, err
+		if ctx.Err() == nil || (reasoningBuf.Len() == 0 && textBuf.Len() == 0) {
+			return LLMResponse{}, err
+		}
+		streamAborted = true
 	}
 
 	var parts []Part
@@ -451,6 +455,13 @@ func streamOpenAIChat(ctx context.Context, req LLMRequest, proxyEnv func() map[s
 			ID:   NewID("prt"),
 			Text: textBuf.String(),
 		})
+	}
+	if streamAborted {
+		return LLMResponse{
+			Parts:  parts,
+			Finish: "aborted",
+			Usage:  usage,
+		}, err
 	}
 
 	var idxs []int

@@ -15,8 +15,7 @@ import 'ai_model_discovery.dart';
 import 'ai_oauth_client.dart';
 import 'ai_capability_editor.dart';
 import 'ai_reasoning_field.dart';
-import 'ai_extensions.dart';
-import '../development/development_scope.dart';
+import 'ai_run_options.dart';
 
 import 'ai_visuals.dart';
 
@@ -102,6 +101,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   late String _baseline;
   String? _editingId;
   String? _inspectedModel;
+  String? _editingPersonaId;
   String _section = 'connection';
   final _name = TextEditingController();
   final _url = TextEditingController();
@@ -125,8 +125,14 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   int _request = 0;
   String? _note;
   String? _error;
-  String _ruleEffect = 'ask', _ruleAction = 'shell', _ruleScope = 'global';
+  String _ruleEffect = 'ask',
+      _ruleAction = 'shell',
+      _ruleScope = 'global',
+      _ruleAgent = '';
+  int _ruleTtlHours = 0;
+  bool _ruleDisabled = false;
   int? _editingRule;
+  int _policyEpoch = 0;
   late String _ruleBaseline;
 
   AiProvider? get _current =>
@@ -153,8 +159,13 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       _ai.providers.where((p) => p.id == widget.providerId).firstOrNull ??
           _ai.activeProvider,
     );
-    _section = _sections.any((s) => s.$1 == widget.initialSection)
-        ? widget.initialSection
+    final requestedSection = switch (widget.initialSection) {
+      'overview' => 'personas',
+      'models' => 'connection',
+      _ => widget.initialSection,
+    };
+    _section = _sections.any((s) => s.$1 == requestedSection)
+        ? requestedSection
         : 'connection';
     _inspectedModel = widget.model;
     _baseline = _snapshot();
@@ -182,8 +193,15 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     return jsonEncode(json);
   }
 
-  String _ruleSnapshot() =>
-      jsonEncode([_ruleAction, _ruleEffect, _ruleScope, _resource.text.trim()]);
+  String _ruleSnapshot() => jsonEncode([
+    _ruleAction,
+    _ruleEffect,
+    _ruleScope,
+    _ruleAgent,
+    _ruleTtlHours,
+    _ruleDisabled,
+    _resource.text.trim(),
+  ]);
 
   bool get _ruleDirty => _ruleSnapshot() != _ruleBaseline;
   bool get _dirty =>
@@ -194,6 +212,9 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     _ruleAction = 'shell';
     _ruleEffect = 'ask';
     _ruleScope = 'global';
+    _ruleAgent = '';
+    _ruleTtlHours = 0;
+    _ruleDisabled = false;
     _resource.text = '*';
     _ruleBaseline = _ruleSnapshot();
   }
@@ -290,7 +311,18 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       baseUrl: preset.$3,
       model: preset.$4,
     );
-    if (index == 0) p.authMode = 'chatgpt-device';
+    if (index == 0) {
+      p.authMode = 'chatgpt-device';
+      p.models = [
+        'gpt-6.1-sol',
+        'gpt-5.3-codex',
+        'gpt-5.2-codex',
+        'gpt-5.1-codex',
+        'gpt-5-codex',
+        'o3',
+        'o4-mini',
+      ]..sort();
+    }
     setState(() {
       _ai.providers.add(p);
       // The first connection becomes the default; adding others only opens them.
@@ -311,6 +343,16 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
         p.protocol = 'openai-responses';
         p.baseUrl = 'https://chatgpt.com/backend-api/codex';
         p.model = 'gpt-6.1-sol';
+        p.models = {
+          ...p.models,
+          'gpt-6.1-sol',
+          'gpt-5.3-codex',
+          'gpt-5.2-codex',
+          'gpt-5.1-codex',
+          'gpt-5-codex',
+          'o3',
+          'o4-mini',
+        }.toList()..sort();
       } else if (p.isSubscription) {
         final old = _beforeSubscription[p.id];
         p.protocol = old?.$1 ?? 'openai-chat';
@@ -347,11 +389,11 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     if (selected == null || _fetching || _checking) return;
     final p = AiProvider.fromJson(selected.toJson());
     final link = widget.ws?.link;
-    if (_clientNetwork && p.proxyMode == 'agent') {
+    if (!p.isSubscription && _clientNetwork && p.proxyMode == 'agent') {
       setState(() => _error = '此连接使用 agent 代理，请在“连接 → 网络出口”选择“当前 agent”拉取目录。');
       return;
     }
-    if (!_clientNetwork && link == null) {
+    if (!p.isSubscription && !_clientNetwork && link == null) {
       setState(() => _error = '当前 agent 未连接；可在“连接 → 网络出口”选择本机网络。');
       return;
     }
@@ -364,7 +406,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     bool active() => mounted && request == _request && _current?.id == p.id;
     try {
       final List<dynamic> models;
-      if (_clientNetwork) {
+      if (_clientNetwork || (p.isSubscription && p.oauth == null)) {
         models = await discoverAiModels(p);
       } else {
         final prepared = await prepareAiProvider(widget.app, link!, p);
@@ -393,6 +435,9 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
             }
           }
           selected.models = ids.toList()..sort();
+          if (_model.text.trim().isEmpty && selected.models.isNotEmpty) {
+            _model.text = selected.models.first;
+          }
         }
         _note = p.isSubscription
             ? '内置订阅模型建议 · 未验证账号可用性。实际权限以模型调用结果为准。'
@@ -424,8 +469,9 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
         return;
       }
       p.models = {...p.models, id}.toList()..sort();
+      _model.clear();
       _error = null;
-      _note = '已添加 $id，保存后可在会话中选择。';
+      _note = '已添加 $id 到模型清单，可点击「生成 Persona」使用。';
     });
   }
 
@@ -521,6 +567,16 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       setState(() => _error = '请先打开项目工作区，或改为全局规则。');
       return false;
     }
+    final existingExpiry = _editingRule != null
+        ? _ai.permissionRules[_editingRule!].expiresAt
+        : 0;
+    final expiresAt = _ruleTtlHours < 0
+        ? existingExpiry
+        : _ruleTtlHours == 0
+        ? 0
+        : DateTime.now()
+            .add(Duration(hours: _ruleTtlHours))
+            .millisecondsSinceEpoch;
     final rule = AiPermissionRule(
       action: _ruleAction,
       resource: _resource.text.trim(),
@@ -528,6 +584,9 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       scope: _ruleScope,
       serverId: _ruleScope == 'project' ? ws!.serverId : '',
       projectId: _ruleScope == 'project' ? ws!.project!.id : '',
+      agent: _ruleAgent,
+      expiresAt: expiresAt,
+      disabled: _ruleDisabled,
     );
     setState(() {
       if (_editingRule case final index?) {
@@ -549,8 +608,201 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
       _ruleAction = rule.action;
       _ruleEffect = rule.effect;
       _ruleScope = rule.scope;
+      _ruleAgent = rule.agent;
+      _ruleDisabled = rule.disabled;
+      _ruleTtlHours = rule.expiresAt > 0 ? -1 : 0;
       _resource.text = rule.resource;
       _ruleBaseline = _ruleSnapshot();
+    });
+  }
+
+  void _fillRuleTemplate({
+    required String effect,
+    required String action,
+    required String resource,
+    String agent = '',
+    int ttlHours = 0,
+  }) {
+    setState(() {
+      _editingRule = null;
+      _ruleEffect = effect;
+      _ruleAction = action;
+      _ruleAgent = agent;
+      _ruleTtlHours = ttlHours;
+      _ruleDisabled = false;
+      _resource.text = resource;
+      _error = null;
+    });
+  }
+
+  void _applyPermissionPreset(String preset) {
+    setState(() {
+      _resetRule();
+      switch (preset) {
+        case 'readonly':
+          _ai.permissionMode = 'ask';
+          _ai.permissionRules = [
+            AiPermissionRule(action: 'write_files', resource: '*', effect: 'deny'),
+            AiPermissionRule(action: 'shell', resource: '*', effect: 'ask'),
+            AiPermissionRule(action: 'network', resource: '*', effect: 'ask'),
+          ];
+          _note = '已应用「只读探索」方案，保存设置后生效。';
+        case 'balanced':
+          _ai.permissionMode = 'ask';
+          _ai.permissionRules = [
+            AiPermissionRule(
+              action: 'shell',
+              resource: 'git status *',
+              effect: 'allow',
+            ),
+            AiPermissionRule(
+              action: 'shell',
+              resource: 'git diff *',
+              effect: 'allow',
+            ),
+            AiPermissionRule(
+              action: 'network',
+              resource: '*',
+              effect: 'deny',
+              agent: 'subagent',
+            ),
+          ];
+          _note = '已应用「标准开发」方案，保存设置后生效。';
+        case 'isolated_subagent':
+          _ai.permissionMode = 'ask';
+          _ai.permissionRules = [
+            AiPermissionRule(
+              action: 'shell',
+              resource: '*',
+              effect: 'deny',
+              agent: 'subagent',
+            ),
+            AiPermissionRule(
+              action: 'network',
+              resource: '*',
+              effect: 'deny',
+              agent: 'subagent',
+            ),
+            AiPermissionRule(
+              action: 'write_files',
+              resource: '*',
+              effect: 'deny',
+              agent: 'subagent',
+            ),
+          ];
+          _note = '已应用「子代理严格隔离」方案，保存设置后生效。';
+        case 'auto_guarded':
+          _ai.permissionMode = 'auto';
+          _ai.permissionRules = [
+            AiPermissionRule(
+              action: 'shell',
+              resource: 'git push *',
+              effect: 'ask',
+            ),
+            AiPermissionRule(
+              action: 'network',
+              resource: '*',
+              effect: 'ask',
+              agent: 'subagent',
+            ),
+          ];
+          _note = '已应用「自动受控」方案，保存设置后生效。';
+        case 'full_access':
+          _ai.permissionMode = 'full_access';
+          _ai.permissionRules = [];
+          _note = '已应用「完全权限 (Full Access)」方案：免确认自动执行，显式拒绝规则仍生效。';
+      }
+      _error = null;
+    });
+  }
+
+  void _createPersonaFromModel(AiProvider p, String modelId) {
+    final m = modelId.trim().isEmpty ? p.model : modelId.trim();
+    final opts = p.modelOptions[m];
+    final persona = AiPersona.create(
+      name: m.isEmpty ? p.name : '$m 人设',
+      description: '基于 ${p.name}${m.isEmpty ? '' : ' / $m'}',
+      providerId: p.id,
+      model: m,
+      reasoningEffort: opts?.reasoningEffort,
+      reasoningMode: opts?.reasoningMode ?? '',
+      thinkingBudget: opts?.thinkingBudget ?? 0,
+      contextWindow:
+          opts?.contextWindow ?? p.modelContextWindows[m] ?? 0,
+      maxTokens: opts?.maxTokens ?? 0,
+      capabilities: Map<String, bool>.of(opts?.capabilities ?? const {}),
+      permissionMode: opts?.permissionMode ?? '',
+      permissionRules: [
+        for (final r in opts?.permissionRules ?? const <AiPermissionRule>[])
+          AiPermissionRule.fromJson(r.toJson()),
+      ],
+    );
+    setState(() {
+      _ai.personas.add(persona);
+      _editingPersonaId = persona.id;
+      _section = 'personas';
+      _note = '已从模型生成 Persona「${persona.name}」，可继续调整权限与思考参数。';
+      _error = null;
+    });
+  }
+
+  void _addPersona() {
+    final p = _ai.activeProvider ?? _ai.providers.firstOrNull;
+    final persona = AiPersona.create(
+      name: '新 Persona ${_ai.personas.length + 1}',
+      providerId: p?.id ?? '',
+      model: p?.model ?? '',
+    );
+    setState(() {
+      _ai.personas.add(persona);
+      _editingPersonaId = persona.id;
+      _error = null;
+    });
+  }
+
+  void _duplicatePersona(AiPersona source) {
+    final copy = AiPersona.create(
+      name: '${source.name} 副本',
+      description: source.description,
+      providerId: source.providerId,
+      model: source.model,
+      reasoningEffort: source.reasoningEffort,
+      reasoningMode: source.reasoningMode,
+      thinkingBudget: source.thinkingBudget,
+      capabilities: Map<String, bool>.of(source.capabilities),
+      permissionMode: source.permissionMode,
+      permissionRules: [
+        for (final r in source.permissionRules)
+          AiPermissionRule.fromJson(r.toJson()),
+      ],
+    );
+    setState(() {
+      _ai.personas.add(copy);
+      _editingPersonaId = copy.id;
+    });
+  }
+
+  void _deletePersona(AiPersona target) {
+    setState(() {
+      _ai.personas.removeWhere((p) => p.id == target.id);
+      if (_ai.activePersonaId == target.id) _ai.activePersonaId = null;
+      if (_ai.orchestratorConductorPersonaId == target.id) {
+        _ai.orchestratorConductorPersonaId = null;
+      }
+      if (_ai.orchestratorMusicianPersonaId == target.id) {
+        _ai.orchestratorMusicianPersonaId = null;
+      }
+      if (_editingPersonaId == target.id) {
+        _editingPersonaId = _ai.personas.firstOrNull?.id;
+      }
+    });
+  }
+
+  void _pruneExpiredRules() {
+    setState(() {
+      _ai.permissionRules.removeWhere((r) => r.isExpired);
+      _editingRule = null;
+      _resetRule();
     });
   }
 
@@ -576,7 +828,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
           p.contextWindow > 10000000) {
         setState(() {
           _load(p);
-          _section = 'models';
+          _section = 'connection';
           _error = '连接上下文上限须为 0–10000000，输出上限须为 0–1000000。';
         });
         return;

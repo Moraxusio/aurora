@@ -435,8 +435,14 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 		}
 		return nil
 	})
+	streamAborted := false
+	var streamErr error
 	if err != nil && !errors.Is(err, errSSEStreamDone) {
-		return LLMResponse{}, err
+		if ctx.Err() == nil {
+			return LLMResponse{}, err
+		}
+		streamAborted = true
+		streamErr = err
 	}
 
 	var indices []int
@@ -451,12 +457,14 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 		cb := blocks[idx]
 		switch cb.blockType {
 		case "thinking":
-			parts = append(parts, Part{
-				Type:      "reasoning",
-				ID:        NewID("prt"),
-				Text:      cb.text.String(),
-				Signature: cb.signature.String(),
-			})
+			if cb.text.Len() > 0 || cb.signature.Len() > 0 {
+				parts = append(parts, Part{
+					Type:      "reasoning",
+					ID:        NewID("prt"),
+					Text:      cb.text.String(),
+					Signature: cb.signature.String(),
+				})
+			}
 		case "redacted_thinking":
 			parts = append(parts, Part{
 				Type:     "reasoning",
@@ -472,6 +480,9 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 				})
 			}
 		case "tool_use":
+			if streamAborted {
+				continue
+			}
 			rawArgs := strings.TrimSpace(cb.inputJSON.String())
 			if rawArgs == "" && len(cb.seedInput) > 0 {
 				rawArgs = string(cb.seedInput)
@@ -500,6 +511,13 @@ func streamAnthropicMessages(ctx context.Context, req LLMRequest, proxyEnv func(
 				})
 			}
 		}
+	}
+	if streamAborted {
+		return LLMResponse{
+			Parts:  parts,
+			Finish: "aborted",
+			Usage:  usage,
+		}, streamErr
 	}
 	if hasToolCalls {
 		finishReason = "tool-calls"

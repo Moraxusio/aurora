@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora/ui/aurora_ui.dart';
 
+import 'ai_model_picker.dart';
 import 'ai_visuals.dart';
 
 import '../../kernel/ai_edits.dart';
@@ -19,8 +21,10 @@ Future<Map<String, Object?>> aiProposalArguments(
   AiBufferSnapshot origin,
   String instruction, {
   bool inline = false,
+  AiProvider? providerOverride,
 }) async {
-  final link = ws.link, provider = ws.app.aiSettings.activeProvider;
+  final link = ws.link,
+      provider = providerOverride ?? ws.app.aiSettings.activeProvider;
   if (link == null || !link.server.caps.contains('ai.propose'))
     throw StateError('需要支持 AI 编辑建议的 agent');
   if (provider == null) throw StateError('请先在 AI 设置中选择模型');
@@ -81,9 +85,38 @@ class _AiEditReviewState extends State<AiEditReview> {
   AiProposalOperation? operation;
   FileTextOperation? saveOperation;
   AiEditSet? edits;
+  AiProvider? selectedProvider;
+  String? reasoningOverride;
   bool busy = false;
   String? error;
   int requested = 0;
+
+  AiProvider? get _effectiveProvider {
+    if (selectedProvider != null) return selectedProvider;
+    return widget.ws.app.ready ? widget.ws.app.aiSettings.activeProvider : null;
+  }
+
+  Future<void> _chooseModel() async {
+    final ai = widget.ws.app.ready ? widget.ws.app.aiSettings : null;
+    final pickedId = await showAiPersonaPicker(
+      context,
+      widget.ws,
+      initialPersonaId: ai?.activePersonaId,
+    );
+    if (pickedId == null || !mounted || ai == null) return;
+    final persona = ai.personaById(pickedId);
+    if (persona == null) return;
+    final source = (persona.providerId.isNotEmpty
+            ? ai.providers.where((p) => p.id == persona.providerId).firstOrNull
+            : ai.activeProvider);
+    if (source == null) return;
+    setState(() {
+      selectedProvider = AiProvider.fromJson(source.toJson());
+      if (persona.model.isNotEmpty) selectedProvider!.model = persona.model;
+      reasoningOverride = persona.reasoningEffort;
+    });
+  }
+
   Future<void> generate() async {
     if (busy || instruction.text.trim().isEmpty) return;
     final link = widget.ws.link;
@@ -103,7 +136,12 @@ class _AiEditReviewState extends State<AiEditReview> {
       final prompt = instruction.text;
       final result = await op.run(
         link,
-        () => aiProposalArguments(widget.ws, snapshots.first, prompt),
+        () => aiProposalArguments(
+          widget.ws,
+          snapshots.first,
+          prompt,
+          providerOverride: _effectiveProvider,
+        ),
       );
       if (!mounted) return;
       edits?.dispose();
@@ -256,6 +294,7 @@ class _AiEditReviewState extends State<AiEditReview> {
                   ),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 6,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       FilledButton.icon(
@@ -298,6 +337,22 @@ class _AiEditReviewState extends State<AiEditReview> {
                           '${current.chunks.where((c) => c.accepted).length}/${current.chunks.length} 块已接受 · ${current.elapsedMs} ms · ${current.usage['total_tokens'] ?? 0} tokens',
                         ),
                       ],
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 260),
+                        child: TextButton.icon(
+                          key: const ValueKey('ai-edit-model-btn'),
+                          onPressed: busy ? null : _chooseModel,
+                          icon: const Icon(Icons.memory_rounded, size: 15),
+                          label: Text(
+                            _effectiveProvider == null ||
+                                    _effectiveProvider!.model.isEmpty
+                                ? '选择模型'
+                                : '${_effectiveProvider!.name} / ${_effectiveProvider!.model}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   if (busy || current?.saving == true)

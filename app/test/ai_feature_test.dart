@@ -477,52 +477,44 @@ void main() {
   );
 
   testWidgets(
-    'the composer shows the model and thinking strength, and the picker changes both',
+    'the composer shows the persona and thinking strength, and the picker switches persona',
     (t) async {
+      await app.update((p) {
+        p.ai.personas = [
+          AiPersona(
+            id: 'per_1',
+            name: '默认人设',
+            providerId: p.ai.activeProvider!.id,
+            model: 'claude-sonnet-4-5',
+          ),
+          AiPersona(
+            id: 'per_2',
+            name: '深度推理',
+            providerId: p.ai.activeProvider!.id,
+            model: 'gpt-5.2-codex',
+            reasoningEffort: 'high',
+          ),
+        ];
+        p.ai.activePersonaId = 'per_1';
+      });
       await pumpView(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
-      expect(find.text('OpenCode Gateway / claude-sonnet-4-5'), findsOneWidget);
+      expect(find.text('默认人设 · claude-sonnet-4-5'), findsOneWidget);
       await t.tap(find.byKey(const ValueKey('ai-model-btn')));
       await settle(t);
 
-      // Fetch the model list through the agent, then choose a model typed or listed.
-      await t.tap(find.text('拉取模型'));
-      await settle(t);
-      expect(find.text('gpt-5.2-codex'), findsOneWidget);
-      await t.ensureVisible(find.text('high'));
-      await t.tap(find.text('high'));
+      await t.tap(find.byKey(const ValueKey('ai-persona-option-per_2')));
       await settle(t);
       expect(
-        app.profile.ai.activeProvider!.reasoningEffort,
-        isEmpty,
-        reason: '对话临时选择不能改写配置页预设',
+        app.profile.ai.activePersonaId,
+        'per_1',
+        reason: '会话选择不应改写全局默认 Persona',
       );
-      await t.ensureVisible(find.text('gpt-5.2-codex'));
-      await t.tap(find.text('gpt-5.2-codex'));
-      await settle(t);
-      await t.tap(find.byKey(const ValueKey('ai-model-apply')));
-      await settle(t);
+      expect(find.text('深度推理 · gpt-5.2-codex'), findsOneWidget);
       expect(
-        app.profile.ai.activeProvider!.model,
-        'claude-sonnet-4-5',
-        reason: '会话选择不应改写全局默认模型',
-      );
-      expect(
-        app.profile.ai.activeProvider!.models,
-        contains('claude-sonnet-4-5'),
-      );
-      expect(
-        app.profile.ai.activeProvider!.imageSupport('gpt-5.2-codex'),
-        isTrue,
-      );
-
-      // One model line; the full choice, including strength, stays in its tooltip.
-      expect(find.text('OpenCode Gateway / gpt-5.2-codex'), findsOneWidget);
-      expect(
-        find.byTooltip('OpenCode Gateway / gpt-5.2-codex · high'),
+        find.byTooltip('当前 Persona：深度推理 (gpt-5.2-codex) · high'),
         findsOneWidget,
       );
 
-      // And what is sent to the agent carries both.
       await t.enterText(find.byKey(const ValueKey('ai-prompt-input')), 'hi');
       await t.tap(find.byKey(const ValueKey('ai-send-btn')));
       await t.pump(const Duration(milliseconds: 100));
@@ -599,7 +591,20 @@ void main() {
       await settle(t);
       await t.tap(find.byKey(const ValueKey('ai-send-options-apply')));
       await settle(t);
-      expect(find.textContaining('规划 · 询问'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('ai-mode-pill')),
+          matching: find.text('规划'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('ai-perm-pill')),
+          matching: find.text('先询问'),
+        ),
+        findsOneWidget,
+      );
 
       await t.enterText(
         find.byKey(const ValueKey('ai-prompt-input')),
@@ -634,10 +639,10 @@ void main() {
       );
       await t.tap(find.text('打开配置'));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(const ValueKey('ai-settings-nav-models')));
+      await t.tap(find.byKey(const ValueKey('ai-settings-nav-connection')));
       await t.pumpAndSettle();
-      await t.ensureVisible(find.text('拉取模型'));
-      await t.tap(find.text('拉取模型'));
+      await t.ensureVisible(find.text('拉取模型列表'));
+      await t.tap(find.text('拉取模型列表'));
       await t.pumpAndSettle();
       await t.ensureVisible(find.text('已获取 2 个模型'));
       expect(find.text('已获取 2 个模型'), findsOneWidget);
@@ -645,20 +650,16 @@ void main() {
       await t.pumpAndSettle();
       await t.ensureVisible(find.text('gpt-5.2-codex'));
       await t.pumpAndSettle();
-      await t.tap(find.text('gpt-5.2-codex'));
-      await t.pump();
       final modelRow = find.ancestor(
         of: find.text('gpt-5.2-codex').first,
         matching: find.byType(ListTile),
       );
-      await t.tap(
-        find.descendant(of: modelRow, matching: find.byTooltip('设为默认模型')),
-      );
-      await t.pump();
+      await t.tap(find.descendant(of: modelRow, matching: find.text('生成 Persona')));
+      await t.pumpAndSettle();
 
       await t.tap(find.byKey(const ValueKey('ai-save-settings')));
       await t.pumpAndSettle();
-      expect(app.profile.ai.activeProvider!.model, 'gpt-5.2-codex');
+      expect(app.profile.ai.personas.single.model, 'gpt-5.2-codex');
     },
   );
   testWidgets(
@@ -676,7 +677,7 @@ void main() {
       final key = app.profile.ai.activeProvider!.apiKey;
       await t.tap(find.text('配置'));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(const ValueKey('ai-settings-nav-models')));
+      await t.tap(find.byKey(const ValueKey('ai-settings-nav-connection')));
       await t.pumpAndSettle();
       await t.enterText(
         find.byKey(const ValueKey('ai-model-id')),
@@ -686,8 +687,8 @@ void main() {
       await t.ensureVisible(find.byKey(const ValueKey('ai-add-model')));
       await t.tap(find.byKey(const ValueKey('ai-add-model')));
       await t.pumpAndSettle();
-      await t.ensureVisible(find.text('拉取模型'));
-      await t.tap(find.text('拉取模型'));
+      await t.ensureVisible(find.text('拉取模型列表'));
+      await t.tap(find.text('拉取模型列表'));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('ai-save-settings')));
       await t.pumpAndSettle();

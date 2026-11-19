@@ -2,6 +2,7 @@ import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../theme/ide_theme.dart';
+import '../files/file_icons.dart';
 
 class AiPathChoice {
   final String root, path, name;
@@ -223,11 +224,10 @@ class _PathPickerState extends State<_PathPicker> {
                           return ListTile(
                             key: ValueKey('ai-path-$name'),
                             dense: true,
-                            leading: Icon(
-                              isDir
-                                  ? Icons.folder_outlined
-                                  : Icons.description_outlined,
-                              color: isDir ? ide.accent : ide.textDim,
+                            leading: FileIcon(
+                              name: name,
+                              folder: isDir,
+                              size: 16,
                             ),
                             title: Text(name),
                             trailing: isDir

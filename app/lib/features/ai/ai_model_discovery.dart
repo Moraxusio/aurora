@@ -45,14 +45,22 @@ Future<List<Map<String, dynamic>>> discoverAiModels(
       for (final id in {
         provider.model,
         'gpt-6.1-sol',
+        'gpt-5.3-codex',
         'gpt-5.2-codex',
         'gpt-5.1-codex',
         'gpt-5-codex',
+        'o3',
+        'o4-mini',
       }.where((x) => x.isNotEmpty))
         {'id': id},
     ];
   }
-  final base = Uri.tryParse(provider.baseUrl.trim());
+  final rawBase = provider.baseUrl.trim().isEmpty
+      ? (provider.protocol == 'anthropic-messages'
+            ? 'https://api.anthropic.com/v1'
+            : 'https://api.openai.com/v1')
+      : provider.baseUrl.trim();
+  final base = Uri.tryParse(rawBase);
   if (base == null ||
       !base.hasAuthority ||
       base.userInfo.isNotEmpty ||
@@ -102,11 +110,30 @@ Future<List<Map<String, dynamic>>> discoverAiModels(
             .timeout(const Duration(seconds: 20));
         req.followRedirects = false;
         req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+        req.headers.set(
+          HttpHeaders.userAgentHeader,
+          'opencode/stable/1.4.0/opencode',
+        );
+        req.headers.set('origin', 'https://opencode.ai/');
+        req.headers.set('referer', 'https://opencode.ai/');
+        req.headers.set('x-title', 'opencode');
+        req.headers.set('x-opencode-client', 'cli');
         if (provider.apiKey.isNotEmpty) {
-          if (provider.authMode == 'x-api-key' ||
-              (provider.authMode.isEmpty &&
-                  provider.protocol == 'anthropic-messages')) {
+          if (provider.authMode == 'x-api-key') {
             req.headers.set('x-api-key', provider.apiKey);
+          } else if (provider.authMode == 'bearer') {
+            req.headers.set(
+              HttpHeaders.authorizationHeader,
+              'Bearer ${provider.apiKey}',
+            );
+          } else if (provider.protocol == 'anthropic-messages') {
+            req.headers.set('x-api-key', provider.apiKey);
+            if (!rawBase.toLowerCase().contains('api.anthropic.com')) {
+              req.headers.set(
+                HttpHeaders.authorizationHeader,
+                'Bearer ${provider.apiKey}',
+              );
+            }
           } else {
             req.headers.set(
               HttpHeaders.authorizationHeader,
@@ -136,7 +163,12 @@ Future<List<Map<String, dynamic>>> discoverAiModels(
           continue endpointsLoop;
         }
         try {
-          final json = jsonDecode(utf8.decode(bytes));
+          final bodyText = utf8.decode(bytes).trimLeft();
+          if (bodyText.isEmpty ||
+              (!bodyText.startsWith('{') && !bodyText.startsWith('['))) {
+            throw StateError('接口返回的不是 JSON，请检查 Base URL（通常以 /v1 结尾）');
+          }
+          final json = jsonDecode(bodyText);
           final models = parseAiModels(json);
           all.addAll(models);
           if (json is Map && json['has_more'] == true) {

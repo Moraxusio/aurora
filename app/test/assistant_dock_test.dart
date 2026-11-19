@@ -137,7 +137,7 @@ void main() {
         'keep this draft',
       );
       final root = ws.tabLayout.root;
-      t.view.physicalSize = const Size(700, 800);
+      t.view.physicalSize = const Size(560, 800);
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('input-doc')), findsNothing);
       ws.focusGroupAt(0);

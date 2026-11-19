@@ -10,7 +10,7 @@ class AppearanceValues {
   final int tabSize;
   const AppearanceValues({this.theme = 'system', this.editorFont = 13.5,
     this.terminalFont = 14, this.chatFont = 15, this.uiScale = 1,
-    this.wordWrap = false, this.tabSize = 4});
+    this.wordWrap = true, this.tabSize = 4});
 
   AppearanceValues patch(Map<String, Object> p) => AppearanceValues(
     theme: p['theme'] as String? ?? theme,

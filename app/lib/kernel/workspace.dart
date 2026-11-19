@@ -129,6 +129,9 @@ class Workspace extends ChangeNotifier {
 
   /// Raised by Ctrl+Shift+F: the search view puts the cursor in its query.
   final ValueNotifier<int> focusSearch = ValueNotifier(0);
+  VoidCallback? openQuickSearch, openContentSearch;
+  final TextEditingController searchQuery = TextEditingController();
+  final ValueNotifier<int> submitSearch = ValueNotifier(0);
 
   /// Notices of files changed on the server, for open editors.
   late final FileWatch watch = FileWatch(() => link);
@@ -149,7 +152,12 @@ class Workspace extends ChangeNotifier {
       if (_disposed) return;
       for (final entry in entries.reversed) {
         final path = WorkspacePath(root: entry.key.root, path: entry.key.path);
-        if (tab('file:${path.root}:${path.path}') == null) openTab(build(path));
+        final id = 'file:${path.root}:${path.path}';
+        if (tab(id) == null) {
+          openTab(build(path));
+        } else {
+          keepPreview(id);
+        }
       }
     }
     try {
@@ -296,15 +304,19 @@ class Workspace extends ChangeNotifier {
   }
 
   /// Opens [t], or brings the open tab with the same id to the front.
-  void openTab(EditorTab t) {
+  void openTab(EditorTab t, {bool preview = false}) {
+    preview = preview && t.isEditor && t.file != null;
     final existing = tab(t.id) ?? (t.isAssistant && t.taskKey != null ? assistantTabs.where((other) => other.taskKey == t.taskKey).firstOrNull : null);
     if (existing != null) {
+      if (!preview) _keepPreview(existing.id);
       if (existing.file != null) existing.projects.add(projectKey);
       _syncLayout(projectKey);
       if (!identical(t, existing)) t.dispose();
       activate(existing.id);
       return;
     }
+    final layout = t.isEditor ? tabLayout : null;
+    final previous = preview ? layout!.current.tabs.where(layout.previews.contains).firstOrNull : null;
     tabs.add(t);
     if (t.isAssistant) {
       assistantPanel.activate(t.id);
@@ -324,9 +336,53 @@ class Workspace extends ChangeNotifier {
     if (t.file != null) t.projects.add(projectKey);
     _syncLayout(projectKey);
     _show(t.id);
+    if (preview) {
+      if (previous != null) {
+        final old = tab(previous)!;
+        final file = old.file!;
+        if (old.dirty.value || _closingTabs.containsKey('$projectKey\u0000$previous') ||
+            (old.projects.length == 1 && !documents.releaseCleanPreview(file.root, file.path))) {
+          layout!.previews.remove(previous);
+        } else {
+          final group = layout!.current;
+          final slot = group.tabs.indexOf(previous);
+          layout.remove(previous);
+          group.tabs.remove(t.id);
+          group.tabs.insert(slot, t.id);
+          old.projects.remove(projectKey);
+          if (old.projects.isEmpty) {
+            tabs.remove(old);
+            old.dispose();
+          }
+        }
+      }
+      final file = t.file!;
+      if (documents.find(file.root, file.path)?.dirty != true) {
+        layout!.previews.add(t.id);
+        t.dirty.addListener(() {
+          if (!t.dirty.value || !_keepPreview(t.id)) return;
+          _scheduleGeometryFrame();
+        });
+      }
+    }
     compactEditor = true;
     rememberFiles();
     notifyListeners();
+  }
+
+  bool _keepPreview(String id) {
+    var changed = false;
+    for (final entry in _layouts.entries) {
+      if (entry.value.previews.remove(id)) {
+        _rememberFilesFor(entry.key);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  void keepPreview(String id) {
+    if (_keepPreview(id)) _layoutChanged();
   }
 
   void activate(String id) {
@@ -428,7 +484,7 @@ class Workspace extends ChangeNotifier {
   // ---- editor groups ----
   AssistantPanelState _loadAssistantPanel() {
     final value = _viewForKey('').tabLayout['assistant_width'];
-    return AssistantPanelState(width: value is num && value.isFinite ? value.toDouble().clamp(320.0, 800.0) : 420);
+    return AssistantPanelState(width: value is num && value.isFinite ? value.toDouble().clamp(260.0, 900.0) : 420);
   }
   void showAssistantPanel() {
     assistantPanel.visible = true;
@@ -457,7 +513,7 @@ class Workspace extends ChangeNotifier {
   }
   void setAssistantWidth(double width) {
     if (!width.isFinite) return;
-    final next = width.clamp(320.0, 800.0);
+    final next = width.clamp(260.0, 900.0);
     if (assistantPanel.width == next) return;
     assistantPanel.width = next;
     _geometryChanged(key: '');
@@ -560,7 +616,7 @@ class Workspace extends ChangeNotifier {
     final i = g.tabs.indexOf(id);
     moveTab(id, g.id, index: (i + (delta > 0 ? 2 : -1)).clamp(0, g.tabs.length));
   }
-  void pinTab(String id) { if (tab(id)?.isEditor != true) return; tabLayout.togglePin(id); _layoutChanged(); }
+  void pinTab(String id) { if (tab(id)?.isEditor != true) return; _keepPreview(id); tabLayout.togglePin(id); _layoutChanged(); }
   void setTabPlacement(TabPlacement placement) { tabLayout.placement = placement; _layoutChanged(); }
   void setSideWidth(double width) {
     if (!width.isFinite) return;
@@ -854,13 +910,15 @@ class Workspace extends ChangeNotifier {
   void _rememberFilesFor(String key, {WorkspacePath? removed}) {
     _geometryDirty.remove(key);
     final view = _viewForKey(key);
-    final files = [for (final t in _tabsFor(key)) if (t.file != null) t.file!];
+    final layout = _layoutFor(key);
+    final files = [for (final t in _tabsFor(key)) if (t.file != null && !layout.previews.contains(t.id)) t.file!];
     // Other service tabs can open before the file feature restores saved
     // files. Keep those references instead of silently replacing them by [].
     final next = _restored.contains(key) ? files : {...view.files, ...files}.toList();
     if (removed != null) next.remove(removed);
-    final layout = _layoutFor(key);
-    final activeFile = tab(layout.current.active ?? '')?.file;
+    final activeFile = layout.previews.contains(layout.current.active)
+      ? (next.contains(view.activeFile) ? view.activeFile : null)
+      : tab(layout.current.active ?? '')?.file;
     final allowed = {for (final file in next) 'file:${file.root}:${file.path}'};
     final defaults = layout.groups.length == 1 && layout.placement == TabPlacement.top && layout.sideWidth == 300 && layout.tabsWidth == 180 && layout.tabWidth == 160 && !layout.pinned.any(allowed.contains);
     final panelHeight = key.isEmpty ? terminalPanel.height : TerminalPanelState.defaultHeight;
@@ -966,6 +1024,8 @@ class Workspace extends ChangeNotifier {
     filesRevision.dispose();
     fileClipboard.dispose();
     focusSearch.dispose();
+    searchQuery.dispose();
+    submitSearch.dispose();
     _development?.dispose();
     _debugger?.dispose();
     _tasks?.dispose();

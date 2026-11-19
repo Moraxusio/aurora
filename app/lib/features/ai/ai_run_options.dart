@@ -1,354 +1,560 @@
-import 'dart:convert';
-
 import 'package:aurora/ui/aurora_ui.dart';
-import 'package:aurora_wire/aurora_wire.dart';
+import 'package:aurora_profile/aurora_profile.dart';
+import 'package:flutter/services.dart';
 
-import '../../theme/ide_theme.dart';
 import 'ai_visuals.dart';
 
-/// A composer draft. Run overrides are consumed only by a successful send.
+/// Conversation-level send & execution policy settings.
 class AiSendSettings {
   final String agent, permission, delivery;
-  final Map<String, dynamic> options;
+  final AiSessionPolicy policy;
   const AiSendSettings({
     required this.agent,
     required this.permission,
     required this.delivery,
-    this.options = const {},
+    required this.policy,
   });
 }
 
-Future<AiSendSettings?> showAiRunOptions(
+Future<AiSendSettings?> showAiSessionPolicyDialog(
   BuildContext context, {
-  required Link link,
-  required String root,
-  required String workdir,
   required AiSendSettings initial,
+  required AiSessionPolicy defaultPolicy,
   required bool running,
   bool child = false,
 }) => showWorkbenchDialog<AiSendSettings>(
   context: context,
-  builder: (_) => _RunOptions(
-    link: link,
-    root: root,
-    workdir: workdir,
+  builder: (_) => _SessionPolicyDialog(
     initial: initial,
+    defaultPolicy: defaultPolicy,
     running: running,
     child: child,
   ),
 );
 
-class _RunOptions extends StatefulWidget {
-  final Link link;
-  final String root, workdir;
+/// Reusable editor for `AiSessionPolicy` (used in Settings default policy and per-conversation policy).
+class AiSessionPolicyEditor extends StatelessWidget {
+  final AiSessionPolicy policy;
+  final bool child;
+  final int epoch;
+  final VoidCallback onChanged;
+
+  const AiSessionPolicyEditor({
+    super.key,
+    required this.policy,
+    required this.onChanged,
+    this.child = false,
+    this.epoch = 0,
+  });
+
+  Widget _intField(
+    String keyName,
+    String label,
+    String help,
+    int value,
+    int min,
+    int max,
+    ValueChanged<int> apply,
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: TextFormField(
+      key: ValueKey('ai-policy-$keyName-$epoch'),
+      initialValue: '$value',
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: help,
+        helperMaxLines: 2,
+      ),
+      validator: (text) {
+        final n = int.tryParse(text ?? '');
+        return n == null || n < min || n > max ? '请输入 $min–$max 之间的整数' : null;
+      },
+      onChanged: (text) {
+        final n = int.tryParse(text);
+        if (n != null && n >= min && n <= max) {
+          apply(n);
+          onChanged();
+        }
+      },
+    ),
+  );
+
+  Widget _doubleField(
+    String keyName,
+    String label,
+    String help,
+    double value,
+    double max,
+    ValueChanged<double> apply,
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: TextFormField(
+      key: ValueKey('ai-policy-$keyName-$epoch'),
+      initialValue: '$value',
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: help,
+        helperMaxLines: 2,
+      ),
+      validator: (text) {
+        final n = double.tryParse(text ?? '');
+        return n == null || !n.isFinite || n < 0 || n > max
+            ? '请输入 0–$max 之间的数值'
+            : null;
+      },
+      onChanged: (text) {
+        final n = double.tryParse(text);
+        if (n != null && n.isFinite && n >= 0 && n <= max) {
+          apply(n);
+          onChanged();
+        }
+      },
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const AiSectionHeading(
+          icon: Icons.speed_outlined,
+          title: '运行预算',
+          subtitle: '每条独立任务使用一份预算（含子代理、标题与摘要）；0 表示不限该项。',
+        ),
+        SwitchListTile(
+          key: ValueKey('ai-policy-budget-enabled-$epoch'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('启用运行预算上限'),
+          value: policy.budgetEnabled,
+          onChanged: (v) {
+            policy.budgetEnabled = v;
+            onChanged();
+          },
+        ),
+        if (policy.budgetEnabled) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              ActionChip(
+                label: const Text('标准预算'),
+                onPressed: () {
+                  policy.budgetSteps = 60;
+                  policy.budgetSeconds = 900;
+                  policy.budgetTokens = 500000;
+                  policy.budgetOutputBytes = 2097152;
+                  policy.budgetCost = 0;
+                  onChanged();
+                },
+              ),
+              ActionChip(
+                label: const Text('长任务预算'),
+                onPressed: () {
+                  policy.budgetSteps = 200;
+                  policy.budgetSeconds = 7200;
+                  policy.budgetTokens = 5000000;
+                  policy.budgetOutputBytes = 8388608;
+                  policy.budgetCost = 0;
+                  onChanged();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _intField(
+            'tokens',
+            '累计 Token 上限',
+            '输入、输出、缓存与思考总计上限。',
+            policy.budgetTokens,
+            0,
+            1000000000,
+            (v) => policy.budgetTokens = v,
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _intField(
+                  'steps',
+                  '模型调用步数',
+                  '每步可包含多个工具调用',
+                  policy.budgetSteps,
+                  0,
+                  10000,
+                  (v) => policy.budgetSteps = v,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _intField(
+                  'seconds',
+                  '运行时间（秒）',
+                  '含模型响应与命令执行',
+                  policy.budgetSeconds,
+                  0,
+                  604800,
+                  (v) => policy.budgetSeconds = v,
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _intField(
+                  'outputBytes',
+                  '模型输出（字节）',
+                  '模型返回内容总字节',
+                  policy.budgetOutputBytes,
+                  0,
+                  1073741824,
+                  (v) => policy.budgetOutputBytes = v,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _doubleField(
+                  'cost',
+                  '估算金额（USD）',
+                  '0 表示不限金额',
+                  policy.budgetCost,
+                  1000000,
+                  (v) => policy.budgetCost = v,
+                ),
+              ),
+            ],
+          ),
+        ],
+        const AiSectionHeading(
+          icon: Icons.account_tree_outlined,
+          title: '子代理协作',
+          subtitle: '子代理共享当前任务预算，始终禁止继续派生子代理。',
+        ),
+        if (child)
+          const Text('当前为子会话，不能再创建子代理。')
+        else ...[
+          SwitchListTile(
+            key: ValueKey('ai-policy-subagents-$epoch'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('允许主代理创建子代理'),
+            value: policy.subagentsEnabled,
+            onChanged: (v) {
+              policy.subagentsEnabled = v;
+              onChanged();
+            },
+          ),
+          if (policy.subagentsEnabled) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _intField(
+                    'maxParallel',
+                    '并发子代理数 (1–16)',
+                    '1 为顺序执行',
+                    policy.subagentsMaxParallel,
+                    1,
+                    16,
+                    (v) => policy.subagentsMaxParallel = v,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _intField(
+                    'maxTotal',
+                    '单次任务总量',
+                    '0 表示不限',
+                    policy.subagentsMaxTotal,
+                    0,
+                    1000,
+                    (v) => policy.subagentsMaxTotal = v,
+                  ),
+                ),
+              ],
+            ),
+            DropdownButtonFormField<String>(
+              key: ValueKey(
+                'ai-policy-subagent-perm-${policy.subagentsPermissionMode}-$epoch',
+              ),
+              initialValue:
+                  const {
+                    '',
+                    'ask',
+                    'readOnly',
+                    'auto',
+                    'full_access',
+                  }.contains(policy.subagentsPermissionMode)
+                  ? policy.subagentsPermissionMode
+                  : '',
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '子代理默认权限策略'),
+              items: const [
+                DropdownMenuItem(
+                  value: '',
+                  child: Text('继承主会话 / 乐手 Persona 权限'),
+                ),
+                DropdownMenuItem(value: 'ask', child: Text('先询问 · 修改与命令需确认')),
+                DropdownMenuItem(
+                  value: 'readOnly',
+                  child: Text('仅只读 · 强制降级为探索子代理'),
+                ),
+                DropdownMenuItem(value: 'auto', child: Text('自动执行 · 高风险仍确认')),
+                DropdownMenuItem(
+                  value: 'full_access',
+                  child: Text('完全权限 · 免确认放行'),
+                ),
+              ],
+              onChanged: (v) {
+                policy.subagentsPermissionMode = v ?? '';
+                onChanged();
+              },
+            ),
+            const SizedBox(height: 6),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('子代理仅允许只读探索'),
+              value: policy.subagentsReadOnly,
+              onChanged: (v) {
+                policy.subagentsReadOnly = v;
+                onChanged();
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('允许子代理访问外部网络'),
+              value: policy.subagentsAllowNetwork,
+              onChanged: (v) {
+                policy.subagentsAllowNetwork = v;
+                onChanged();
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('允许子代理执行 Shell 命令'),
+              value: policy.subagentsAllowShell,
+              onChanged: (v) {
+                policy.subagentsAllowShell = v;
+                onChanged();
+              },
+            ),
+          ],
+        ],
+        const AiSectionHeading(
+          icon: Icons.build_circle_outlined,
+          title: '工具边界与自动处理',
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: _intField(
+                'maxCallsPerStep',
+                '单步最大工具调用数',
+                '默认 64',
+                policy.toolMaxCallsPerStep,
+                1,
+                256,
+                (v) => policy.toolMaxCallsPerStep = v,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _intField(
+                'repeatLimit',
+                '重复调用告警阈值',
+                '默认 3',
+                policy.toolRepeatLimit,
+                1,
+                32,
+                (v) => policy.toolRepeatLimit = v,
+              ),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: _intField(
+                'shellDefaultSeconds',
+                '命令默认超时（秒）',
+                '默认 120',
+                policy.shellDefaultSeconds,
+                1,
+                3600,
+                (v) => policy.shellDefaultSeconds = v,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _intField(
+                'shellMaxSeconds',
+                '命令最大超时（秒）',
+                '默认 600',
+                policy.shellMaxSeconds,
+                1,
+                3600,
+                (v) => policy.shellMaxSeconds = v,
+              ),
+            ),
+          ],
+        ),
+        SwitchListTile(
+          key: ValueKey('ai-policy-auto-title-$epoch'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('自动生成会话标题'),
+          value: policy.autoTitle,
+          onChanged: (v) {
+            policy.autoTitle = v;
+            onChanged();
+          },
+        ),
+        SwitchListTile(
+          key: ValueKey('ai-policy-auto-compact-$epoch'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('自动压缩上下文'),
+          value: policy.autoCompact,
+          onChanged: (v) {
+            policy.autoCompact = v;
+            onChanged();
+          },
+        ),
+        SwitchListTile(
+          key: ValueKey('ai-policy-snapshots-$epoch'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('修改前创建文件快照'),
+          value: policy.snapshots,
+          onChanged: (v) {
+            policy.snapshots = v;
+            onChanged();
+          },
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          key: ValueKey('ai-policy-instructions-$epoch'),
+          initialValue: policy.instructions.join('\n'),
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: '对话附加指令（每行一条，可选）',
+            hintText: '例如：优先运行单元测试、保持中文回复…',
+          ),
+          onChanged: (v) {
+            policy.instructions = v
+                .split(RegExp(r'\r?\n'))
+                .map((e) => e.trim())
+                .where((e) => e.isNotEmpty)
+                .toList();
+            onChanged();
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _SessionPolicyDialog extends StatefulWidget {
   final AiSendSettings initial;
+  final AiSessionPolicy defaultPolicy;
   final bool running, child;
-  const _RunOptions({
-    required this.link,
-    required this.root,
-    required this.workdir,
+  const _SessionPolicyDialog({
     required this.initial,
+    required this.defaultPolicy,
     required this.running,
     required this.child,
   });
   @override
-  State<_RunOptions> createState() => _RunOptionsState();
+  State<_SessionPolicyDialog> createState() => _SessionPolicyDialogState();
 }
 
-class _RunOptionsState extends State<_RunOptions> {
+class _SessionPolicyDialogState extends State<_SessionPolicyDialog> {
   final _form = GlobalKey<FormState>();
   late String _agent = widget.initial.agent;
   late String _permission = widget.initial.permission;
   late String _delivery = widget.initial.delivery;
-  late Map<String, dynamic> _options = (jsonDecode(
-    jsonEncode(widget.initial.options),
-  ) as Map).cast<String, dynamic>();
-  Map<String, dynamic>? _defaults;
-  String? _error;
-  bool _loading = false;
+  late AiSessionPolicy _policy = widget.initial.policy.copy();
   int _epoch = 0;
-  bool get _supported => widget.link.server.caps.contains('ai.run.options');
-  bool get _steering => widget.running && _delivery == 'steer';
-  bool get _editable => _supported && !_steering && _defaults != null;
-  String get _budgetMode => _options['budgetMode'] as String? ?? 'inherit';
-
-  @override
-  void initState() {
-    super.initState();
-    if (_supported) _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final data = await widget.link.call('ai.run.options', {
-        'root': widget.root,
-        'workdir': widget.workdir,
-      });
-      if (mounted)
-        setState(() => _defaults = (data as Map).cast<String, dynamic>());
-    } on Object catch (e) {
-      if (mounted) setState(() => _error = '$e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Widget _choice(
-    String key,
-    String label,
-    String value,
-    Map<String, String> choices,
-    ValueChanged<String>? changed, {
-    String? help,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: DropdownButtonFormField<String>(
-      key: ValueKey('ai-send-$key-$_epoch'),
-      initialValue: value,
-      isExpanded: true,
-      style: TextStyle(
-        fontFamily: Ide.ui,
-        fontFamilyFallback: Ide.uiFallback,
-        fontSize: 13,
-        fontWeight: FontWeight.normal,
-        color: Ide.of(context).text,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        helperText: help,
-        helperMaxLines: 3,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 14,
-        ),
-        labelStyle: TextStyle(fontSize: 12, color: Ide.of(context).textDim),
-        floatingLabelStyle: TextStyle(
-          fontSize: 12,
-          color: Ide.of(context).textDim,
-        ),
-      ),
-      items: [
-        for (final e in choices.entries)
-          DropdownMenuItem(
-            value: e.key,
-            child: Text(e.value, overflow: TextOverflow.ellipsis),
-          ),
-      ],
-      onChanged: changed == null
-          ? null
-          : (v) {
-              if (v != null) setState(() => changed(v));
-            },
-    ),
-  );
-
-  Widget _toggle(String key, String label, bool defaultValue, {String? help}) =>
-      _choice(
-        key,
-        label,
-        _options[key] == null ? 'inherit' : '${_options[key]}',
-        {
-          'inherit': '使用项目设置 · ${defaultValue ? '开启' : '关闭'}',
-          'true': '本次开启',
-          'false': '本次关闭',
-        },
-        _editable
-            ? (v) {
-                if (v == 'inherit') {
-                  _options.remove(key);
-                } else {
-                  _options[key] = v == 'true';
-                }
-              }
-            : null,
-        help: help,
-      );
-
-  Widget _limit(String key, String label, num max, {bool decimal = false}) {
-    final limits = _options['budget'] as Map;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextFormField(
-        key: ValueKey('ai-send-limit-$key-$_epoch'),
-        enabled: _editable,
-        initialValue: '${limits[key] ?? 0}',
-        decoration: InputDecoration(labelText: label, helperText: '0 表示不限'),
-        keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-        validator: (v) {
-          if (!_editable || _budgetMode != 'custom') return null;
-          final n = decimal ? double.tryParse(v ?? '') : int.tryParse(v ?? '');
-          return n == null || !n.isFinite || n < 0 || n > max
-              ? '请输入 0–$max 的${decimal ? '数值' : '整数'}'
-              : null;
-        },
-        onChanged: (v) =>
-            limits[key] = (decimal ? double.tryParse(v) : int.tryParse(v)) ?? v,
-      ),
-    );
-  }
-
-  void _apply() {
-    if (!(_form.currentState?.validate() ?? false)) return;
-    if (_options['budgetMode'] != 'custom') _options.remove('budget');
-    if (_options['budgetMode'] == 'inherit') _options.remove('budgetMode');
-    if (_options['maxParallel'] == 0) _options.remove('maxParallel');
-    Navigator.pop(
-      context,
-      AiSendSettings(
-        agent: _agent,
-        permission: _permission,
-        delivery: _delivery,
-        options: _options,
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('本次发送'),
+    title: const Text('此对话的执行策略'),
     content: SizedBox(
-      width: 540,
+      width: 560,
       child: SingleChildScrollView(
         child: Form(
           key: _form,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('${widget.root}:${widget.workdir}'),
-              const SizedBox(height: 8),
-              const Text('模式与权限保留在当前对话；下面的运行覆盖仅用于这条消息，发送成功后恢复项目设置。'),
-              const SizedBox(height: 20),
-              _choice(
-                'agent',
-                '工作模式',
-                _agent,
-                {
-                  if (_agent == 'explore') 'explore': '探索 · 只读',
-                  'build': '构建 · 可修改文件',
-                  'plan': '规划 · 只读',
-                },
-                widget.child && _agent == 'explore' ? null : (v) => _agent = v,
+              const Text(
+                '按当前对话生效；新对话默认继承「AI 设置 → 对话与编排」中的全局配置。',
+                style: TextStyle(fontSize: 12),
               ),
-              _choice(
-                'permission',
-                '执行权限',
-                _permission,
-                {'ask': '先询问', 'auto': '自动执行'},
-                (v) => _permission = v,
-                help: '按模型工具开关与权限规则执行；高风险命令仍需确认。',
-              ),
-              if (widget.running)
-                _choice('delivery', '发送方式', _delivery, {
-                  'steer': '补充指令 · 插入当前任务',
-                  'queue': '排队发送 · 当前任务结束后',
-                }, (v) => _delivery = v),
-              if (_steering)
-                const Notice(
-                  tone: Tone.info,
-                  title: '沿用当前任务设置',
-                  body: '补充指令共用当前预算。暂存的运行覆盖仅在排队或空闲后发送时使用。',
-                ),
-              if (!_supported)
-                const Notice(
-                  tone: Tone.info,
-                  title: '需要更新 agent',
-                  body: '当前 agent 支持模式与权限；逐条消息的运行覆盖需要新版 agent。',
-                ),
-              if (_loading) const LinearProgressIndicator(),
-              if (_error != null)
-                Notice(
-                  tone: Tone.error,
-                  title: '未能读取项目策略',
-                  body: _error,
-                  action: TextButton(
-                    onPressed: _loading ? null : _load,
-                    child: const Text('重试'),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                key: ValueKey('ai-send-agent-$_epoch'),
+                initialValue: _agent,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '工作模式'),
+                items: [
+                  if (_agent == 'explore')
+                    const DropdownMenuItem(
+                      value: 'explore',
+                      child: Text('探索 · 只读'),
+                    ),
+                  const DropdownMenuItem(
+                    value: 'build',
+                    child: Text('构建 · 可修改文件'),
                   ),
-                ),
-              if (_supported) ...[
-                const AiSectionHeading(
-                  icon: Icons.speed_outlined,
-                  title: '运行预算',
-                  subtitle: '含主代理、子代理、标题与摘要。关闭限制仍保留用量统计。',
-                ),
-                _choice(
-                  'budget',
-                  '本条消息的预算',
-                  _budgetMode,
-                  {
-                    'inherit':
-                        '使用项目设置 · ${_defaults?['budgetEnabled'] == false ? '关闭' : '开启'}',
-                    'on': '开启 · 使用项目限额',
-                    'off': '关闭 · 不限制本次运行',
-                    'custom': '自定义本次限额',
-                  },
-                  _editable
-                      ? (v) {
-                          _options['budgetMode'] = v;
-                          if (v == 'custom') {
-                            _options['budget'] ??= Map<String, dynamic>.from(
-                              _defaults!['budget'] as Map,
-                            );
-                          }
-                        }
-                      : null,
-                ),
-                if (_budgetMode == 'custom') ...[
-                  _limit('tokens', '累计 Token 上限', 1000000000),
-                  _limit('steps', '模型调用步数', 10000),
-                  _limit('seconds', '运行时间（秒）', 604800),
-                  _limit('outputBytes', '模型输出（字节）', 1073741824),
-                  _limit('cost', '估算金额（USD）', 1000000, decimal: true),
-                ],
-                const AiSectionHeading(
-                  icon: Icons.account_tree_outlined,
-                  title: '代理协作',
-                  subtitle: '子代理共享当前任务预算，始终禁止继续创建子代理。',
-                ),
-                if (widget.child)
-                  const Text('这是子会话，不能派生新的子代理。')
-                else ...[
-                  _toggle(
-                    'subagents',
-                    '允许主代理创建子代理',
-                    (_defaults?['subagents'] as Map?)?['enabled'] != false,
-                  ),
-                  _choice(
-                    'parallel',
-                    '同时运行的子代理数',
-                    '${_options['maxParallel'] ?? 0}',
-                    {
-                      '0':
-                          '使用项目设置 · ${(_defaults?['subagents'] as Map?)?['maxParallel'] ?? 1} 个',
-                      for (var i = 1; i <= 16; i++) '$i': '$i 个',
-                    },
-                    _editable
-                        ? (v) {
-                            _options['maxParallel'] = int.parse(v);
-                          }
-                        : null,
-                    help: '独立子任务可并发；总量与只读策略由项目设置控制。',
+                  const DropdownMenuItem(value: 'plan', child: Text('规划 · 只读')),
+                  const DropdownMenuItem(
+                    value: 'orchestrator',
+                    child: Text('编排 · 指挥调度乐手'),
                   ),
                 ],
-                const AiSectionHeading(
-                  icon: Icons.auto_awesome_outlined,
-                  title: '自动处理',
-                ),
-                _toggle(
-                  'autoCompact',
-                  '自动压缩上下文',
-                  _defaults?['autoCompact'] != false,
-                ),
-                _toggle(
-                  'snapshots',
-                  '修改前创建文件快照',
-                  _defaults?['snapshots'] != false,
+                onChanged: widget.child && _agent == 'explore'
+                    ? null
+                    : (v) => setState(() => _agent = v!),
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                key: ValueKey('ai-send-permission-$_epoch'),
+                initialValue: _permission,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '执行权限'),
+                items: const [
+                  DropdownMenuItem(value: 'ask', child: Text('先询问')),
+                  DropdownMenuItem(value: 'auto', child: Text('自动执行')),
+                  DropdownMenuItem(value: 'full_access', child: Text('完全权限')),
+                ],
+                onChanged: (v) => setState(() => _permission = v!),
+              ),
+              if (widget.running) ...[
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  key: ValueKey('ai-send-delivery-$_epoch'),
+                  initialValue: _delivery,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: '发送方式'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'steer',
+                      child: Text('补充指令 · 插入当前任务'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'queue',
+                      child: Text('排队发送 · 当前任务结束后'),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => _delivery = v!),
                 ),
               ],
+              const SizedBox(height: 12),
+              AiSessionPolicyEditor(
+                policy: _policy,
+                child: widget.child,
+                epoch: _epoch,
+                onChanged: () => setState(() {}),
+              ),
             ],
           ),
         ),
@@ -357,10 +563,10 @@ class _RunOptionsState extends State<_RunOptions> {
     actions: [
       TextButton(
         onPressed: () => setState(() {
-          _options = {};
+          _policy = widget.defaultPolicy.copy();
           _epoch++;
         }),
-        child: const Text('恢复项目设置'),
+        child: const Text('恢复默认策略'),
       ),
       TextButton(
         onPressed: () => Navigator.pop(context),
@@ -368,8 +574,19 @@ class _RunOptionsState extends State<_RunOptions> {
       ),
       FilledButton(
         key: const ValueKey('ai-send-options-apply'),
-        onPressed: _apply,
-        child: const Text('应用到输入框'),
+        onPressed: () {
+          if (_form.currentState?.validate() != true) return;
+          Navigator.pop(
+            context,
+            AiSendSettings(
+              agent: _agent,
+              permission: _permission,
+              delivery: _delivery,
+              policy: _policy,
+            ),
+          );
+        },
+        child: const Text('应用到本对话'),
       ),
     ],
   );

@@ -220,7 +220,7 @@ func TestAdmissionPersistenceFailureRetainsInputs(t *testing.T) {
 
 func TestSessionGrantCanBeRevokedAndExplicitDenyWinsInPlan(t *testing.T) {
 	g := NewPermissionGate()
-	g.allowedKeys["s\x00shell\x00npm *"] = true
+	g.allowedKeys["s\x00shell\x00npm *"] = 0
 	if len(g.SessionGrants("s", "", "", false)) != 1 {
 		t.Fatal("grant missing")
 	}
@@ -230,5 +230,122 @@ func TestSessionGrantCanBeRevokedAndExplicitDenyWinsInPlan(t *testing.T) {
 	}
 	if effect, _ := g.EvaluateWithRules("s", "plan", "auto", "shell", "git push origin", []PermissionRule{{Action: "shell", Resource: "git push *", Effect: "deny"}}); effect != "deny" {
 		t.Fatal("plan softened explicit deny")
+	}
+}
+
+func TestPermissionAgentRolesNetworkAndLifecycle(t *testing.T) {
+	g := NewPermissionGate()
+	rules := []PermissionRule{
+		{Action: "network", Resource: "*", Effect: "deny", Agent: "subagent"},
+		{Action: "webfetch", Resource: "https://docs.example.com/*", Effect: "allow", Agent: "primary"},
+		{Action: "shell", Resource: "npm test *", Effect: "allow", Agent: "primary", ExpiresAt: time.Now().Add(-time.Minute).UnixMilli()},
+		{Action: "edit", Resource: "src/*", Effect: "deny", Agent: "general", Disabled: true},
+	}
+
+	// Primary agent allowed on matching webfetch URL; subagent denied on network.
+	if eff, _ := g.EvaluateWithContext("s1", "build", false, "ask", "webfetch", "https://docs.example.com/guide", rules); eff != "allow" {
+		t.Fatalf("primary webfetch = %q want allow", eff)
+	}
+	if eff, _ := g.EvaluateWithContext("s1", "general", true, "auto", "webfetch", "https://docs.example.com/guide", rules); eff != "deny" {
+		t.Fatalf("subagent webfetch = %q want deny", eff)
+	}
+
+	// Expired rule does not apply (falls back to ask).
+	if eff, _ := g.EvaluateWithContext("s1", "build", false, "ask", "shell", "npm test --all", rules); eff != "ask" {
+		t.Fatalf("expired shell rule = %q want ask", eff)
+	}
+
+	// Disabled rule does not apply.
+	if eff, _ := g.EvaluateWithContext("s1", "general", true, "auto", "edit", "src/a.go", rules); eff != "allow" {
+		t.Fatalf("disabled rule = %q want allow", eff)
+	}
+
+	// Default ask mode asks for webfetch and remembers host scope on Always.
+	if eff, reason := g.EvaluateWithContext("s2", "build", false, "ask", "webfetch", "https://api.example.org/v1", nil); eff != "ask" || PermissionReasonCode(reason) != "network_access" {
+		t.Fatalf("default webfetch = (%q, %q)", eff, reason)
+	}
+	if got := AlwaysAllowScope("webfetch", "https://api.example.org/v1"); got != "https://api.example.org/*" {
+		t.Fatalf("webfetch AlwaysAllowScope = %q", got)
+	}
+
+	// TTL grant expires and revoke-all clears session grants.
+	g.allowedKeys["s2\x00shell\x00git *"] = time.Now().Add(time.Hour).UnixMilli()
+	g.allowedKeys["s2\x00read\x00*"] = time.Now().Add(-time.Second).UnixMilli()
+	grants := g.SessionGrants("s2", "", "", false)
+	if len(grants) != 1 || grants[0].Resource != "git *" || grants[0].ExpiresAt == 0 {
+		t.Fatalf("unexpected grants: %+v", grants)
+	}
+	if left := g.SessionGrants("s2", "*", "*", true); len(left) != 0 {
+		t.Fatalf("expected all grants revoked, got %+v", left)
+	}
+
+	// Full Access mode bypasses ask prompts for sensitive files, high-risk shell, and network,
+	// while still honoring explicit deny rules, plan/explore read-only guards, and doom_loop.
+	if eff, _ := g.EvaluateWithContext("s3", "build", false, "full_access", "read", ".env", nil); eff != "allow" {
+		t.Fatalf("full_access .env = %q want allow", eff)
+	}
+	if eff, _ := g.EvaluateWithContext("s3", "build", false, "full_access", "shell", "rm -rf /tmp/test", nil); eff != "allow" {
+		t.Fatalf("full_access high-risk shell = %q want allow", eff)
+	}
+	if eff, _ := g.EvaluateWithContext("s3", "build", false, "full_access", "webfetch", "https://example.com", nil); eff != "allow" {
+		t.Fatalf("full_access webfetch = %q want allow", eff)
+	}
+	if eff, _ := g.EvaluateWithContext("s3", "build", false, "full_access", "shell", "git push origin main", []PermissionRule{{Action: "shell", Resource: "git push *", Effect: "deny"}}); eff != "deny" {
+		t.Fatalf("full_access explicit deny = %q want deny", eff)
+	}
+	if eff, _ := g.EvaluateWithContext("s3", "plan", false, "full_access", "edit", "a.go", nil); eff != "deny" {
+		t.Fatalf("full_access plan edit = %q want deny", eff)
+	}
+	if eff, _ := g.EvaluateWithContext("s3", "build", false, "full_access", "doom_loop", "read x", nil); eff != "ask" {
+		t.Fatalf("full_access doom_loop = %q want ask", eff)
+	}
+
+	// Switching to full_access immediately resolves pending non-doom_loop prompts.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	askErr := make(chan error, 1)
+	go func() {
+		askErr <- g.Ask(ctx, PermissionQuestion{
+			ID:        "perm_live_1",
+			SessionID: "s_live",
+			Action:    "shell",
+			Resource:  "echo hi",
+		}, nil)
+	}()
+	// Wait briefly until Ask registers the pending question.
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if ids := g.ResolveSessionPending("s_live", "build", false, "full_access", nil); len(ids) == 1 && ids[0] == "perm_live_1" {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := <-askErr; err != nil {
+		t.Fatalf("pending Ask after full_access switch failed: %v", err)
+	}
+}
+
+func TestResolveSessionPendingAppliesChangedRulesOnlyToTargetSession(t *testing.T) {
+	g := NewPermissionGate()
+	queue := func(id, session, action, resource string) chan PermissionDecision {
+		ch := make(chan PermissionDecision, 1)
+		g.pending[id] = &pendingPermission{question: PermissionQuestion{
+			ID: id, SessionID: session, Action: action, Resource: resource,
+		}, ch: ch}
+		return ch
+	}
+	allow := queue("allow", "parent", "write", "notes.md")
+	deny := queue("deny", "parent", "write", "locked.md")
+	ask := queue("ask", "parent", "write", "draft.md")
+	child := queue("child", "child", "write", "notes.md")
+	ids := g.ResolveSessionPending("parent", "build", false, "ask", []PermissionRule{
+		{Action: "write", Resource: "notes.md", Effect: "allow"},
+		{Action: "write", Resource: "locked.md", Effect: "deny"},
+	})
+	if len(ids) != 2 || len(allow) != 1 || len(deny) != 1 || len(ask) != 0 || len(child) != 0 {
+		t.Fatalf("wrong pending resolutions: %v", ids)
+	}
+	if !(<-allow).Allow || (<-deny).Allow {
+		t.Fatal("rule changes must authorize or reject as specified")
 	}
 }

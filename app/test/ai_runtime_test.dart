@@ -472,6 +472,21 @@ void main() {
       await openTask(t, 'child-1:child-shell');
       await t.pump();
       expect(find.text('synthetic live output'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('ai-work-tab-child-1:child-shell')),
+        findsOneWidget,
+      );
+      await t.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('ai-work-tab-child-1:child-shell')),
+          matching: find.byIcon(Icons.close_rounded),
+        ),
+      );
+      await t.pump();
+      expect(
+        find.byKey(const ValueKey('ai-work-tab-child-1:child-shell')),
+        findsNothing,
+      );
       await t.pumpWidget(const SizedBox());
     },
   );

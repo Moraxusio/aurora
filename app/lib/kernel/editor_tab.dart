@@ -41,7 +41,10 @@ class EditorTab {
   /// Set by editors; the tab may already be open when it is called.
   void Function(int line, int col)? reveal;
 
-  EditorTab({required this.id, required this.title, required this.icon, required this.builder, this.iconColor, this.tooltip, this.file, this.taskKey, TabArea? area})
+  /// Invoked when the user clicks the tab status text in the status bar (e.g. Go to Line).
+  VoidCallback? onStatusTap;
+
+  EditorTab({required this.id, required this.title, required this.icon, required this.builder, this.iconColor, this.tooltip, this.file, this.taskKey, this.confirmClose, TabArea? area})
     : area = area ?? (id.startsWith('term:') ? TabArea.terminal : id.startsWith('ai:') ? TabArea.assistant : TabArea.editor);
 
   void dispose() {

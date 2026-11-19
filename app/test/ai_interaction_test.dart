@@ -265,7 +265,7 @@ void main() {
     (t) async {
       await settings(t);
       await provider(t, 'a', '连接 B');
-      await page(t, 'models');
+      await page(t, 'connection');
       await t.enterText(
         find.byKey(const ValueKey('ai-model-id')),
         'model-b-edited',
@@ -303,7 +303,7 @@ void main() {
     (t) async {
       link.catalog = Completer<Object?>();
       await settings(t);
-      await page(t, 'models');
+      await page(t, 'connection');
       await t.tap(find.byKey(const ValueKey('ai-fetch-models')));
       await t.pump();
       await provider(t, 'a', '连接 B');
@@ -325,38 +325,26 @@ void main() {
   );
 
   testWidgets(
-    'browsing model picker then cancel changes neither default nor session',
+    'browsing persona picker then cancel changes neither default nor session',
     (t) async {
-      AiModelSelection? result;
+      String? result;
       await pump(
         t,
         Builder(
           builder: (ctx) => TextButton(
             onPressed: () async {
-              result = await showAiModelPicker(
-                ctx,
-                ws,
-                initialProviderId: 'a',
-                initialModel: 'model-a',
-              );
+              result = await showAiPersonaPicker(ctx, ws);
             },
-            child: const Text('模型'),
+            child: const Text('人设'),
           ),
         ),
       );
-      await t.tap(find.text('模型'));
+      await t.tap(find.text('人设'));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(const ValueKey('ai-picker-provider-a')));
-      await t.pumpAndSettle();
-      await t.tap(find.text('连接 B'));
-      await t.pumpAndSettle();
-      await t.ensureVisible(find.text('high'));
-      await t.tap(find.text('high'));
       await t.tap(find.byTooltip('关闭'));
       await t.pumpAndSettle();
       expect(result, isNull);
       expect(app.profile.ai.selectedProviderId, 'a');
-      expect(app.profile.ai.providers.last.reasoningEffort, isEmpty);
     },
   );
 
@@ -376,7 +364,20 @@ void main() {
       await t.tap(find.byKey(const ValueKey('ai-send-btn')));
       await frames(t);
       expect(link.rpcCalls.where((x) => x.$1 == 'ai.run'), isEmpty);
-      expect(find.textContaining('规划 · 询问'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('ai-mode-pill')),
+          matching: find.text('规划'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('ai-perm-pill')),
+          matching: find.text('询问'),
+        ),
+        findsOneWidget,
+      );
       expect(t.takeException(), isNull);
       await snapshot(t, 'conversation-narrow-dark');
     },
@@ -459,32 +460,45 @@ void main() {
   );
 
   testWidgets(
-    'model search filters immediately and applies only to this conversation',
+    'persona search filters immediately and applies only to this conversation',
     (t) async {
+      await app.update((p) {
+        p.ai.personas = [
+          AiPersona(id: 'pa', name: '人设 A', providerId: 'a', model: 'model-a'),
+          AiPersona(id: 'pb', name: '人设 New', providerId: 'a', model: 'model-new'),
+        ];
+        p.ai.activePersonaId = 'pa';
+      });
       await pump(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
       await t.tap(find.byKey(const ValueKey('ai-model-btn')));
       await frames(t);
-      final filter = find.byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.hintText == '搜索模型，或直接输入模型 ID',
-      );
+      final filter = find.byKey(const ValueKey('ai-picker-search'));
       await t.enterText(filter, 'model-new');
       await frames(t);
-      expect(find.text('model-a'), findsNothing);
-      await t.tap(find.text('model-new', findRichText: false).last);
+      expect(find.text('人设 A'), findsNothing);
+      await t.tap(find.byKey(const ValueKey('ai-persona-option-pb')));
       await frames(t);
-      await t.tap(find.byKey(const ValueKey('ai-model-apply')));
-      await frames(t);
-      expect(app.profile.ai.activeProvider!.model, 'model-a');
-      expect(find.text('连接 A / model-new'), findsOneWidget);
-      await app.update((p) => p.ai.selectedProviderId = 'b');
-      await frames(t);
-      expect(find.text('连接 A / model-new'), findsOneWidget);
+      expect(app.profile.ai.activePersonaId, 'pa');
+      expect(find.text('人设 New · model-new'), findsOneWidget);
     },
   );
 
   testWidgets(
-    'short model picker stages keyboard choice and custom effort until apply',
+    'short persona picker selects persona and sends its reasoning effort',
     (t) async {
+      await app.update((p) {
+        p.ai.personas = [
+          AiPersona(id: 'pa', name: '人设 A', providerId: 'a', model: 'model-a'),
+          AiPersona(
+            id: 'pmax',
+            name: '极速思考',
+            providerId: 'a',
+            model: 'custom-model',
+            reasoningEffort: 'max',
+          ),
+        ];
+        p.ai.activePersonaId = 'pa';
+      });
       await pump(
         t,
         AiStudioView(ws: ws, initialSessionId: 'ses_1'),
@@ -492,24 +506,11 @@ void main() {
       );
       await t.tap(find.byKey(const ValueKey('ai-compact-menu')));
       await frames(t);
-      await t.tap(find.text('model-a'));
+      await t.tap(find.text('人设 A · model-a'));
       await frames(t);
-      final filter = find.byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.hintText == '搜索模型，或直接输入模型 ID',
-      );
-      await t.ensureVisible(filter);
-      await t.enterText(filter, 'custom-model');
-      await t.testTextInput.receiveAction(TextInputAction.done);
-      await frames(t);
-      expect(find.byKey(const ValueKey('ai-model-apply')), findsOneWidget);
-      final effort = find.byKey(const ValueKey('ai-effort-input'));
-      await t.ensureVisible(effort);
-      await t.enterText(effort, 'max');
+      await t.tap(find.byKey(const ValueKey('ai-persona-option-pmax')));
       await frames(t);
       expect(t.takeException(), isNull);
-      await snapshot(t, 'model-picker-short');
-      await t.tap(find.byKey(const ValueKey('ai-model-apply')));
-      await frames(t);
       await t.enterText(
         find.byKey(const ValueKey('ai-prompt-input')),
         'test effort',
@@ -521,7 +522,7 @@ void main() {
               as Map;
       expect(wire['model'], 'custom-model');
       expect(wire['reasoning_effort'], 'max');
-      expect(app.aiSettings.activeProvider!.model, 'model-a');
+      expect(app.aiSettings.activePersonaId, 'pa');
     },
   );
 
@@ -596,8 +597,13 @@ void main() {
     (t) async {
       link.modern = true;
       await settings(t);
-      await page(t, 'models');
-      await t.tap(find.text('model-new'));
+      await page(t, 'connection');
+      await t.ensureVisible(find.text('model-new'));
+      final modelRow = find.ancestor(
+        of: find.text('model-new').first,
+        matching: find.byType(ListTile),
+      );
+      await t.tap(find.descendant(of: modelRow, matching: find.text('生成 Persona')));
       await t.pumpAndSettle();
       final image = find.byKey(const ValueKey('ai-capability-image_input'));
       await t.ensureVisible(image);
@@ -609,11 +615,7 @@ void main() {
       await t.pumpAndSettle();
       expect(app.aiSettings.activeProvider!.model, 'model-a');
       expect(
-        app
-            .aiSettings
-            .activeProvider!
-            .modelOptions['model-new']!
-            .capabilities['image_input'],
+        app.aiSettings.personas.single.capabilities['image_input'],
         isFalse,
       );
       await app.update(
@@ -869,9 +871,8 @@ void main() {
         (t) async {
           await settings(t, size: size, brightness: brightness);
           for (final id in [
-            'overview',
+            'personas',
             'connection',
-            'models',
             'execution',
             'defaults',
           ]) {

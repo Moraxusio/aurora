@@ -98,6 +98,7 @@ void main() {
         AiProvider(
           id: 'p',
           name: 'fixture',
+          protocol: 'anthropic-messages',
           model: 'm',
           modelOptions: {
             'm': AiModelOptions(
@@ -124,5 +125,10 @@ void main() {
       ai.providers.single.modelOptions['m']!.capabilities['image_input'],
       isTrue,
     );
+    p.authMode = 'chatgpt-device';
+    final subWire = p.toWireJson();
+    expect(subWire['protocol'], 'openai-responses');
+    expect(subWire, isNot(contains('reasoning_mode')));
+    expect(subWire, isNot(contains('thinking_budget')));
   });
 }

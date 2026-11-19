@@ -41,11 +41,18 @@ class TerminalFeature extends Feature {
   SideBarView? sideBar(BuildContext context, Workspace ws) => null;
 
   @override
-  void open(Workspace ws) => ws.showTerminalPanel();
+  void open(Workspace ws) => ws.toggleTerminalPanel();
 
   @override
   List<Command> commands(Workspace ws) => [
-    Command(id: 'terminal.new', title: '新建终端会话…', group: '终端', icon: Icons.add, shortcut: 'Ctrl+Shift+`', run: () => createSession(ws)),
+    Command(
+      id: 'terminal.new',
+      title: '新建终端会话…',
+      group: '终端',
+      icon: Icons.add,
+      shortcut: 'Ctrl+Shift+`',
+      run: () => createSession(ws),
+    ),
   ];
 }
 
@@ -57,8 +64,29 @@ void openSession(Workspace ws, String name) {
       area: TabArea.terminal,
       title: name,
       icon: Icons.terminal,
-      tooltip: ws.entry?.isLocal == true ? '本地 PowerShell · $name（退出客户端后结束）' : 'tmux 会话 $name',
-      builder: (_) => SessionView(key: ValueKey('${ws.serverId}/$name'), ws: ws, session: name),
+      tooltip: ws.entry?.isLocal == true
+          ? '本地 PowerShell · $name（退出客户端后结束）'
+          : 'tmux 会话 $name',
+      confirmClose: ws.entry?.isLocal == true
+          ? () async {
+              final context = AppNavigation.context;
+              final link = ws.link;
+              return context != null &&
+                  await confirmDialog(
+                    context,
+                    title: '结束本地终端 $name？',
+                    body: '会话里运行的程序都会被结束。只想收起输出时，请隐藏终端面板。',
+                    ok: '结束终端',
+                    danger: true,
+                  ) &&
+                  identical(link, ws.link);
+            }
+          : null,
+      builder: (_) => SessionView(
+        key: ValueKey('${ws.serverId}/$name'),
+        ws: ws,
+        session: name,
+      ),
     ),
   );
 }
@@ -77,7 +105,9 @@ Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
   var taken = <String>{};
   try {
     final r = await link.call('session.list') as Map;
-    taken = {for (final s in r['sessions'] as List) (s as Map)['name'] as String};
+    taken = {
+      for (final s in r['sessions'] as List) (s as Map)['name'] as String,
+    };
   } on w.OpError {
     // the name check below still catches a duplicate on the server
   }
@@ -90,7 +120,12 @@ Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
   // a node is chosen (D-47): a box that can only fail would be a trap.
   final r = await showWorkbenchDialog<NewSession>(
     context: ctx,
-    builder: (_) => NewSessionDialog(initial: suggest, proxy: proxyOffer(ws), local: ws.entry?.isLocal == true, networkChoice: ws.hasOp('session.network')),
+    builder: (_) => NewSessionDialog(
+      initial: suggest,
+      proxy: proxyOffer(ws),
+      local: ws.entry?.isLocal == true,
+      networkChoice: ws.hasOp('session.network'),
+    ),
   );
   if (r == null || r.name.isEmpty || !identical(link, ws.link)) return null;
   final name = r.name;
@@ -99,13 +134,25 @@ Future<String?> createSession(Workspace ws, {BuildContext? context}) async {
     return null;
   }
   final folder = ws.project?.folders.firstOrNull;
-  final res = await ws.guard(() => link.call('session.create', {'name': name, if (r.proxy) 'proxy': true, if (r.proxyMode != null) 'proxy_mode': r.proxyMode, if (folder != null) 'root': folder.root, if (folder != null) 'path': folder.path}));
+  final res = await ws.guard(
+    () => link.call('session.create', {
+      'name': name,
+      if (r.proxy) 'proxy': true,
+      if (r.proxyMode != null) 'proxy_mode': r.proxyMode,
+      if (folder != null) 'root': folder.root,
+      if (folder != null) 'path': folder.path,
+    }),
+  );
   if (res == null || !identical(link, ws.link)) return null;
   // A name that was already a session is opened as it is (D-48): say that it
   // was not given the proxy the box asked for, instead of letting the user think so.
-  if (r.proxyMode != null && (res as Map)['existed'] == true && res['proxy_mode'] != r.proxyMode) {
+  if (r.proxyMode != null &&
+      (res as Map)['existed'] == true &&
+      res['proxy_mode'] != r.proxyMode) {
     ws.toast('已打开现有会话“$name”；它保留创建时的代理出口');
-  } else if (r.proxy && (res as Map)['existed'] == true && res['proxy'] != true) {
+  } else if (r.proxy &&
+      (res as Map)['existed'] == true &&
+      res['proxy'] != true) {
     ws.toast('会话“$name”早就有了，已打开；它启动时没有代理，不会因为这次勾选而改变', error: true);
   }
   openSession(ws, name);
@@ -125,9 +172,11 @@ class ProxyOffer {
 ProxyOffer proxyOffer(Workspace ws) {
   final s = ws.serviceInfo('proxy');
   if (s == null) return const ProxyOffer.unavailable('这台服务器的 agent 没有代理功能');
-  if (s['enabled'] != true) return const ProxyOffer.unavailable('代理服务是关闭的：在“代理”页打开它');
+  if (s['enabled'] != true)
+    return const ProxyOffer.unavailable('代理服务是关闭的：在“代理”页打开它');
   final ops = ((s['ops'] as List?) ?? const []).cast<String>();
-  if (!ops.contains('proxy.set')) return const ProxyOffer.unavailable('agent 版本较旧，没有代理功能');
+  if (!ops.contains('proxy.set'))
+    return const ProxyOffer.unavailable('agent 版本较旧，没有代理功能');
   final c = ws.entry?.proxy;
   if (c == null) return const ProxyOffer.unavailable('还没有选节点：在“代理”页选一个');
   if (c.pending) return const ProxyOffer.unavailable('节点参数待同步：请先在“代理”页同步成功');
@@ -145,13 +194,21 @@ class NewSessionDialog extends StatefulWidget {
   final String initial;
   final ProxyOffer proxy;
   final bool local, networkChoice;
-  const NewSessionDialog({super.key, required this.initial, required this.proxy, this.local = false, this.networkChoice = false});
+  const NewSessionDialog({
+    super.key,
+    required this.initial,
+    required this.proxy,
+    this.local = false,
+    this.networkChoice = false,
+  });
   @override
   State<NewSessionDialog> createState() => _NewSessionDialogState();
 }
 
 class _NewSessionDialogState extends State<NewSessionDialog> {
-  late final TextEditingController _name = TextEditingController(text: widget.initial);
+  late final TextEditingController _name = TextEditingController(
+    text: widget.initial,
+  );
   bool _proxy = false;
   String _proxyMode = 'system';
   String? _error;
@@ -167,8 +224,14 @@ class _NewSessionDialogState extends State<NewSessionDialog> {
       setState(() => _error = '使用 1–64 个字母、数字、点、下划线或连字符');
       return;
     }
-    Navigator.pop(context, NewSession(_name.text.trim(), !widget.local && _proxy && widget.proxy.available,
-      proxyMode: widget.local && widget.networkChoice ? _proxyMode : null));
+    Navigator.pop(
+      context,
+      NewSession(
+        _name.text.trim(),
+        !widget.local && _proxy && widget.proxy.available,
+        proxyMode: widget.local && widget.networkChoice ? _proxyMode : null,
+      ),
+    );
   }
 
   @override
@@ -186,35 +249,74 @@ class _NewSessionDialogState extends State<NewSessionDialog> {
             TextField(
               controller: _name,
               autofocus: true,
-              decoration: InputDecoration(hintText: '字母、数字、点、下划线、连字符', errorText: _error),
+              decoration: InputDecoration(
+                hintText: '字母、数字、点、下划线、连字符',
+                errorText: _error,
+              ),
               onSubmitted: (_) => _ok(),
             ),
             const SizedBox(height: 10),
             if (widget.local && widget.networkChoice) ...[
               DropdownButtonFormField<String>(
-                key: const ValueKey('session-proxy-mode'), initialValue: _proxyMode, isExpanded: true,
+                key: const ValueKey('session-proxy-mode'),
+                initialValue: _proxyMode,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: '网络出口'),
                 items: [
-                  const DropdownMenuItem(value: 'system', child: Text('本机代理（环境 / Windows 系统代理）', overflow: TextOverflow.ellipsis)),
-                  DropdownMenuItem(value: 'agent', enabled: p.available, child: Text('Aurora agent 代理${p.available ? ' · ${p.nodeName}' : '（未就绪）'}', overflow: TextOverflow.ellipsis)),
-                  const DropdownMenuItem(value: 'direct', child: Text('直连（不注入代理）')),
+                  const DropdownMenuItem(
+                    value: 'system',
+                    child: Text(
+                      '本机代理（环境 / Windows 系统代理）',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'agent',
+                    enabled: p.available,
+                    child: Text(
+                      'Aurora agent 代理${p.available ? ' · ${p.nodeName}' : '（未就绪）'}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const DropdownMenuItem(
+                    value: 'direct',
+                    child: Text('直连（不注入代理）'),
+                  ),
                 ],
-                onChanged: (v) { if (v != null) setState(() => _proxyMode = v); },
+                onChanged: (v) {
+                  if (v != null) setState(() => _proxyMode = v);
+                },
               ),
               const SizedBox(height: 8),
-              Text(p.available ? '出口在创建时确定；Aurora 节点可在代理页切换。' : '${p.unavailable}；本机代理与直连仍可使用。', style: TextStyle(fontSize: 11.5, color: ide.textDim)),
+              Text(
+                p.available
+                    ? '出口在创建时确定；Aurora 节点可在代理页切换。'
+                    : '${p.unavailable}；本机代理与直连仍可使用。',
+                style: TextStyle(fontSize: 11.5, color: ide.textDim),
+              ),
             ] else if (widget.local)
-              Text('本地终端继承本机代理；升级本地 agent 后可选择出口。', style: TextStyle(fontSize: 11.5, color: ide.textDim))
-            else CheckboxListTile(
-              key: const ValueKey('session-proxy'),
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              dense: true,
-              value: _proxy && p.available,
-              onChanged: p.available ? (v) => setState(() => _proxy = v ?? false) : null,
-              title: const Text('这个会话走代理'),
-              subtitle: Text(p.available ? '用“${p.nodeName}”。会话开始时就定下来，之后不能改。' : p.unavailable!, style: TextStyle(fontSize: 11.5, color: ide.textDim)),
-            ),
+              Text(
+                '本地终端继承本机代理；升级本地 agent 后可选择出口。',
+                style: TextStyle(fontSize: 11.5, color: ide.textDim),
+              )
+            else
+              CheckboxListTile(
+                key: const ValueKey('session-proxy'),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+                value: _proxy && p.available,
+                onChanged: p.available
+                    ? (v) => setState(() => _proxy = v ?? false)
+                    : null,
+                title: const Text('这个会话走代理'),
+                subtitle: Text(
+                  p.available
+                      ? '用“${p.nodeName}”。会话开始时就定下来，之后不能改。'
+                      : p.unavailable!,
+                  style: TextStyle(fontSize: 11.5, color: ide.textDim),
+                ),
+              ),
           ],
         ),
       ),
@@ -233,12 +335,18 @@ class SessionList extends StatefulWidget {
   final Workspace ws;
   final bool compact;
   final VoidCallback? onOpened;
-  const SessionList({super.key, required this.ws, this.compact = false, this.onOpened});
+  const SessionList({
+    super.key,
+    required this.ws,
+    this.compact = false,
+    this.onOpened,
+  });
   @override
   State<SessionList> createState() => _SessionListState();
 }
 
-class _SessionListState extends State<SessionList> with VisiblePolling<SessionList> {
+class _SessionListState extends State<SessionList>
+    with VisiblePolling<SessionList> {
   List<Map<String, dynamic>> _sessions = [];
   bool _loading = true;
   String? _error;
@@ -287,7 +395,10 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
     final link = ws.link;
     if (_reading) return;
     if (link == null) {
-      setState(() { _loading = false; _error = '未连接'; });
+      setState(() {
+        _loading = false;
+        _error = '未连接';
+      });
       return;
     }
     _reading = true;
@@ -295,8 +406,14 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
     final observed = ws.terminalTabs.toSet();
     try {
       final r = await link.call('session.list') as Map;
-      final list = [for (final s in r['sessions'] as List) (s as Map).cast<String, dynamic>()];
-      if (!mounted || generation != _loadGeneration || !identical(link, ws.link)) return;
+      final list = [
+        for (final s in r['sessions'] as List)
+          (s as Map).cast<String, dynamic>(),
+      ];
+      if (!mounted ||
+          generation != _loadGeneration ||
+          !identical(link, ws.link))
+        return;
       setState(() {
         _sessions = list;
         _error = null;
@@ -304,9 +421,17 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
       });
       // a tab whose session no longer exists has nothing to show
       final names = {for (final s in list) s['name'] as String};
-      ws.dropTabs((t) => observed.contains(t) && t.id.startsWith('term:') && !names.contains(t.id.substring(5)));
+      ws.dropTabs(
+        (t) =>
+            observed.contains(t) &&
+            t.id.startsWith('term:') &&
+            !names.contains(t.id.substring(5)),
+      );
     } on Object catch (e) {
-      if (mounted && generation == _loadGeneration && identical(link, ws.link) && (!quiet || _loading)) {
+      if (mounted &&
+          generation == _loadGeneration &&
+          identical(link, ws.link) &&
+          (!quiet || _loading)) {
         setState(() {
           _error = e is w.OpError ? e.message : '$e';
           _loading = false;
@@ -322,7 +447,13 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
     if (link == null || !_ending.add(name)) return;
     final target = ws.tab('term:$name');
     try {
-      final ok = await confirmDialog(context, title: '结束会话 $name？', body: '会话里运行的程序都会被结束。', ok: '结束', danger: true);
+      final ok = await confirmDialog(
+        context,
+        title: '结束会话 $name？',
+        body: '会话里运行的程序都会被结束。',
+        ok: '结束',
+        danger: true,
+      );
       if (!ok || !mounted || !identical(link, ws.link)) return;
       final ended = await ws.guard(() async {
         await link.call('session.kill', {'name': name});
@@ -339,57 +470,157 @@ class _SessionListState extends State<SessionList> with VisiblePolling<SessionLi
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context);
-    if (_error != null) return EmptyHint(icon: Icons.error_outline, text: _error!, actionLabel: '重试', onAction: _load);
+    if (_error != null)
+      return EmptyHint(
+        icon: Icons.error_outline,
+        text: _error!,
+        actionLabel: '重试',
+        onAction: _load,
+      );
+    if (_loading)
+      return const Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    if (_sessions.isEmpty) {
+      return EmptyHint(
+        icon: Icons.terminal_rounded,
+        text: widget.compact ? '没有运行中的会话，可从工具栏新建终端' : '还没有会话',
+        actionLabel: widget.compact ? null : '新建会话',
+        onAction: widget.compact
+            ? null
+            : () async {
+                if (await createSession(ws, context: context) != null) _load();
+              },
+      );
+    }
+    final touch = InputMode.isTouch(context);
+    final extent = InputMode.row(context) + 4;
     return Column(
       children: [
-        Container(
-          height: InputMode.isTouch(context) ? 44 : 30,
-          padding: const EdgeInsets.symmetric(horizontal: 2),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Space.l, Space.xs, Space.s, 0),
           child: Row(
             children: [
-              if (!widget.compact) IconBtn(Icons.add, '新建会话', () async {
-                final n = await createSession(ws, context: context);
-                if (n != null) _load();
-              }),
-              if (widget.compact) Padding(padding: const EdgeInsets.only(left: 8), child: Text('会话', style: TextStyle(fontSize: 11, color: ide.textDim))),
-              const Spacer(),
-              IconBtn(Icons.refresh, '刷新', _load),
+              Expanded(
+                child: Text(
+                  '可用会话  ${_sessions.length}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: ide.textDim,
+                  ),
+                ),
+              ),
+              if (!widget.compact)
+                IconBtn(Icons.add, '新建会话', () async {
+                  if (await createSession(ws, context: context) != null)
+                    _load();
+                }),
+              IconBtn(Icons.refresh_rounded, '刷新会话', _load, size: 14),
             ],
           ),
         ),
-        const Divider(),
         Expanded(
-          child: _loading
-              ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-              : _sessions.isEmpty
-              ? EmptyHint(
-                  icon: Icons.terminal,
-                  text: '还没有会话',
-                  actionLabel: '新建会话',
-                  onAction: () async {
-                    final n = await createSession(ws, context: context);
-                    if (n != null) _load();
-                  },
-                )
-              : ListView(
-                  children: [
-                    for (final s in _sessions)
-                      TreeRow(
-                        leading: Icon(Icons.terminal, size: 14, color: (s['attached'] as num? ?? 0) > 0 ? ide.ok : ide.textDim),
-                        label: s['name'] as String,
-                        detail: s['proxy_mode'] == null ? '${s['windows'] ?? 1} 个窗口${(s['attached'] as num? ?? 0) > 0 ? ' · 已连接' : ''}' : const {'system': '本机代理', 'agent': 'Aurora 代理', 'direct': '直连'}[s['proxy_mode']] ?? '',
-                        selected: ws.terminalActiveId == 'term:${s['name']}',
-                        onTap: () { openSession(ws, s['name'] as String); widget.onOpened?.call(); },
-                        trailing: IconBtn(Icons.close, '结束会话', () => _kill(s['name'] as String)),
-                        menu: () => [
-                          MenuItem('打开', () { openSession(ws, s['name'] as String); widget.onOpened?.call(); }, icon: Icons.open_in_new),
-                          MenuItem('复制会话名', () => copyText(s['name'] as String), icon: Icons.copy),
-                          const MenuItem.separator(),
-                          MenuItem('结束会话…', () => _kill(s['name'] as String), icon: Icons.close, danger: true),
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(
+              Space.s,
+              Space.xs,
+              Space.s,
+              Space.s,
+            ),
+            itemCount: _sessions.length,
+            itemExtent: extent,
+            itemBuilder: (_, index) {
+              final s = _sessions[index];
+              final name = s['name'] as String;
+              final attached = (s['attached'] as num? ?? 0) > 0;
+              final mode = const {
+                'system': '本机代理',
+                'agent': 'Aurora 代理',
+                'direct': '直连',
+              }[s['proxy_mode']];
+              void open() {
+                openSession(ws, name);
+                widget.onOpened?.call();
+              }
+
+              return Padding(
+                key: ValueKey('terminal-session-$name'),
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: ClipRRect(
+                  borderRadius: UiMetrics.controlCorners,
+                  child: TreeRow(
+                    leading: Tooltip(
+                      message: attached ? '已连接' : '可重新连接',
+                      child: Icon(
+                        Icons.terminal_rounded,
+                        size: 15,
+                        color: attached ? ide.ok : ide.textDim,
+                      ),
+                    ),
+                    label: name,
+                    detail: mode ?? '${s['windows'] ?? 1} 个窗口',
+                    selected: _active == 'term:$name',
+                    onTap: open,
+                    trailing: SizedBox(
+                      width: touch ? UiMetrics.touchRow : UiMetrics.compactRow,
+                      child: WorkbenchMenuButton<String>(
+                        tooltip: '会话操作 · $name',
+                        icon: Icon(
+                          Icons.more_horiz_rounded,
+                          size: 15,
+                          color: ide.textDim,
+                        ),
+                        onSelected: (action) {
+                          if (action == 'copy') copyText(name);
+                          if (action == 'end') _kill(name);
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                            value: 'copy',
+                            child: MenuLabel(
+                              '复制会话名',
+                              icon: Icons.copy_outlined,
+                            ),
+                          ),
+                          const PopupMenuDivider(),
+                          PopupMenuItem(
+                            value: 'end',
+                            child: MenuLabel(
+                              '结束会话…',
+                              icon: Icons.stop_circle_outlined,
+                              danger: true,
+                            ),
+                          ),
                         ],
                       ),
-                  ],
+                    ),
+                    menu: () => [
+                      MenuItem('打开', open, icon: Icons.open_in_new),
+                      MenuItem(
+                        '复制会话名',
+                        () => copyText(name),
+                        icon: Icons.copy_outlined,
+                      ),
+                      const MenuItem.separator(),
+                      MenuItem(
+                        '结束会话…',
+                        () => _kill(name),
+                        icon: Icons.stop_circle_outlined,
+                        danger: true,
+                      ),
+                    ],
+                  ),
                 ),
+              );
+            },
+          ),
         ),
       ],
     );
@@ -409,6 +640,9 @@ class _SessionViewState extends State<SessionView> {
   final _term = Terminal(maxLines: 10000);
   final _controller = TerminalController();
   final _focus = FocusNode();
+  final _scroll = ScrollController();
+  final _readingHistory = ValueNotifier(false);
+  bool _tailCheckScheduled = false;
   w.Terminal? _t;
   StreamSubscription<Uint8List>? _out;
   String _state = '正在连接…';
@@ -425,6 +659,7 @@ class _SessionViewState extends State<SessionView> {
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_queueTailCheck);
     _term.onOutput = (data) {
       if (_ctrl && data.length == 1) {
         final c = data.codeUnitAt(0);
@@ -473,22 +708,26 @@ class _SessionViewState extends State<SessionView> {
   void _send(List<int> bytes) {
     final terminal = _t;
     if (terminal == null) return;
-    unawaited(terminal.write(bytes).catchError((Object e) {
-      if (!_disposed && identical(_t, terminal)) {
-        setState(() => _state = '终端写入失败：$e');
-      }
-    }));
+    unawaited(
+      terminal.write(bytes).catchError((Object e) {
+        if (!_disposed && identical(_t, terminal)) {
+          setState(() => _state = '终端写入失败：$e');
+        }
+      }),
+    );
   }
 
   void _resize(int cols, int rows) {
     final terminal = _t;
-    if (terminal != null) unawaited(terminal.resize(cols, rows).catchError((Object _) {}));
+    if (terminal != null)
+      unawaited(terminal.resize(cols, rows).catchError((Object _) {}));
   }
 
   double? _fontSize;
   void _onAppearance() {
     final size = ws.app.appearance.value.terminalFont;
-    if (mounted && size != _fontSize && TickerMode.valuesOf(context).enabled) setState(() => _fontSize = size);
+    if (mounted && size != _fontSize && TickerMode.valuesOf(context).enabled)
+      setState(() => _fontSize = size);
   }
 
   Future<void> _attach() async {
@@ -497,7 +736,10 @@ class _SessionViewState extends State<SessionView> {
     _retry?.cancel();
     final generation = ++_attachGeneration;
     _streamLink = link;
-    bool current() => !_disposed && generation == _attachGeneration && identical(link, ws.link);
+    bool current() =>
+        !_disposed &&
+        generation == _attachGeneration &&
+        identical(link, ws.link);
     _attaching = true;
     setState(() => _state = '正在连接…');
     StreamSubscription<Uint8List>? output;
@@ -506,23 +748,32 @@ class _SessionViewState extends State<SessionView> {
         _cols = _term.viewWidth;
         _rows = _term.viewHeight;
       }
-      final t = await w.Terminal.attach(link, widget.session, cols: _cols, rows: _rows);
+      final t = await w.Terminal.attach(
+        link,
+        widget.session,
+        cols: _cols,
+        rows: _rows,
+      );
       if (!current()) {
         await t.close();
         return;
       }
       _t = t;
       _attaching = false;
-      if (_term.viewWidth > 1 && (_term.viewWidth != _cols || _term.viewHeight != _rows)) {
+      if (_term.viewWidth > 1 &&
+          (_term.viewWidth != _cols || _term.viewHeight != _rows)) {
         _cols = _term.viewWidth;
         _rows = _term.viewHeight;
       }
       _resize(_cols, _rows);
       // UTF-8 state belongs to this stream; a reconnect cannot join partial
       // bytes from the old connection to the new terminal's first character.
-      final decoder = const Utf8Decoder(allowMalformed: true).startChunkedConversion(
-        _StringSink((s) { if (current()) _term.write(s); }),
-      );
+      final decoder = const Utf8Decoder(allowMalformed: true)
+          .startChunkedConversion(
+            _StringSink((s) {
+              if (current()) _term.write(s);
+            }),
+          );
       output = _out = t.output.listen(decoder.add, onDone: decoder.close);
       setState(() => _state = '');
       if (_wantsFocus) _focus.requestFocus();
@@ -549,7 +800,11 @@ class _SessionViewState extends State<SessionView> {
     } on Object catch (e) {
       if (current()) {
         final missing = e is w.OpError && e.code == w.codeNotFound;
-        setState(() => _state = missing ? '会话已结束' : '无法连接终端：${e is w.OpError ? e.message : e}');
+        setState(
+          () => _state = missing
+              ? '会话已结束'
+              : '无法连接终端：${e is w.OpError ? e.message : e}',
+        );
         if (missing) ws.dropTabs((x) => x.id == 'term:${widget.session}');
       }
     } finally {
@@ -567,9 +822,16 @@ class _SessionViewState extends State<SessionView> {
     ws.app.appearance.removeListener(_onAppearance);
     _out?.cancel();
     _t?.close();
-    if (ws.entry?.isLocal == true && ws.link != null) unawaited(ws.link!.call('session.kill', {'name': widget.session}).catchError((Object _) => null));
+    if (ws.entry?.isLocal == true && ws.link != null)
+      unawaited(
+        ws.link!
+            .call('session.kill', {'name': widget.session})
+            .catchError((Object _) => null),
+      );
     _focus.dispose();
     _controller.dispose();
+    _scroll.dispose();
+    _readingHistory.dispose();
     super.dispose();
   }
 
@@ -585,6 +847,14 @@ class _SessionViewState extends State<SessionView> {
     if (sel == null) return;
     Clipboard.setData(ClipboardData(text: _term.buffer.getText(sel)));
     _controller.clearSelection();
+  }
+
+  void _selectAll() {
+    _controller.setSelection(
+      _term.buffer.createAnchor(0, _term.buffer.height - _term.viewHeight),
+      _term.buffer.createAnchor(_term.viewWidth, _term.buffer.height - 1),
+      mode: SelectionMode.line,
+    );
   }
 
   @override
@@ -603,11 +873,34 @@ class _SessionViewState extends State<SessionView> {
     }
   }
 
-  bool get _wantsFocus => mounted && ws.terminalFocused && ws.terminalActiveId == 'term:${widget.session}' && TickerMode.valuesOf(context).enabled && (ModalRoute.of(context)?.isCurrent ?? true);
+  bool get _wantsFocus =>
+      mounted &&
+      ws.terminalFocused &&
+      ws.terminalActiveId == 'term:${widget.session}' &&
+      TickerMode.valuesOf(context).enabled &&
+      (ModalRoute.of(context)?.isCurrent ?? true);
 
   void _key(TerminalKey k) {
     _term.keyInput(k);
     _focus.requestFocus();
+  }
+
+  void _queueTailCheck() {
+    if (_tailCheckScheduled) return;
+    _tailCheckScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _tailCheckScheduled = false;
+      if (!mounted || !_scroll.hasClients) return;
+      final position = _scroll.position;
+      _readingHistory.value =
+          position.hasContentDimensions && position.extentAfter > 32;
+    });
+  }
+
+  void _jumpToTail() {
+    if (!_scroll.hasClients) return;
+    _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    if (_wantsFocus) _focus.requestFocus();
   }
 
   @override
@@ -623,55 +916,113 @@ class _SessionViewState extends State<SessionView> {
               Positioned.fill(
                 child: CallbackShortcuts(
                   bindings: {
-                    const SingleActivator(LogicalKeyboardKey.keyC, control: true, shift: true): _copy,
-                    const SingleActivator(LogicalKeyboardKey.keyV, control: true, shift: true): _paste,
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyC,
+                      control: true,
+                      shift: true,
+                    ): _copy,
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyV,
+                      control: true,
+                      shift: true,
+                    ): _paste,
                   },
-                  child: TerminalView(
-                    _term,
-                    controller: _controller,
-                    focusNode: _focus,
-                    autofocus: false,
-                    onKeyEvent: (_, event) => WorkbenchShortcuts.handle(context, event),
-                    theme: theme,
-                    textStyle: TerminalStyle(fontSize: _fontSize = ws.app.appearance.value.terminalFont, fontFamily: Ide.mono, fontFamilyFallback: Ide.monoFallback),
-                    padding: const EdgeInsets.fromLTRB(10, 6, 4, 4),
-                    onSecondaryTapDown: (d, _) {
-                      final sel = _controller.selection;
-                      showMenuAt(context, d.globalPosition, [
-                        MenuItem('复制', sel == null ? null : _copy, icon: Icons.copy, hint: 'Ctrl+Shift+C'),
-                        MenuItem('粘贴', _paste, icon: Icons.paste, hint: 'Ctrl+Shift+V'),
-                        const MenuItem.separator(),
-                        MenuItem('清屏', () => _term.keyInput(TerminalKey.keyL, ctrl: true), icon: Icons.clear_all),
-                      ]);
-                    },
+                  child: Scrollbar(
+                    controller: _scroll,
+                    thickness: 5,
+                    radius: const Radius.circular(3),
+                    child: NotificationListener<ScrollMetricsNotification>(
+                      onNotification: (_) {
+                        _queueTailCheck();
+                        return false;
+                      },
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context)
+                            .copyWith(scrollbars: false),
+                        child: TerminalView(
+                          _term,
+                          controller: _controller,
+                          scrollController: _scroll,
+                          focusNode: _focus,
+                          autofocus: false,
+                          onKeyEvent: (_, event) =>
+                              WorkbenchShortcuts.handle(context, event),
+                          theme: theme,
+                          textStyle: TerminalStyle(
+                            fontSize: _fontSize =
+                                ws.app.appearance.value.terminalFont,
+                            fontFamily: Ide.mono,
+                            fontFamilyFallback: Ide.monoFallback,
+                          ),
+                          padding: const EdgeInsets.fromLTRB(13, 8, 8, 5),
+                          onSecondaryTapDown: (d, _) {
+                            final sel = _controller.selection;
+                            showMenuAt(context, d.globalPosition, [
+                              MenuItem(
+                                '复制',
+                                sel == null ? null : _copy,
+                                icon: Icons.copy,
+                                hint: 'Ctrl+Shift+C',
+                              ),
+                              MenuItem(
+                                '粘贴',
+                                _paste,
+                                icon: Icons.paste,
+                                hint: 'Ctrl+Shift+V',
+                              ),
+                              MenuItem(
+                                '全选',
+                                _selectAll,
+                                icon: Icons.select_all,
+                              ),
+                              const MenuItem.separator(),
+                              MenuItem(
+                                '清屏',
+                                () => _term.keyInput(
+                                  TerminalKey.keyL,
+                                  ctrl: true,
+                                ),
+                                icon: Icons.clear_all,
+                              ),
+                            ]);
+                          },
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
               if (_state.isNotEmpty)
                 Positioned(
-                  right: 12,
-                  top: 10,
-                  child: Material(
-                    color: ide.tabBar,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: BorderSide(color: ide.border),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_t == null && _state.startsWith('正在'))
-                            const Padding(
-                              padding: EdgeInsets.only(right: 8),
-                              child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
+                  left: Space.m,
+                  right: Space.m,
+                  top: Space.m,
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child: _statusBanner(ide),
+                  ),
+                ),
+              if (_state.isEmpty)
+                Positioned(
+                  right: Space.l,
+                  bottom: Space.m,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: _readingHistory,
+                    builder: (_, reading, _) => !reading
+                        ? const SizedBox.shrink()
+                        : Material(
+                            color: ide.surface,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: UiMetrics.controlCorners,
+                              side: BorderSide(color: ide.borderStrong),
                             ),
-                          Text(_state),
-                           if (_t == null && !_state.startsWith('正在')) TextButton(onPressed: _attaching || ws.link == null ? null : _attach, child: const Text('重新连接')),
-                        ],
-                      ),
-                    ),
+                            child: IconBtn(
+                              Icons.arrow_downward_rounded,
+                              '回到最新输出',
+                              _jumpToTail,
+                              key: const ValueKey('terminal-jump-to-tail'),
+                            ),
+                          ),
                   ),
                 ),
             ],
@@ -679,6 +1030,55 @@ class _SessionViewState extends State<SessionView> {
         ),
         if (touch) _keyBar(ide),
       ],
+    );
+  }
+
+  Widget _statusBanner(Ide ide) {
+    final busy = _state.startsWith('正在');
+    return Material(
+      color: ide.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: UiMetrics.controlCorners,
+        side: BorderSide(color: ide.borderStrong),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.m,
+          vertical: Space.xs,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (busy)
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.5),
+              )
+            else
+              Icon(Icons.info_outline_rounded, size: 15, color: ide.textDim),
+            const SizedBox(width: Space.m),
+            Flexible(
+              child: Tooltip(
+                message: _state,
+                child: Text(
+                  _state,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: ide.text, fontSize: 12),
+                ),
+              ),
+            ),
+            if (_t == null && !busy)
+              IconBtn(
+                Icons.refresh_rounded,
+                '重新连接',
+                ws.link == null || _attaching ? null : _attach,
+                size: 14,
+              ),
+          ],
+        ),
+      ),
     );
   }
 

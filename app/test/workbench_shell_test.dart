@@ -121,7 +121,7 @@ void main() {
     (t) async {
       final ws = await pump(t);
       final before = t.getRect(find.byKey(const ValueKey('main-sidebar')));
-      await t.tap(find.byTooltip('终端'));
+      await t.tap(find.byTooltip('切换终端面板（Ctrl+J）'));
       await t.pumpAndSettle();
       expect(ws.terminalPanel.visible, isTrue);
       expect(
@@ -147,6 +147,30 @@ void main() {
       expect(find.byType(NewSessionDialog), findsOneWidget);
       await t.tap(find.text('取消'));
       await t.pumpAndSettle();
+      await ws.flushViews();
+      await t.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'narrow navigation returns to an open terminal without hiding it',
+    (t) async {
+      final ws = await pump(t);
+      t.view.physicalSize = const Size(390, 760);
+      await t.pumpAndSettle();
+      final entry = find.byTooltip('终端');
+      await t.tap(entry);
+      await t.pumpAndSettle();
+      final list = find.byType(SessionList);
+      expect(list, findsOneWidget);
+      await t.tap(find.byIcon(Icons.arrow_back_rounded));
+      await t.pumpAndSettle();
+      expect(list, findsNothing);
+      expect(ws.terminalPanel.visible, isTrue);
+      await t.tap(entry);
+      await t.pumpAndSettle();
+      expect(list, findsOneWidget);
+      expect(ws.terminalPanel.visible, isTrue);
       await ws.flushViews();
       await t.pumpWidget(const SizedBox());
     },

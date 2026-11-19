@@ -63,6 +63,10 @@ void main() {
           expect(r, greaterThanOrEqualTo(3), reason: '$label = ${r.toStringAsFixed(2)}');
         }
       });
+
+      test('primary action labels meet 4.5:1 on the accent fill', () {
+        expect(contrast(ide.onAccent, ide.accent), greaterThanOrEqualTo(4.5));
+      });
     });
   }
 }

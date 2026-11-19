@@ -6,12 +6,14 @@
 import 'package:aurora_profile/aurora_profile.dart' show WorkspacePath;
 import 'package:aurora_wire/aurora_wire.dart' show Link, OpError, codeConflict;
 import 'package:aurora/ui/aurora_ui.dart';
+import 'package:flutter/services.dart';
 
 import '../../kernel/editor_tab.dart';
 import '../../kernel/feature.dart';
 import '../../kernel/workspace.dart';
 import '../../theme/ide_theme.dart';
 import '../files/file_editor.dart';
+import '../files/file_icons.dart';
 import 'blame_view.dart';
 import 'diff_view.dart';
 import 'git_model.dart';
@@ -703,12 +705,29 @@ class _GitPanelState extends State<GitPanel> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        TextField(
-          controller: _message,
-          minLines: 2,
-          maxLines: 5,
-          style: const TextStyle(fontSize: 13),
-          decoration: InputDecoration(hintText: st.detached ? '提交说明' : '提交说明（提交到 ${st.branch}）'),
+        Focus(
+          onKeyEvent: (_, event) {
+            if (canCommit &&
+                event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.enter &&
+                (HardwareKeyboard.instance.isControlPressed ||
+                    HardwareKeyboard.instance.isMetaPressed)) {
+              _commit();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: TextField(
+            controller: _message,
+            minLines: 2,
+            maxLines: 5,
+            style: const TextStyle(fontSize: 13),
+            decoration: InputDecoration(
+              hintText: st.detached
+                  ? '提交说明（Ctrl+Enter 提交）'
+                  : '提交说明（提交到 ${st.branch}，Ctrl+Enter）',
+            ),
+          ),
         ),
         const SizedBox(height: 6),
         Row(children: [
@@ -747,6 +766,7 @@ class _GitPanelState extends State<GitPanel> {
     final dir = f.path.contains('/') ? f.path.substring(0, f.path.lastIndexOf('/')) : null;
     return TreeRow(
       depth: 1,
+      leading: FileIcon(name: name, size: 15),
       label: name,
       detail: dir,
       labelColor: letter == 'D' ? ide.textDim : null,

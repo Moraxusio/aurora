@@ -49,12 +49,12 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
         children: [
           Container(
             key: const ValueKey('assistant-panel-header'),
-            height: 36,
+            height: 34,
             decoration: BoxDecoration(
               color: ide.tabBar,
               border: Border(bottom: BorderSide(color: ide.border)),
             ),
-            padding: const EdgeInsets.only(left: 12, right: 4),
+            padding: const EdgeInsets.only(left: 10, right: 4),
             child: Row(
               children: [
                 Icon(Icons.auto_awesome_outlined, size: 15, color: ide.accent),
@@ -74,23 +74,37 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                           child: Text(tab.title),
                         ),
                     ],
-                    child: Text(
-                      _historyOpen
-                          ? '对话历史'
-                          : ws.tab(ws.assistantPanel.active ?? '')?.title ??
-                                'AI 助手',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _historyOpen
+                                ? '对话历史'
+                                : ws.tab(ws.assistantPanel.active ?? '')?.title ??
+                                      'AI 助手',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (!_historyOpen && tabs.length > 1) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.expand_more_rounded,
+                            size: 14,
+                            color: ide.textDim,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
                 _action(
                   '新建 AI 对话',
-                  Icons.add,
+                  Icons.add_rounded,
                   widget.onNew == null
                       ? null
                       : () {
@@ -100,7 +114,7 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                 ),
                 _action(
                   _historyOpen ? '返回对话' : 'AI 对话历史',
-                  _historyOpen ? Icons.arrow_back : Icons.history,
+                  _historyOpen ? Icons.arrow_back_rounded : Icons.history_rounded,
                   _history,
                 ),
                 WorkbenchMenuButton<String>(
@@ -120,7 +134,13 @@ class _AssistantPanelViewState extends State<AssistantPanelView> {
                       child: Text('隐藏侧栏 · 保留对话'),
                     ),
                   ],
-                  icon: const Icon(Icons.more_horiz, size: 17),
+                  icon: Icon(
+                    ws.assistantPanel.maximized
+                        ? Icons.close_fullscreen_rounded
+                        : Icons.view_sidebar_outlined,
+                    size: 16,
+                    color: ide.textDim,
+                  ),
                 ),
               ],
             ),

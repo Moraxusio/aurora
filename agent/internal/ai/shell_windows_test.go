@@ -58,3 +58,29 @@ func TestWindowsAIShellExplicitRoutes(t *testing.T) {
 		t.Fatal("missing node executed the shell")
 	}
 }
+
+func TestWindowsReadOnlyShellAllowlist(t *testing.T) {
+	for _, cmd := range []string{
+		"Get-Location",
+		"Get-ChildItem -Force",
+		"git status",
+		"git diff --stat",
+		"rg TODO src",
+	} {
+		if !isReadOnlyWindowsShellCommand(cmd) {
+			t.Errorf("expected read-only command allowed: %q", cmd)
+		}
+	}
+	for _, cmd := range []string{
+		"Get-ChildItem | Remove-Item",
+		"Get-Content .env",
+		"git status > out.txt",
+		"Get-Content foo.txt; Remove-Item foo.txt",
+		"Invoke-WebRequest https://example.com",
+		"Remove-Item -Recurse .",
+	} {
+		if isReadOnlyWindowsShellCommand(cmd) {
+			t.Errorf("expected unsafe/mutating command rejected: %q", cmd)
+		}
+	}
+}

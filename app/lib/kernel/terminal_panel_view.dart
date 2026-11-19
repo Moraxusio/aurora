@@ -5,9 +5,11 @@ import 'package:aurora/ui/aurora_ui.dart';
 import '../theme/ide_theme.dart';
 import 'editor_tab.dart';
 import 'input_mode.dart';
+import 'retained_pane.dart';
 import 'tab_workspace_view.dart';
 import 'workspace.dart';
-import 'retained_pane.dart';
+
+enum _TerminalAction { create, maximize, close }
 
 class TerminalPanelView extends StatefulWidget {
   final Workspace ws;
@@ -25,7 +27,7 @@ class TerminalPanelView extends StatefulWidget {
 
 class _TerminalPanelViewState extends State<TerminalPanelView> {
   final Map<EditorTab, Widget> _bodies = {};
-  bool? _sessionsWanted;
+  bool _sessionsWanted = false, _sessionsVisited = false;
   String? _active;
   int _revision = -1;
 
@@ -34,10 +36,12 @@ class _TerminalPanelViewState extends State<TerminalPanelView> {
     super.didUpdateWidget(old);
     if (old.ws != widget.ws) {
       _bodies.clear();
-      _sessionsWanted = null;
+      _sessionsWanted = _sessionsVisited = false;
       _active = null;
     }
   }
+
+  void _sessions(bool open) => setState(() => _sessionsWanted = open);
 
   @override
   Widget build(BuildContext context) {
@@ -48,265 +52,299 @@ class _TerminalPanelViewState extends State<TerminalPanelView> {
     }
     final live = tabs.toSet();
     _bodies.removeWhere((tab, _) => !live.contains(tab));
-    final row = InputMode.isTouch(context) ? 44.0 : 36.0;
+    final active = tabs
+        .where((tab) => tab.id == ws.terminalActiveId)
+        .firstOrNull;
+    if (active?.id != _active) {
+      _active = active?.id;
+      _sessionsWanted = false;
+    }
+    final touch = InputMode.isTouch(context);
     return Material(
-      color: ide.editor,
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => ws.focusTerminalPanel(),
-        child: LayoutBuilder(
-          builder: (_, box) {
-            final wide = box.maxWidth >= 700;
-            if (_active != ws.terminalActiveId) {
-              _active = ws.terminalActiveId;
-              if (!wide) _sessionsWanted = false;
-            }
-            final hasTerminal = tabs.any(
-              (tab) => tab.id == ws.terminalActiveId,
-            );
-            final showSessions = !hasTerminal || (_sessionsWanted ?? wide);
-            final split = hasTerminal && wide && showSessions;
-            final headerHeight = math.min(row, box.maxHeight);
-            final area = Rect.fromLTWH(
-              0,
-              headerHeight,
-              box.maxWidth,
-              math.max(0, box.maxHeight - headerHeight),
-            );
-            final listWidth = math.min(
-              200.0,
-              math.max(150.0, box.maxWidth * .22),
-            );
-            final terminalRect = split
-                ? Rect.fromLTWH(
-                    0,
-                    area.top,
-                    math.max(0, area.width - listWidth - 1),
-                    area.height,
-                  )
-                : area;
-            final sessionsRect = split
-                ? Rect.fromLTWH(
-                    terminalRect.right + 1,
-                    area.top,
-                    listWidth,
-                    area.height,
-                  )
-                : area;
-            final showBody = hasTerminal && (!showSessions || split);
-            final sessions =
-                widget.sessionsBuilder?.call(() {
-                  if (mounted && !wide) setState(() => _sessionsWanted = false);
-                }) ??
-                const Center(child: Text('在这里选择或新建终端会话'));
-            return Stack(
-              clipBehavior: Clip.hardEdge,
-              children: [
-                for (final tab in tabs)
-                  Builder(
-                    key: ObjectKey(tab),
-                    builder: (_) {
-                      final shown = showBody && ws.terminalActiveId == tab.id;
-                      return Positioned.fromRect(
-                        rect: terminalRect,
-                        child: RetainedPane(
-                          visible: shown,
-                          viewportKey: ValueKey('terminal-viewport-${tab.id}'),
-                          child: Listener(
-                            behavior: HitTestBehavior.translucent,
-                            onPointerDown: (_) => ws.focusTerminalPanel(),
-                            child: TabFocusFrame(
-                              request: shown && ws.terminalFocused
-                                  ? ws.terminalFocusRequest
-                                  : -1,
-                              canFocus: () =>
-                                  ws.terminalFocused &&
-                                  ws.terminalActiveId == tab.id,
-                              child: _bodies.putIfAbsent(
-                                tab,
-                                () => Builder(builder: tab.builder),
-                              ),
+      color: ide.panel,
+      child: LayoutBuilder(
+        builder: (_, box) {
+          final showSessions = active == null || _sessionsWanted;
+          final split = active != null && showSessions && box.maxWidth >= 690;
+          final showOutput = active != null && (!showSessions || split);
+          if (showSessions) _sessionsVisited = true;
+          final height = math.min(touch ? 48.0 : 38.0, box.maxHeight);
+          final bodyHeight = math.max(0.0, box.maxHeight - height);
+          final listWidth = (box.maxWidth * .25).clamp(185.0, 250.0);
+          final outputWidth = split
+              ? box.maxWidth - listWidth - 1
+              : box.maxWidth;
+          final outputRect = Rect.fromLTWH(0, height, outputWidth, bodyHeight);
+          final sessionsRect = split
+              ? Rect.fromLTWH(outputWidth + 1, height, listWidth, bodyHeight)
+              : outputRect;
+          return Stack(
+            children: [
+              for (final tab in tabs)
+                Builder(
+                  key: ObjectKey(tab),
+                  builder: (_) {
+                    final shown = showOutput && active.id == tab.id;
+                    return Positioned.fromRect(
+                      rect: outputRect,
+                      child: RetainedPane(
+                        visible: shown,
+                        viewportKey: ValueKey('terminal-viewport-${tab.id}'),
+                        child: Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerDown: (_) => ws.focusTerminalPanel(),
+                          child: TabFocusFrame(
+                            request: shown && ws.terminalFocused
+                                ? ws.terminalFocusRequest
+                                : -1,
+                            canFocus: () =>
+                                ws.terminalFocused &&
+                                ws.terminalActiveId == tab.id,
+                            child: _bodies.putIfAbsent(
+                              tab,
+                              () => Builder(builder: tab.builder),
                             ),
                           ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  },
+                ),
+              if (_sessionsVisited)
                 Positioned.fromRect(
                   key: const ValueKey('terminal-sessions-host'),
                   rect: sessionsRect,
                   child: RetainedPane(
                     visible: showSessions,
                     viewportKey: const ValueKey('terminal-sessions'),
-                    child: sessions,
-                  ),
-                ),
-                if (split)
-                  Positioned(
-                    left: terminalRect.right,
-                    top: area.top,
-                    bottom: 0,
-                    width: 1,
-                    child: ColoredBox(color: ide.border),
-                  ),
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  right: 0,
-                  height: headerHeight,
-                  child: ClipRect(
-                    child: Container(
-                      key: const ValueKey('terminal-panel-header'),
-                      decoration: BoxDecoration(
-                        color: ide.tabBar,
-                        border: Border(bottom: BorderSide(color: ide.border)),
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 12),
-                          Container(
-                            alignment: Alignment.center,
-                            height: row,
-                            decoration: BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(color: ide.accent, width: 2),
-                              ),
-                            ),
-                            child: Text(
-                              '终端',
-                              style: TextStyle(fontSize: 12, color: ide.text),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: tabs.isEmpty
-                                ? const SizedBox()
-                                : Align(
-                                    alignment: Alignment.centerRight,
-                                    child: WorkbenchMenuButton<String>(
-                                      key: const ValueKey('terminal-selector'),
-                                      tooltip: '切换终端会话',
-                                      onSelected: ws.activate,
-                                      itemBuilder: (_) => [
-                                        for (final tab in tabs)
-                                          CheckedPopupMenuItem(
-                                            value: tab.id,
-                                            checked:
-                                                tab.id == ws.terminalActiveId,
-                                            child: Text(tab.title),
-                                          ),
-                                      ],
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.terminal,
-                                              size: 14,
-                                              color: ide.textDim,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Flexible(
-                                              child: Text(
-                                                ws
-                                                        .tab(
-                                                          ws.terminalActiveId ??
-                                                              '',
-                                                        )
-                                                        ?.title ??
-                                                    '',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: ide.textDim,
-                                                ),
-                                              ),
-                                            ),
-                                            Icon(
-                                              Icons.expand_more,
-                                              size: 14,
-                                              color: ide.textDim,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                          _action(
-                            Icons.add,
-                            '新建终端会话（Ctrl+Shift+`）',
-                            widget.onNew,
-                          ),
-                          _action(
-                            Icons.list_alt_outlined,
-                            '终端会话列表',
-                            () =>
-                                setState(() => _sessionsWanted = !showSessions),
-                            selected: showSessions,
-                          ),
-                          // Three different things, three different glyphs:
-                          //   a bin   = this ends the process (local terminal only)
-                          //   an X    = close this view; a remote session keeps running
-                          //   a chevron = hide the whole panel; every session keeps running
-                          if (hasTerminal)
-                            ws.entry?.isLocal == true
-                                ? _action(
-                                    Icons.delete_outline,
-                                    '结束当前本地终端（里面运行的程序会被结束）',
-                                    () => ws.closeTab(ws.terminalActiveId!),
-                                  )
-                                : _action(
-                                    Icons.close,
-                                    '关闭这个终端视图（服务器上的会话继续运行，可在会话列表重新打开）',
-                                    () => ws.closeTab(ws.terminalActiveId!),
-                                  ),
-                          _action(
-                            ws.terminalPanel.maximized
-                                ? Icons.close_fullscreen
-                                : Icons.open_in_full,
-                            ws.terminalPanel.maximized ? '还原终端面板' : '最大化终端面板',
-                            ws.toggleTerminalMaximized,
-                          ),
-                          _action(
-                            Icons.keyboard_arrow_down,
-                            '隐藏终端面板（所有会话保留，Ctrl+J 再显示）',
-                            ws.hideTerminalPanel,
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                      ),
+                    child: ColoredBox(
+                      color: ide.sideBar,
+                      child:
+                          widget.sessionsBuilder?.call(
+                            () => _sessions(false),
+                          ) ??
+                          const Center(child: Text('在这里选择或新建终端会话')),
                     ),
                   ),
                 ),
-              ],
-            );
-          },
-        ),
+              if (split)
+                Positioned(
+                  left: outputWidth,
+                  top: height,
+                  bottom: 0,
+                  width: 1,
+                  child: ColoredBox(color: ide.border),
+                ),
+              Positioned(
+                left: 0,
+                top: 0,
+                right: 0,
+                height: height,
+                child: ClipRect(
+                  child: _header(
+                    context,
+                    tabs,
+                    active,
+                    showSessions,
+                    touch,
+                    box.maxWidth,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _action(
-    IconData icon,
-    String tooltip,
-    VoidCallback? onTap, {
-    bool selected = false,
-  }) => SizedBox(
-    width: InputMode.isTouch(context) ? 40 : 28,
-    child: IconButton(
-      padding: EdgeInsets.zero,
-      tooltip: tooltip,
-      onPressed: onTap,
-      icon: Icon(
-        icon,
-        size: 16,
-        color: selected ? Ide.of(context).accent : Ide.of(context).textDim,
+  Widget _header(
+    BuildContext context,
+    List<EditorTab> tabs,
+    EditorTab? active,
+    bool showSessions,
+    bool touch,
+    double width,
+  ) {
+    final ws = widget.ws, ide = Ide.of(context);
+    final local = ws.entry?.isLocal == true;
+    final extra = width >= (touch ? 260 : 190);
+    final sidePadding = width >= 160 ? Space.m : Space.xs;
+    final showMetadata = width >= 440 && !touch && active != null;
+    final label = active?.title ?? '终端';
+    final Color glyph = ws.terminalFocused ? ide.accent : ide.textDim;
+    final actionSize = touch ? UiMetrics.touchRow : UiMetrics.compactRow;
+    return Container(
+      key: const ValueKey('terminal-panel-header'),
+      padding: EdgeInsets.symmetric(horizontal: sidePadding),
+      decoration: BoxDecoration(
+        color: ide.frame,
+        border: Border(bottom: BorderSide(color: ide.border)),
       ),
-    ),
-  );
+      child: Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: WorkbenchMenuButton<String>(
+                  key: const ValueKey('terminal-selector'),
+                  tooltip: '切换或管理终端会话',
+                  enabled: active != null,
+                  onSelected: (value) {
+                    if (value == '@sessions') {
+                      _sessions(!showSessions);
+                    } else {
+                      _sessions(false);
+                      ws.activate(value);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    for (final tab in tabs)
+                      CheckedPopupMenuItem(
+                        value: tab.id,
+                        checked: tab.id == active?.id,
+                        child: Text(
+                          tab.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (widget.sessionsBuilder != null) ...[
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: '@sessions',
+                        child: MenuLabel(
+                          showSessions ? '返回输出' : '管理全部会话',
+                          icon: showSessions
+                              ? Icons.terminal_rounded
+                              : Icons.list_alt_rounded,
+                        ),
+                      ),
+                    ],
+                  ],
+                  child: Container(
+                    height: touch ? 44 : 28,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: width >= 160 ? Space.m : Space.xs,
+                    ),
+                    decoration: active == null
+                        ? null
+                        : BoxDecoration(
+                            color: ide.surface,
+                            borderRadius: UiMetrics.controlCorners,
+                            border: Border.all(color: ide.border),
+                          ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (width >= 100)
+                          Icon(Icons.terminal_rounded, size: 16, color: glyph),
+                        if (width >= 150) const SizedBox(width: Space.m),
+                        Flexible(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: ide.text,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (active != null && width >= 155) ...[
+                          const SizedBox(width: Space.s),
+                          Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 15,
+                            color: ide.textDim,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (showMetadata)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.m),
+              child: Tooltip(
+                message: active.tooltip ?? label,
+                child: Text(
+                  local ? '本机 · PowerShell' : '远程 · tmux',
+                  style: TextStyle(color: ide.textFaint, fontSize: 11),
+                ),
+              ),
+            ),
+          if (extra && widget.onNew != null)
+            IconBtn(
+              Icons.add_rounded,
+              '新建终端会话（Ctrl+Shift+`）',
+              widget.onNew,
+              color: ide.accent,
+            ),
+          SizedBox(
+            width: actionSize,
+            child: WorkbenchMenuButton<_TerminalAction>(
+              key: const ValueKey('terminal-panel-actions'),
+              tooltip: '终端操作',
+              icon: Icon(
+                Icons.more_horiz_rounded,
+                size: 19,
+                color: ide.textDim,
+              ),
+              onSelected: (action) {
+                switch (action) {
+                  case _TerminalAction.create:
+                    widget.onNew?.call();
+                  case _TerminalAction.maximize:
+                    ws.toggleTerminalMaximized();
+                  case _TerminalAction.close:
+                    if (active != null) ws.closeTab(active.id);
+                }
+              },
+              itemBuilder: (_) => [
+                if (!extra && widget.onNew != null)
+                  const PopupMenuItem(
+                    value: _TerminalAction.create,
+                    child: MenuLabel('新建终端会话…', icon: Icons.add_rounded),
+                  ),
+                PopupMenuItem(
+                  value: _TerminalAction.maximize,
+                  child: MenuLabel(
+                    ws.terminalPanel.maximized ? '还原面板高度' : '最大化终端面板',
+                    icon: ws.terminalPanel.maximized
+                        ? Icons.close_fullscreen
+                        : Icons.open_in_full,
+                  ),
+                ),
+                if (active != null) ...[
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: _TerminalAction.close,
+                    child: MenuLabel(
+                      local ? '结束本地终端…' : '关闭视图（会话继续运行）',
+                      icon: local
+                          ? Icons.stop_circle_outlined
+                          : Icons.close_rounded,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconBtn(
+            Icons.keyboard_arrow_down_rounded,
+            '隐藏终端面板（会话继续运行，Ctrl+J 再显示）',
+            ws.hideTerminalPanel,
+            key: const ValueKey('terminal-hide'),
+          ),
+        ],
+      ),
+    );
+  }
 }

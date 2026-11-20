@@ -162,11 +162,11 @@ type Dialer func(ctx context.Context, addr, pin, token string) (*wire.AgentInfo,
 
 // Env is the machine the installer works on.
 type Env struct {
-	Root           string // "/" on a server; a temporary directory in tests
-	Sys            System
-	Dial           Dialer
-	Self           string // the running executable (what gets installed)
-	Version        string // its version
+	Root    string // "/" on a server; a temporary directory in tests
+	Sys     System
+	Dial    Dialer
+	Self    string // the running executable (what gets installed)
+	Version string // its version
 	// Instance is the agent this run works on (D-101); empty is the default
 	// instance. Every name, path, port and tmux socket follows from it.
 	Instance       string
@@ -371,7 +371,7 @@ func (e *Env) run(o Options) (result Result) {
 	e.step("switch", "ok", "")
 
 	e.step("confirm", "start", "")
-	info, pin, err := e.confirm(s.conf, e.Version)
+	info, pin, err := e.confirm(s, e.Version)
 	if err != nil {
 		e.step("confirm", "fail", err.Error())
 		return e.rollback(s, sw, "新版本没有正常运行："+err.Error())
@@ -479,6 +479,8 @@ type staged struct {
 	cfg          string // new config to install; "" keeps the existing one
 	conf         *entry.Config
 	stateExisted bool
+	programOnly  bool // an existing 4.x-managed layout needs no unit/config replacement
+	identity     *programIdentity
 }
 
 // prepare writes only into StateDir/install-* and checks what it wrote.
@@ -522,12 +524,34 @@ func (e *Env) prepare(o Options, pr *Probe) (*staged, error) {
 		return nil, fmt.Errorf("新程序报告版本 %q，应为 %q", v, e.Version)
 	}
 
+	target, _, _ := update.ParseVersionStrict(e.Version)
+	isUpgrade := target[0] >= 4 && pr.Installed != ""
+	if isUpgrade && !pr.Config {
+		return nil, errors.New("已有安装缺少配置；4.x 不生成替代配置")
+	}
 	if pr.Config {
 		c, err := entry.LoadConfig(e.p(e.lay().ConfigPath))
 		if err != nil {
 			return nil, fmt.Errorf("现有配置无法解析：%w", err)
 		}
 		s.conf = c
+		if isUpgrade {
+			if c.Protection() != nil {
+				return nil, errors.New("受保护状态不能通过传统安装路径切换程序")
+			}
+			fi, err := os.Lstat(e.p(e.lay().UnitPath))
+			if err != nil || !fi.Mode().IsRegular() {
+				return nil, errors.New("4.x 只更新现有程序；systemd 单元缺失或不是普通文件，未修改配置")
+			}
+			if err := e.Sys.VerifyUnit(e.p(e.lay().UnitPath)); err != nil {
+				return nil, fmt.Errorf("已有 systemd 单元无法验证，未修改：%w", err)
+			}
+			s.programOnly = true
+			s.identity, err = e.captureProgramIdentity(c)
+			if err != nil {
+				return nil, fmt.Errorf("无法冻结旧配对与配置：%w", err)
+			}
+		}
 	} else {
 		user := o.User
 		if user == "" {
@@ -551,6 +575,10 @@ func (e *Env) prepare(o Options, pr *Probe) (*staged, error) {
 
 	// The unit is checked as written, except that ExecStart points at the
 	// staged copy, which must exist and be executable for the check to pass.
+	if s.programOnly {
+		ok = true
+		return s, nil
+	}
 	vu := filepath.Join(dir, e.lay().UnitName)
 	text := e.unit(s.bin)
 	if err := os.WriteFile(vu, []byte(text), 0o644); err != nil {
@@ -577,14 +605,15 @@ func (e *Env) dropStage(s *staged) {
 
 // before is the state the switch replaced, kept in the rollback directory.
 type before struct {
-	Bin       bool   `json:"bin"`
-	Unit      bool   `json:"unit"`
-	Config    bool   `json:"config"`
-	ConfigDir bool   `json:"config_dir"`
-	State     bool   `json:"state"`
-	Enabled   bool   `json:"enabled"`
-	Active    bool   `json:"active"`
-	Version   string `json:"version,omitempty"`
+	Bin         bool   `json:"bin"`
+	Unit        bool   `json:"unit"`
+	Config      bool   `json:"config"`
+	ConfigDir   bool   `json:"config_dir"`
+	State       bool   `json:"state"`
+	Enabled     bool   `json:"enabled"`
+	Active      bool   `json:"active"`
+	Version     string `json:"version,omitempty"`
+	ProgramOnly bool   `json:"program_only,omitempty"`
 }
 
 type switched struct {
@@ -601,6 +630,7 @@ func (e *Env) switchOver(s *staged, pr *Probe) (*switched, error) {
 	sw := &switched{was: before{
 		Bin: exists(e.p(e.lay().Bin)), Unit: exists(e.p(e.lay().UnitPath)), Config: pr.Config, ConfigDir: isDir(e.p(e.lay().ConfigDir)),
 		State: s.stateExisted, Enabled: e.Sys.IsEnabled(e.lay().UnitName), Active: pr.Active, Version: pr.Installed,
+		ProgramOnly: s.programOnly,
 	}}
 	undo := func(err error) (*switched, error) {
 		for _, t := range sw.temps {
@@ -624,7 +654,7 @@ func (e *Env) switchOver(s *staged, pr *Probe) (*switched, error) {
 			return undo(err)
 		}
 	}
-	if sw.was.Unit {
+	if sw.was.Unit && !s.programOnly {
 		if _, err := copyFile(e.p(e.lay().UnitPath), filepath.Join(dir, e.lay().UnitName), 0o644); err != nil {
 			return undo(err)
 		}
@@ -655,9 +685,12 @@ func (e *Env) switchOver(s *staged, pr *Probe) (*switched, error) {
 	if err != nil {
 		return undo(err)
 	}
-	unitTmp, err := put(e.p(e.lay().UnitPath), "", []byte(e.unit(e.lay().Bin)), 0o644, 0o755)
-	if err != nil {
-		return undo(err)
+	unitTmp := ""
+	if !s.programOnly {
+		unitTmp, err = put(e.p(e.lay().UnitPath), "", []byte(e.unit(e.lay().Bin)), 0o644, 0o755)
+		if err != nil {
+			return undo(err)
+		}
 	}
 	cfgTmp := ""
 	if s.cfg != "" {
@@ -669,6 +702,9 @@ func (e *Env) switchOver(s *staged, pr *Probe) (*switched, error) {
 		return undo(err)
 	}
 
+	if err := e.checkProgramIdentity(s); err != nil {
+		return undo(err)
+	}
 	sw.committed = true
 	if err := os.Rename(binTmp, e.p(e.lay().Bin)); err != nil {
 		return sw, err
@@ -676,22 +712,27 @@ func (e *Env) switchOver(s *staged, pr *Probe) (*switched, error) {
 	if err := e.failAt("rename-bin"); err != nil {
 		return sw, err
 	}
-	if err := os.Rename(unitTmp, e.p(e.lay().UnitPath)); err != nil {
-		return sw, err
+	if unitTmp != "" {
+		if err := os.Rename(unitTmp, e.p(e.lay().UnitPath)); err != nil {
+			return sw, err
+		}
 	}
 	if cfgTmp != "" {
 		if err := os.Rename(cfgTmp, e.p(e.lay().ConfigPath)); err != nil {
 			return sw, err
 		}
 	}
-	for _, d := range []string{e.lay().Bin, e.lay().UnitPath, e.lay().ConfigPath} {
-		syncDir(filepath.Dir(e.p(d)))
-	}
-	if err := e.Sys.DaemonReload(); err != nil {
-		return sw, err
-	}
-	if err := e.Sys.Enable(e.lay().UnitName); err != nil {
-		return sw, err
+	syncDir(filepath.Dir(e.p(e.lay().Bin)))
+	if !s.programOnly {
+		for _, d := range []string{e.lay().UnitPath, e.lay().ConfigPath} {
+			syncDir(filepath.Dir(e.p(d)))
+		}
+		if err := e.Sys.DaemonReload(); err != nil {
+			return sw, err
+		}
+		if err := e.Sys.Enable(e.lay().UnitName); err != nil {
+			return sw, err
+		}
 	}
 	e.Sys.ResetFailed(e.lay().UnitName)
 	if err := e.Sys.Restart(e.lay().UnitName); err != nil {
@@ -702,16 +743,27 @@ func (e *Env) switchOver(s *staged, pr *Probe) (*switched, error) {
 
 // confirm waits until the service answers a pinned Hello on its own port and
 // reports version want (D-38: local checks only). An empty want accepts any.
-func (e *Env) confirm(c *entry.Config, want string) (*wire.AgentInfo, string, error) {
+func (e *Env) confirm(s *staged, want string) (*wire.AgentInfo, string, error) {
+	c := s.conf
 	deadline := time.Now().Add(e.ConfirmTimeout)
 	addr := localAddr(c.Listen)
 	cert := filepath.Join(e.p(c.StateDir), "agent.crt")
 	var last error
 	for {
+		if err := e.checkProgramIdentity(s); err != nil {
+			return nil, "", err
+		}
+		var pin string
+		var pinErr error
+		if s.identity != nil {
+			pin = s.identity.pin
+		} else {
+			pin, pinErr = readPin(cert)
+		}
 		if !e.Sys.IsActive(e.lay().UnitName) {
 			last = errors.New("服务没有在运行")
-		} else if pin, err := readPin(cert); err != nil {
-			last = fmt.Errorf("证书还没有生成：%w", err)
+		} else if pinErr != nil {
+			last = fmt.Errorf("证书还没有生成：%w", pinErr)
 		} else {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			info, err := e.Dial(ctx, addr, pin, c.Token)
@@ -721,6 +773,8 @@ func (e *Env) confirm(c *entry.Config, want string) (*wire.AgentInfo, string, er
 				last = fmt.Errorf("%s 没有应答：%w", addr, err)
 			case want != "" && info.Version != want:
 				last = fmt.Errorf("%s 上运行的是 %s，不是 %s", addr, info.Version, want)
+			case s.identity != nil && info.ID != s.identity.id:
+				return nil, "", errors.New("候选 agent 与升级前 ID 不一致")
 			default:
 				return info, pin, nil
 			}
@@ -753,11 +807,13 @@ func (e *Env) rollback(s *staged, sw *switched, cause string) Result {
 		note("停止服务", e.Sys.Stop(e.lay().UnitName))
 	}
 	// Disable while the unit file still exists, or the symlink would dangle.
-	if !was.Enabled && e.Sys.IsEnabled(e.lay().UnitName) {
+	if !was.ProgramOnly && !was.Enabled && e.Sys.IsEnabled(e.lay().UnitName) {
 		note("取消开机启动", e.Sys.Disable(e.lay().UnitName))
 	}
 	note("恢复程序", restore(e.p(e.lay().Bin), filepath.Join(sw.dir, "aurora3-agent"), was.Bin, 0o755))
-	note("恢复单元", restore(e.p(e.lay().UnitPath), filepath.Join(sw.dir, e.lay().UnitName), was.Unit, 0o644))
+	if !was.ProgramOnly {
+		note("恢复单元", restore(e.p(e.lay().UnitPath), filepath.Join(sw.dir, e.lay().UnitName), was.Unit, 0o644))
+	}
 	if !was.Config {
 		if err := os.Remove(e.p(e.lay().ConfigPath)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			note("删除新配置", err)
@@ -766,13 +822,17 @@ func (e *Env) rollback(s *staged, sw *switched, cause string) Result {
 			note("删除配置目录", os.RemoveAll(e.p(e.lay().ConfigDir)))
 		}
 	}
-	note("systemctl daemon-reload", e.Sys.DaemonReload())
-	if was.Enabled {
-		note("恢复开机启动", e.Sys.Enable(e.lay().UnitName))
+	if !was.ProgramOnly {
+		note("systemctl daemon-reload", e.Sys.DaemonReload())
+		if was.Enabled {
+			note("恢复开机启动", e.Sys.Enable(e.lay().UnitName))
+		}
 	}
 	// The new version may have crash-looped into systemd's start limit.
 	e.Sys.ResetFailed(e.lay().UnitName)
-	if was.Active {
+	if err := e.checkProgramIdentity(s); err != nil {
+		note("拒绝启动原版本以免覆盖已变化的状态", err)
+	} else if was.Active {
 		note("启动原来的服务", e.Sys.Restart(e.lay().UnitName))
 	}
 	note("恢复", e.failAt("restore"))
@@ -782,7 +842,7 @@ func (e *Env) rollback(s *staged, sw *switched, cause string) Result {
 			if want == "unknown" {
 				want = ""
 			}
-			if _, _, err := e.confirm(s.conf, want); err != nil {
+			if _, _, err := e.confirm(s, want); err != nil {
 				errs = append(errs, "原来的服务没有恢复："+err.Error())
 			}
 		} else if e.Sys.IsActive(e.lay().UnitName) {

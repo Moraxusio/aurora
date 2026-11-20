@@ -18,6 +18,7 @@ type PermissionDecision struct {
 	Always     bool   `json:"always,omitempty"`      // remember for the remainder of the session (or TTLSeconds)
 	TTLSeconds int64  `json:"ttl_seconds,omitempty"` // optional expiry in seconds when Always is true
 	Reason     string `json:"reason,omitempty"`
+	fromPolicy bool
 }
 
 // SessionGrants exposes only the actual remembered scopes, never pending input.
@@ -95,6 +96,12 @@ func (g *PermissionGate) PendingForSession(sessionID string) *PermissionQuestion
 	return nil
 }
 
+func (g *PermissionGate) isPending(id string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.pending[id] != nil
+}
+
 func (g *PermissionGate) Resolve(id string, dec PermissionDecision) bool {
 	g.mu.Lock()
 	p, ok := g.pending[id]
@@ -121,6 +128,12 @@ func (g *PermissionGate) Resolve(id string, dec PermissionDecision) bool {
 }
 
 func (g *PermissionGate) ResolveSessionPending(sessionID, agentMode string, isSubagent bool, permMode string, rules []PermissionRule) []string {
+	return g.resolveSessionPending(sessionID, func(q PermissionQuestion) (string, string) {
+		return g.EvaluateWithContext(sessionID, agentMode, isSubagent, permMode, q.Action, q.Resource, rules)
+	})
+}
+
+func (g *PermissionGate) resolveSessionPending(sessionID string, evaluate func(PermissionQuestion) (string, string)) []string {
 	g.mu.Lock()
 	var candidates []*pendingPermission
 	for _, p := range g.pending {
@@ -131,8 +144,8 @@ func (g *PermissionGate) ResolveSessionPending(sessionID, agentMode string, isSu
 	g.mu.Unlock()
 	resolved := []string{}
 	for _, p := range candidates {
-		eff, reason := g.EvaluateWithContext(sessionID, agentMode, isSubagent, permMode, p.question.Action, p.question.Resource, rules)
-		if eff != "ask" && g.Resolve(p.question.ID, PermissionDecision{Allow: eff == "allow", Reason: reason}) {
+		eff, reason := evaluate(p.question)
+		if eff != "ask" && g.Resolve(p.question.ID, PermissionDecision{Allow: eff == "allow", Reason: reason, fromPolicy: true}) {
 			resolved = append(resolved, p.question.ID)
 		}
 	}
@@ -503,6 +516,11 @@ func (g *PermissionGate) isRemembered(sessionID, action, resource string) bool {
 
 // Ask registers a pending permission question, emits it via emitFn, and blocks until resolved or ctx cancelled.
 func (g *PermissionGate) Ask(ctx context.Context, q PermissionQuestion, emitFn func(PermissionQuestion)) error {
+	_, err := g.askDecision(ctx, q, emitFn)
+	return err
+}
+
+func (g *PermissionGate) askDecision(ctx context.Context, q PermissionQuestion, emitFn func(PermissionQuestion)) (PermissionDecision, error) {
 	if q.ID == "" {
 		q.ID = NewID("perm")
 	}
@@ -526,15 +544,15 @@ func (g *PermissionGate) Ask(ctx context.Context, q PermissionQuestion, emitFn f
 		g.mu.Lock()
 		delete(g.pending, q.ID)
 		g.mu.Unlock()
-		return ctx.Err()
+		return PermissionDecision{}, ctx.Err()
 	case dec := <-ch:
 		if !dec.Allow {
 			if dec.Reason != "" {
-				return errors.New("Permission denied by user: " + dec.Reason)
+				return dec, errors.New("Permission denied by user: " + dec.Reason)
 			}
-			return errors.New("Permission denied by user.")
+			return dec, errors.New("Permission denied by user.")
 		}
-		return nil
+		return dec, ctx.Err()
 	}
 }
 

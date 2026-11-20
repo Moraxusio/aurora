@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -71,11 +70,7 @@ func New(cfg *Config, cfgPath, version string, services []service.Service, lookP
 	if err := filetxn.New(cfg.StateDir, roots).Recover(); err != nil {
 		return nil, err
 	}
-	cert, pin, err := wire.LoadOrCreateCert(cfg.StateDir, "agent")
-	if err != nil {
-		return nil, err
-	}
-	id, err := loadOrCreateID(filepath.Join(cfg.StateDir, "agent-id"))
+	cert, pin, id, err := loadIdentity(cfg.StateDir)
 	if err != nil {
 		return nil, err
 	}
@@ -100,14 +95,6 @@ func New(cfg *Config, cfgPath, version string, services []service.Service, lookP
 		}
 	}
 	return s, nil
-}
-
-func loadOrCreateID(path string) (string, error) {
-	if b, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(b))) >= 16 {
-		return strings.TrimSpace(string(b)), nil
-	}
-	id := wire.NewToken()[:24]
-	return id, os.WriteFile(path, []byte(id+"\n"), 0o600)
 }
 
 // Pin is the certificate pin clients check.

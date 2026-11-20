@@ -1,9 +1,12 @@
+//go:build linux || windows
+
 package ai
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -11,7 +14,23 @@ import (
 const (
 	MaxOutputLines = 2000
 	MaxOutputBytes = 50 * 1024 // 50 KiB (OpenCode Truncate.MAX_BYTES)
+	maxSpillBytes  = 8 << 20
 )
+
+var spillName = regexp.MustCompile(`^tool_[0-9a-f]{24}\.txt$`)
+
+func isToolSpill(stateDir, path string) bool {
+	if stateDir == "" || !spillName.MatchString(filepath.Base(path)) {
+		return false
+	}
+	spill := filepath.Join(stateDir, "ai", "tool-output")
+	real, err := filepath.EvalSymlinks(spill)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(real, path)
+	return err == nil && rel == filepath.Base(path)
+}
 
 // TruncateResult holds a tool output after applying OpenCode's 2000-line / 50 KiB cap.
 type TruncateResult struct {
@@ -29,11 +48,11 @@ func TruncateOutput(text string, spillDir string, direction string) TruncateResu
 	}
 
 	var savedPath string
-	if spillDir != "" {
+	if spillDir != "" && len(text) <= maxSpillBytes {
 		if err := os.MkdirAll(spillDir, 0o700); err == nil {
 			name := NewID("tool") + ".txt"
 			full := filepath.Join(spillDir, name)
-			if err := os.WriteFile(full, []byte(text), 0o600); err == nil {
+			if err := writeAIRecord("tool-output", full, []byte(text)); err == nil {
 				savedPath = full
 			}
 		}

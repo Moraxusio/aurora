@@ -8,6 +8,8 @@ import 'dart:io';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter/foundation.dart';
 
+import 'download_publish.dart';
+
 class Transfer extends ChangeNotifier {
   final bool upload;
   final String name;
@@ -214,13 +216,15 @@ class Transfers extends ChangeNotifier {
     int size,
     String root,
     String path, {
+    String? ifMatch,
+    VoidCallback? verifyTarget,
     VoidCallback? onDone,
     Link? Function()? currentLink,
   }) {
     final t = _add(Transfer(true, path.split('/').last, size));
     final source = currentLink ?? () => link;
     t._retry = (same) =>
-        _run(same, () => _runUpload(same, source, local, root, path), onDone);
+        _run(same, () => _runUpload(same, source, link, local, root, path, ifMatch, verifyTarget), onDone);
     unawaited(t._retry!(t));
     return t;
   }
@@ -228,17 +232,22 @@ class Transfers extends ChangeNotifier {
   Future<void> _runUpload(
     Transfer t,
     Link? Function() source,
+    Link expected,
     File local,
     String root,
     String path,
+    String? ifMatch,
+    VoidCallback? verifyTarget,
   ) async {
-    final link = _connection(t, source);
+    final link = _connection(t, source, expected);
     t.total = await local.length();
     _connection(t, source, link);
+    verifyTarget?.call();
     final s = await link.open('fs.upload', {
       'root': root,
       'path': path,
       'size': t.total,
+      if (ifMatch == null) 'create': true else 'if_match': ifMatch,
     }, Priority.bulk);
     t._stream = s;
     _connection(t, source, link);
@@ -256,6 +265,7 @@ class Transfers extends ChangeNotifier {
       }
     }
     _connection(t, source, link);
+    verifyTarget?.call();
     await s.sendEnd();
     await s.response();
     _connection(t, source, link);
@@ -273,7 +283,19 @@ class Transfers extends ChangeNotifier {
     Link? Function()? currentLink,
   }) {
     final t = _add(Transfer(false, path.split('/').last, size));
-    final source = currentLink ?? () => link;
+    Link? source() {
+      final current = currentLink == null ? link : currentLink();
+      if (current == null || identical(current, link)) return current;
+      // Retry after a reconnect only when authenticated agent identity matches.
+      final original = link.server;
+      final next = current.server;
+      final pin = (original.raw['direct'] as Map?)?['cert_sha256'];
+      if (original.id.isEmpty || original.id != next.id || pin is! String ||
+          pin.isEmpty || (next.raw['direct'] as Map?)?['cert_sha256'] != pin) {
+        return null;
+      }
+      return current;
+    }
     t._retry = (same) =>
         _run(same, () => _runDownload(same, source, root, path, where), onDone);
     unawaited(t._retry!(t));
@@ -332,9 +354,8 @@ class Transfers extends ChangeNotifier {
       if (!ended || t.done != t.total) {
         throw StateError('下载不完整：${t.done} / ${t.total} 字节');
       }
-      if (await File(where).exists()) throw StateError('目标文件已存在，请选择其它名称');
       _connection(t, source, link);
-      await tmp.rename(where);
+      await publishDownload(tmp, where);
     } finally {
       try {
         await out?.close();

@@ -2,13 +2,13 @@ import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora/ui/aurora_ui.dart';
 
 import '../../kernel/workspace.dart';
-import '../../kernel/input_mode.dart';
 import '../../theme/ide_theme.dart';
 
 class ProjectWorkspaceBar extends StatelessWidget {
   final Workspace ws;
-  final List<Widget> actions;
-  const ProjectWorkspaceBar({super.key, required this.ws, this.actions = const []});
+  final Widget commands;
+  final double commandWidth;
+  const ProjectWorkspaceBar({super.key, required this.ws, required this.commands, required this.commandWidth});
   @override
   Widget build(BuildContext context) {
     final ide = Ide.of(context), current = ws.project;
@@ -52,16 +52,13 @@ class ProjectWorkspaceBar extends StatelessWidget {
       ]);
     return Container(
       constraints: const BoxConstraints(minHeight: 36),
-      padding: const EdgeInsets.fromLTRB(12, 2, 4, 2),
-      color: ide.sideBar,
-      child: LayoutBuilder(builder: (_, box) {
-        final actionsWidth = actions.length * InputMode.row(context);
-        final wrap = actions.isNotEmpty && box.maxWidth < 140 + actionsWidth;
-        // Keep the same element hierarchy when input mode or width changes:
-        // rebuilding an open menu's owner would discard its pending selection.
-        return Wrap(alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          SizedBox(width: wrap ? box.maxWidth : box.maxWidth - actionsWidth, child: heading),
-          ...actions,
+      padding: const EdgeInsets.fromLTRB(Space.s, 2, Space.xs, 2),
+      decoration: BoxDecoration(color: ide.sideBar, border: Border(bottom: BorderSide(color: ide.border))),
+      child: LayoutBuilder(builder: (_, bounds) {
+        final wrap = bounds.maxWidth < 62 + commandWidth;
+        return Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: Space.xs, children: [
+          SizedBox(width: wrap ? bounds.maxWidth : bounds.maxWidth - commandWidth, child: heading),
+          SizedBox(width: wrap ? bounds.maxWidth : commandWidth, child: commands),
         ]);
       }),
     );

@@ -103,7 +103,7 @@ UiVirtualList(
 ### 浮层与状态所有权
 
 - 对话框：`showWorkbenchDialog` + `AlertDialog`；复杂编辑器可用 `Dialog` 和有界布局。
-- 菜单：`WorkbenchMenuButton`／`showWorkbenchMenu`；右键和长按：`ContextArea`。
+- 菜单：`WorkbenchMenuButton`／`showWorkbenchMenu`；右键和长按用 `ContextArea`（右键在释放并赢得手势后触发）。文件等菜单可用 `MenuItem(…, quick: true)` 放置可聚焦的快捷图标，用 `MenuItem.more` 在当前菜单关闭后打开分组，避免菜单叠放。
 - 简短输入／确认：`askText`／`confirmDialog`。不要在功能中直接调用 `showDialog` 或 `showMenu`。
 - 请求必须核对连接、版本与生命周期。异步关闭要取消 operation，迟到结果不得重写新状态。
 - 文档、终端、任务及 AI 会话状态归工作区模型；组件 State 仅管理视图状态和自身 controller。缩放、主题、停靠或隐藏不触发重连。

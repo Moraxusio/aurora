@@ -1,3 +1,5 @@
+//go:build linux || windows
+
 package ai
 
 import (
@@ -393,6 +395,9 @@ func (m *SnapshotManager) Prune(ctx context.Context, work string, keep map[strin
 	defer unlock()
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
+	if store := m.protected(work); store != nil {
+		return store.prune(ctx, keep)
+	}
 	gitDir, err := m.ensureRepo(ctx, work)
 	if err != nil {
 		return nil, err

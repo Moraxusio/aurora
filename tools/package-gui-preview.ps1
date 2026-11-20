@@ -10,7 +10,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $Suffix -notmatch '^[a-zA-Z0-9-]+$') { throw 'Invalid candidate version/name' }
-if ($NotesFile -notmatch '^[a-zA-Z0-9_/-]+\.md$' -or [IO.Path]::IsPathRooted($NotesFile)) { throw 'Invalid notes filename' }
+if ($NotesFile -notmatch '^(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-][a-zA-Z0-9_.-]*\.md$' -or [IO.Path]::IsPathRooted($NotesFile)) { throw 'Invalid notes filename' }
 $repo = Split-Path -Parent $PSScriptRoot
 & (Join-Path $PSScriptRoot 'check-docs.ps1')
 $notesName = "docs/$NotesFile"
@@ -44,6 +44,9 @@ try {
     & go run ./cmd/aurora3-release verify --product aurora3-local-agent --dir "$BaseRelease\local-agent\windows-amd64"
     if ($LASTEXITCODE) { throw 'Base local-agent signature verification failed' }
 } finally { Pop-Location }
+& (Join-Path $PSScriptRoot 'check-agent-release-identity.ps1') -ManifestPaths @(
+    "$BaseRelease\agent\amd64\manifest.json", "$BaseRelease\local-agent\windows-amd64\manifest.json"
+)
 $parts = $Version.Split('.')
 $build = [int]$parts[0] * 10000 + [int]$parts[1] * 100 + [int]$parts[2]
 $sources = Get-ClientSources
@@ -51,7 +54,7 @@ Push-Location (Join-Path $repo 'app')
 try {
     & dart tool/ui_contract.dart
     if ($LASTEXITCODE) { throw 'Aurora GUI contract failed' }
-    & flutter build windows --no-pub --release --target=lib/main.dart "--build-name=$Version" "--build-number=$build"
+    & flutter build windows --no-pub --release --target=lib/main.dart "--build-name=$Version" "--build-number=$build" "--dart-define=AURORA_CLIENT_VERSION=$Version"
     if ($LASTEXITCODE) { throw 'Candidate Windows build failed' }
 } finally { Pop-Location }
 $after = Get-ClientSources

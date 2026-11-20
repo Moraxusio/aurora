@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -29,8 +30,9 @@ func CertPin(der []byte) string {
 // with its pin. Clients trust it by pin, so no CA or hostname is involved.
 func LoadOrCreateCert(dir, name string) (tls.Certificate, string, error) {
 	certPath, keyPath := filepath.Join(dir, name+".crt"), filepath.Join(dir, name+".key")
-	if cert, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
-		return cert, CertPin(cert.Certificate[0]), nil
+	cert, pin, err := LoadCert(dir, name)
+	if !errors.Is(err, os.ErrNotExist) {
+		return cert, pin, err
 	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -53,20 +55,76 @@ func LoadOrCreateCert(dir, name string) (tls.Certificate, string, error) {
 	if err != nil {
 		return tls.Certificate{}, "", err
 	}
+	defer clear(keyDER)
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	defer clear(keyPEM)
+	stored, err := sealIdentityKey(keyPEM)
+	if err != nil {
+		return tls.Certificate{}, "", fmt.Errorf("无法保护 TLS 身份密钥：%w", err)
+	}
+	defer clear(stored)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return tls.Certificate{}, "", err
 	}
-	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
+	if err := WriteNewIdentityFile(keyPath, stored, 0o600); err != nil {
 		return tls.Certificate{}, "", err
 	}
-	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+	if err := WriteNewIdentityFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
 		return tls.Certificate{}, "", err
 	}
-	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	return LoadCert(dir, name)
+}
+
+// LoadCert returns os.ErrNotExist only when neither identity file exists.
+// A partial pair, unreadable files, symlinks or a bad key are never a request
+// to generate a replacement identity.
+func LoadCert(dir, name string) (tls.Certificate, string, error) {
+	crt, key := filepath.Join(dir, name+".crt"), filepath.Join(dir, name+".key")
+	c, ce := os.Lstat(crt)
+	k, ke := os.Lstat(key)
+	if errors.Is(ce, os.ErrNotExist) && errors.Is(ke, os.ErrNotExist) {
+		return tls.Certificate{}, "", os.ErrNotExist
+	}
+	if ce != nil || ke != nil || !c.Mode().IsRegular() || !k.Mode().IsRegular() ||
+		c.Size() > 64<<10 || k.Size() > 64<<10 {
+		return tls.Certificate{}, "", errors.New("TLS 身份文件不完整或无法读取；已保留原件")
+	}
+	certPEM, err := os.ReadFile(crt)
 	if err != nil {
 		return tls.Certificate{}, "", err
 	}
-	return cert, CertPin(der), nil
+	keyStored, err := os.ReadFile(key)
+	if err != nil {
+		return tls.Certificate{}, "", err
+	}
+	defer clear(keyStored)
+	keyPEM, err := unsealIdentityKey(keyStored)
+	if err != nil {
+		return tls.Certificate{}, "", fmt.Errorf("无法解读 TLS 身份密钥；已保留原件：%w", err)
+	}
+	defer clear(keyPEM)
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return tls.Certificate{}, "", fmt.Errorf("TLS 身份无法验证；已保留原件：%w", err)
+	}
+	return cert, CertPin(cert.Certificate[0]), nil
+}
+
+// Exclusive creation also protects against overlapping first starts. A
+// partial write is deliberately preserved and blocks future initialization.
+func WriteNewIdentityFile(path string, data []byte, mode os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 func ServerTLS(cert tls.Certificate) *tls.Config {

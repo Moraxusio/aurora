@@ -7,3 +7,4 @@
 - 客户端 GUI 还须遵循 `app/AGENTS.md`，通过统一 GUI 入口接入。
 - 检查入口：`powershell -NoProfile -File tools/check.ps1`；文档单独检查：`powershell -NoProfile -File tools/check-docs.ps1`。
 - 打包使用新的版本／候选后缀和输出目录，保留已有交付。记录脏工作树、源码指纹、签名验证及实际运行范围。
+- 单文件交付与状态迁移遵循 `docs/decisions/0002-single-binary-state-safety.md`：程序缓存与持久状态必须分离；不得明文降级、擅自重置身份或以升级覆盖用户数据。

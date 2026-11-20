@@ -58,7 +58,7 @@ extension _DialogsView on _AiStudioViewState {
                                 ? '当前任务结束后'
                                 : '下一步优先'}\n'
                             '${(item['runtime'] as Map?)?['provider_name'] ?? ''} / ${(item['runtime'] as Map?)?['model'] ?? '已选模型'}'
-                            ' · ${item['agent'] == 'plan' ? '规划' : '构建'} · ${item['permission_mode'] == 'auto' ? '自动执行' : '先询问'}',
+                            ' · ${item['agent'] == 'plan' ? '规划' : item['agent'] == 'orchestrator' ? '编排' : '构建'} · ${AiComposerText.permission(item['permission_mode'] as String? ?? 'ask', narrow: false)}',
                             style: TextStyle(
                               fontSize: 11,
                               color: Ide.of(context).textDim,

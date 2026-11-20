@@ -59,7 +59,11 @@ class LocalAgent {
       process.stdout.transform(utf8.decoder).transform(const LineSplitter()),
     );
     try {
-      process.stdin.writeln(jsonEncode({'state_dir': stateDir}));
+      final requireProtection = Platform.environment['AURORA4_PROTECTED_STATE'] == '1';
+      process.stdin.writeln(jsonEncode({
+        'state_dir': stateDir,
+        if (requireProtection) 'protected_state': true,
+      }));
       await process.stdin.flush();
       if (!await lines.moveNext().timeout(const Duration(seconds: 20))) {
         throw StateError('本地 agent 未返回启动结果');
@@ -75,6 +79,7 @@ class LocalAgent {
       if (ready['kind'] != 'local' ||
           ready['platform'] != 'windows' ||
           ready['version'] != build.manifest.version ||
+          (requireProtection && ready['protected_state'] != true) ||
           hp == null ||
           hp.$1 != '127.0.0.1' ||
           !RegExp(r'^[a-f0-9]{64}$').hasMatch(pin) ||

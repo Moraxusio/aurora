@@ -1,5 +1,4 @@
 import 'package:aurora/features/files/file_editor.dart';
-import 'package:aurora/features/files/file_icons.dart';
 import 'package:aurora/features/files/file_tree_row.dart';
 import 'package:aurora/features/files/files_feature.dart';
 import 'package:aurora/features/files/transfers.dart';
@@ -208,7 +207,11 @@ void main() {
         find.byWidgetPredicate((w) => w is FileTreeRow && w.path == path);
 
     expect(row('/project/README.md'), findsOneWidget);
-    expect(find.byTooltip('新建文件夹'), findsOneWidget);
+    await t.tap(find.byTooltip('新建'));
+    await t.pumpAndSettle();
+    expect(find.text('文件夹…'), findsOneWidget);
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
 
     // Filter files inline and reveal matched loaded node.
     await t.tap(find.byTooltip('过滤文件（Ctrl+F）'));
@@ -228,7 +231,7 @@ void main() {
     await t.tapAt(t.getCenter(srcRow), buttons: kSecondaryMouseButton);
     await t.pumpAndSettle();
     expect(find.text('在终端中打开'), findsOneWidget);
-    expect(find.text('复制相对路径'), findsOneWidget);
+    expect(find.text('更多选项'), findsOneWidget);
     await t.tap(find.text('在终端中打开'));
     await t.pumpAndSettle();
     expect(link.terminalCalls, hasLength(1));

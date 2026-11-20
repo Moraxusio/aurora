@@ -151,6 +151,7 @@ class ServerEntry {
   ProxyChoice? proxy;
   UpgradeRecord? upgrade;
   List<String> failedUpgrades;
+  PasteRecoveryRecord? pendingPaste;
 
   /// Named projects are client-side views of folders, not new agent roots or
   /// permissions. A null selection keeps the complete server browser visible.
@@ -170,6 +171,7 @@ class ServerEntry {
     List<ForwardSpec>? forwards,
     this.proxy,
     this.upgrade,
+    this.pendingPaste,
     List<String>? failedUpgrades,
     List<ProjectWorkspace>? workspaces,
     this.selectedWorkspace,
@@ -205,6 +207,9 @@ class ServerEntry {
     upgrade: j['upgrade'] == null
         ? null
         : UpgradeRecord.fromJson(_map(j['upgrade'])),
+    pendingPaste: j['pending_paste'] == null
+        ? null
+        : PasteRecoveryRecord.fromJson(_map(j['pending_paste'])),
     failedUpgrades: (j['failed_upgrades'] as List? ?? const [])
         .cast<String>()
         .toList(),
@@ -230,6 +235,7 @@ class ServerEntry {
     if (forwards.isNotEmpty) 'forwards': [for (final f in forwards) f.toJson()],
     'proxy': ?proxy?.toJson(),
     'upgrade': ?upgrade?.toJson(),
+    'pending_paste': ?pendingPaste?.toJson(),
     if (failedUpgrades.isNotEmpty) 'failed_upgrades': failedUpgrades,
     if (workspaces.isNotEmpty)
       'workspaces': [for (final w in workspaces) w.toJson()],
@@ -246,6 +252,42 @@ class ServerEntry {
   }
 
   WorkspaceView viewFor(String? id) => workspace(id)?.view ?? browserView;
+}
+
+/// Query-only receipt, sealed with the profile. It contains no material that
+/// could replay a copy or an automatic source deletion.
+class PasteRecoveryRecord {
+  final String id, agentId, pin;
+  final WorkspacePath target;
+
+  PasteRecoveryRecord({
+    required this.id,
+    required this.agentId,
+    required this.pin,
+    required this.target,
+  }) {
+    if (!RegExp(r'^[0-9a-f]{32}$').hasMatch(id) ||
+        agentId.isEmpty ||
+        pin.isEmpty ||
+        target.path == '/') {
+      throw const FormatException('invalid replacement receipt');
+    }
+  }
+
+  factory PasteRecoveryRecord.fromJson(Map<String, dynamic> j) =>
+      PasteRecoveryRecord(
+        id: j['id'] as String,
+        agentId: j['agent_id'] as String,
+        pin: j['pin'] as String,
+        target: WorkspacePath.fromJson(_map(j['target'])),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'agent_id': agentId,
+    'pin': pin,
+    'target': target.toJson(),
+  };
 }
 
 /// A path is relative to an existing agent root. Never turn a workspace into

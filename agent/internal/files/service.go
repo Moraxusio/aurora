@@ -39,6 +39,8 @@ func (v svc) Operations() []service.Operation {
 		u("fs.mkdir", e.fsMkdir),
 		u("fs.rename", e.fsRename),
 		u("fs.copy", e.fsCopy),
+		u("fs.paste.replace", e.fsPasteReplace),
+		u("fs.paste.status", e.fsPasteStatus),
 		u("fs.delete", e.fsDelete),
 		st("fs.upload", e.fsUpload),
 		st("fs.text", e.fsText),

@@ -12,6 +12,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"aurora3/internal/statecrypt"
+	"aurora3/internal/wire"
 )
 
 // v3 names (D-71). None of them is a prefix of a v2 name or the other way round.
@@ -29,8 +32,8 @@ type Config struct {
 	// is the default instance. It decides the tmux socket and unit names.
 	Instance string `json:"instance,omitempty"`
 	Name     string `json:"name"`
-	Listen   string `json:"listen"` // direct TLS listener, default ":17710"
-	Token    string `json:"token"`  // direct client token
+	Listen   string `json:"listen"`          // direct TLS listener, default ":17710"
+	Token    string `json:"token,omitempty"` // direct client token (legacy JSON only)
 	// PublicAddrs are extra host:port values clients should try (NAT, port
 	// forward). Local interface addresses are added at run time.
 	PublicAddrs []string `json:"public_addrs,omitempty"`
@@ -46,6 +49,8 @@ type Config struct {
 	// listener's credentials). The entry keeps it as it is and does not look
 	// inside: it holds a password, so the file is 0600 like the token (D-90).
 	Proxy json.RawMessage `json:"proxy,omitempty"`
+
+	protection *statecrypt.Codec // non-nil for an authenticated remote config
 }
 
 // Root is a top-level folder clients may work in.
@@ -56,15 +61,62 @@ type Root struct {
 }
 
 func LoadConfig(path string) (*Config, error) {
-	b, err := os.ReadFile(path)
+	root, err := os.OpenRoot(filepath.Dir(path))
 	if err != nil {
 		return nil, err
+	}
+	defer root.Close()
+	b, err := statecrypt.ReadRegular(root, filepath.Base(path), 8<<20)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(b)
+	var stored struct {
+		Sealed string `json:"protected_config"`
+	}
+	if err := json.Unmarshal(b, &stored); err != nil {
+		return nil, fmt.Errorf("配置文件格式错误：%w", err)
+	}
+	if stored.Sealed != "" {
+		return openProtectedConfig(path, b)
 	}
 	var c Config
 	if err := json.Unmarshal(b, &c); err != nil {
 		return nil, fmt.Errorf("配置文件格式错误：%w", err)
 	}
 	return &c, c.Validate()
+}
+
+func (c *Config) Protection() *statecrypt.Codec { return c.protection }
+
+type LocalOptions struct {
+	Services map[string]bool `json:"services,omitempty"`
+	Proxy    json.RawMessage `json:"proxy,omitempty"`
+}
+
+func LoadLocalOptions(path string) (LocalOptions, error) {
+	var out LocalOptions
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return out, err
+	}
+	if !fi.Mode().IsRegular() || fi.Size() > 4<<20 {
+		return out, errors.New("本地 agent 配置不是可读取的普通文件")
+	}
+	stored, err := os.ReadFile(path)
+	if err != nil {
+		return out, err
+	}
+	defer clear(stored)
+	plain, err := wire.OpenLocalOptions(stored)
+	if err != nil {
+		return out, err
+	}
+	defer clear(plain)
+	if err := json.Unmarshal(plain, &out); err != nil {
+		return LocalOptions{}, err
+	}
+	return out, nil
 }
 
 // Validate checks the config and fills the defaults. The rules and messages
@@ -118,25 +170,52 @@ func (c *Config) Validate() error {
 
 // Save writes the config atomically with 0600 permissions (it holds secrets).
 func (c *Config) Save(path string) error {
+	if c.protection != nil {
+		stored, err := encodeProtectedConfig(path, c)
+		if err != nil {
+			return err
+		}
+		return saveConfigBytes(path, stored)
+	}
 	var saved any = c
 	if c.Kind == "local" {
 		// Local bootstrap identity is ephemeral. Persist only service choices;
 		// never write the per-launch direct token or restore a stale bind/root.
-		saved = struct {
-			Services map[string]bool `json:"services,omitempty"`
-			Proxy    json.RawMessage `json:"proxy,omitempty"`
-		}{c.Services, c.Proxy}
+		saved = LocalOptions{c.Services, c.Proxy}
 	}
 	b, err := json.MarshalIndent(saved, "", "  ")
 	if err != nil {
 		return err
 	}
+	defer clear(b)
+	stored := append(b, '\n')
+	if c.Kind == "local" {
+		stored, err = wire.SealLocalOptions(stored)
+		if err != nil {
+			return fmt.Errorf("无法保护本地 agent 配置：%w", err)
+		}
+	}
+	return saveConfigBytes(path, stored)
+}
+
+func saveConfigBytes(path string, stored []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".aurora-config-")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(stored)
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return statecrypt.ReplaceFile(tmp.Name(), path)
 }

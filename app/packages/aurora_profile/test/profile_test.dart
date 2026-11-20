@@ -171,6 +171,16 @@ void main() {
       expect(ascii.decode(raw.sublist(0, 8)), 'AURORA3P');
     });
 
+    test('never reuses an existing stage path', () async {
+      final oldStage = File('$path.tmp');
+      await oldStage.writeAsString('unrelated fixture');
+      final s = await ProfileStore.open(path, XorSealer());
+      await s.update((p) => p.servers.addAll(sample().servers));
+      await s.close();
+      expect(await oldStage.readAsString(), 'unrelated fixture');
+      expect(await dir.list().toList(), hasLength(2));
+    });
+
     test('get() returns copies', () async {
       final s = await ProfileStore.open(path, XorSealer());
       s.get().servers.add(ServerEntry.create('x'));
@@ -303,6 +313,29 @@ void main() {
       sealed[sealed.length - 5] ^= 1;
       expect(() => d.unseal(sealed), throwsA(isA<SealerException>()));
     }, skip: skip);
+
+    test('retains a query-only replacement receipt in the DPAPI profile', () async {
+      final store = await ProfileStore.open(path, DpapiSealer());
+      const privatePath = '/synthetic-private/source-tree/target.txt';
+      final receipt = PasteRecoveryRecord(
+        id: 'b' * 32,
+        agentId: 'fixture-agent',
+        pin: 'a' * 64,
+        target: WorkspacePath(root: 'home', path: privatePath),
+      );
+      await store.update((p) {
+        p.servers.add(ServerEntry(id: 'fixture', name: 'fixture', pendingPaste: receipt));
+      });
+      await store.close();
+      final raw = await File(path).readAsBytes();
+      expect(latin1.decode(raw), isNot(contains(privatePath)));
+      expect(latin1.decode(raw), isNot(contains(receipt.id)));
+      final reopened = await ProfileStore.open(path, DpapiSealer());
+      final pending = reopened.server('fixture')?.pendingPaste;
+      expect(pending?.toJson(), equals(receipt.toJson()));
+      expect(pending?.toJson().keys, unorderedEquals(['id', 'agent_id', 'pin', 'target']));
+      await reopened.close();
+    });
 
     test('store on DPAPI: save, reopen, tamper', () async {
       final s = await ProfileStore.open(path, DpapiSealer());

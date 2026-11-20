@@ -3,11 +3,28 @@
 //
 // Copy and cut only remember what was chosen (nothing is read or moved yet);
 // paste does the work on the server: fs.copy, or fs.rename inside one root.
-// A cut across two roots is a copy followed by a delete, and the delete only
-// happens after the copy succeeded. A name that is already taken is never
-// overwritten without asking, and "replace" keeps the old item aside until
-// the new one is in place, so a failure never loses the old one.
+// A cut across roots (or a replacement) deletes only after a confirmed
+// copy. Replacement is one journaled agent operation, with no client-side
+// staging rename or replay after a lost response.
+import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
+
+String? pasteReceiptPin(Link link) {
+  final direct = link.server.raw['direct'];
+  final pin = direct is Map ? direct['cert_sha256'] : null;
+  return pin is String && pin.isNotEmpty ? pin : null;
+}
+
+extension PasteReceiptTarget on PasteRecoveryRecord {
+  bool matches(Link link) => agentId == link.server.id && pin == pasteReceiptPin(link);
+
+  bool confirmedBy(Object? response) {
+    if (response is! Map || response['committed'] != true) return false;
+    final request = response['request'];
+    return request is Map && request['id'] == id &&
+        request['to_root'] == target.root && request['to'] == target.path;
+  }
+}
 
 typedef RpcCall = Future<Object?> Function(String op, Map<String, Object?> args);
 
@@ -45,14 +62,16 @@ class ClipItem {
   final String root;
   final String path;
   final bool isDir;
-  const ClipItem(this.root, this.path, this.isDir);
+  final String? etag;
+  const ClipItem(this.root, this.path, this.isDir, {this.etag});
   String get name => baseName(path);
 }
 
 class FileClipboard {
   final List<ClipItem> items;
   final bool cut;
-  const FileClipboard(this.items, {required this.cut});
+  final Link link;
+  const FileClipboard(this.items, {required this.cut, required this.link});
   bool contains(String root, String path) => items.any((i) => i.root == root && i.path == path);
 }
 
@@ -81,8 +100,6 @@ class PasteResult {
   final List<String> createdPaths = [];
 }
 
-int _tmpCounter = 0;
-
 Future<PasteResult> pasteItems({
   required RpcCall call,
   required List<ClipItem> items,
@@ -91,10 +108,15 @@ Future<PasteResult> pasteItems({
   required String destDir,
   required Set<String> existing,
   required ConflictResolver resolve,
+  Map<String, String> existingVersions = const {},
+  Future<void> Function(ClipItem item, String dest, String? targetVersion)? replaceFile,
+  void Function(ClipItem item, String? replacing)? beforeTransfer,
+  void Function(ClipItem item)? beforeSourceDelete,
   void Function(int index, int total, String name)? onProgress,
 }) async {
   final res = PasteResult();
   final taken = {...existing};
+  final replaced = <String>{};
   ConflictChoice? sticky; // "apply to all"
   for (var i = 0; i < items.length; i++) {
     final it = items[i];
@@ -134,47 +156,49 @@ Future<PasteResult> pasteItems({
         }
       }
       final dest = joinPath(destDir, name);
-      String? aside;
+      beforeTransfer?.call(it, replace ? dest : null);
       if (replace) {
-        aside = joinPath(destDir, '.aurora-old-${DateTime.now().millisecondsSinceEpoch}-${_tmpCounter++}-$name');
-        await call('fs.rename', {'root': destRoot, 'path': dest, 'to': aside});
-      }
-      try {
+        if (replaced.contains(name)) {
+          throw OpError(codeConflict, '本批次已写入 $dest，请刷新后再确认替换');
+        }
+        if (replaceFile == null) {
+          throw OpError(codeConflict, '当前 agent 不支持事务替换；请选择保留两者');
+        }
+        await replaceFile(it, dest, existingVersions[name]);
+      } else {
         await _transfer(call, it, cut: cut, destRoot: destRoot, dest: dest);
-      } on Object {
-        if (aside != null) {
-          try {
-            await call('fs.rename', {'root': destRoot, 'path': aside, 'to': dest}); // put the old one back
-          } on Object {
-            res.errors.add('${it.name}：旧的同名项被暂存为 $aside，没能自动还原');
-          }
-        }
-        rethrow;
-      }
-      if (aside != null) {
-        try {
-          await call('fs.delete', {'root': destRoot, 'path': aside, 'recursive': true});
-        } on Object catch (e) {
-          res.errors.add('${it.name}：已替换，但没能删除暂存的旧项 $aside（${_msg(e)}）');
-        }
       }
       taken.add(name);
+      replaced.add(name);
       res.done++;
       res.createdPaths.add(dest);
-      if (cut && sameRoot) {
+      if (cut && sameRoot && !replace) {
         res.moved.add(it);
       } else if (cut) {
         // Copy has committed. Failure to delete the source is a partial move,
         // not a failed copy: never try to restore the old destination over it.
         try {
-          await call('fs.delete', {'root': it.root, 'path': it.path, 'recursive': it.isDir});
+          beforeSourceDelete?.call(it);
+          await call('fs.delete', {
+            'root': it.root, 'path': it.path, 'recursive': it.isDir,
+            'if_match': ?it.etag,
+          });
           res.moved.add(it);
         } on Object catch (e) {
-          res.errors.add('${it.name}：已复制到 $dest，但源文件未能删除；源和目标均保留（${_msg(e)}）');
+          if (e is OpError && e.code == codeUnavailable) {
+            res.errors.add('${it.name}：已复制到 $dest，源删除结果未知；重试前请核对两处（${e.message}）');
+            res.stopped = true;
+            break;
+          }
+          res.errors.add('${it.name}：已复制到 $dest，但未确认删除源文件，请核对两处（${_msg(e)}）');
         }
       }
     } on Object catch (e) {
       res.errors.add('${it.name}：${_msg(e)}');
+      if (e is OpError && e.code == codeUnavailable) {
+        res.stopped = true;
+        break;
+      }
     }
   }
   return res;
@@ -184,7 +208,7 @@ String _msg(Object e) => e is OpError ? e.message : '$e';
 
 Future<void> _transfer(RpcCall call, ClipItem it, {required bool cut, required String destRoot, required String dest}) async {
   if (cut && it.root == destRoot) {
-    await call('fs.rename', {'root': it.root, 'path': it.path, 'to': dest});
+    await call('fs.rename', {'root': it.root, 'path': it.path, 'to': dest, 'if_match': ?it.etag});
     return;
   }
   await call('fs.copy', {
@@ -192,6 +216,7 @@ Future<void> _transfer(RpcCall call, ClipItem it, {required bool cut, required S
     'path': it.path,
     'to': dest,
     if (it.root != destRoot) 'to_root': destRoot,
+    'if_match': ?it.etag,
   });
 }
 

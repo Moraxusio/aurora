@@ -79,16 +79,18 @@ class UiNavigationItem extends StatelessWidget {
 class UiToolbar extends StatelessWidget {
   final List<Widget> children;
   final EdgeInsetsGeometry padding;
+  final double spacing;
   const UiToolbar({
     super.key,
     required this.children,
     this.padding = const EdgeInsets.all(Space.m),
+    this.spacing = Space.m,
   });
   @override
   Widget build(BuildContext context) => Padding(
     padding: padding,
     child: Wrap(
-      spacing: Space.m,
+      spacing: spacing,
       runSpacing: Space.xs,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: children,

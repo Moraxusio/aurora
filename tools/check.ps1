@@ -3,6 +3,7 @@ param([switch]$Native, [string]$NativeOut)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 & (Join-Path $PSScriptRoot 'check-docs.ps1')
+& (Join-Path $PSScriptRoot 'test-agent-release-identity.ps1')
 Push-Location (Join-Path $repo 'agent')
 try {
     & go test ./... -count=1 -timeout=180s

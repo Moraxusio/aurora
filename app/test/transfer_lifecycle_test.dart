@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:aurora/features/files/transfers.dart';
+import 'package:aurora/features/files/download_publish.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,11 +29,33 @@ class _Stream extends Fake implements OpStream {
   }
 }
 
+class _UploadStream extends _Stream {
+  final dataSent = Completer<void>();
+  final resume = Completer<void>();
+  int endsSent = 0;
+
+  @override
+  Future<void> sendData(List<int> payload) {
+    dataSent.complete();
+    return resume.future;
+  }
+
+  @override
+  Future<void> sendEnd() async => endsSent++;
+}
+
 class _Link extends Fake implements Link {
   final _Stream stream;
   Completer<OpStream>? gate;
   int opens = 0;
-  _Link(this.stream);
+  Object? lastArgs;
+  final String agentId;
+  _Link(this.stream, {this.agentId = 'fixture'});
+  @override
+  AgentInfo get server => AgentInfo({
+    'id': agentId,
+    'direct': {'cert_sha256': 'fixture-pin'},
+  });
   @override
   Future<OpStream> open(
     String op, [
@@ -40,6 +63,7 @@ class _Link extends Fake implements Link {
     Priority priority = Priority.interactive,
   ]) async {
     opens++;
+    lastArgs = args;
     return gate?.future ?? stream;
   }
 }
@@ -60,6 +84,67 @@ Future<void> finish(Transfer t) async {
 }
 
 void main() {
+  test('download publish never replaces a file at the final path', () async {
+    final dir = await Directory.systemTemp.createTemp('aurora-publish-');
+    addTearDown(() => dir.delete(recursive: true));
+    final part = await File('${dir.path}/待发布.part').writeAsString('download');
+    final dest = File('${dir.path}/报告.txt');
+    expect(await dest.exists(), isFalse);
+    await dest.writeAsString('independent edit');
+    await expectLater(publishDownload(part, dest.path), throwsA(isA<FileSystemException>()));
+    expect(await dest.readAsString(), 'independent edit');
+    expect(await part.readAsString(), 'download');
+    await publishDownload(part, '${dir.path}/报告-副本.txt');
+    expect(await File('${dir.path}/报告-副本.txt').readAsString(), 'download');
+    expect(await part.exists(), isFalse);
+  });
+  test('upload sends explicit create/version authorization and never retargets a retry', () async {
+    final dir = await Directory.systemTemp.createTemp('aurora-upload-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = await File('${dir.path}/source').writeAsString('fixture');
+    final old = _Link(_Stream()..fail = true);
+    final replacement = _Link(_Stream()..fail = true);
+    Link current = old;
+    final transfers = Transfers();
+    addTearDown(transfers.dispose);
+
+    final create = transfers.upload(old, file, 7, 'home', '/new',
+      currentLink: () => current);
+    await finish(create);
+    expect(old.lastArgs, containsPair('create', true));
+    final overwrite = transfers.upload(old, file, 7, 'home', '/existing',
+      ifMatch: 'reviewed-etag', currentLink: () => current);
+    await finish(overwrite);
+    expect(old.lastArgs, containsPair('if_match', 'reviewed-etag'));
+    expect(old.lastArgs as Map, isNot(contains('create')));
+    current = replacement;
+    overwrite.retry();
+    await finish(overwrite);
+    expect(overwrite.error, contains('连接已变化'));
+    expect(replacement.opens, 0);
+  });
+
+  test('upload checks again before authorizing commit after a local edit', () async {
+    final dir = await Directory.systemTemp.createTemp('aurora-upload-edit-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = await File('${dir.path}/source').writeAsString('fixture');
+    final stream = _UploadStream();
+    final transfers = Transfers();
+    addTearDown(transfers.dispose);
+    var edited = false;
+    final task = transfers.upload(_Link(stream), file, 7, 'home', '/existing',
+      ifMatch: 'reviewed-etag',
+      verifyTarget: () {
+        if (edited) throw OpError(codeConflict, '目标有未保存的修改');
+      });
+    await stream.dataSent.future.timeout(const Duration(seconds: 5));
+    edited = true;
+    stream.resume.complete();
+    await finish(task);
+    expect(task.error, contains('未保存'));
+    expect(stream.endsSent, 0);
+    expect(stream.resets, 1);
+  });
   test(
     'queue admits three streams and removed transfers cannot publish or notify',
     () async {
@@ -181,6 +266,25 @@ void main() {
       expect(await dir.list().length, 1);
     },
   );
+
+  test('download retry must not use a differently paired agent', () async {
+    final dir = await Directory.systemTemp.createTemp('aurora-download-pairing-');
+    addTearDown(() => dir.delete(recursive: true));
+    final old = _Link(_Stream()..fail = true);
+    final other = _Link(_Stream(), agentId: 'other');
+    Link current = old;
+    final transfers = Transfers();
+    addTearDown(transfers.dispose);
+    final task = transfers.download(old, 'home', '/example', '${dir.path}/example', 6,
+      currentLink: () => current);
+    await finish(task);
+    current = other;
+    task.retry();
+    await finish(task);
+    expect(task.error, contains('连接已变化'));
+    expect(other.opens, 0);
+    expect(await dir.list().isEmpty, isTrue);
+  });
 
   test('cancelling before open resolves resets the late stream without creating a file', () async {
     final dir = await Directory.systemTemp.createTemp('aurora-transfer-');

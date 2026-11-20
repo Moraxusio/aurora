@@ -124,6 +124,10 @@ func (f *fakeSys) Restart(string) error {
 	if _, _, err := wire.LoadOrCreateCert(filepath.Join(f.root, c.StateDir), "agent"); err != nil {
 		return err
 	}
+	idPath := filepath.Join(f.root, c.StateDir, "agent-id")
+	if err := wire.WriteNewIdentityFile(idPath, []byte(fixtureAgentID+"\n"), 0o600); err != nil && !os.IsExist(err) {
+		return err
+	}
 	f.active = true
 	if !bytes.Contains(b, []byte("broken")) {
 		f.running = strings.Fields(string(b))[1]
@@ -151,7 +155,11 @@ func (f *fakeSys) VerifyUnit(path string) error {
 	}
 	for _, l := range strings.Split(string(b), "\n") {
 		if exe, ok := strings.CutPrefix(l, "ExecStart="); ok {
-			fi, err := os.Stat(strings.Fields(exe)[0])
+			bin := strings.Fields(exe)[0]
+			if bin == f.lay().Bin {
+				bin = filepath.Join(f.root, bin)
+			}
+			fi, err := os.Stat(bin)
 			if err != nil || fi.Mode()&0o111 == 0 {
 				return fmt.Errorf("%s: Command %s is not executable", path, exe)
 			}
@@ -173,6 +181,8 @@ func (f *fakeSys) BinaryVersion(path string) (string, error) {
 }
 func (f *fakeSys) PortFree(int) bool { return f.portFree }
 
+const fixtureAgentID = "0123456789abcdef01234567"
+
 func (f *fakeSys) dial(_ context.Context, addr, pin, token string) (*wire.AgentInfo, error) {
 	if !f.active || f.running == "" {
 		return nil, errors.New("connection refused")
@@ -191,7 +201,11 @@ func (f *fakeSys) dial(_ context.Context, addr, pin, token string) (*wire.AgentI
 	if want := fmt.Sprintf("127.0.0.1:%d", entry.ListenPort(c.Listen)); addr != want {
 		return nil, fmt.Errorf("unexpected addr %s", addr)
 	}
-	return &wire.AgentInfo{ID: "agent-1", Version: f.running, Direct: wire.DirectInfo{Port: entry.ListenPort(c.Listen), Addrs: []string{fmt.Sprintf("10.0.0.5:%d", entry.ListenPort(c.Listen))}}}, nil
+	id, err := os.ReadFile(filepath.Join(f.root, c.StateDir, "agent-id"))
+	if err != nil {
+		return nil, err
+	}
+	return &wire.AgentInfo{ID: strings.TrimSpace(string(id)), Version: f.running, Direct: wire.DirectInfo{Port: entry.ListenPort(c.Listen), Addrs: []string{fmt.Sprintf("10.0.0.5:%d", entry.ListenPort(c.Listen))}}}, nil
 }
 
 type rig struct {
@@ -362,7 +376,7 @@ func TestFreshInstall(t *testing.T) {
 		t.Fatalf("result %+v", res)
 	}
 	if res.Direct == nil || len(res.Direct.Token) != 64 || len(res.Direct.CertSHA256) != 64 || res.Direct.Port != 17710 ||
-		len(res.Direct.Addrs) != 1 || res.AgentID != "agent-1" {
+		len(res.Direct.Addrs) != 1 || res.AgentID != fixtureAgentID {
 		t.Fatalf("direct %+v", res.Direct)
 	}
 	for p, mode := range map[string]os.FileMode{BinPath: 0o755, UnitPath: 0o644, ConfigPath: 0o600, ConfigDir: 0o700 | fs.ModeDir, StateDir: 0o700 | fs.ModeDir} {
@@ -423,6 +437,77 @@ func TestUpgradeKeepsConfigAndIdentity(t *testing.T) {
 	}
 	if res.Direct.Token != first.Direct.Token || res.Direct.CertSHA256 != first.Direct.CertSHA256 {
 		t.Fatal("upgrade changed the token or the certificate")
+	}
+}
+
+func TestVersion4UpdatesOnlyExecutableAndRestoresItAfterFailure(t *testing.T) {
+	r := newRig(t)
+	first := r.install("3.26.0", false, "")
+	if first.Result != ResultInstalled {
+		t.Fatalf("initial install: %+v", first)
+	}
+	unitPath := filepath.Join(r.root, UnitPath)
+	unit, err := os.ReadFile(unitPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit = append(unit, []byte("\n# Administrator custom comment\n")...)
+	if err := os.WriteFile(unitPath, unit, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(r.root, ConfigPath)
+	cfg, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keep := func() {
+		t.Helper()
+		after, err := os.ReadFile(unitPath)
+		if err != nil || !bytes.Equal(after, unit) {
+			t.Fatal("existing service unit was not preserved")
+		}
+		after, err = os.ReadFile(cfgPath)
+		if err != nil || !bytes.Equal(after, cfg) {
+			t.Fatal("existing configuration was not preserved")
+		}
+	}
+	result := r.install("4.0.0", false, "")
+	if result.Result != ResultUpgraded || result.Direct.CertSHA256 != first.Direct.CertSHA256 {
+		t.Fatalf("upgrade: %+v", result)
+	}
+	keep()
+	result = r.install("4.0.1", false, "rename-bin")
+	if result.Result != ResultRolledBack || r.sys.running != "4.0.0" {
+		t.Fatalf("rollback: %+v %s", result, r.sysState())
+	}
+	keep()
+}
+
+func TestVersion4DoesNotRestartOldAgentOverChangedIdentity(t *testing.T) {
+	r := newRig(t)
+	first := r.install("3.26.0", false, "")
+	if first.Result != ResultInstalled {
+		t.Fatalf("initial install: %+v", first)
+	}
+	bin, sum := r.agent("4.0.1", false)
+	e := r.env(bin, "4.0.1")
+	path := filepath.Join(r.root, StateDir, "agent-id")
+	const changed = "111111111111111111111111\n"
+	e.fault = func(step string) error {
+		if step == "restart" {
+			return os.WriteFile(path, []byte(changed), 0o600)
+		}
+		return nil
+	}
+	res := Run(e, Options{SHA256: sum})
+	if res.Result != ResultRollbackFailed || res.Kept == "" || r.sys.active {
+		t.Fatalf("changed identity was not preserved safely: %+v %s", res, r.sysState())
+	}
+	if b, err := os.ReadFile(path); err != nil || string(b) != changed {
+		t.Fatal("changed identity was overwritten")
+	}
+	if version, err := r.sys.BinaryVersion(filepath.Join(r.root, defaultBin)); err != nil || version != "3.26.0" {
+		t.Fatalf("old binary was not restored: %s %v", version, err)
 	}
 }
 
@@ -630,7 +715,7 @@ func TestDirectInfo(t *testing.T) {
 	inst := r.install("3.0.1", false, "")
 	res := DirectInfo(r.env("", "3.0.1"))
 	if res.Result != ResultDirect || !res.Running || res.Direct.Token != inst.Direct.Token ||
-		res.Direct.CertSHA256 != inst.Direct.CertSHA256 || res.AgentID != "agent-1" || len(res.Direct.Addrs) != 1 {
+		res.Direct.CertSHA256 != inst.Direct.CertSHA256 || res.AgentID != fixtureAgentID || len(res.Direct.Addrs) != 1 {
 		t.Fatalf("%+v", res)
 	}
 	r.sys.active, r.sys.running = false, ""

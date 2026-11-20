@@ -93,18 +93,21 @@ class MenuLabel extends StatelessWidget {
   final IconData? icon;
   final String? shortcut;
   final bool danger;
+  final bool hasMore;
   const MenuLabel(
     this.label, {
     super.key,
     this.icon,
     this.shortcut,
     this.danger = false,
+    this.hasMore = false,
   });
   @override
   Widget build(BuildContext context) => _MenuLabelBody(
     label: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
     icon: icon,
     shortcut: shortcut,
+    hasMore: hasMore,
   );
 }
 
@@ -112,7 +115,8 @@ class _MenuLabelBody extends StatelessWidget {
   final Widget label;
   final IconData? icon;
   final String? shortcut;
-  const _MenuLabelBody({required this.label, this.icon, this.shortcut});
+  final bool hasMore;
+  const _MenuLabelBody({required this.label, this.icon, this.shortcut, this.hasMore = false});
   @override
   Widget build(BuildContext context) {
     final color = DefaultTextStyle.of(context).style.color;
@@ -140,6 +144,10 @@ class _MenuLabelBody extends StatelessWidget {
               ),
             ),
           ),
+        ],
+        if (hasMore) ...[
+          const SizedBox(width: Space.xs),
+          Icon(Icons.chevron_right_rounded, size: 16, color: color),
         ],
       ],
     );
@@ -234,6 +242,7 @@ Future<T?> showWorkbenchMenu<T>({
   required List<PopupMenuEntry<T>> items,
   BuildContext? anchor,
   Offset? at,
+  bool? touch,
 }) async {
   if (items.isEmpty) return null;
   Tooltip.dismissAllToolTips();
@@ -262,7 +271,7 @@ Future<T?> showWorkbenchMenu<T>({
     items: items,
     position: position,
     anchored: anchor != null,
-    touch: InputMode.isTouch(context),
+    touch: touch ?? InputMode.isTouch(context),
     reduced: UiMotion.reduced(context),
     themes: InheritedTheme.capture(from: context, to: navigator.context),
     label: MaterialLocalizations.of(context).popupMenuLabel,
@@ -444,6 +453,70 @@ class _MenuTransitionState extends State<_MenuTransition> {
         );
 }
 
+/// A compact icon strip for frequent commands at the top of a workbench menu.
+/// Items use [MenuLabel] for their icon, tooltip, shortcut, and danger tone.
+class WorkbenchMenuActions<T> extends PopupMenuEntry<T> {
+  final List<PopupMenuItem<T>> actions;
+  const WorkbenchMenuActions({super.key, required this.actions});
+
+  @override
+  double get height => UiMetrics.touchRow;
+
+  @override
+  bool represents(T? value) => actions.any((item) => item.represents(value));
+
+  @override
+  State<WorkbenchMenuActions<T>> createState() => _WorkbenchMenuActionsState<T>();
+}
+
+class _WorkbenchMenuActionsState<T> extends State<WorkbenchMenuActions<T>> {
+  @override
+  Widget build(BuildContext context) {
+    final route = ModalRoute.of(context)! as _WorkbenchMenuRoute<T>;
+    final ide = Ide.of(context);
+    final size = route.touch ? UiMetrics.touchRow : 38.0;
+    return Wrap(
+      spacing: Space.xs,
+      children: [
+        for (var i = 0; i < widget.actions.length; i++)
+          Builder(builder: (context) {
+            final item = widget.actions[i];
+            final label = item.child! as MenuLabel;
+            final tip = label.shortcut == null
+                ? label.label
+                : '${label.label}（${label.shortcut}）';
+            return Tooltip(
+              message: tip,
+              excludeFromSemantics: true,
+              child: Semantics(
+                role: SemanticsRole.menuItem,
+                label: tip,
+                enabled: item.enabled,
+                button: true,
+                child: InkWell(
+                  key: ValueKey('menu-action-${label.label}'),
+                  autofocus: !route.items.any((entry) => entry is PopupMenuItem<T> && entry.enabled) &&
+                      i == widget.actions.indexWhere((entry) => entry.enabled),
+                  canRequestFocus: item.enabled,
+                  onTap: item.enabled ? () => route.select(item) : null,
+                  borderRadius: UiMetrics.controlCorners,
+                  child: SizedBox.square(
+                    dimension: size,
+                    child: Icon(
+                      label.icon,
+                      size: 18,
+                      color: !item.enabled ? ide.textFaint : label.danger ? ide.error : ide.text,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
 /// Shared rendering removes ListTile's extra height/indent from checked entries.
 class WorkbenchMenuEntry<T> extends StatelessWidget {
   final PopupMenuItem<T> item;
@@ -474,6 +547,7 @@ class WorkbenchMenuEntry<T> extends StatelessWidget {
         label: Text(label.label, maxLines: 2, overflow: TextOverflow.ellipsis),
         icon: checked == true ? Icons.check_rounded : label.icon,
         shortcut: label.shortcut,
+        hasMore: label.hasMore,
       );
     } else if (checkColumn || label is Text) {
       body = _MenuLabelBody(

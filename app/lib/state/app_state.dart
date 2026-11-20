@@ -142,6 +142,8 @@ class AppState extends ChangeNotifier implements ProfileAccess {
   String? get selected => _store?.selected;
   List<ServerEntry> get servers => _store?.servers ?? const [];
   bool get ready => _store != null;
+  bool get allowAutoConnect =>
+      Platform.environment['AURORA4_PROTECTED_STATE'] != '1';
 
   Future<void> init() => initAt(null);
 
@@ -186,6 +188,10 @@ class AppState extends ChangeNotifier implements ProfileAccess {
     builds = [];
     buildsError = null;
     upgradePolicy = null;
+    if (Platform.environment['AURORA4_PUBLIC_PREVIEW'] == '1') {
+      buildsError = '公开预览仅供隔离体验，不支持远程 agent 安装与升级';
+      return;
+    }
     // Tests sign builds with a throwaway key and trust it through the
     // environment; it replaces the release key for this process only, and the
     // UI says so. A release never sets it.

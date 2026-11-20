@@ -5,7 +5,8 @@ param(
     [string]$Key = $env:AURORA_RELEASE_KEY,
     [string]$Policy = '',
     [string]$NotesFile = '',
-    [switch]$NoArchive
+    [switch]$NoArchive,
+    [switch]$PublicPreview
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -13,6 +14,7 @@ if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw 'Ve
 $parts = $Version.Split('.')
 if ([int]$parts[1] -gt 99 -or [int]$parts[2] -gt 99) { throw 'MINOR and PATCH must be 0-99' }
 $buildNumber = [int]$parts[0] * 10000 + [int]$parts[1] * 100 + [int]$parts[2]
+$linuxChannel = if ($PublicPreview) { 'preview' } else { 'stable' }
 if (-not $Key -or -not (Test-Path -LiteralPath $Key -PathType Leaf)) { throw 'Release signing key not found' }
 $Key = (Resolve-Path -LiteralPath $Key).Path
 $Out = [IO.Path]::GetFullPath($Out)
@@ -75,20 +77,24 @@ try {
         & go build -o "$work\aurora3-release.exe" ./cmd/aurora3-release
         if ($LASTEXITCODE) { throw 'Release helper build failed' }
         $env:GOOS = 'linux'
-        & go build -trimpath -ldflags "-s -w -X main.Version=$Version" -o "$work\aurora3-agent" ./cmd/aurora3-agent
+        $previewTag = if ($PublicPreview) { @('-tags', 'aurora_public_preview') } else { @() }
+        & go build @previewTag -trimpath -ldflags "-s -w -X main.Version=$Version" -o "$work\aurora3-agent" ./cmd/aurora3-agent
         if ($LASTEXITCODE) { throw 'Linux agent build failed' }
         $env:GOOS = 'windows'
         & go build -trimpath -ldflags "-H=windowsgui -s -w -X main.Version=$Version" -o "$work\aurora3-local-agent.exe" ./cmd/aurora3-local-agent
         if ($LASTEXITCODE) { throw 'Windows local agent build failed' }
     } finally { Pop-Location }
-    & "$work\aurora3-release.exe" sign --key $Key --version $Version --arch amd64 --file "$work\aurora3-agent" --out "$dir\agent\amd64"
+    & "$work\aurora3-release.exe" sign --key $Key --version $Version --channel $linuxChannel --arch amd64 --file "$work\aurora3-agent" --out "$dir\agent\amd64"
     if ($LASTEXITCODE) { throw 'Linux agent signing failed' }
-    & "$work\aurora3-release.exe" verify --dir "$dir\agent\amd64"
+    & "$work\aurora3-release.exe" verify --channel $linuxChannel --dir "$dir\agent\amd64"
     if ($LASTEXITCODE) { throw 'Linux agent verification failed' }
     & "$work\aurora3-release.exe" sign --key $Key --product aurora3-local-agent --os windows --version $Version --arch amd64 --file "$work\aurora3-local-agent.exe" --out "$dir\local-agent\windows-amd64"
     if ($LASTEXITCODE) { throw 'Local agent signing failed' }
     & "$work\aurora3-release.exe" verify --product aurora3-local-agent --dir "$dir\local-agent\windows-amd64"
     if ($LASTEXITCODE) { throw 'Local agent verification failed' }
+    & (Join-Path $PSScriptRoot 'check-agent-release-identity.ps1') -ManifestPaths @(
+        "$dir\agent\amd64\manifest.json", "$dir\local-agent\windows-amd64\manifest.json"
+    )
     $policyArgs = @('policy', '--key', $Key, '--out', "$dir\agent")
     if ($Policy) { $policyArgs += @('--input', $Policy) }
     & "$work\aurora3-release.exe" @policyArgs
@@ -98,7 +104,7 @@ try {
     try {
         & dart tool/ui_contract.dart
         if ($LASTEXITCODE) { throw 'Aurora GUI contract failed' }
-        & flutter build windows --no-pub --release --target=lib/main.dart "--build-name=$Version" "--build-number=$buildNumber"
+        & flutter build windows --no-pub --release --target=lib/main.dart "--build-name=$Version" "--build-number=$buildNumber" "--dart-define=AURORA_CLIENT_VERSION=$Version"
         if ($LASTEXITCODE) { throw 'Windows client build failed' }
     } finally { Pop-Location }
     Copy-Item (Join-Path $repo 'app\build\windows\x64\runner\Release\*') $dir -Recurse
@@ -138,7 +144,7 @@ Windows 本地 agent、Linux amd64 agent 和客户端统一版本 $Version。
     $local = Get-Content -LiteralPath "$dir\local-agent\windows-amd64\manifest.json" -Raw | ConvertFrom-Json
     [ordered]@{
         version = $Version
-        channel = 'stable'
+        channel = $linuxChannel
         built_at_utc = [DateTime]::UtcNow.ToString('o')
         source_head = $sourceHead
         source_working_tree = $(if ($sourceStatus.Count) { 'uncommitted working tree' } else { 'clean' })

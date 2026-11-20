@@ -106,7 +106,20 @@ class _ComponentGalleryState extends State<ComponentGallery> {
                     selected: label == '文件', onTap: () => setState(() => status = '导航到$label'))),
               ]),
               const SizedBox(height: Space.l),
-              const KeyCaps('Ctrl+Shift+P'),
+               const KeyCaps('Ctrl+Shift+P'),
+               Builder(builder: (context) => OutlinedButton(
+                 onPressed: () => showMenuAt(
+                   context,
+                   Offset.zero,
+                   [
+                     MenuItem('复制', () => setState(() => status = '已复制示例'), icon: Icons.content_copy_outlined, hint: 'Ctrl+C', quick: true),
+                     MenuItem('删除', () => setState(() => status = '已选择删除示例'), icon: Icons.delete_outline, danger: true, quick: true),
+                     MenuItem('属性…', () => setState(() => status = '已选择属性'), icon: Icons.info_outline),
+                   ],
+                   anchor: context,
+                 ),
+                 child: const Text('图标操作菜单'),
+               )),
             ],
           ),
         ),

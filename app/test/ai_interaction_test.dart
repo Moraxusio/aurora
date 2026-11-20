@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:aurora/features/ai/ai_model_picker.dart';
 import 'package:aurora/features/ai/ai_settings_dialog.dart';
 import 'package:aurora/features/ai/ai_studio_view.dart';
+import 'package:aurora/kernel/editor_tab.dart';
 import 'package:aurora/kernel/input_mode.dart';
 import 'package:aurora/kernel/workspace.dart';
 import 'package:aurora/theme/ide_theme.dart';
@@ -48,6 +49,7 @@ class _Link extends RuntimeLink {
   int downloads = 0;
   final media = <String, Uint8List>{};
   List<Map<String, dynamic>>? history;
+  Map<String, Object?>? revertPreview, revertRequest;
   final List<Map<String, dynamic>> inbox = [];
   @override
   Future<OpStream> open(
@@ -69,6 +71,7 @@ class _Link extends RuntimeLink {
     'caps': [
       'ai.inbox',
       'ai.permissions',
+      if (revertPreview != null) 'ai.revert.preview',
       if (modern) ...['ai.capabilities', 'ai.question'],
     ],
   });
@@ -78,6 +81,11 @@ class _Link extends RuntimeLink {
     Object? args,
     Duration timeout = const Duration(seconds: 60),
   ]) async {
+    if (op == 'ai.revert.preview') return revertPreview;
+    if (op == 'ai.revert') {
+      revertRequest = Map<String, Object?>.from(args as Map);
+      return {'restored_files': 1};
+    }
     if (op == 'ai.question') {
       final input = args as Map;
       if (input['id'] == null) return {'question': question};
@@ -142,6 +150,7 @@ void main() {
       wire: link,
       profile: Profile(
         servers: [ServerEntry(id: 'server', name: '测试工作区')],
+        selected: 'server',
         ai: AiSettings(
           selectedProviderId: 'a',
           providers: [
@@ -735,9 +744,13 @@ void main() {
       expect(t.takeException(), isNull);
       await snapshot(t, 'tool-pdf-preview-390');
       await t.pumpWidget(const SizedBox());
+      // pdfrx checks disposal on the next background-page timer. Advance the
+      // fake clock as well as giving its native document worker time to exit.
+      await t.pump(const Duration(milliseconds: 100));
       await t.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 300)),
       );
+      await t.pump(const Duration(milliseconds: 100));
     },
   );
 
@@ -759,6 +772,63 @@ void main() {
     final call = link.rpcCalls.where((x) => x.$1 == 'ai.run').single.$2;
     expect(call['delivery'], 'queue');
     expect(call['text'], '下一项任务');
+  });
+
+  testWidgets('AI revert rechecks edits that appear while confirming', (t) async {
+    link.history = [
+      {
+        'id': 'prompt',
+        'role': 'user',
+        'parts': [
+          {'type': 'text', 'text': 'fixture prompt'},
+        ],
+      },
+    ];
+    await pump(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
+    await t.tap(find.text('回退'));
+    await frames(t);
+    expect(find.text('回退到此消息之前？'), findsOneWidget);
+
+    final tab = EditorTab(
+      id: 'file:home:/project/notes.md',
+      file: WorkspacePath(root: 'home', path: '/project/notes.md'),
+      title: 'notes.md',
+      icon: Icons.edit,
+      builder: (_) => const SizedBox(),
+    );
+    ws.tabs.add(tab);
+    tab.dirty.value = true;
+    await t.tap(find.text('仅回退对话'));
+    await frames(t);
+    expect(link.revertRequest, isNull);
+    expect(tab.dirty.value, isTrue);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('AI revert does not preselect files and only submits explicit choices', (t) async {
+    link.revertPreview = {'revision': 'review-revision', 'paths': ['ai.txt', 'manual.txt']};
+    link.history = [
+      {
+        'id': 'prompt',
+        'role': 'user',
+        'parts': [
+          {'type': 'text', 'text': 'fixture prompt'},
+        ],
+      },
+    ];
+    await pump(t, AiStudioView(ws: ws, initialSessionId: 'ses_1'));
+    await t.tap(find.text('回退'));
+    await frames(t);
+    expect(find.text('仅回退对话'), findsOneWidget);
+    final choices = find.byType(CheckboxListTile);
+    expect(t.widgetList<CheckboxListTile>(choices).map((tile) => tile.value), [false, false]);
+    await t.tap(find.text('ai.txt'));
+    await frames(t);
+    await t.tap(find.text('恢复所选文件和对话'));
+    await frames(t);
+    expect(link.revertRequest, containsPair('files', true));
+    expect(link.revertRequest?['review'], {'revision': 'review-revision', 'paths': ['ai.txt']});
+    await t.pumpWidget(const SizedBox());
   });
 
   testWidgets(

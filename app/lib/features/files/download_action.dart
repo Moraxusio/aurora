@@ -15,6 +15,7 @@ Future<void> downloadRemoteFile(Workspace ws, {required String root, required St
   final link = ws.link;
   final transfers = ws.transfers;
   if (link == null || transfers == null) return;
+  final project = ws.projectKey;
   final name = path.split('/').last;
   final dir = await FilePicker.getDirectoryPath(dialogTitle: '下载 $name 到…');
   if (dir == null) return;
@@ -22,6 +23,10 @@ Future<void> downloadRemoteFile(Workspace ws, {required String root, required St
   for (var i = 1; await File(where).exists(); i++) {
     final dot = name.lastIndexOf('.');
     where = dot > 0 ? '$dir${Platform.pathSeparator}${name.substring(0, dot)} ($i)${name.substring(dot)}' : '$dir${Platform.pathSeparator}$name ($i)';
+  }
+  if (!identical(link, ws.link) || project != ws.projectKey || ws.app.selected != ws.serverId) {
+    ws.toast('连接或工作区已变化，请重新选择下载', error: true);
+    return;
   }
   transfers.download(link, root, path, where, size, currentLink: () => ws.link,
     onDone: () => Toast.show('已下载 $name'));

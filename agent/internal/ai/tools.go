@@ -371,6 +371,30 @@ func resolveToolPath(tc toolContext, rawPath string, allowSpill bool) (absPath s
 	return p, rel, nil
 }
 
+func (tc toolContext) livePermissionSessionLocked() *Session {
+	id, parentID := tc.session.ID, tc.session.ParentID
+	for {
+		tc.env.waitSessionLocked(id)
+		if run := tc.env.running[id]; run != nil && run.parentRun != nil {
+			tc.env.waitSessionLocked(parentID)
+			if tc.env.sessionIO[id] != nil {
+				continue
+			}
+		}
+		if live := tc.env.sessions[id]; live != nil {
+			return live
+		}
+		return tc.session
+	}
+}
+
+func (tc toolContext) liveToolPermission(action, resource string) (string, string) {
+	tc.env.init()
+	tc.env.mu.Lock()
+	defer tc.env.mu.Unlock()
+	return tc.env.toolPermissionLocked(tc.livePermissionSessionLocked(), tc.session.ParentID != "" || tc.depth > 0, action, resource)
+}
+
 func executeTool(ctx context.Context, tc toolContext, name string, rawInput json.RawMessage) ToolExecResult {
 	if err := ctx.Err(); err != nil {
 		return ToolExecResult{Output: "Not executed: run cancelled.", IsError: true}
@@ -398,11 +422,17 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 
 	checkPerm := func(action, resource string, meta map[string]any) error {
 		isSubagent := tc.session.ParentID != "" || tc.depth > 0
-		eff, reason := tc.env.perms.EvaluateWithContext(tc.session.ID, tc.session.Agent, isSubagent, tc.session.PermissionMode, action, resource, tc.session.PermissionRules)
-		if eff == "deny" {
-			return errors.New(reason)
-		}
-		if eff == "ask" {
+		for {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			eff, reason := tc.liveToolPermission(action, resource)
+			if eff == "deny" {
+				return errors.New(reason)
+			}
+			if eff == "allow" {
+				return nil
+			}
 			q := PermissionQuestion{
 				ID:         NewID("perm"),
 				SessionID:  tc.session.ID,
@@ -416,8 +446,20 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 				Reason:     reason,
 				Metadata:   meta,
 			}
-			return tc.env.perms.Ask(ctx, q, func(pq PermissionQuestion) {
-				tc.env.broadcast(StreamEvent{
+			decision, err := tc.env.perms.askDecision(ctx, q, func(pq PermissionQuestion) {
+				tc.env.mu.Lock()
+				defer tc.env.mu.Unlock()
+				// Registration and publication can straddle a policy update.
+				s := tc.livePermissionSessionLocked()
+				if !tc.env.perms.isPending(pq.ID) {
+					return
+				}
+				effect, reason := tc.env.toolPermissionLocked(s, isSubagent, action, resource)
+				if effect != "ask" {
+					tc.env.perms.Resolve(pq.ID, PermissionDecision{Allow: effect == "allow", Reason: reason, fromPolicy: true})
+					return
+				}
+				tc.env.broadcastLocked(StreamEvent{
 					Type:       "permission.ask",
 					SessionID:  tc.session.ID,
 					MessageID:  tc.messageID,
@@ -425,8 +467,18 @@ func executeTool(ctx context.Context, tc toolContext, name string, rawInput json
 					Permission: &pq,
 				})
 			})
+			if err != nil {
+				return err
+			}
+			effect, reason := tc.liveToolPermission(action, resource)
+			if effect == "deny" {
+				return errors.New(reason)
+			}
+			if effect == "allow" || !decision.fromPolicy {
+				return ctx.Err()
+			}
+			// An automatic approval is not consent if policy changed back to Ask.
 		}
-		return nil
 	}
 
 	var res ToolExecResult
@@ -592,13 +644,20 @@ func execReadTool(ctx context.Context, tc toolContext, rawInput json.RawMessage,
 		return ToolExecResult{Output: "Read requires a regular file or directory.", IsError: true}
 	}
 	if st.Size() > 8*1024*1024 {
-		return ToolExecResult{
-			Output:  fmt.Sprintf("File %s is %d bytes (> 8 MiB). Use grep or shell head/tail to inspect specific parts.", disp, st.Size()),
-			IsError: true,
+		if !isToolSpill(tc.env.StateDir, abs) {
+			return ToolExecResult{
+				Output:  fmt.Sprintf("File %s is %d bytes (> 8 MiB). Use grep or shell head/tail to inspect specific parts.", disp, st.Size()),
+				IsError: true,
+			}
 		}
 	}
 
-	data, err := readToolFile(abs, maxAttachmentBytes)
+	var data []byte
+	if isToolSpill(tc.env.StateDir, abs) {
+		data, err = readAIRecord("tool-output", abs, maxSpillBytes)
+	} else {
+		data, err = readToolFile(abs, maxAttachmentBytes)
+	}
 	if err != nil {
 		return ToolExecResult{Output: err.Error(), IsError: true}
 	}
@@ -911,8 +970,7 @@ func execGlobTool(ctx context.Context, tc toolContext, rawInput json.RawMessage)
 				}
 			}
 			if tc.env != nil && tc.session != nil {
-				tc.env.init()
-				effect, _ := tc.env.perms.EvaluateWithRules(tc.session.ID, tc.session.Agent, tc.session.PermissionMode, "glob", dispRel, tc.session.PermissionRules)
+				effect, _ := tc.liveToolPermission("glob", dispRel)
 				if effect != "allow" {
 					return nil
 				}
@@ -1092,8 +1150,9 @@ func execGrepTool(ctx context.Context, tc toolContext, rawInput json.RawMessage,
 		if incRe != nil && !incRe.MatchString(d.Name()) && !incRe.MatchString(filepath.ToSlash(rel)) {
 			return nil
 		}
+		spill := tc.env != nil && p == searchTarget && isToolSpill(tc.env.StateDir, p)
 		info, err := d.Info()
-		if err != nil || !info.Mode().IsRegular() || info.Size() > 2*1024*1024 {
+		if err != nil || !info.Mode().IsRegular() || (!spill && info.Size() > 2*1024*1024) {
 			return nil
 		}
 		disp := p
@@ -1101,15 +1160,22 @@ func execGrepTool(ctx context.Context, tc toolContext, rawInput json.RawMessage,
 			disp = filepath.ToSlash(rel)
 		}
 		if st.IsDir() && tc.env != nil {
-			tc.env.init()
-			effect, _ := tc.env.perms.EvaluateWithRules(tc.session.ID, tc.session.Agent, tc.session.PermissionMode, "read", disp, tc.session.PermissionRules)
-			searchEffect, _ := tc.env.perms.EvaluateWithRules(tc.session.ID, tc.session.Agent, tc.session.PermissionMode, "grep", disp, tc.session.PermissionRules)
+			effect, _ := tc.liveToolPermission("read", disp)
+			searchEffect, _ := tc.liveToolPermission("grep", disp)
 			if effect != "allow" || searchEffect != "allow" {
 				skipped++
 				return nil
 			}
 		}
-		b, err := readToolFile(p, 2<<20)
+		var b []byte
+		if spill {
+			b, err = readAIRecord("tool-output", p, maxSpillBytes)
+			if err != nil {
+				return err
+			}
+		} else {
+			b, err = readToolFile(p, 2<<20)
+		}
 		if err != nil || bytes.IndexByte(b[:minInt(len(b), 4096)], 0) >= 0 || !utf8.Valid(b) {
 			return nil
 		}

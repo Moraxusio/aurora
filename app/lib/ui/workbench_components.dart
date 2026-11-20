@@ -104,6 +104,8 @@ class MenuItem {
   final VoidCallback? onTap;
   final bool danger;
   final String? hint;
+  final bool quick;
+  final List<MenuItem> Function()? children;
 
   /// A divider instead of an item.
   final bool separator;
@@ -113,13 +115,22 @@ class MenuItem {
     this.icon,
     this.danger = false,
     this.hint,
-  }) : separator = false;
+    this.quick = false,
+  }) : separator = false, children = null;
+  const MenuItem.more(this.label, this.children, {this.icon = Icons.more_horiz})
+    : separator = false,
+      onTap = null,
+      danger = false,
+      hint = null,
+      quick = false;
   const MenuItem.separator()
     : label = '',
       icon = null,
       onTap = null,
       danger = false,
       hint = null,
+      quick = false,
+      children = null,
       separator = true;
 }
 
@@ -129,46 +140,72 @@ Future<void> showMenuAt(
   Offset at,
   List<MenuItem> items, {
   BuildContext? anchor,
+  bool? touch,
 }) async {
+  PopupMenuItem<int> entry(int i) => PopupMenuItem<int>(
+    value: i,
+    enabled: items[i].onTap != null || items[i].children != null,
+    child: MenuLabel(
+      items[i].label,
+      icon: items[i].icon,
+      danger: items[i].danger,
+      shortcut: items[i].hint,
+      hasMore: items[i].children != null,
+    ),
+  );
+  final quick = [
+    for (var i = 0; i < items.length; i++)
+      if (items[i].quick) entry(i),
+  ];
   final picked = await showWorkbenchMenu<int>(
     context: context,
     anchor: anchor,
     at: at,
+    touch: touch,
     items: [
+      if (quick.isNotEmpty) WorkbenchMenuActions<int>(actions: quick),
+      if (quick.isNotEmpty && items.any((item) => !item.quick && !item.separator))
+        const PopupMenuDivider(height: 8),
       for (var i = 0; i < items.length; i++)
         if (items[i].separator)
           const PopupMenuDivider(height: 8)
-        else
-          PopupMenuItem<int>(
-            value: i,
-            enabled: items[i].onTap != null,
-            child: MenuLabel(
-              items[i].label,
-              icon: items[i].icon,
-              danger: items[i].danger,
-              shortcut: items[i].hint,
-            ),
-          ),
+        else if (!items[i].quick)
+          entry(i),
     ],
   );
-  if (context.mounted && picked != null) items[picked].onTap?.call();
+  if (!context.mounted || picked == null) return;
+  final item = items[picked];
+  if (item.children case final children?) {
+    await showMenuAt(context, at, children(), anchor: anchor, touch: touch);
+  } else {
+    item.onTap?.call();
+  }
 }
 
 /// Right-click and long-press open the same menu.
-class ContextArea extends StatelessWidget {
+class ContextArea extends StatefulWidget {
   final Widget child;
   final List<MenuItem> Function() items;
   const ContextArea({super.key, required this.child, required this.items});
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onSecondaryTapDown: (d) => showMenuAt(context, d.globalPosition, items()),
-      onLongPressStart: (d) => showMenuAt(context, d.globalPosition, items()),
-      child: child,
-    );
-  }
+  State<ContextArea> createState() => _ContextAreaState();
+}
+
+class _ContextAreaState extends State<ContextArea> {
+  bool? _longPressTouch;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    // Tap-down can reach multiple competing recognizers before one wins.
+    onSecondaryTapUp: (d) => showMenuAt(context, d.globalPosition, widget.items(),
+      touch: InputMode.touchFor(d.kind)),
+    onLongPressDown: (d) => _longPressTouch = InputMode.touchFor(d.kind),
+    onLongPressStart: (d) => showMenuAt(context, d.globalPosition, widget.items(),
+      touch: _longPressTouch),
+    child: widget.child,
+  );
 }
 
 /// A 28 px (44 px with touch) list row: indent, leading, label, trailing.

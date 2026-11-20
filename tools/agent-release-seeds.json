@@ -1,0 +1,14 @@
+{
+  "aurora3-agent-3.24.0-linux-amd64": "e81a201d41f8c35f52164e82ca87c2879912ac9c8ed7058d3f6c7aed0bee3a02",
+  "aurora3-local-agent-3.24.0-windows-amd64.exe": "b16bf48b6a062bf2b8423026c52c45212d3a3ecc9ffb82bb818b28caec30be7c",
+  "aurora3-agent-3.25.0-linux-amd64": "09a5a20e35a78568c3a4a1758c30145d674c31338297bde9b2a97d65658831b9",
+  "aurora3-local-agent-3.25.0-windows-amd64.exe": "eda9490ce48d9d26c576e3ccd25318a5e4cca8f235527a659d9c165e5d29dbfe",
+  "aurora3-agent-3.25.1-linux-amd64": "dda63fe7a57aeb9ab359be2e367de742116fcfe62ec3414adc4a99355fd8a53a",
+  "aurora3-local-agent-3.25.1-windows-amd64.exe": "b15a46ef78ca3ff65174f537f46a7e9e5b1699e5017f39cbf0478a38f3b672c7",
+  "aurora3-agent-3.25.3-linux-amd64": "c9204273b783573931941d055734b8acff6495abac1e540f7b6946b23f21fe38",
+  "aurora3-local-agent-3.25.3-windows-amd64.exe": "86be9b43b3267b77180d5a94cddcb09baffc6a6050128787c7483c1e05e943d4",
+  "aurora3-agent-3.26.0-linux-amd64": "9f6cc0670b6f4b883df2cc947552ac5cb0e349b2097da1f32f3c0a4d04946374",
+  "aurora3-local-agent-3.26.0-windows-amd64.exe": "faf2c28015b1a8b3d8bbbf03453a0141c34aa625e51d4718dc0fd654f367baa7",
+  "aurora3-agent-4.0.0-linux-amd64": "6ed7eb1ad8eb1ab119580b7c8e3078bba4e448a732af56437b588bb5306eb8e2",
+  "aurora3-local-agent-4.0.0-windows-amd64.exe": "97ba342872d420dfea88f6cefaa9780ffe18330a70582642913715f6840aeae7"
+}

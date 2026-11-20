@@ -16,6 +16,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"aurora3/internal/statecrypt"
 )
 
 var CommitMu sync.Mutex
@@ -71,7 +73,8 @@ type journal struct {
 }
 
 type Manager struct {
-	Directory string
+	Directory  string
+	protection *statecrypt.Codec
 	// Configured roots plus the private state directory. Recovery refuses a
 	// journal whose targets are outside these capabilities.
 	Roots []string
@@ -83,7 +86,7 @@ type Manager struct {
 }
 
 func New(stateDir string, roots []string) *Manager {
-	m := &Manager{Roots: append([]string(nil), roots...)}
+	m := &Manager{Roots: append([]string(nil), roots...), protection: statecrypt.Current()}
 	if stateDir != "" {
 		m.Directory = filepath.Join(stateDir, "file-transactions")
 		m.Roots = append(m.Roots, stateDir)
@@ -397,12 +400,31 @@ func (m *Manager) writeJournal(id string, j journal) error {
 	if err != nil {
 		return err
 	}
+	defer clear(b)
+	stored, err := m.sealRecord("filetxn:journal:"+id, b)
+	if err != nil {
+		return err
+	}
 	root, err := os.OpenRoot(m.Directory)
 	if err != nil {
 		return err
 	}
 	defer root.Close()
-	return Put(root, id+".json", State{Exists: true, Data: b, Mode: 0o600, UID: -1, GID: -1})
+	return Put(root, id+".json", State{Exists: true, Data: stored, Mode: 0o600, UID: -1, GID: -1})
+}
+
+func (m *Manager) sealRecord(context string, plain []byte) ([]byte, error) {
+	if m.protection == nil {
+		return plain, nil
+	}
+	return m.protection.Seal(context, plain)
+}
+
+func (m *Manager) openRecord(context string, data []byte) ([]byte, error) {
+	if m.protection == nil && !statecrypt.Protected(data) {
+		return data, nil
+	}
+	return m.protection.Open(context, data)
 }
 
 func (m *Manager) markCommitted(id string) error {
@@ -411,7 +433,11 @@ func (m *Manager) markCommitted(id string) error {
 		return err
 	}
 	defer root.Close()
-	err = Put(root, id+".committed", State{Exists: true, Data: []byte("1"), Mode: 0o600, UID: -1, GID: -1})
+	marker, err := m.sealRecord("filetxn:commit:"+id, []byte("1"))
+	if err != nil {
+		return err
+	}
+	err = Put(root, id+".committed", State{Exists: true, Data: marker, Mode: 0o600, UID: -1, GID: -1})
 	if err == nil && m.afterMarker != nil {
 		err = m.afterMarker()
 	}
@@ -492,7 +518,15 @@ func (m *Manager) recoverLocked() error {
 		if _, err := hex.DecodeString(id); err != nil {
 			return err
 		}
-		if _, err := os.Stat(filepath.Join(m.Directory, id+".committed")); err == nil {
+		marker, err := readJournalFile(filepath.Join(m.Directory, id+".committed"), int64(1+statecrypt.Overhead))
+		if err == nil {
+			value, err := m.openRecord("filetxn:commit:"+id, marker)
+			if err != nil || !bytes.Equal(value, []byte("1")) {
+				return errors.New("invalid or unreadable file transaction commit marker")
+			}
+			if _, err := m.loadJournal(id); err != nil {
+				return fmt.Errorf("committed transaction %s has an unreadable journal; records preserved: %w", id, err)
+			}
 			if err := m.removeJournal(id); err != nil {
 				return err
 			}
@@ -507,20 +541,29 @@ func (m *Manager) recoverLocked() error {
 	return nil
 }
 
-func (m *Manager) recoverJournal(id string) error {
-	f, err := os.Open(filepath.Join(m.Directory, id+".json"))
-	if err != nil {
-		return err
-	}
-	data, err := io.ReadAll(io.LimitReader(f, 2*MaxTransactionBytes+1))
-	f.Close()
-	if err != nil {
-		return err
-	}
+func (m *Manager) loadJournal(id string) (journal, error) {
 	var j journal
+	stored, err := readJournalFile(filepath.Join(m.Directory, id+".json"), int64(2*MaxTransactionBytes+statecrypt.Overhead))
+	if err != nil {
+		return j, err
+	}
+	defer clear(stored)
+	data, err := m.openRecord("filetxn:journal:"+id, stored)
+	if err != nil {
+		return j, err
+	}
+	defer clear(data)
 	if len(data) > 2*MaxTransactionBytes || json.Unmarshal(data, &j) != nil || j.Format != 1 ||
 		len(j.Changes) == 0 || len(j.Changes) > MaxChanges {
-		return errors.New("invalid file transaction journal")
+		return journal{}, errors.New("invalid file transaction journal")
+	}
+	return j, nil
+}
+
+func (m *Manager) recoverJournal(id string) error {
+	j, err := m.loadJournal(id)
+	if err != nil {
+		return err
 	}
 	roots := map[string]*os.Root{}
 	defer func() {
@@ -547,4 +590,28 @@ func (m *Manager) recoverJournal(id string) error {
 		return err
 	}
 	return m.removeJournal(id)
+}
+
+func readJournalFile(path string, limit int64) ([]byte, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() || fi.Size() > limit {
+		return nil, errors.New("invalid file transaction record")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	opened, err := f.Stat()
+	if err != nil || !os.SameFile(opened, fi) {
+		return nil, errors.New("file transaction record changed during open")
+	}
+	b, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err == nil && int64(len(b)) > limit {
+		return nil, errors.New("file transaction record exceeds its size limit")
+	}
+	return b, err
 }

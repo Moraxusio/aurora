@@ -20,6 +20,7 @@ func (v svc) Operations() []service.Operation {
 		}},
 		{Name: "fs.list", Handle: e.fsList}, {Name: "fs.stat", Handle: e.fsStat}, {Name: "fs.read", Handle: e.fsRead}, {Name: "fs.write", Handle: e.fsWrite},
 		{Name: "fs.mkdir", Handle: e.fsMkdir}, {Name: "fs.rename", Handle: e.fsRename}, {Name: "fs.copy", Handle: e.fsCopy}, {Name: "fs.delete", Handle: e.fsDelete},
+		{Name: "fs.paste.replace", Handle: e.fsPasteReplace}, {Name: "fs.paste.status", Handle: e.fsPasteStatus},
 		{Name: "fs.upload", Stream: e.fsUpload}, {Name: "fs.download", Stream: e.fsDownload}, {Name: "fs.watch", Stream: e.fsWatch},
 		{Name: "fs.search", Handle: e.fsSearch}, {Name: "fs.find", Handle: e.fsFind},
 		{Name: "fs.search.stream", Stream: e.fsSearchStream},

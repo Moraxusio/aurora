@@ -5,6 +5,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"strings"
 	"sync"
@@ -50,11 +51,15 @@ func (s svc) Operations() []service.Operation {
 		{Name: "ai.approve", Handle: s.opApprove},
 		{Name: "ai.inbox", Handle: s.opInbox},
 		{Name: "ai.permissions", Handle: s.opPermissions},
+		{Name: "ai.permissions.full_access", Handle: func(_ context.Context, _ json.RawMessage) (any, error) {
+			return map[string]any{"mode": "full_access", "live": true}, nil
+		}},
 		{Name: "ai.question", Handle: s.opQuestion},
 		{Name: "ai.capabilities", Handle: func(_ context.Context, _ json.RawMessage) (any, error) {
 			return map[string]any{"version": 1, "capabilities": resolvedCapabilities(ProviderConfig{}), "tool_media": true, "durable_steps": true}, nil
 		}},
 		{Name: "ai.revert", Handle: s.opRevert},
+		{Name: "ai.revert.preview", Handle: s.opRevertPreview},
 		{Name: "ai.compact", Handle: s.opCompact},
 		{Name: "ai.models", Handle: s.opModels},
 		{Name: "ai.network", Handle: s.opNetwork},
@@ -353,9 +358,10 @@ func (s svc) opApprove(_ context.Context, raw json.RawMessage) (any, error) {
 
 func (s svc) opRevert(ctx context.Context, raw json.RawMessage) (any, error) {
 	var in struct {
-		SessionID string `json:"session_id"`
-		MessageID string `json:"message_id"`
-		Files     *bool  `json:"files"`
+		SessionID string        `json:"session_id"`
+		MessageID string        `json:"message_id"`
+		Files     *bool         `json:"files"`
+		Review    *revertReview `json:"review"`
 	}
 	if err := decodeArgs(raw, &in); err != nil {
 		return nil, err
@@ -367,9 +373,18 @@ func (s svc) opRevert(ctx context.Context, raw json.RawMessage) (any, error) {
 	if in.Files != nil {
 		restoreFiles = *in.Files
 	}
-	sess, count, err := s.RevertSession(ctx, in.SessionID, in.MessageID, restoreFiles)
+	if restoreFiles && (in.Review == nil || len(in.Review.Paths) == 0) {
+		return nil, wire.Errf(wire.CodeBadRequest, "请先预览并明确选择要回退的文件；旧客户端请升级")
+	}
+	sess, count, err := s.revertSession(ctx, in.SessionID, in.MessageID, restoreFiles, in.Review)
 	if err != nil {
+		if errors.Is(err, errRevertReview) {
+			return nil, wire.Errf(wire.CodeConflict, "%v", err)
+		}
 		return nil, wire.Errf(wire.CodeInternal, "%v", err)
+	}
+	if in.Review != nil {
+		return map[string]any{"session_id": sess.ID, "restored_files": count}, nil
 	}
 	return map[string]any{
 		"session":        sess,

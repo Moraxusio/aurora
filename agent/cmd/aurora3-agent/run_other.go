@@ -5,8 +5,13 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 )
+
+func initProtectedPreview([]string, io.Reader) error {
+	return errors.New("state init runs on Linux only")
+}
 
 const defaultConfigPath = "/etc/aurora3/agent.json"
 
@@ -22,3 +27,11 @@ func directInfoCmd([]string) int { return installCmd(nil) }
 func uninstallCmd([]string) int { return installCmd(nil) }
 
 func upgradeWorker(string, string) error { return errors.New("upgrade worker runs on Linux only") }
+
+func cloneProtectedPreview([]string) error { return errors.New("state clone runs on Linux only") }
+
+func activationPreview([]string) error { return errors.New("activation preview runs on Linux only") }
+
+func activationProbeChild(string, string) error {
+	return errors.New("activation preview runs on Linux only")
+}

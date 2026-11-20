@@ -31,15 +31,24 @@ func (s svc) opInspectSnapshots(ctx context.Context, raw json.RawMessage) (any, 
 	defer cancel()
 	unlock := s.snapshots.lock(work)
 	defer unlock()
-	gitDir, err := s.snapshots.ensureRepo(ctx, work)
-	if err != nil {
-		return nil, err
+	var files []snapshotFile
+	var skipped int
+	var size int64
+	if store := s.snapshots.protected(work); store != nil {
+		files, skipped, err = s.snapshots.protectedSelection(ctx, work, policy)
+		if err == nil {
+			_, size, err = store.inventory()
+		}
+	} else {
+		var gitDir string
+		gitDir, err = s.snapshots.ensureRepo(ctx, work)
+		if err == nil {
+			files, skipped, err = s.snapshots.snapshotFiles(ctx, gitDir, work, policy)
+		}
+		if err == nil {
+			size, err = s.snapshots.storeBytes(ctx, gitDir, work)
+		}
 	}
-	files, skipped, err := s.snapshots.snapshotFiles(ctx, gitDir, work, policy)
-	if err != nil {
-		return nil, err
-	}
-	size, err := s.snapshots.storeBytes(ctx, gitDir, work)
 	if err != nil {
 		return nil, err
 	}

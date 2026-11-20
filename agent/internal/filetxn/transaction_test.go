@@ -1,7 +1,9 @@
 package filetxn
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"aurora3/internal/statecrypt"
 )
 
 func fixture(t *testing.T, root string) []Change {
@@ -83,6 +87,9 @@ func TestCrashRecoveryChild(t *testing.T) {
 	}
 	at, _ := strconv.Atoi(os.Getenv("AURORA_TXN_CRASH_AT"))
 	m := New(os.Getenv("AURORA_TXN_CRASH_STATE"), []string{root})
+	if os.Getenv("AURORA_TXN_CRASH_PROTECTED") == "1" {
+		m.protection = transactionTestKey(t, 7)
+	}
 	batch := fixture(t, root)
 	m.afterApply = func(i int) error {
 		if i == at {
@@ -118,6 +125,92 @@ func TestRecoveryAfterProcessExitAtEachReplacement(t *testing.T) {
 			}
 		})
 	}
+}
+
+func transactionTestKey(t *testing.T, fill byte) *statecrypt.Codec {
+	t.Helper()
+	key, err := statecrypt.New(bytes.Repeat([]byte{fill}, statecrypt.KeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
+}
+
+func TestProtectedJournalRecoversAfterProcessExit(t *testing.T) {
+	root, state := t.TempDir(), t.TempDir()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestCrashRecoveryChild$")
+	cmd.Env = append(os.Environ(), "AURORA_TXN_CRASH_ROOT="+root, "AURORA_TXN_CRASH_STATE="+state,
+		"AURORA_TXN_CRASH_AT=0", "AURORA_TXN_CRASH_PROTECTED=1")
+	output, err := cmd.CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 23 {
+		t.Fatalf("child did not exit mid-commit: %v, %s", err, output)
+	}
+	m := New(state, []string{root})
+	t.Cleanup(func() { recoveryFaults.Delete(m.Directory) })
+	entries, err := os.ReadDir(m.Directory)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("journal missing: %v %v", entries, err)
+	}
+	path := filepath.Join(m.Directory, entries[0].Name())
+	stored, err := os.ReadFile(path)
+	cleartext := base64.StdEncoding.EncodeToString([]byte("before first.txt"))
+	if err != nil || !statecrypt.Protected(stored) || bytes.Contains(stored, []byte(cleartext)) {
+		t.Fatalf("unexpected journal format: %v", err)
+	}
+	for _, codec := range []*statecrypt.Codec{nil, transactionTestKey(t, 8)} {
+		m.protection = codec
+		if err := m.Recover(); !errors.Is(err, ErrRecoveryRequired) {
+			t.Fatalf("missing/wrong key was not refused: %v", err)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(after, stored) {
+			t.Fatal("unreadable journal wasn't preserved")
+		}
+		after, err = os.ReadFile(filepath.Join(root, "first.txt"))
+		if err != nil || string(after) != "after first.txt" {
+			t.Fatal("recovery made changes without a valid key")
+		}
+	}
+	m.protection = transactionTestKey(t, 7)
+	if err := m.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	assertFiles(t, root, "before")
+	if err := m.Recover(); err != nil {
+		t.Fatalf("repeat recovery: %v", err)
+	}
+}
+
+func TestProtectedCommitPreservesUnreadableJournal(t *testing.T) {
+	root := t.TempDir()
+	m := New(t.TempDir(), []string{root})
+	t.Cleanup(func() { recoveryFaults.Delete(m.Directory) })
+	m.protection = transactionTestKey(t, 7)
+	id := newID()
+	if err := m.writeJournal(id, journal{Format: 1, Changes: fixture(t, root)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.markCommitted(id); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(m.Directory, id+".json")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content[len(content)-1] ^= 1
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Recover(); !errors.Is(err, ErrRecoveryRequired) {
+		t.Fatalf("committed transaction silently dropped damaged journal: %v", err)
+	}
+	entries, err := os.ReadDir(m.Directory)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("expected both records to remain: %v %v", entries, err)
+	}
+	assertFiles(t, root, "before")
 }
 
 func TestRecoveryRetainsExternalChangesAndJournal(t *testing.T) {

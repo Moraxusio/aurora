@@ -13,7 +13,6 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -24,6 +23,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"aurora3/internal/statecrypt"
 	"aurora3/internal/wire"
 )
 
@@ -31,6 +31,8 @@ const maxAttachmentBytes = 8 << 20
 
 var attachmentIDPattern = regexp.MustCompile(`^att_[0-9a-f]{24}$`)
 var attachmentStoreMu sync.Mutex
+
+const attachmentMetaMax = 4096
 
 type attachmentMeta struct {
 	ID     string `json:"id"`
@@ -46,13 +48,8 @@ func (e *Env) attachmentMeta(id string) (attachmentMeta, error) {
 	if e.StateDir == "" || !attachmentIDPattern.MatchString(id) {
 		return m, errors.New("附件引用无效，请重新选择文件")
 	}
-	f, err := os.Open(filepath.Join(e.attachmentDir(), id+".json"))
-	if err != nil {
-		return m, errors.New("附件不存在或已损坏，请重新选择文件")
-	}
-	defer f.Close()
-	b, err := io.ReadAll(io.LimitReader(f, 4097))
-	if err != nil || len(b) > 4096 || json.Unmarshal(b, &m) != nil || m.ID != id || m.Size <= 0 || m.Size > maxAttachmentBytes {
+	b, err := readAIRecord("attachment-meta", filepath.Join(e.attachmentDir(), id+".json"), attachmentMetaMax)
+	if err != nil || json.Unmarshal(b, &m) != nil || m.ID != id || m.Size <= 0 || m.Size > maxAttachmentBytes {
 		return m, errors.New("附件不存在或已损坏，请重新选择文件")
 	}
 	return m, nil
@@ -62,17 +59,7 @@ func (e *Env) loadAttachment(p Part) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(e.attachmentDir(), m.ID+".bin")
-	st, err := os.Lstat(path)
-	if err != nil || !st.Mode().IsRegular() || st.Size() != m.Size {
-		return nil, errors.New("附件数据不存在或已变化")
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, errors.New("无法读取附件")
-	}
-	defer f.Close()
-	b, err := io.ReadAll(io.LimitReader(f, maxAttachmentBytes+1))
+	b, err := readAIRecord("attachment-data", filepath.Join(e.attachmentDir(), m.ID+".bin"), m.Size)
 	if err != nil {
 		return nil, errors.New("无法读取附件")
 	}
@@ -105,6 +92,69 @@ func attachmentMime(b []byte) (string, error) {
 	}
 	return "", errors.New("不支持此二进制格式；支持图片、PDF 和 UTF-8 文本/代码，不会把二进制伪装成文本")
 }
+
+// checkAttachmentBudget and saveAttachment require attachmentStoreMu.
+func checkAttachmentBudget(dir string, size int64) error {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return errors.New("无法创建附件存储目录")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var used int64
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		used += info.Size()
+	}
+	// Reserve a bounded metadata record too, so committed files cannot exceed
+	// the quota by one record on an otherwise full store.
+	overhead := int64(attachmentMetaMax)
+	if statecrypt.Current() != nil {
+		overhead += int64(2 * statecrypt.Overhead)
+	}
+	if used+size+overhead > 512<<20 {
+		return errors.New("AI 附件存储已达到 512 MiB 上限，拒绝继续上传以保护服务器磁盘")
+	}
+	return nil
+}
+
+func saveAttachment(dir, name, mime string, data []byte) (attachmentMeta, error) {
+	id := NewID("att")
+	sum := sha256.Sum256(data)
+	m := attachmentMeta{ID: id, Name: name, Mime: mime, Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}
+	meta, err := json.Marshal(m)
+	if err != nil {
+		return attachmentMeta{}, err
+	}
+	if len(meta) > attachmentMetaMax {
+		return attachmentMeta{}, errors.New("附件元数据超过存储预算")
+	}
+	path := filepath.Join(dir, id+".bin")
+	metaPath := filepath.Join(dir, id+".json")
+	for _, name := range []string{path, metaPath} {
+		if _, err := os.Lstat(name); !os.IsNotExist(err) {
+			if err != nil {
+				return attachmentMeta{}, err
+			}
+			return attachmentMeta{}, errors.New("已有同编号附件，拒绝覆盖")
+		}
+	}
+	if err := writeAIRecord("attachment-data", path, data); err != nil {
+		return attachmentMeta{}, err
+	}
+	if err := writeAIRecord("attachment-meta", metaPath, meta); err != nil {
+		// The metadata is the publication record. An interrupted publication
+		// can leave an orphan, but never a reference to partial data.
+		_ = os.Remove(path)
+		return attachmentMeta{}, err
+	}
+	return m, nil
+}
+
 func (s svc) opAttachmentUpload(ctx context.Context, st net.Conn, raw json.RawMessage) error {
 	var in struct {
 		Name string `json:"name"`
@@ -119,36 +169,18 @@ func (s svc) opAttachmentUpload(ctx context.Context, st net.Conn, raw json.RawMe
 	attachmentStoreMu.Lock()
 	defer attachmentStoreMu.Unlock()
 	dir := s.attachmentDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return errors.New("无法创建附件存储目录")
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
+	if err := checkAttachmentBudget(dir, in.Size); err != nil {
 		return err
 	}
-	var used int64
-	for _, entry := range entries {
-		if info, err := entry.Info(); err == nil {
-			used += info.Size()
-		}
-	}
-	// Reserve a bounded metadata record too, so committed files cannot exceed
-	// the quota by one record on an otherwise full store.
-	if used+in.Size+4096 > 512<<20 {
-		return errors.New("AI 附件存储已达到 512 MiB 上限，拒绝继续上传以保护服务器磁盘")
-	}
-	f, err := os.CreateTemp(dir, ".upload-")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-	_ = f.Chmod(0600)
 	_ = st.SetDeadline(time.Now().Add(2 * time.Minute))
 	if err := wire.WriteJSON(st, wire.Response{OK: true}); err != nil {
 		return err
 	}
-	var received int64
+	// Admission and the existing upload lock bound memory to one upload of
+	// at most 8 MiB. Unverified upload plaintext is never staged on disk.
+	data := make([]byte, int(in.Size))
+	defer clear(data)
+	var received int
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -158,27 +190,17 @@ func (s svc) opAttachmentUpload(ctx context.Context, st net.Conn, raw json.RawMe
 			return err
 		}
 		if typ == wire.TypeEnd {
-			if received != in.Size || len(b) != 0 {
+			if received != len(data) || len(b) != 0 {
 				return errors.New("附件上传未完成")
 			}
 			break
 		}
-		if typ != wire.TypeData || received+int64(len(b)) > in.Size {
+		if typ != wire.TypeData || len(b) > len(data)-received {
 			return errors.New("附件大小或数据帧无效")
 		}
-		if _, err := f.Write(b); err != nil {
-			return err
-		}
-		received += int64(len(b))
+		received += copy(data[received:], b)
 	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	b, err := os.ReadFile(f.Name())
-	if err != nil {
-		return err
-	}
-	mime, err := attachmentMime(b)
+	mime, err := attachmentMime(data)
 	if err != nil {
 		return wire.Errf(wire.CodeBadRequest, "%v", err)
 	}
@@ -186,17 +208,14 @@ func (s svc) opAttachmentUpload(ctx context.Context, st net.Conn, raw json.RawMe
 	if name == "." || name == "/" || name == "" {
 		name = "attachment"
 	}
-	id := NewID("att")
-	sum := sha256.Sum256(b)
-	m := attachmentMeta{ID: id, Name: name, Mime: mime, Size: in.Size, SHA256: hex.EncodeToString(sum[:])}
-	if err := os.Rename(f.Name(), filepath.Join(dir, id+".bin")); err != nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	m, err := saveAttachment(dir, name, mime, data)
+	if err != nil {
 		return err
 	}
 	meta, _ := json.Marshal(m)
-	if err := atomicWriteFile(filepath.Join(dir, id+".json"), meta, 0600); err != nil {
-		_ = os.Remove(filepath.Join(dir, id+".bin"))
-		return err
-	}
 	return wire.WriteJSON(st, wire.Response{OK: true, Result: meta})
 }
 func (s svc) opAttachmentDownload(ctx context.Context, st net.Conn, raw json.RawMessage) error {

@@ -164,7 +164,9 @@ class _ShellState extends State<Shell> {
     return _spaces.putIfAbsent(id, () {
       // The first time a server is in front, connect it (the old server page did this).
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && app.status(id).state == ConnState.idle) unawaited(app.connect(id));
+        if (mounted && app.allowAutoConnect && app.status(id).state == ConnState.idle) {
+          unawaited(app.connect(id));
+        }
       });
       final ws = Workspace(app, id);
       ws.openQuickSearch = () => _find(ws);

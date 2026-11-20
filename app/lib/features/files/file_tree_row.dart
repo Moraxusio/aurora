@@ -11,6 +11,10 @@ export 'file_icons.dart' show FileIcon, FileIconSpec, fileGlyph, fileIconSpec, f
 
 /// File-specific visual hierarchy; other service lists keep their compact rows.
 class FileTreeRow extends StatefulWidget {
+  static double heightOf(BuildContext context) => math.max(
+    InputMode.row(context) + 2,
+    MediaQuery.textScalerOf(context).scale(12.5) * 1.3 + 8,
+  );
   final String name, path;
   final int depth;
   final bool folder, expanded, loading, selected, root, link;
@@ -37,38 +41,41 @@ class FileTreeRow extends StatefulWidget {
 
   Widget _build(BuildContext context, VoidCallback tap) {
     final ide = Ide.of(context);
-    final height = InputMode.row(context) + 2;
+    final height = heightOf(context);
     final row = ContextArea(items: menu, child: Tooltip(message: tooltip ?? location ?? path, waitDuration: const Duration(milliseconds: 700),
-      child: Semantics(selected: selected || active, expanded: folder ? expanded : null, child: Material(
+      // Hover still shows the path; touch long-press belongs to the menu.
+      triggerMode: TooltipTriggerMode.manual,
+      child: Semantics(selected: selected, expanded: folder ? expanded : null,
+        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          child: Material(
+        shape: RoundedRectangleBorder(
+          borderRadius: UiMetrics.controlCorners,
+          side: dragOver || selected
+              ? BorderSide(color: ide.accent.withValues(alpha: dragOver ? .85 : .32))
+              : BorderSide.none,
+        ),
         color: dragOver ? ide.accentSoft : selected ? ide.selection : active ? ide.hover : Colors.transparent,
-        child: InkWell(onTap: tap, hoverColor: ide.hover, child: SizedBox(height: height,
+        child: InkWell(onTap: tap, borderRadius: UiMetrics.controlCorners, hoverColor: ide.hover, child: SizedBox(height: height - 2,
           child: LayoutBuilder(builder: (context, box) {
             final indent = math.min(depth * 14.0, math.min(84.0, box.maxWidth * .22));
-            final wide = box.maxWidth >= 460;
-            final metadata = box.maxWidth >= 300;
-            final style = TextStyle(fontSize: 12.5, fontWeight: root || active ? FontWeight.w600 : FontWeight.w400, color: link ? ide.accent : ide.text);
-            Widget cell(String? value, double width) => SizedBox(width: width, child: Text(value ?? '', textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 10.5, color: ide.textFaint, fontFeatures: const [FontFeature.tabularFigures()])));
-            return Stack(children: [
-              if (depth > 0) Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _Guides(indent, ide.border)))),
-              if (selected || active || dragOver) Positioned(left: 0, top: 0, bottom: 0, width: 2, child: ColoredBox(color: selected || dragOver ? ide.accent : ide.textDim)),
-              Padding(padding: EdgeInsets.only(left: 6 + indent, right: 10), child: Row(children: [
+             final wide = box.maxWidth >= _wide;
+             final metadata = box.maxWidth >= _details && !InputMode.isTouch(context);
+             final style = TextStyle(fontSize: 12.5, fontWeight: root || active ? FontWeight.w600 : FontWeight.w400, color: link ? ide.accent : ide.text);
+             return Padding(padding: EdgeInsets.only(left: 6 + indent, right: 10), child: Row(children: [
                 SizedBox(width: 20, child: loading ? const Center(child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)))
                   : folder ? InkWell(onTap: onExpand ?? onTap, child: SizedBox(height: height, child: Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: 16, color: ide.textDim))) : null),
                 Stack(clipBehavior: Clip.none, children: [
                   FileIcon(name: name, folder: folder, expanded: expanded, root: root, size: 16),
                   if (link) Positioned(right: -4, bottom: -3, child: Icon(Icons.link, size: 11, color: ide.accent)),
                 ]),
-                const SizedBox(width: 7),
-                Expanded(child: _FileName(name: name, folder: folder, style: style)),
-                if (metadata) ...[const SizedBox(width: 8), cell(!wide && preferModified ? modified : detail, !wide && preferModified ? 102 : 64)],
-                if (wide) ...[const SizedBox(width: 14), cell(modified, 102)],
-              ])),
-            ]);
-          }),
-        )),
-      )),
-    ));
+                 const SizedBox(width: 7),
+                 Expanded(child: _FileName(name: name, folder: folder, style: style)),
+                 if (metadata) ..._detailCells(context, wide: wide, preferModified: preferModified, size: detail, modified: modified),
+               ]));
+           }),
+         )),
+       ))),
+     ));
     return dimmed ? Opacity(opacity: 0.45, child: row) : row;
   }
 }
@@ -146,17 +153,99 @@ class FileLocation extends StatelessWidget {
   }
 }
 
-class _Guides extends CustomPainter {
-  final double indent;
-  final Color color;
-  const _Guides(this.indent, this.color);
+const _details = 330.0, _wide = 450.0;
+
+List<Widget> _detailCells(BuildContext context, {
+  required bool wide,
+  required bool preferModified,
+  required String? size,
+  required String? modified,
+}) {
+  final ide = Ide.of(context);
+  Widget cell(String? value, double width) => SizedBox(
+    width: width,
+    child: Text(
+      value ?? '',
+      textAlign: TextAlign.right,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 11,
+        color: ide.textDim,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    ),
+  );
+  final dateOnly = !wide && preferModified;
+  return [
+    const SizedBox(width: 8),
+    cell(dateOnly ? modified : size, dateOnly ? 108 : 68),
+    if (wide) ...[const SizedBox(width: 14), cell(modified, 108)],
+  ];
+}
+
+/// Explorer's details header has the same responsive columns as the rows.
+class FileTreeHead extends StatelessWidget {
+  final String sort;
+  final bool descending;
+  final ValueChanged<String> onSort;
+  const FileTreeHead({super.key, required this.sort, required this.descending, required this.onSort});
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color.withValues(alpha: 0.7)..strokeWidth = 1;
-    for (var i = 0; i < (indent / 14).ceil(); i++) {
-      final x = 15.0 + i * 14;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+    final width = box.maxWidth - 8;
+    if (width < _details || InputMode.isTouch(context)) return const SizedBox.shrink();
+    final ide = Ide.of(context);
+    final wide = width >= _wide;
+    Widget column(String id, String title, {double? width}) {
+      final selected = id == sort;
+      final tip = selected
+          ? '$title · ${descending ? '降序' : '升序'}，点击改变顺序'
+          : '按$title排序';
+      return SizedBox(
+        width: width,
+        child: Tooltip(
+          message: tip,
+          child: Semantics(
+            header: true,
+            selected: selected,
+            button: true,
+            child: InkWell(
+              borderRadius: UiMetrics.controlCorners,
+              onTap: () => onSort(id),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: Space.xs),
+                child: Row(
+                  mainAxisAlignment: width == null ? MainAxisAlignment.start : MainAxisAlignment.end,
+                  children: [
+                    Flexible(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: selected ? ide.text : ide.textDim))),
+                    if (selected) Icon(descending ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                      size: 11, color: ide.textDim),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
     }
-  }
-  @override bool shouldRepaint(_Guides old) => old.indent != indent || old.color != color;
+    return DecoratedBox(
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: ide.border))),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(36, 0, 14, 0),
+        child: Row(children: [
+          Expanded(child: column('name', '名称')),
+          const SizedBox(width: 8),
+          if (!wide && sort == 'mtime')
+            column('mtime', '修改日期', width: 108)
+          else
+            column('size', '大小', width: 68),
+          if (wide) ...[
+            const SizedBox(width: 14),
+            column('mtime', '修改日期', width: 108),
+          ],
+        ]),
+      ),
+    );
+  });
 }

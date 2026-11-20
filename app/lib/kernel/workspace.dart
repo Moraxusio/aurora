@@ -119,6 +119,20 @@ class Workspace extends ChangeNotifier {
   /// What the file tree's Copy or Cut remembered. Shared by every project page
   /// of this server, so something copied in one project can be pasted in another.
   final ValueNotifier<FileClipboard?> fileClipboard = ValueNotifier(null);
+  final ValueNotifier<PasteRecoveryRecord?> pendingPaste = ValueNotifier(null);
+
+  Future<void> savePasteReceipt(PasteRecoveryRecord receipt) => app.update((p) {
+    final server = p.server(serverId);
+    if (server == null || server.pendingPaste != null) {
+      throw OpError(codeConflict, '请先查询上一次替换的结果');
+    }
+    server.pendingPaste = receipt;
+  });
+
+  Future<void> clearPasteReceipt(String id) => app.update((p) {
+    final server = p.server(serverId);
+    if (server?.pendingPaste?.id == id) server!.pendingPaste = null;
+  });
 
   /// The transfer list the file tree shows; set when the tree is built. The
   /// viewers download through it, so their transfers appear in the same list.
@@ -186,6 +200,9 @@ class Workspace extends ChangeNotifier {
   void _onApp() {
     if (_disposed) return;
     final e = entry;
+    if (pendingPaste.value?.id != e?.pendingPaste?.id) {
+      pendingPaste.value = e?.pendingPaste;
+    }
     final selected = e?.workspace(e.selectedWorkspace)?.id;
     if (_projectId != selected) {
       if (_restored.contains(projectKey)) _activeByProject[projectKey] = editorActiveId;
@@ -1023,6 +1040,7 @@ class Workspace extends ChangeNotifier {
     }
     filesRevision.dispose();
     fileClipboard.dispose();
+    pendingPaste.dispose();
     focusSearch.dispose();
     searchQuery.dispose();
     submitSearch.dispose();

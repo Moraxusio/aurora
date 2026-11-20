@@ -132,7 +132,7 @@ func etag(fi fs.FileInfo) string {
 }
 
 func (s *Env) toEntry(root *os.Root, rootDir, rel string, fi fs.FileInfo) entry {
-	e := entry{Name: fi.Name(), Size: fi.Size(), Mtime: fi.ModTime().UnixMilli(), Mode: fi.Mode().String()}
+	e := entry{Name: fi.Name(), Size: fi.Size(), Mtime: fi.ModTime().UnixMilli(), Mode: fi.Mode().String(), Etag: etag(fi)}
 	e.Owner, e.Group = fileOwner(fi)
 	switch {
 	case fi.IsDir():
@@ -167,7 +167,6 @@ func (s *Env) toEntry(root *os.Root, rootDir, rel string, fi fs.FileInfo) entry 
 		}
 	case fi.Mode().IsRegular():
 		e.Type = "file"
-		e.Etag = etag(fi)
 	default:
 		e.Type = "other"
 	}
@@ -385,17 +384,12 @@ func admitTarget(root *os.Root, rel string, a *fsArgs) (fs.FileMode, error) {
 	if err := filetxn.CheckReady(); err != nil {
 		return 0, err
 	}
-	mode, err := checkTarget(root, rel, a)
+	mode, version, err := inspectTarget(root, rel, a)
 	if err != nil {
 		return 0, err
 	}
-	if fi, err := root.Lstat(rel); err == nil {
-		a.IfMatch = etag(fi)
-	} else if os.IsNotExist(err) {
-		a.Create = true
-	} else {
-		return 0, fsErr(err)
-	}
+	a.IfMatch = version
+	a.Create = version == ""
 	return mode, nil
 }
 
@@ -404,34 +398,42 @@ func admitTarget(root *os.Root, rel string, a *fsArgs) (fs.FileMode, error) {
 // when the agent is not root (it cannot give files away then anyway).
 
 func checkTarget(root *os.Root, rel string, a *fsArgs) (fs.FileMode, error) {
+	mode, _, err := inspectTarget(root, rel, a)
+	return mode, err
+}
+
+// Return the exact version whose precondition was checked. A second Lstat at
+// admission could otherwise accept a new version not authorized by the caller.
+func inspectTarget(root *os.Root, rel string, a *fsArgs) (fs.FileMode, string, error) {
 	if rel == "." {
-		return 0, wire.Errf(wire.CodeBadRequest, "不能写入根目录本身")
+		return 0, "", wire.Errf(wire.CodeBadRequest, "不能写入根目录本身")
 	}
 	mode := fs.FileMode(0o644)
 	fi, err := root.Lstat(rel)
 	switch {
 	case err == nil:
 		if !fi.Mode().IsRegular() {
-			return 0, wire.Errf(wire.CodeConflict, "目标不是普通文件")
+			return 0, "", wire.Errf(wire.CodeConflict, "目标不是普通文件")
 		}
 		if a.Create {
-			return 0, wire.Errf(wire.CodeConflict, "已存在同名文件")
+			return 0, "", wire.Errf(wire.CodeConflict, "已存在同名文件")
 		}
-		if a.IfMatch != "" && a.IfMatch != etag(fi) {
-			return 0, wire.Errf(wire.CodeConflict, "文件已被其他程序修改，请重新打开后再保存")
+		version := etag(fi)
+		if a.IfMatch != "" && a.IfMatch != version {
+			return 0, "", wire.Errf(wire.CodeConflict, "文件已被其他程序修改，请重新打开后再保存")
 		}
-		mode = fi.Mode().Perm()
+		return fi.Mode().Perm(), version, nil
 	case errors.Is(err, fs.ErrNotExist):
 		if a.IfMatch != "" {
-			return 0, wire.Errf(wire.CodeConflict, "文件已被删除")
+			return 0, "", wire.Errf(wire.CodeConflict, "文件已被删除")
 		}
 		if pfi, perr := root.Stat(path.Dir(rel)); perr != nil || !pfi.IsDir() {
-			return 0, wire.Errf(wire.CodeNotFound, "上级目录不存在")
+			return 0, "", wire.Errf(wire.CodeNotFound, "上级目录不存在")
 		}
 	default:
-		return 0, fsErr(err)
+		return 0, "", fsErr(err)
 	}
-	return mode, nil
+	return mode, "", nil
 }
 
 func (s *Env) fsWrite(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -533,6 +535,18 @@ func (s *Env) fsRename(ctx context.Context, raw json.RawMessage) (any, error) {
 	if pfi, err := root.Stat(path.Dir(to)); err != nil || !pfi.IsDir() {
 		return nil, wire.Errf(wire.CodeNotFound, "目标目录不存在")
 	}
+	if a.IfMatch != "" {
+		fi, err := root.Lstat(rel)
+		if err != nil {
+			return nil, fsErr(err)
+		}
+		if a.IfMatch != etag(fi) {
+			return nil, wire.Errf(wire.CodeConflict, "源已变化，请刷新后重新确认重命名")
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := root.Rename(rel, to); err != nil {
 		return nil, fsErr(err)
 	}
@@ -585,21 +599,73 @@ func (s *Env) fsCopy(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, fsErr(err)
 	}
-	if _, err := dstRoot.Lstat(to); err == nil {
-		return nil, wire.Errf(wire.CodeConflict, "目标位置已存在同名文件或目录")
+	if a.IfMatch != "" && a.IfMatch != etag(src) {
+		return nil, wire.Errf(wire.CodeConflict, "复制源已变化，请刷新后重新选择")
+	}
+	requireAbsent := func() error {
+		if _, err := dstRoot.Lstat(to); err == nil {
+			return wire.Errf(wire.CodeConflict, "目标位置已存在同名文件或目录")
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return fsErr(err)
+		}
+		return nil
+	}
+	if err := requireAbsent(); err != nil {
+		return nil, err
 	}
 	if pfi, err := dstRoot.Stat(path.Dir(to)); err != nil || !pfi.IsDir() {
 		return nil, wire.Errf(wire.CodeNotFound, "目标目录不存在")
 	}
-	if err := copyTree(ctx, root, dstRoot, rel, to, src, 0); err != nil {
-		_ = dstRoot.RemoveAll(to) // do not leave a half copy behind
+	// Keep an incomplete tree private. Failure must never RemoveAll the
+	// destination path, which may have been created by someone else.
+	stage := path.Join(path.Dir(to), partPrefix+wire.NewToken()[:12]+".part")
+	staged := false
+	defer func() {
+		if staged {
+			removeCopyStage(dstRoot, stage)
+		}
+	}()
+	if err := copyTree(ctx, root, dstRoot, rel, stage, src, 0, func() { staged = true }); err != nil {
 		return nil, fsErr(err)
 	}
+	if a.IfMatch != "" {
+		if current, err := root.Lstat(rel); err != nil || etag(current) != a.IfMatch {
+			return nil, wire.Errf(wire.CodeConflict, "复制期间源已变化，未发布目标")
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := requireAbsent(); err != nil {
+		return nil, err
+	}
+	if err := dstRoot.Rename(stage, to); err != nil {
+		return nil, fsErr(err)
+	}
+	staged = false
 	s.Audit.Write("fs.copy", map[string]any{"root": a.Root, "from": rel, "to_root": toID, "to": to})
 	return map[string]any{"path": "/" + to}, nil
 }
 
 const maxCopyDepth = 64
+
+// A staged copy can already contain read-only directories whose permissions
+// were restored. Unlock only those directories, never following symlinks.
+func removeCopyStage(root *os.Root, stage string) {
+	if fi, err := root.Lstat(stage); err != nil || !fi.IsDir() {
+		_ = root.Remove(stage)
+		return
+	}
+	_ = fs.WalkDir(root.FS(), stage, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			if fi, err := d.Info(); err == nil {
+				_ = root.Chmod(p, fi.Mode().Perm()|0o700)
+			}
+		}
+		return nil
+	})
+	_ = root.RemoveAll(stage)
+}
 
 // keepMeta gives the copy the source's owner (the agent is usually root and
 // would otherwise own every copy), permission bits and modification time.
@@ -615,7 +681,7 @@ func keepMeta(dst *os.Root, name string, fi fs.FileInfo, link bool) {
 // copyTree copies src (described by fi) from the root srcRoot to dst in dstRoot
 // (the same handle for a copy inside one root). Symbolic links are copied as
 // links, not followed; special files are refused.
-func copyTree(ctx context.Context, srcRoot, dstRoot *os.Root, src, dst string, fi fs.FileInfo, depth int) error {
+func copyTree(ctx context.Context, srcRoot, dstRoot *os.Root, src, dst string, fi fs.FileInfo, depth int, created func()) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -631,6 +697,7 @@ func copyTree(ctx context.Context, srcRoot, dstRoot *os.Root, src, dst string, f
 		if err := dstRoot.Symlink(target, dst); err != nil {
 			return err
 		}
+		created()
 		keepMeta(dstRoot, dst, fi, true)
 		return nil
 	case fi.IsDir():
@@ -638,6 +705,7 @@ func copyTree(ctx context.Context, srcRoot, dstRoot *os.Root, src, dst string, f
 		if err := dstRoot.Mkdir(dst, fi.Mode().Perm()|0o700); err != nil {
 			return err
 		}
+		created()
 		d, err := srcRoot.Open(src)
 		if err != nil {
 			return err
@@ -652,7 +720,7 @@ func copyTree(ctx context.Context, srcRoot, dstRoot *os.Root, src, dst string, f
 			if err != nil {
 				return err
 			}
-			if err := copyTree(ctx, srcRoot, dstRoot, path.Join(src, e.Name()), path.Join(dst, e.Name()), child, depth+1); err != nil {
+			if err := copyTree(ctx, srcRoot, dstRoot, path.Join(src, e.Name()), path.Join(dst, e.Name()), child, depth+1, created); err != nil {
 				return err
 			}
 		}
@@ -668,6 +736,7 @@ func copyTree(ctx context.Context, srcRoot, dstRoot *os.Root, src, dst string, f
 		if err != nil {
 			return err
 		}
+		created()
 		if _, err := io.Copy(out, ctxReader{ctx, in}); err != nil {
 			out.Close()
 			return err
@@ -712,6 +781,12 @@ func (s *Env) fsDelete(ctx context.Context, raw json.RawMessage) (any, error) {
 	fi, err := root.Lstat(rel)
 	if err != nil {
 		return nil, fsErr(err)
+	}
+	if a.IfMatch != "" && a.IfMatch != etag(fi) {
+		return nil, wire.Errf(wire.CodeConflict, "目标已变化，请刷新后重新确认删除")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	if fi.IsDir() && a.Recursive {
 		err = root.RemoveAll(rel)

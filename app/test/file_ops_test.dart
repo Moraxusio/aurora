@@ -109,6 +109,7 @@ void main() {
         items: const [ClipItem('home', '/f.txt', false)],
         cut: true, destRoot: 'data', destDir: '/', existing: {'f.txt'},
         resolve: (n, d, {required more}) async => const ConflictChoice(Conflict.replace),
+        replaceFile: (_, _, _) async {},
       );
       expect(result.done, 1);
       expect(result.createdPaths, ['/f.txt']);
@@ -116,8 +117,53 @@ void main() {
       expect(result.errors.single, contains('已复制'));
       expect(fs.tree['home'], contains('/f.txt'));
       expect(fs.tree['data'], {'/f.txt'});
-      expect(fs.calls.where((c) => c.startsWith('fs.rename')), hasLength(1),
-          reason: 'committed destination must never enter copy rollback');
+      expect(fs.calls, isEmpty, reason: 'committed destination must never enter copy rollback');
+    });
+
+    test('paste replacement carries the observed target and source versions', () async {
+      final fs = FakeFs({'home': {'/src/f'}, 'data': {'/f'}});
+      final writes = <Map<String, Object?>>[];
+      final result = await pasteItems(
+        call: (op, args) {
+          writes.add(args);
+          return fs.call(op, args);
+        },
+        items: const [ClipItem('home', '/src/f', false, etag: 'source-v1')],
+        cut: true,
+        destRoot: 'data',
+        destDir: '/',
+        existing: {'f'},
+        existingVersions: {'f': 'target-v1'},
+        replaceFile: (item, path, targetVersion) async {
+          expect(item.etag, 'source-v1');
+          expect(path, '/f');
+          expect(targetVersion, 'target-v1');
+        },
+        resolve: (_, _, {required more}) async => const ConflictChoice(Conflict.replace),
+      );
+      expect(result.moved, hasLength(1));
+      expect(writes, hasLength(1));
+      expect(writes.last['if_match'], 'source-v1');
+    });
+
+    test('lost replacement receipt stops the batch and never deletes the source', () async {
+      final fs = FakeFs({'work': {'/src/f', '/dst/f'}});
+      final result = await pasteItems(
+        call: fs.call,
+        replaceFile: (item, path, stamp) async {
+          throw OpError(codeUnavailable, 'connection lost after commit');
+        },
+        items: const [ClipItem('work', '/src/f', false)],
+        cut: true,
+        destRoot: 'work',
+        destDir: '/dst',
+        existing: {'f'},
+        resolve: (_, _, {required more}) async => const ConflictChoice(Conflict.replace),
+      );
+      expect(fs.tree['work'], {'/src/f', '/dst/f'});
+      expect(fs.calls, isEmpty);
+      expect(result.stopped, isTrue);
+      expect(result.errors.first, contains('connection lost after commit'));
     });
 
     test('copy beside itself makes a numbered copy without asking', () async {
@@ -143,9 +189,10 @@ void main() {
       expect(fs.calls, isEmpty);
     });
 
-    test('conflict: skip, keep both, replace; replace parks the old item and restores it on failure', () async {
+    test('skip, keep both and replace; incapable agents never stage away data', () async {
       final fs = FakeFs({'home': {'/s/x.txt', '/s/y.txt', '/s/z.txt', '/t', '/t/x.txt', '/t/y.txt', '/t/z.txt'}});
       final asked = <String>[];
+      final replaced = <String>[];
       final answers = [const ConflictChoice(Conflict.skip), const ConflictChoice(Conflict.keepBoth), const ConflictChoice(Conflict.replace)];
       final r = await pasteItems(
         call: fs.call,
@@ -154,6 +201,7 @@ void main() {
         destRoot: 'home',
         destDir: '/t',
         existing: {'x.txt', 'y.txt', 'z.txt'},
+        replaceFile: (item, path, stamp) async => replaced.add(path),
         resolve: (n, d, {required more}) async {
           asked.add(n);
           return answers.removeAt(0);
@@ -163,16 +211,14 @@ void main() {
       expect(r.skipped, 1);
       expect(r.done, 2);
       expect(fs.tree['home'], containsAll(['/t/y 副本.txt', '/t/z.txt']));
-      // replace: renamed aside, copied, aside deleted
-      final replaceCalls = fs.calls.where((c) => c.contains('z.txt')).toList();
-      expect(replaceCalls[0], startsWith('fs.rename home:/t/z.txt -> home:/t/.aurora-old-'));
-      expect(replaceCalls[1], 'fs.copy home:/s/z.txt -> home:/t/z.txt');
-      expect(replaceCalls[2], startsWith('fs.delete home:/t/.aurora-old-'));
+      expect(replaced, ['/t/z.txt']);
+      expect(fs.calls, ['fs.copy home:/s/y.txt -> home:/t/y 副本.txt']);
 
       // now the same replace, but the copy fails: the old item must come back
       final fs2 = FakeFs({'home': {'/s/z.txt', '/t', '/t/z.txt'}})..failOn.add('fs.copy');
       final r2 = await pasteItems(call: fs2.call, items: const [ClipItem('home', '/s/z.txt', false)], cut: false, destRoot: 'home', destDir: '/t', existing: {'z.txt'}, resolve: (n, d, {required more}) async => const ConflictChoice(Conflict.replace));
       expect(r2.done, 0);
+      expect(fs2.calls, isEmpty);
       expect(fs2.tree['home'], contains('/t/z.txt'), reason: 'the old file must be back');
       expect(fs2.tree['home']!.where((p) => p.contains('.aurora-old-')), isEmpty);
     });

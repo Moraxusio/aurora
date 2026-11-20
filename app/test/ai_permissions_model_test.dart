@@ -16,6 +16,7 @@ import 'ai_runtime_test.dart' show RuntimeLink;
 import 'support/workspace_fixture.dart';
 
 class _PermLink extends RuntimeLink {
+  bool advertisesFullAccess = true;
   final List<Map<String, dynamic>> grants = [
     {
       'action': 'shell',
@@ -56,6 +57,7 @@ class _PermLink extends RuntimeLink {
       'ai',
       'ai.extensions',
       'ai.permissions',
+      if (advertisesFullAccess) 'ai.permissions.full_access',
       'ai.capabilities',
       'ai.run.options',
     ],
@@ -369,6 +371,32 @@ void main() {
     await t.pumpAndSettle();
 
     expect(policy.subagentsAllowNetwork, isFalse);
+  });
+
+  testWidgets('unverified same-version agent cannot silently downgrade Full Access', (t) async {
+    final link = _PermLink()..advertisesFullAccess = false;
+    final app = WorkspaceApp(wire: link);
+    app.data.ai = AiSettings(
+      permissionMode: 'full_access',
+      providers: [AiProvider(id: 'p', name: 'fixture', model: 'fixture')],
+    );
+    final ws = Workspace(app, 'server');
+    final input = InputMode(touch: false);
+    await t.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: InputMode.scope(mode: input, child: Scaffold(body: AiStudioView(ws: ws))),
+    ));
+    await t.pumpAndSettle();
+    final prompt = find.byKey(const ValueKey('ai-prompt-input'));
+    await t.enterText(prompt, 'keep my draft');
+    await t.tap(find.byKey(const ValueKey('ai-send-btn')));
+    await t.pumpAndSettle();
+    expect(link.rpcCalls.where((c) => c.$1 == 'ai.run'), isEmpty);
+    expect(t.widget<TextField>(prompt).controller!.text, 'keep my draft');
+    await t.pumpWidget(const SizedBox());
+    ws.dispose();
+    input.dispose();
+    app.dispose();
   });
 
   testWidgets('AiStudioView sends orchestrator conductor and musician personas and model permission rules', (t) async {

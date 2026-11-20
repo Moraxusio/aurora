@@ -4,7 +4,8 @@ param(
     [string]$Suffix = 'ide-preview1',
     [Parameter(Mandatory)][string]$Out,
     [string]$Key = $env:AURORA_RELEASE_KEY,
-    [string]$NotesFile = ''
+    [string]$NotesFile = '',
+    [switch]$PublicPreview
 )
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $Suffix -notmatch '^[a-zA-Z0-9-]+$') { throw 'Invalid candidate name' }
@@ -33,7 +34,7 @@ function Get-Sources {
 $sources = Get-Sources
 $stage = Join-Path $env:LOCALAPPDATA ('Temp\opencode\aurora-preview-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $stage | Out-Null
-& (Join-Path $PSScriptRoot 'package.ps1') -Version $Version -Out $stage -Key $Key -NotesFile $NotesFile -NoArchive
+& (Join-Path $PSScriptRoot 'package.ps1') -Version $Version -Out $stage -Key $Key -NotesFile $NotesFile -NoArchive -PublicPreview:$PublicPreview
 $after = Get-Sources
 if ($sources.Count -ne $after.Count) { throw 'Build inputs changed during compilation' }
 foreach ($file in $sources.Keys) {
@@ -76,6 +77,7 @@ $local = Get-Content "$dir\local-agent\windows-amd64\manifest.json" -Raw | Conve
 [ordered]@{
     version = $Version
     candidate = $Suffix
+    channel = $linux.channel
     built_at_utc = [DateTime]::UtcNow.ToString('o')
     source_head = (& git -C $repo rev-parse HEAD)
     source_working_tree = $(if (@(& git -C $repo status --porcelain).Count) { 'uncommitted working tree' } else { 'clean' })

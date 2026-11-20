@@ -15,6 +15,170 @@ import (
 	"time"
 )
 
+func TestLivePermissionCannotBeReplacedByPendingInput(t *testing.T) {
+	for _, delivery := range []string{"queue", "steer"} {
+		t.Run(delivery, func(t *testing.T) {
+			arrived := make(chan struct{}, 4)
+			release := make(chan struct{}, 4)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				arrived <- struct{}{}
+				select {
+				case <-release:
+				case <-r.Context().Done():
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"Synthetic reply\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+			}))
+			defer server.Close()
+			env := &Env{StateDir: t.TempDir(), Roots: []Root{{ID: "work", Path: t.TempDir()}}}
+			defer env.StopAll()
+			events := env.subscribe()
+			defer env.unsubscribe(events)
+			no := false
+			in := RunInput{
+				Root: "work", Workdir: "/", Agent: "build", PermissionMode: "full_access", Text: "first",
+				Provider: ProviderConfig{Model: "first-model", Protocol: "openai-chat", BaseURL: server.URL},
+				Options:  &RunOptions{AutoTitle: &no},
+			}
+			next := func() {
+				t.Helper()
+				select {
+				case <-arrived:
+				case <-time.After(5 * time.Second):
+					t.Fatal("model fixture was not reached")
+				}
+			}
+			sum, err := env.StartRun(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			next()
+			in.SessionID, in.Text, in.Delivery = sum.ID, "pending", delivery
+			in.Provider.Model = "pending-model"
+			in.SubagentPermissionMode = "full_access"
+			in.SubagentPermissionRules = []PermissionRule{{Action: "write", Resource: "*", Effect: "allow"}}
+			in.Options = nil
+			if _, err := env.StartRun(in); err != nil {
+				t.Fatal(err)
+			}
+			ask := "ask"
+			rules := []PermissionRule{{Action: "write", Resource: "notes.md", Effect: "deny"}}
+			if _, err := env.UpdateSessionPermission(sum.ID, &ask, &rules); err != nil {
+				t.Fatal(err)
+			}
+			before, _, _, err := env.GetSession(sum.ID)
+			if err != nil || len(before.Inbox) != 1 || before.Inbox[0].PermissionMode != "ask" {
+				t.Fatalf("pending input did not show the current policy: %+v %v", before.Inbox, err)
+			}
+			release <- struct{}{}
+			next()
+			after, _, _, err := env.GetSession(sum.ID)
+			if err != nil || after.PermissionMode != "ask" || len(after.PermissionRules) != 1 ||
+				after.PermissionRules[0].Effect != "deny" || after.Model != "pending-model" {
+				t.Fatalf("delivery changed authorization or lost its model: %v %+v", err, after)
+			}
+			env.mu.Lock()
+			run := env.running[sum.ID]
+			staleChildPolicy := run.subagentPermMode != "" || len(run.subagentPermRules) != 0
+			env.mu.Unlock()
+			if staleChildPolicy {
+				t.Fatal("delivery replaced the active child policy")
+			}
+			release <- struct{}{}
+			timeout := time.NewTimer(5 * time.Second)
+			defer timeout.Stop()
+			for {
+				select {
+				case event := <-events:
+					if event.SessionID == sum.ID && event.Type == "session.status" && event.Status == "idle" {
+						return
+					}
+				case <-timeout.C:
+					t.Fatal("pending input did not finish")
+				}
+			}
+		})
+	}
+}
+
+func TestLiveParentPolicyAppliesToManagedChildAndPendingApproval(t *testing.T) {
+	root := t.TempDir()
+	env := &Env{StateDir: t.TempDir(), Roots: []Root{{ID: "work", Path: root}}}
+	events := env.subscribe()
+	defer env.unsubscribe(events)
+	parent := &Session{ID: "parent", Agent: "orchestrator", PermissionMode: "full_access"}
+	child := &Session{ID: "child", ParentID: parent.ID, Agent: "general", PermissionMode: "full_access"}
+	env.sessions[parent.ID], env.sessions[child.ID] = parent, child
+	pr := &activeRun{}
+	env.running[parent.ID], env.running[child.ID] = pr, &activeRun{parentRun: pr}
+	stale := *child
+	tc := toolContext{env: env, session: &stale, depth: 1, rootPath: root, absWorkdir: root}
+	if effect, _ := tc.liveToolPermission("write", "notes.md"); effect != "allow" {
+		t.Fatal("fixture should initially allow writing")
+	}
+	ask := "ask"
+	if _, err := env.UpdateSessionPermission(parent.ID, &ask, nil); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	done := make(chan ToolExecResult, 1)
+	go func() {
+		done <- executeTool(ctx, tc, "write", json.RawMessage(`{"path":"notes.md","content":"fixture"}`))
+	}()
+	var q *PermissionQuestion
+	select {
+	case ev := <-events:
+		q = ev.Permission
+	case result := <-done:
+		t.Fatalf("child did not wait for permission: %+v", result)
+	case <-ctx.Done():
+		t.Fatal("child did not ask")
+	}
+	if q == nil || !q.IsSubagent || q.SessionID != child.ID {
+		t.Fatalf("unexpected approval: %+v", q)
+	}
+	rules := []PermissionRule{{Action: "write", Resource: "*", Effect: "deny", Agent: "subagent"}}
+	ids, err := env.UpdateSessionPermission(parent.ID, nil, &rules)
+	if err != nil || len(ids) != 1 || ids[0] != q.ID {
+		t.Fatalf("parent update did not close the child's prompt: %v %v", ids, err)
+	}
+	select {
+	case result := <-done:
+		if !result.IsError || !strings.Contains(result.Output, "拒绝") {
+			t.Fatalf("child ignored revoked authorization: %+v", result)
+		}
+	case <-ctx.Done():
+		t.Fatal("child still waiting for an answer")
+	}
+	if _, err := os.Stat(filepath.Join(root, "notes.md")); !os.IsNotExist(err) {
+		t.Fatalf("child should not have written: %v", err)
+	}
+}
+
+func TestToolUsesLivePermissionsRatherThanModelRequestSnapshot(t *testing.T) {
+	root := t.TempDir()
+	env := &Env{StateDir: t.TempDir(), Roots: []Root{{ID: "work", Path: root}}}
+	env.init()
+	s := &Session{ID: "fixture", Agent: "build", PermissionMode: "full_access", Root: "work", Workdir: "/"}
+	stale := *s
+	env.sessions[s.ID] = s
+	mode := "ask"
+	rules := []PermissionRule{{Action: "write", Resource: "*", Effect: "deny"}}
+	if _, err := env.UpdateSessionPermission(s.ID, &mode, &rules); err != nil {
+		t.Fatal(err)
+	}
+	tc := toolContext{env: env, session: &stale, rootPath: root, absWorkdir: root}
+	result := executeTool(context.Background(), tc, "write", json.RawMessage(`{"path":"notes.md","content":"fixture"}`))
+	if !result.IsError || !strings.Contains(result.Output, "拒绝") {
+		t.Fatalf("stale request permissions did not honor live deny: %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(root, "notes.md")); !os.IsNotExist(err) {
+		t.Fatalf("tool should not have written: %v", err)
+	}
+}
+
 func TestDeliveryWaitsForTaskBoundaryAndKeepsPerInputModel(t *testing.T) {
 	type request struct {
 		Model    string          `json:"model"`

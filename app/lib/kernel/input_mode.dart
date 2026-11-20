@@ -19,18 +19,16 @@ class InputMode extends ChangeNotifier {
 
   /// Feeds the mode from a pointer-down event.
   void onPointer(PointerEvent e) {
-    switch (e.kind) {
-      case PointerDeviceKind.touch:
-      case PointerDeviceKind.stylus:
-      case PointerDeviceKind.invertedStylus:
-        _set(true);
-      case PointerDeviceKind.mouse:
-      case PointerDeviceKind.trackpad:
-        _set(false);
-      case PointerDeviceKind.unknown:
-        break;
-    }
+    if (touchFor(e.kind) case final next?) _set(next);
   }
+
+  static bool? touchFor(PointerDeviceKind? kind) => switch (kind) {
+    PointerDeviceKind.touch ||
+    PointerDeviceKind.stylus ||
+    PointerDeviceKind.invertedStylus => true,
+    PointerDeviceKind.mouse || PointerDeviceKind.trackpad => false,
+    _ => null,
+  };
 
   /// Whether the current mode is touch; widgets that call this rebuild when it changes.
   static bool isTouch(BuildContext context) =>

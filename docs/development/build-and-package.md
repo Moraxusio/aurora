@@ -43,6 +43,7 @@ powershell -NoProfile -File tools/package-preview.ps1 `
 - 生成客户端、正式公钥可验证的两种 agent、升级策略、许可证、使用文档、源码哈希、构建信息、独立启动脚本、ZIP 和 SHA-256。
 - `启动验收版.cmd` 使用包内 `review-data` 和独立实例名。该目录是配置隔离；选择的项目仍是实际项目文件。
 - 同名候选已存在时拒绝覆盖；复验或重打使用新后缀。
+- Windows 打包在双 agent 验签后检查版本身份。`tools/agent-release-seeds.json` 固定已有交付的基线；`AURORA_AGENT_RELEASE_LEDGER` 指向共用、持久的发布账本目录（单机默认 `%LOCALAPPDATA%\AuroraRelease\agent-identities`）。正式构建机须共用账本并保留备份；相同 agent 版本只能复用相同字节，改动后分配新版本。GUI-only 候选允许只提升客户端版本、复用验签一致的 agent。
 - 构建前后检查源码、测试、工具和随包文档指纹；构建期间保持这些输入稳定。
 - 随包文档保留原目录，根 `CHANGES.md` 链接到版本说明；`copy-package-docs.ps1` 在实际包目录再次检查链接。构建后的验收记录另行归档，包内文档保留构建时快照。
 
@@ -67,3 +68,9 @@ GitHub 发布使用带注释版本标签。先推送源码和标签，创建草�
 实际包的无界面冒烟入口位于 `app/tool`：`local_agent_smoke.dart` 验证 TLS、监控、代理与终端；`ai_harness_smoke.dart` 使用本地模型夹具；`ide_agent_smoke.dart` 验证文本编码、批量事务冲突、开发任务及 AI 扩展配置。通过 `AURORA3_LOCAL_AGENT_DIR` 指向待验包的 `local-agent/windows-amd64`，使用新的临时目录；正常验签时清除测试用 `AURORA3_TRUST_KEY`。本地代理冒烟还需脚本指定的合成代理环境值。
 
 检查记录使用 [验收模板](../templates/validation.md)，用户操作见 [验收指南](../guides/acceptance.md)。
+
+单 EXE／单 ELF 候选另须满足 [ADR 0002](../decisions/0002-single-binary-state-safety.md) 的缓存隔离、机密加密、身份保护和原子升级门槛。现有 ZIP 流程不变，不能用打包成功代替这些验收。
+
+`tools/package-single-preview.ps1` 可选用当前构建用户证书库中的代码签名证书：同时指定 `-AuthenticodeThumbprint` 和 HTTPS `-TimestampUrl`，必要时以 `-SignTool` 指定 Windows SDK 中的 `signtool.exe`。脚本先签外层 EXE、验证信任链和时间戳，再复验内嵌包并生成最终 SHA-256。未指定证书则跳过外层 Authenticode；Aurora 内嵌签名和最终 SHA-256 仍必须生成。外层 Authenticode 不作为正式发布的前置条件，签名也不替代迁移、回滚等验收。
+
+隔离公开预览用 `package-preview.ps1 -PublicPreview` 加上新的数字版本和候选后缀，再用 `package-single-preview.ps1` 包装。该模式为 Linux ELF 使用 `preview` 通道并编译隔离启动限制，Windows 包装启动使用单独 Profile。只发布包装后的 EXE 与 Linux ELF、签名和校验清单；本流程不替换 GitHub Latest，也不发布中间 ZIP。

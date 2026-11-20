@@ -133,17 +133,34 @@ class ProfileStore {
       ..add(sealed);
     final f = File(path);
     await f.parent.create(recursive: true);
-    final tmp = File('$path.tmp');
-    final raf = await tmp.open(mode: FileMode.writeOnly);
+    // Do not follow a previously created .tmp link or share a temporary
+    // filename with another client. Only sealed bytes reach this directory.
+    final stage = await f.parent.createTemp('.aurora-profile-');
+    final tmp = File('${stage.path}${Platform.pathSeparator}sealed.bin');
     try {
-      await raf.writeFrom(out.takeBytes());
-      await raf.flush();
+      final raf = await tmp.open(mode: FileMode.writeOnly);
+      try {
+        await raf.writeFrom(out.takeBytes());
+        await raf.flush();
+      } finally {
+        await raf.close();
+      }
+      // Replaces the old file in one step (MoveFileEx with REPLACE_EXISTING
+      // on Windows, rename(2) elsewhere).
+      await tmp.rename(path);
     } finally {
-      await raf.close();
+      // Cleanup is best effort; do not report a committed rename as failed.
+      try {
+        await tmp.delete();
+      } on FileSystemException {
+        // Already renamed (or no file was created).
+      }
+      try {
+        await stage.delete();
+      } on FileSystemException {
+        // A remaining staged file is encrypted and not opened as a profile.
+      }
     }
-    // Replaces the old file in one step (MoveFileEx with REPLACE_EXISTING on
-    // Windows, rename(2) elsewhere): a crash leaves the old or the new file.
-    await tmp.rename(path);
   }
 
   /// Moves an unreadable profile aside (`profile.bin.unreadable-TIME`) so

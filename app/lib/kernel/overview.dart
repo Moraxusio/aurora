@@ -210,8 +210,14 @@ class _OverviewViewState extends State<OverviewView> {
         ]),
         if (info != null)
           FormSection(title: 'agent', children: [
+            const FormRow(title: '客户端版本', value: String.fromEnvironment('AURORA_CLIENT_VERSION', defaultValue: '开发构建')),
             FormRow(title: '系统', value: info.os.ifEmpty('—')),
             FormRow(title: '主机名', value: info.host.ifEmpty('—')),
+            if (!e.isLocal && ws.link != null)
+              FormRow(
+                title: '内置远端 agent',
+                value: ws.app.upgrades.offer(ws.serverId, ws.link!).build?.manifest.version ?? '无匹配构建',
+              ),
             FormRow(
               title: 'agent 版本',
               value: info.version,

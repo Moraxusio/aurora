@@ -14,6 +14,22 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('an isolated imported workspace never auto-connects', (t) async {
+    final app = _OfflineImport();
+    final features = Features();
+    final input = InputMode(touch: false);
+    await t.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.light),
+      home: InputMode.scope(mode: input, child: Shell(app: app, features: features)),
+    ));
+    await t.pumpAndSettle();
+    expect(app.connections, 0);
+    await t.pumpWidget(const SizedBox.shrink());
+    features.dispose();
+    input.dispose();
+    app.dispose();
+  });
+
   testWidgets(
     'side bar and editor switches do not rebuild unrelated retained bodies',
     (t) async {
@@ -188,6 +204,24 @@ class _App extends AppState {
     if (views[''] != null) _entry.browserView = WorkspaceView.fromJson(views['']!.toJson());
   }
   void changed() => notifyListeners();
+}
+
+class _OfflineImport extends _App {
+  int connections = 0;
+
+  @override
+  bool get allowAutoConnect => false;
+
+  @override
+  Link? link(String id) => null;
+
+  @override
+  ConnStatus status(String id) => ConnStatus(ConnState.idle);
+
+  @override
+  Future<void> connect(String id) async {
+    connections++;
+  }
 }
 
 class _Link implements Link {

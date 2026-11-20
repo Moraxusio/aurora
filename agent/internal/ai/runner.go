@@ -29,6 +29,9 @@ type activeRun struct {
 	subagentPermMode  string
 	subagentPermRules []PermissionRule
 	meter             *runMeter
+	parentRun         *activeRun // non-nil only for a managed child, not a resumed conversation
+	inheritParentMode bool
+	childModeCeiling  string // set by an explicit live permission change
 }
 
 // Env is the state and dependencies of the "ai" service on the agent.
@@ -336,25 +339,79 @@ func (e *Env) UpdateSessionPermission(id string, permMode *string, rules *[]Perm
 	}
 	beforeMode := s.PermissionMode
 	beforeRules := s.PermissionRules
+	beforeInbox := s.Inbox
 	if permMode != nil {
 		s.PermissionMode = mode
 	}
 	if rules != nil {
 		s.PermissionRules = append([]PermissionRule(nil), (*rules)...)
 	}
+	// Pending entries report the conversation's current permissions. Model,
+	// delivery and admitted budget remain independent of these live settings.
+	if len(s.Inbox) != 0 {
+		s.Inbox = append([]InboxItem(nil), s.Inbox...)
+		for i := range s.Inbox {
+			s.Inbox[i].PermissionMode = s.PermissionMode
+			s.Inbox[i].PermissionRules = append([]PermissionRule(nil), s.PermissionRules...)
+		}
+	}
 	if err := e.persistSessionLocked(s); err != nil {
 		s.PermissionMode = beforeMode
 		s.PermissionRules = beforeRules
+		s.Inbox = beforeInbox
 		e.mu.Unlock()
 		return nil, err
 	}
-	agentMode := s.Agent
-	isSubagent := s.ParentID != ""
-	effMode := s.PermissionMode
-	effRules := append([]PermissionRule(nil), s.PermissionRules...)
+	run := e.running[id]
+	if run != nil && permMode != nil {
+		run.inheritParentMode = false
+		run.childModeCeiling = mode
+	}
+	if len(s.Inbox) != 0 {
+		e.broadcastLocked(StreamEvent{Type: "inbox.updated", SessionID: id, Inbox: e.inboxSnapshotLocked(s)})
+	}
+	resolve := func(session *Session) []string {
+		return e.perms.resolveSessionPending(session.ID, func(q PermissionQuestion) (string, string) {
+			return e.toolPermissionLocked(session, q.IsSubagent, q.Action, q.Resource)
+		})
+	}
+	resolved := resolve(s)
+	if run != nil {
+		for childID, childRun := range e.running {
+			if childRun.parentRun == run {
+				if child := e.sessions[childID]; child != nil {
+					resolved = append(resolved, resolve(child)...)
+				}
+			}
+		}
+	}
 	e.mu.Unlock()
-	resolved := e.perms.ResolveSessionPending(id, agentMode, isSubagent, effMode, effRules)
 	return resolved, nil
+}
+
+// The child has its own approvals, but cannot overrule a parent's explicit
+// denial for the child role. Parent grants are not copied into a child's gate.
+// Caller holds e.mu and has already waited for relevant session writes.
+func (e *Env) toolPermissionLocked(s *Session, isChild bool, action, resource string) (string, string) {
+	mode, rules := s.PermissionMode, s.PermissionRules
+	if run := e.running[s.ID]; run != nil && run.parentRun != nil {
+		parent := e.sessions[s.ParentID]
+		if parent == nil || e.running[s.ParentID] != run.parentRun {
+			return "deny", "主任务已经停止"
+		}
+		if effect, matched, _ := matchingPermissionRule(parent.PermissionRules, s.Agent, true, action, resource); matched && effect == "deny" {
+			return "deny", "操作被主会话的权限规则拒绝"
+		}
+		if run.inheritParentMode {
+			mode = parent.PermissionMode
+		}
+		ceiling := run.parentRun.childModeCeiling
+		if ceiling == "ask" || (ceiling == "auto" && mode == "full_access") {
+			mode = ceiling
+		}
+		rules = append(append([]PermissionRule(nil), parent.PermissionRules...), rules...)
+	}
+	return e.perms.EvaluateWithContext(s.ID, s.Agent, isChild, mode, action, resource, rules)
 }
 
 // SearchHit is one session found by SearchSessions.
@@ -525,6 +582,8 @@ func (e *Env) GetSession(id string) (Session, bool, *PermissionQuestion, error) 
 	_ = e.sessionIOLocked(id, func() error { out = cloneSession(s); return nil })
 	for i := range out.Inbox {
 		out.Inbox[i].Held = !e.inboxActiveLocked(id, out.Inbox[i].ID)
+		out.Inbox[i].PermissionMode = out.PermissionMode
+		out.Inbox[i].PermissionRules = append([]PermissionRule(nil), out.PermissionRules...)
 	}
 	return out, isRun, e.perms.PendingForSession(id), nil
 }
@@ -548,6 +607,8 @@ func (e *Env) inboxSnapshotLocked(s *Session) []InboxItem {
 	items := append([]InboxItem(nil), s.Inbox...)
 	for i := range items {
 		items[i].Held = !e.inboxActiveLocked(s.ID, items[i].ID)
+		items[i].PermissionMode = s.PermissionMode
+		items[i].PermissionRules = append([]PermissionRule(nil), s.PermissionRules...)
 		items[i].Provider = ProviderConfig{}
 	}
 	return items
@@ -914,22 +975,20 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 	// If already running, push into activeRun.inbox for OpenCode-style live steering!
 	if ar, busy := e.running[s.ID]; busy {
 		item := InboxItem{
-			ID:                      NewID("inb"),
-			Text:                    in.Text,
-			Agent:                   agentMode,
-			Delivery:                in.Delivery,
-			Attachments:             in.Attachments,
-			CreatedAt:               time.Now().UnixMilli(),
-			PermissionMode:          permMode,
-			PermissionRules:         append([]PermissionRule(nil), in.PermissionRules...),
-			Provider:                in.Provider,
-			SubagentProvider:        in.SubagentProvider,
-			SubagentPermissionMode:  subPermMode,
-			SubagentPermissionRules: append([]PermissionRule(nil), in.SubagentPermissionRules...),
-			Runtime:                 runtimeInfo(in.Provider),
-			Options:                 in.Options,
-			AdmittedConfig:          &budgetConfig,
-			ConfigSource:            budgetSource,
+			ID:               NewID("inb"),
+			Text:             in.Text,
+			Agent:            agentMode,
+			Delivery:         in.Delivery,
+			Attachments:      in.Attachments,
+			CreatedAt:        time.Now().UnixMilli(),
+			PermissionMode:   s.PermissionMode,
+			PermissionRules:  append([]PermissionRule(nil), s.PermissionRules...),
+			Provider:         in.Provider,
+			SubagentProvider: in.SubagentProvider,
+			Runtime:          runtimeInfo(in.Provider),
+			Options:          in.Options,
+			AdmittedConfig:   &budgetConfig,
+			ConfigSource:     budgetSource,
 		}
 		if item.Delivery != "queue" {
 			item.Delivery = "steer"
@@ -959,8 +1018,8 @@ func (e *Env) StartRun(in RunInput) (SessionSummary, error) {
 			UpdatedAt:    s.UpdatedAt,
 		}
 		pending := e.inboxSnapshotLocked(s)
+		e.broadcastLocked(StreamEvent{Type: "inbox.updated", SessionID: s.ID, Inbox: pending})
 		e.mu.Unlock()
-		e.broadcast(StreamEvent{Type: "inbox.updated", SessionID: s.ID, Inbox: pending})
 		return sum, nil
 	}
 
@@ -1293,11 +1352,9 @@ func (e *Env) runLoop(baseCtx context.Context, sessionID string, depth int) {
 				}
 				ar.provider = item.Provider
 				ar.subagentProvider = item.SubagentProvider
-				ar.subagentPermMode = item.SubagentPermissionMode
-				ar.subagentPermRules = append([]PermissionRule(nil), item.SubagentPermissionRules...)
 				s.Model, s.Protocol = item.Provider.Model, item.Provider.Protocol
-				s.PermissionMode = item.PermissionMode
-				s.PermissionRules = append([]PermissionRule(nil), item.PermissionRules...)
+				// Authorization belongs to the live conversation, not the
+				// queued provider/model or tool-budget snapshot.
 				for i, pending := range s.Inbox {
 					if pending.ID == item.ID {
 						s.Inbox = append(s.Inbox[:i], s.Inbox[i+1:]...)
@@ -1741,12 +1798,18 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 	e.mu.Lock()
 	run := e.running[parent.ID]
 	persisted := e.sessionLocked(parent.ID)
-	valid := run != nil && persisted != nil && persisted.ParentID == ""
-	e.mu.Unlock()
-	if !valid {
+	if run == nil || persisted == nil || persisted.ParentID != "" || e.running[parent.ID] != run {
+		e.mu.Unlock()
 		return "", "", errors.New("主任务已经停止或不是主会话")
 	}
 	meter := run.meter
+	childProv := prov
+	if run.subagentProvider != nil && strings.TrimSpace(run.subagentProvider.Model) != "" {
+		childProv = *run.subagentProvider
+	}
+	childPermMode := run.subagentPermMode
+	childRules := append([]PermissionRule(nil), run.subagentPermRules...)
+	e.mu.Unlock()
 	policy := meter.config.Subagents.resolved()
 	if policy.ReadOnly && agentType != "explore" {
 		return "", "", errors.New("此项目仅允许只读子代理")
@@ -1757,14 +1820,6 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 	}
 	defer release()
 	now := time.Now().UnixMilli()
-	childProv := prov
-	if run.subagentProvider != nil && strings.TrimSpace(run.subagentProvider.Model) != "" {
-		childProv = *run.subagentProvider
-	}
-	childPermMode := parent.PermissionMode
-	if run.subagentPermMode == "ask" || run.subagentPermMode == "auto" || run.subagentPermMode == "full_access" {
-		childPermMode = run.subagentPermMode
-	}
 	switch policy.PermissionMode {
 	case "ask", "auto", "full_access":
 		childPermMode = policy.PermissionMode
@@ -1772,8 +1827,6 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 		agentType = "explore"
 		childPermMode = "ask"
 	}
-	childRules := append([]PermissionRule(nil), parent.PermissionRules...)
-	childRules = append(childRules, run.subagentPermRules...)
 	if policy.AllowNetwork != nil && !*policy.AllowNetwork {
 		childRules = append(childRules, PermissionRule{
 			Action:   "network",
@@ -1826,16 +1879,23 @@ func (e *Env) runChildSubagent(ctx context.Context, parent *Session, prov Provid
 	defer cancel()
 
 	e.mu.Lock()
-	if ctx.Err() != nil || e.running[parent.ID] != run {
+	e.waitSessionLocked(parent.ID)
+	liveParent := e.sessions[parent.ID]
+	if ctx.Err() != nil || e.running[parent.ID] != run || liveParent == nil {
 		e.mu.Unlock()
 		return "", "", errors.New("主任务已经停止")
+	}
+	if childPermMode == "" {
+		child.PermissionMode = liveParent.PermissionMode
 	}
 	e.sessions[child.ID] = child
 	child.Budget = meter.snapshot()
 	childRun := &activeRun{
-		cancel:   cancel,
-		provider: childProv,
-		meter:    meter,
+		cancel:            cancel,
+		provider:          childProv,
+		meter:             meter,
+		parentRun:         run,
+		inheritParentMode: childPermMode == "",
 	}
 	e.running[child.ID] = childRun
 	if err := e.persistSessionLocked(child); err != nil {
@@ -2034,6 +2094,10 @@ func (e *Env) compactInternal(ctx context.Context, sessionID string, prov Provid
 // targetMessageID (or from targetMessageID onward if inclusive) using shadow-git trees,
 // and truncates later messages from the session.
 func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, restoreFiles bool) (Session, int, error) {
+	return e.revertSession(ctx, sessionID, messageID, restoreFiles, nil)
+}
+
+func (e *Env) revertSession(ctx context.Context, sessionID, messageID string, restoreFiles bool, review *revertReview) (Session, int, error) {
 	e.init()
 	if e.recoveryErr != nil {
 		return Session{}, 0, e.recoveryErr
@@ -2047,6 +2111,9 @@ func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, re
 	}
 	if e.running[sessionID] != nil {
 		e.mu.Unlock()
+		if review != nil {
+			return Session{}, 0, errRevertReview
+		}
 		e.StopSession(sessionID)
 		return Session{}, 0, errors.New("正在停止会话，请等待任务结束后重试回退")
 	}
@@ -2066,6 +2133,22 @@ func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, re
 		e.mu.Unlock()
 		return Session{}, 0, fmt.Errorf("message not found: %s", messageID)
 	}
+	var selected map[string]bool
+	if review != nil {
+		preview := makeRevertPreview(s, idx)
+		if preview.Revision != review.Revision {
+			e.mu.Unlock()
+			return Session{}, 0, errRevertReview
+		}
+		selected = make(map[string]bool, len(review.Paths))
+		for _, name := range review.Paths {
+			if !preview.pathSet[name] || selected[name] {
+				e.mu.Unlock()
+				return Session{}, 0, errRevertReview
+			}
+			selected[name] = true
+		}
+	}
 
 	// Revert everything from `idx` onward if it's a user prompt or assistant turn
 	fileToTree := map[string]string{}
@@ -2074,6 +2157,9 @@ func (e *Env) RevertSession(ctx context.Context, sessionID, messageID string, re
 		m := s.Messages[i]
 		if m.Snapshot != nil && m.Snapshot.Start != "" {
 			for _, f := range m.Snapshot.Files {
+				if selected != nil && !selected[f.File] {
+					continue
+				}
 				if _, seen := fileToTree[f.File]; !seen {
 					fileToTree[f.File] = m.Snapshot.Start
 				}

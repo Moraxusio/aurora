@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:aurora_install/aurora_install.dart' show compareVersions;
 import 'package:aurora_profile/aurora_profile.dart';
 import 'package:aurora_wire/aurora_wire.dart';
 import 'package:aurora/ui/aurora_ui.dart';
@@ -373,6 +374,8 @@ class _AiStudioViewState extends State<_AiConversation> {
   }) {
     final link = ws.link, sid = _sessionId;
     if (link == null || sid == null) return;
+    final requestedMode = mode == 'full_access' && !_supportsFullAccess(link) ? null : mode;
+    if (requestedMode == null && rules == null) return;
     // Preserve update order during rapid toggles and remove only the prompts
     // the agent actually resolved (older agents remove them via tool.done).
     _permissionUpdate = _permissionUpdate.then((_) async {
@@ -380,7 +383,7 @@ class _AiStudioViewState extends State<_AiConversation> {
       try {
         final result = await link.call('ai.update', {
           'id': sid,
-          if (mode != null) 'permission_mode': mode,
+          if (requestedMode != null) 'permission_mode': requestedMode,
           if (rules != null) 'permission_rules': rules,
         });
         if (!mounted || !identical(link, ws.link) || sid != _sessionId) return;
@@ -388,12 +391,14 @@ class _AiStudioViewState extends State<_AiConversation> {
         if (resolved is List && resolved.isNotEmpty) {
           setState(() {
             for (final id in resolved) {
-              if (_permissions[id]?.sessionId == sid) _permissions.remove(id);
+              _permissions.remove(id);
             }
           });
         }
       } on Object {
-        // Older agents still receive the policy with the next ai.run call.
+        if (mounted && identical(link, ws.link) && sid == _sessionId && _running) {
+          ws.toast('即时权限更新未确认，当前任务可能仍按原权限运行。请停止任务并重新连接后检查。', error: true);
+        }
       }
     });
   }
@@ -1315,6 +1320,14 @@ class _AiStudioViewState extends State<_AiConversation> {
     final sentOptions = _sessionPolicy.isDefault
         ? const <String, dynamic>{}
         : _sessionPolicy.toRunOptionsJson();
+    bool wantsFullAccess() =>
+        _permMode == 'full_access' ||
+        musicianPersona?.permissionMode == 'full_access' ||
+        (inboxId == null && sentOptions['subagents_permission_mode'] == 'full_access');
+    if (wantsFullAccess() && !_supportsFullAccess(link)) {
+      ws.toast('当前 agent 无法确认支持完全权限。请升级 agent，或改用先询问／自动执行后再发。', error: true);
+      return;
+    }
     if (sentOptions.isNotEmpty &&
         inboxId == null &&
         !link.server.caps.contains('ai.run.options')) {
@@ -1399,6 +1412,9 @@ class _AiStudioViewState extends State<_AiConversation> {
       // it was running with the obsolete mode and rules from the draft start.
       await _permissionUpdate;
       if (!mounted || !identical(link, ws.link)) return;
+      if (wantsFullAccess() && !_supportsFullAccess(link)) {
+        throw StateError('当前 agent 不支持完全权限，请升级或重新选择权限后再发');
+      }
       if (_agentMode != sentAgent ||
           _primaryPersona?.id != primaryPersona?.id ||
           _root != sentRoot ||
@@ -1479,6 +1495,12 @@ class _AiStudioViewState extends State<_AiConversation> {
         });
     }
   }
+
+  // 3.25.0 was shipped with different behaviors under one number. Only
+  // unambiguous releases are accepted when there is no explicit capability.
+  bool _supportsFullAccess(Link link) =>
+      link.server.caps.contains('ai.permissions.full_access') ||
+      (compareVersions(link.server.version, '3.25.1') ?? -1) >= 0;
 
   Future<void> _refreshInbox() async {
     final link = ws.link, sid = _sessionId;
@@ -1570,26 +1592,100 @@ class _AiStudioViewState extends State<_AiConversation> {
       await showAiSessionGrants(context, link, sid);
   }
 
+  bool _revertBusy = false;
+
   Future<void> _revertTo(AiMessage msg) async {
+    if (_revertBusy) return;
+    _revertBusy = true;
+    try {
+      await _reviewRevert(msg);
+    } finally {
+      _revertBusy = false;
+    }
+  }
+
+  Future<void> _reviewRevert(AiMessage msg) async {
     final link = ws.link;
     final sid = _sessionId;
-    if (link == null || sid == null) return;
-    final ok = await confirmDialog(
-      context,
-      title: '回退到此消息之前？',
-      body: '将通过影子 Git 快照恢复此消息及之后智能体修改过的所有文件，并截断后续对话记录。',
-      ok: '回退文件与对话',
-      danger: true,
+    final project = ws.projectKey;
+    final lastMessage = _session?.messages.lastOrNull?.id;
+    if (link == null || sid == null || _running) return;
+    bool stillHere() => mounted && identical(link, ws.link) &&
+        sid == _sessionId && project == ws.projectKey && ws.app.selected == ws.serverId;
+    bool hasDirtyFiles() => ws.tabs.any((t) {
+      final file = t.file;
+      return t.dirty.value && file != null && file.root == _root &&
+          (_workdir == '/' || file.path == _workdir || file.path.startsWith('$_workdir/'));
+    });
+    if (hasDirtyFiles()) {
+      ws.toast('回退前请先保存目录内未保存的文件', error: true);
+      return;
+    }
+    final scope = {'session_id': sid, 'message_id': msg.id};
+    Map? preview;
+    if (link.server.caps.contains('ai.revert.preview')) {
+      preview = await ws.guard(() async => await link.call('ai.revert.preview', scope) as Map);
+      if (preview == null || !stillHere()) return;
+    }
+    if (!stillHere()) return;
+    final paths = (preview?['paths'] as List? ?? const []).whereType<String>().toList();
+    final checked = <String>{};
+    final chosen = await showWorkbenchDialog<List<String>>(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, update) => AlertDialog(
+        title: const Text('回退到此消息之前？'),
+        content: SizedBox(width: 500, child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(preview == null
+                ? '当前 agent 不支持审阅，只有对话记录可回退，文件保持不变。'
+                : '默认不改动文件。快照无法区分 AI 写入与手动保存，请先核对差异，只勾选要恢复的文件。'),
+            if (preview?['overflow'] == true) const Text('只列出事务允许的文件范围；未列出的文件不会恢复。'),
+            if (paths.isNotEmpty) SizedBox(
+              height: (MediaQuery.sizeOf(c).height * 0.35).clamp(90.0, 250.0).toDouble(),
+              child: ListView.builder(
+              itemCount: paths.length,
+              itemBuilder: (_, i) => CheckboxListTile(
+                title: Text(paths[i], maxLines: 2, overflow: TextOverflow.ellipsis),
+                value: checked.contains(paths[i]),
+                onChanged: (on) => update(() {
+                  if (on == true) {
+                    checked.add(paths[i]);
+                  } else {
+                    checked.remove(paths[i]);
+                  }
+                }),
+              ),
+            )),
+          ],
+        )),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, checked.toList()),
+            child: Text(checked.isEmpty ? '仅回退对话' : '恢复所选文件和对话'),
+          ),
+        ],
+      )),
     );
-    if (!ok || !mounted) return;
+    if (chosen == null || !mounted) return;
+    if (!stillHere() || _running || _session?.messages.lastOrNull?.id != lastMessage) {
+      ws.toast('连接、工作区或对话已变化，请重新核对回退目标', error: true);
+      return;
+    }
+    if (hasDirtyFiles()) {
+      ws.toast('回退前请先保存目录内未保存的文件', error: true);
+      return;
+    }
     final res = await ws.guard(
       () => link.call('ai.revert', {
-        'session_id': sid,
-        'message_id': msg.id,
-        'files': true,
+        ...scope,
+        'files': chosen.isNotEmpty,
+        if (preview != null) 'review': {'revision': preview['revision'], 'paths': chosen},
       }),
     );
-    if (res is Map) {
+    if (res is Map && stillHere()) {
       final count = (res['restored_files'] as num?)?.toInt() ?? 0;
       ws.filesRevision.value++;
       ws.toast(count > 0 ? '已回退对话并恢复 $count 个文件' : '已回退对话记录');

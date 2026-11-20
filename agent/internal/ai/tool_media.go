@@ -3,13 +3,9 @@
 package ai
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -53,36 +49,16 @@ func toolMediaResult(tc toolContext, display, name string, data []byte) ToolExec
 	attachmentStoreMu.Lock()
 	defer attachmentStoreMu.Unlock()
 	dir := tc.env.attachmentDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := checkAttachmentBudget(dir, int64(len(data))); err != nil {
 		return fail(err)
 	}
-	entries, err := os.ReadDir(dir)
+	meta, err := saveAttachment(dir, name, mime, data)
 	if err != nil {
-		return fail(err)
-	}
-	var used int64
-	for _, entry := range entries {
-		if st, err := entry.Info(); err == nil {
-			used += st.Size()
-		}
-	}
-	if used+int64(len(data))+4096 > 512<<20 {
-		return fail(fmt.Errorf("AI attachment store has reached its 512 MiB limit"))
-	}
-	id := NewID("att")
-	sum := sha256.Sum256(data)
-	meta := attachmentMeta{ID: id, Name: name, Mime: mime, Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}
-	if err := atomicWriteFile(filepath.Join(dir, id+".bin"), data, 0600); err != nil {
-		return fail(err)
-	}
-	b, _ := json.Marshal(meta)
-	if err := atomicWriteFile(filepath.Join(dir, id+".json"), b, 0600); err != nil {
-		_ = os.Remove(filepath.Join(dir, id+".bin"))
 		return fail(err)
 	}
 	return ToolExecResult{
 		Output:      fmt.Sprintf("Read %s (%s, %d bytes). The captured file is attached as model input.", display, mime, len(data)),
 		Metadata:    map[string]any{"path": display, "mime": mime, "size": len(data)},
-		Attachments: []Part{{Type: kind, ID: NewID("prt"), AttachmentID: id, Mime: mime, Filename: name, Size: int64(len(data))}},
+		Attachments: []Part{{Type: kind, ID: NewID("prt"), AttachmentID: meta.ID, Mime: mime, Filename: name, Size: int64(len(data))}},
 	}
 }

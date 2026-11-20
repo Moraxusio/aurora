@@ -17,6 +17,7 @@ import (
 	"sort"
 
 	"aurora3/internal/filetxn"
+	"aurora3/internal/statecrypt"
 )
 
 const sessionBytesMax = filetxn.MaxFileBytes
@@ -82,23 +83,62 @@ func sessionFileStamp(path string) (sessionStamp, error) {
 	return sessionStamp{info.Size(), info.ModTime().UnixNano()}, nil
 }
 func readSessionFile(path string, max int64) ([]byte, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() || fi.Size() > max {
+		return nil, errors.New("会话文件超过存储预算")
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() || info.Size() > max {
-		return nil, errors.New("会话文件超过存储预算")
+	if err != nil || !os.SameFile(fi, info) {
+		return nil, errors.New("会话存储在打开时已变化")
 	}
 	data, err := io.ReadAll(io.LimitReader(f, max+1))
 	if int64(len(data)) > max {
 		return nil, errors.New("会话文件超过存储预算")
 	}
 	return data, err
+}
+
+func protectAIRecord(scope, path string, data []byte) ([]byte, error) {
+	if codec := statecrypt.Current(); codec != nil {
+		return codec.Seal("ai:"+scope+":"+filepath.Base(path), data)
+	}
+	return data, nil
+}
+
+func openAIRecord(scope, path string, data []byte) ([]byte, error) {
+	codec := statecrypt.Current()
+	if codec == nil && !statecrypt.Protected(data) {
+		return data, nil
+	}
+	return codec.Open("ai:"+scope+":"+filepath.Base(path), data)
+}
+
+func readAIRecord(scope, path string, max int64) ([]byte, error) {
+	stored, err := readSessionFile(path, max+int64(statecrypt.Overhead))
+	if err != nil {
+		return nil, err
+	}
+	data, err := openAIRecord(scope, path, stored)
+	if err == nil && int64(len(data)) > max {
+		return nil, errors.New("AI 存储记录超过预算")
+	}
+	return data, err
+}
+
+func writeAIRecord(scope, path string, data []byte) error {
+	stored, err := protectAIRecord(scope, path, data)
+	if err != nil {
+		return err
+	}
+	return atomicWriteFile(path, stored, 0600)
 }
 func sessionSummary(s *Session) SessionSummary {
 	return SessionSummary{ID: s.ID, ParentID: s.ParentID, Title: s.Title, Pinned: s.Pinned,
@@ -182,12 +222,12 @@ func writeSessionIndex(dir string, idx sessionIndex) sessionIndex {
 	data, err := json.Marshal(sessionIndexFile{Index: idx, CRC32: crc32.ChecksumIEEE(body)})
 	// Derived cache only: a failure here never changes a durable commit's result.
 	if err == nil {
-		_ = atomicWriteFile(filepath.Join(dir, idx.Meta.ID+".index"), data, 0600)
+		_ = writeAIRecord("index", filepath.Join(dir, idx.Meta.ID+".index"), data)
 	}
 	return idx
 }
 func readSessionIndex(dir, id string) (sessionIndex, bool) {
-	data, err := readSessionFile(filepath.Join(dir, id+".index"), 2<<20)
+	data, err := readAIRecord("index", filepath.Join(dir, id+".index"), 2<<20)
 	if err != nil {
 		return sessionIndex{}, false
 	}
@@ -208,7 +248,7 @@ func readSessionDisk(dir, id string) (*Session, *sessionRecord, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	data, err := readSessionFile(filepath.Join(dir, id+".json"), sessionBytesMax)
+	data, err := readAIRecord("checkpoint", filepath.Join(dir, id+".json"), sessionBytesMax)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -234,7 +274,7 @@ func readSessionDisk(dir, id string) (*Session, *sessionRecord, error) {
 			break
 		}
 		size, checksum := int(binary.BigEndian.Uint32(log[offset:])), binary.BigEndian.Uint32(log[offset+4:])
-		if size < 1 || size > sessionBytesMax {
+		if size < 1 || size > sessionBytesMax+statecrypt.Overhead {
 			return nil, nil, errors.New("会话日志记录长度损坏")
 		}
 		offset += 8
@@ -246,6 +286,10 @@ func readSessionDisk(dir, id string) (*Session, *sessionRecord, error) {
 		offset += size
 		if crc32.ChecksumIEEE(payload) != checksum {
 			return nil, nil, errors.New("会话日志校验失败，已保留原记录")
+		}
+		payload, err = openAIRecord(fmt.Sprintf("delta:%d", start), id+".journal", payload)
+		if err != nil {
+			return nil, nil, err
 		}
 		var delta sessionDelta
 		if err := json.Unmarshal(payload, &delta); err != nil {
@@ -450,7 +494,11 @@ func appendSessionDelta(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(frameSessionDelta(data))
+	stored, err := protectAIRecord(fmt.Sprintf("delta:%d", offset), path, data)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(frameSessionDelta(stored))
 	if err == nil {
 		err = f.Sync()
 	}
@@ -473,6 +521,18 @@ func saveSessionDisk(dir string, s *Session, r *sessionRecord) (*sessionRecord, 
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return r, err
+	}
+	if r == nil {
+		// A missing in-memory record is not permission to replace existing
+		// state. In particular, never overwrite an unreadable checkpoint.
+		for _, ext := range []string{".json", ".journal", ".index"} {
+			if _, err := os.Lstat(filepath.Join(dir, s.ID+ext)); !os.IsNotExist(err) {
+				if err != nil {
+					return r, err
+				}
+				return r, errors.New("已有会话记录，拒绝用新会话覆盖")
+			}
+		}
 	}
 	if r != nil && !indexMatches(dir, s.ID, r.index) {
 		return r, errors.New("会话文件已在外部变化，请重新打开 agent 后恢复")
@@ -508,15 +568,19 @@ func saveSessionDisk(dir string, s *Session, r *sessionRecord) (*sessionRecord, 
 		next.Messages[change.Index] = change.Message
 	}
 	nextRecord := &sessionRecord{baseline: &next, revision: delta.Revision, torn: -1}
-	checkpoint := r == nil || r.index.Journal.Size+int64(len(data)+8) > sessionJournalMax ||
-		r.index.Base.Size+r.index.Journal.Size+int64(len(data)+8) > sessionBytesMax || delta.Revision%64 == 0
+	extra := 8
+	if statecrypt.Current() != nil {
+		extra += statecrypt.Overhead
+	}
+	checkpoint := r == nil || r.index.Journal.Size+int64(len(data)+extra) > sessionJournalMax ||
+		r.index.Base.Size+r.index.Journal.Size+int64(len(data)+extra) > sessionBytesMax || delta.Revision%64 == 0
 	if r != nil && r.torn >= 0 {
 		path := filepath.Join(dir, s.ID+".journal")
 		log, err := readSessionFile(path, sessionBytesMax)
 		if err != nil {
 			return r, err
 		}
-		if err := atomicWriteFile(path+".torn-"+NewID("log"), log, 0600); err != nil {
+		if err := writeAIRecord("torn-journal", path+".torn-"+NewID("log"), log); err != nil {
 			return r, err
 		}
 		if !checkpoint {
@@ -530,10 +594,10 @@ func saveSessionDisk(dir string, s *Session, r *sessionRecord) (*sessionRecord, 
 		if err != nil {
 			return r, err
 		}
-		if len(full) > sessionBytesMax {
+		if len(full)+extra-8 > sessionBytesMax {
 			return r, errors.New("会话超过 64 MiB，请导出或拆分")
 		}
-		if err := atomicWriteFile(filepath.Join(dir, s.ID+".json"), full, 0600); err != nil {
+		if err := writeAIRecord("checkpoint", filepath.Join(dir, s.ID+".json"), full); err != nil {
 			return r, err
 		}
 		// The checkpoint is already durable. Old records are harmless on replay.
@@ -595,6 +659,10 @@ func (e *Env) commitSessionRevertLocked(ctx context.Context, s *Session, work st
 				revision = r.revision + 1
 			}
 			data, err := json.Marshal(sessionCheckpoint{Session: *s, Revision: revision})
+			if err != nil {
+				return err
+			}
+			data, err = protectAIRecord("checkpoint", s.ID+".json", data)
 			if err != nil {
 				return err
 			}

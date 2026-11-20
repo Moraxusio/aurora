@@ -12,9 +12,10 @@ const (
 	ProductDesktop = "aurora-desktop"
 	// ProductAgent is v3's agent (D-71). v2 signed "aurora-agent" with its own
 	// key; the name differs too, so neither manifest passes as the other.
-	ProductAgent = "aurora3-agent"
-	ProductRelay = "aurora-relay"
+	ProductAgent   = "aurora3-agent"
+	ProductRelay   = "aurora-relay"
 	ChannelStable  = "stable"
+	ChannelPreview = "preview"
 )
 
 type CheckArgs struct {

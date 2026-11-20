@@ -1,3 +1,5 @@
+//go:build linux || windows
+
 package ai
 
 import (
@@ -35,6 +37,9 @@ func (m *SnapshotManager) PlanRestore(ctx context.Context, worktree string, firs
 	}
 	unlock := m.lock(worktree)
 	defer unlock()
+	if store := m.protected(worktree); store != nil {
+		return store.plan(ctx, worktree, first, last)
+	}
 	gitDir, err := m.ensureRepo(ctx, worktree)
 	if err != nil {
 		return nil, err
@@ -113,7 +118,10 @@ func (m *SnapshotManager) ensureRepo(ctx context.Context, worktree string) (stri
 	if err != nil {
 		return "", err
 	}
-	gitDir := m.shadowGitDir(worktree)
+	return m.ensureGitDir(ctx, gitPath, m.shadowGitDir(worktree))
+}
+
+func (m *SnapshotManager) ensureGitDir(ctx context.Context, gitPath, gitDir string) (string, error) {
 	if _, err := os.Stat(filepath.Join(gitDir, "HEAD")); err == nil {
 		return gitDir, nil
 	}
@@ -179,6 +187,13 @@ func (m *SnapshotManager) CaptureConfigured(ctx context.Context, worktree string
 	cctx, cancel := context.WithTimeout(ctx, time.Duration(policy.TimeoutSeconds)*time.Second)
 	defer cancel()
 
+	if store := m.protected(worktree); store != nil {
+		files, _, err := m.protectedSelection(cctx, worktree, policy)
+		if err != nil {
+			return "", err
+		}
+		return store.capture(cctx, worktree, files, policy)
+	}
 	gitDir, err := m.ensureRepo(cctx, worktree)
 	if err != nil {
 		return "", err
@@ -198,6 +213,9 @@ func (m *SnapshotManager) Diff(ctx context.Context, worktree, fromTree, toTree s
 	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
+	if store := m.protected(worktree); store != nil {
+		return store.pair(cctx, fromTree, toTree)
+	}
 	gitDir, err := m.ensureRepo(cctx, worktree)
 	if err != nil {
 		return nil, err
@@ -281,6 +299,9 @@ func (m *SnapshotManager) Diff(ctx context.Context, worktree, fromTree, toTree s
 func (m *SnapshotManager) RestoreFiles(ctx context.Context, worktree string, fileToTree map[string]string) error {
 	if m == nil || m.BaseDir == "" || len(fileToTree) == 0 {
 		return nil
+	}
+	if m.protected(worktree) != nil {
+		return fmt.Errorf("加密快照仅允许经过当前文件校验的事务回退")
 	}
 	unlock := m.lock(worktree)
 	defer unlock()
